@@ -8,6 +8,5 @@ import { mockSupabase } from './dev/mockSupabase';
 
 process.env.VITE_SUPABASE_URL = 'http://localhost:5174';
 process.env.VITE_SUPABASE_PUBLISHABLE_KEY = 'mock-publishable-key';
-process.env.APEX_LOGIN_INTERVAL_SEC = '5';
 
 export default mergeConfig(base, defineConfig({ plugins: [mockSupabase()], server: { port: 5174, strictPort: true } }));
