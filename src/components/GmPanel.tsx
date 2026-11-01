@@ -156,7 +156,7 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
         label="Show party vision on map"
         checked={showPartyFog}
         onChange={() => setShowPartyFog(!showPartyFog)}
-        hint="Dunkelt ab, was die Spieler nicht sehen bzw. noch nicht erforscht haben"
+        hint="Dims what players cannot see or have not explored"
       />
       <Stepper
         label="Adjust arena day"
@@ -206,12 +206,12 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
         <button
           className="btn btn-ghost w-full hover:border-blood-400/70"
           onClick={() => {
-            if (confirm(`Neue Arena mit Radius ${radius} (${hexCount(radius)} Felder) und Seed ${seed} erzeugen? Der aktuelle Spielstand wird ersetzt.`)) {
+            if (confirm(`New arena with radius ${radius} (${hexCount(radius)} hexes) und Seed ${seed} erzeugen? Der aktuelle Spielstand wird ersetzt.`)) {
               onRegenerate(radius, seed);
             }
           }}
         >
-          Generate arena ({hexCount(radius)} Felder)
+          Generate arena ({hexCount(radius)} hexes)
         </button>
       </div>
     </div>
