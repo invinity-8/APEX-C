@@ -20,9 +20,9 @@ beforeEach(() => {
   repo.users.set('t-unconfirmed', { id: 'u-uc', email: 'p3@example.com', emailConfirmed: false });
   repo.inviteList.push(
     { campaignId: CID, email: 'gm@example.com', role: 'gm', tokenIds: [], acceptedAt: null },
-    { campaignId: CID, email: 'p1@example.com', role: 'player', tokenIds: ['livia'], acceptedAt: null },
-    { campaignId: CID, email: 'p2@example.com', role: 'player', tokenIds: ['marcus'], acceptedAt: null },
-    { campaignId: CID, email: 'p3@example.com', role: 'player', tokenIds: ['nyx'], acceptedAt: null },
+    { campaignId: CID, email: 'p1@example.com', role: 'player', tokenIds: ['sinna'], acceptedAt: null },
+    { campaignId: CID, email: 'p2@example.com', role: 'player', tokenIds: ['aster'], acceptedAt: null },
+    { campaignId: CID, email: 'p3@example.com', role: 'player', tokenIds: ['elwin'], acceptedAt: null },
   );
   const s = createDemoState({ radius: 12, seed: 5 });
   // Keep each player's knowledge private for the leak tests.
@@ -40,7 +40,7 @@ describe('Online API – authentication & authorisation', () => {
   it('rejects authenticated users without an invitation or membership', async () => {
     const res = await call('t-stranger', 'GET', 'state');
     expect(res.status).toBe(403);
-    expect(JSON.stringify(res.body)).not.toContain('Livia');
+    expect(JSON.stringify(res.body)).not.toContain('Sinna');
   });
 
   it('does not redeem invitations for unconfirmed email addresses', async () => {
@@ -52,7 +52,7 @@ describe('Online API – authentication & authorisation', () => {
     expect(gm.campaigns[0].role).toBe('gm');
     const p1 = (await call('t-p1', 'GET', 'session', { role: 'gm' }, { role: 'gm' })).body as SessionInfo;
     expect(p1.campaigns[0].role).toBe('player');
-    expect(repo.assignmentList).toContainEqual({ campaignId: CID, tokenId: 'livia', userId: 'u-p1' });
+    expect(repo.assignmentList).toContainEqual({ campaignId: CID, tokenId: 'sinna', userId: 'u-p1' });
   });
 });
 
@@ -72,9 +72,9 @@ describe('Online API – filtered state', () => {
   });
 
   it('players cannot request another player’s perspective', async () => {
-    const res = (await call('t-p1', 'GET', 'state', null, { as: 'marcus' })).body as PlayerPayload;
-    expect(res.activeCharacter).toBe('livia');
-    expect(res.characters.map((c) => c.id)).toEqual(['livia']);
+    const res = (await call('t-p1', 'GET', 'state', null, { as: 'aster' })).body as PlayerPayload;
+    expect(res.activeCharacter).toBe('sinna');
+    expect(res.characters.map((c) => c.id)).toEqual(['sinna']);
   });
 });
 
@@ -84,22 +84,22 @@ describe('Online API – commands', () => {
 
   it('a player moves their own character; the move is validated, saved and visible to others', async () => {
     await call('t-gm', 'GET', 'session');
-    const res = await move('t-p1', 'livia', 1, 0);
+    const res = await move('t-p1', 'sinna', 1, 0);
     expect(res.status).toBe(200);
     const body = res.body as PlayerPayload;
     expect(body.version).toBe(2);
-    expect(body.view?.tokens.find((t) => t.id === 'livia')?.pos).toEqual({ q: 1, r: 0 });
+    expect(body.view?.tokens.find((t) => t.id === 'sinna')?.pos).toEqual({ q: 1, r: 0 });
     // Persisted: a fresh request (e.g. after a page refresh) returns the same shared state.
     const gm = (await call('t-gm', 'GET', 'state')).body as GmPayload;
-    expect(gm.state?.tokens.livia.pos).toEqual({ q: 1, r: 0 });
-    expect(gm.state!.tokens.livia.movePoints).toBeLessThan(8);
+    expect(gm.state?.tokens.sinna.pos).toEqual({ q: 1, r: 0 });
+    expect(gm.state!.tokens.sinna.movePoints).toBeLessThan(8);
     const again = (await call('t-p1', 'GET', 'state')).body as PlayerPayload;
-    expect(again.view?.tokens.find((t) => t.id === 'livia')?.pos).toEqual({ q: 1, r: 0 });
+    expect(again.view?.tokens.find((t) => t.id === 'sinna')?.pos).toEqual({ q: 1, r: 0 });
   });
 
   it('players cannot move characters that are not assigned to them', async () => {
     await call('t-p2', 'GET', 'session');
-    const res = await move('t-p1', 'marcus', 1, 0);
+    const res = await move('t-p1', 'aster', 1, 0);
     expect(res.status).toBe(403);
     expect(repo.states.get(CID)!.version).toBe(1);
     expect((await move('t-p1', 'r-ferrata', 1, 0)).status).toBe(403);
@@ -109,8 +109,8 @@ describe('Online API – commands', () => {
     for (const command of [
       { type: 'endDay' },
       { type: 'advancePhase' },
-      { type: 'place', tokenId: 'livia', to: { q: 5, r: 0 } },
-      { type: 'adjustMovePoints', tokenId: 'livia', delta: 50 },
+      { type: 'place', tokenId: 'sinna', to: { q: 5, r: 0 } },
+      { type: 'adjustMovePoints', tokenId: 'sinna', delta: 50 },
       { type: 'setTeamVisibility', teamId: 'ferrata', visibility: 'revealed' },
       { type: 'triggerEvent', eventId: 'willstorm' },
     ]) {
@@ -123,13 +123,13 @@ describe('Online API – commands', () => {
   });
 
   it('malformed commands are rejected before reaching the game logic', async () => {
-    for (const command of [null, 'move', { type: 'move', tokenId: 'livia', to: { q: 'x', r: 0 } }, { type: 'nuke' }, { type: 'move', tokenId: '../../x', to: { q: 1, r: 0 } }]) {
+    for (const command of [null, 'move', { type: 'move', tokenId: 'sinna', to: { q: 'x', r: 0 } }, { type: 'nuke' }, { type: 'move', tokenId: '../../x', to: { q: 1, r: 0 } }]) {
       expect((await call('t-gm', 'POST', 'command', { campaignId: CID, command })).status).toBe(400);
     }
   });
 
   it('rule violations are rejected with a readable message', async () => {
-    const res = await move('t-p1', 'livia', 9, 0); // unexplored
+    const res = await move('t-p1', 'sinna', 9, 0); // unexplored
     expect(res.status).toBe(422);
     expect((res.body as { error: string }).error).toMatch(/Unexplored/);
   });
@@ -140,15 +140,15 @@ describe('Online API – commands', () => {
     repo.beforeSave = () => {
       const cur = repo.states.get(CID)!;
       const s = structuredClone(cur.state);
-      s.tokens.marcus.pos = { q: -1, r: 0 };
+      s.tokens.aster.pos = { q: -1, r: 0 };
       repo.states.set(CID, { state: s, version: cur.version + 1 });
     };
-    const res = await move('t-p1', 'livia', 1, 0);
+    const res = await move('t-p1', 'sinna', 1, 0);
     expect(res.status).toBe(200);
     const final = repo.states.get(CID)!;
     expect(final.version).toBe(3);
-    expect(final.state.tokens.livia.pos).toEqual({ q: 1, r: 0 });
-    expect(final.state.tokens.marcus.pos).toEqual({ q: -1, r: 0 }); // not lost
+    expect(final.state.tokens.sinna.pos).toEqual({ q: 1, r: 0 });
+    expect(final.state.tokens.aster.pos).toEqual({ q: -1, r: 0 }); // not lost
   });
 
   it('the GM advances the phase and a dawn snapshot is created', async () => {
@@ -160,8 +160,8 @@ describe('Online API – commands', () => {
   });
 
   it('every command attempt is written to the audit log', async () => {
-    await move('t-p1', 'marcus', 1, 0);
-    await move('t-p1', 'livia', 1, 0);
+    await move('t-p1', 'aster', 1, 0);
+    await move('t-p1', 'sinna', 1, 0);
     expect(repo.log.map((e) => [e.userId, e.ok])).toEqual([
       ['u-p1', false],
       ['u-p1', true],
@@ -172,23 +172,23 @@ describe('Online API – commands', () => {
 describe('Online API – GM administration', () => {
   it('the GM invites a future player and assigns a character; the player gets it on first login', async () => {
     await call('t-gm', 'GET', 'session');
-    const r = await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'invite', email: 'New.Player@Example.com', role: 'player', tokenIds: ['cassius'] });
+    const r = await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'invite', email: 'New.Player@Example.com', role: 'player', tokenIds: ['javi'] });
     expect(r.status).toBe(200);
     repo.users.set('t-new', { id: 'u-new', email: 'new.player@example.com', emailConfirmed: true });
     const p = (await call('t-new', 'GET', 'state')).body as PlayerPayload;
-    expect(p.activeCharacter).toBe('cassius');
+    expect(p.activeCharacter).toBe('javi');
   });
 
   it('characters can be reassigned between users', async () => {
     await call('t-gm', 'GET', 'session');
     await call('t-p1', 'GET', 'session');
     await call('t-p2', 'GET', 'session');
-    await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'assign', tokenId: 'livia', userId: 'u-p2' });
+    await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'assign', tokenId: 'sinna', userId: 'u-p2' });
     expect(((await call('t-p1', 'GET', 'state')).body as PlayerPayload).characters).toEqual([]);
     const p2 = (await call('t-p2', 'GET', 'state')).body as PlayerPayload;
-    expect(p2.characters.map((c) => c.id).sort()).toEqual(['livia', 'marcus']);
-    // Player 2 now controls Livia, Player 1 no longer does.
-    const cmd = { campaignId: CID, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 0 } } };
+    expect(p2.characters.map((c) => c.id).sort()).toEqual(['aster', 'sinna']);
+    // Player 2 now controls Sinna, Player 1 no longer does.
+    const cmd = { campaignId: CID, command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } };
     expect((await call('t-p1', 'POST', 'command', cmd)).status).toBe(403);
     expect((await call('t-p2', 'POST', 'command', cmd)).status).toBe(200);
   });
@@ -213,14 +213,14 @@ describe('Online API – multiple clients', () => {
   it('all clients see the same version after a move; each only gets its permitted view', async () => {
     for (const t of ['t-gm', 't-p1', 't-p2']) await call(t, 'GET', 'session');
     const before = ((await call('t-p2', 'GET', 'state')).body as PlayerPayload).version;
-    await call('t-p1', 'POST', 'command', { campaignId: CID, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 0 } } });
+    await call('t-p1', 'POST', 'command', { campaignId: CID, command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } });
     const gm = (await call('t-gm', 'GET', 'state')).body as GmPayload;
     const p2 = (await call('t-p2', 'GET', 'state')).body as PlayerPayload;
     expect(gm.version).toBe(before + 1);
     expect(p2.version).toBe(before + 1);
-    expect(gm.state!.tokens.livia.pos).toEqual({ q: 1, r: 0 });
-    // Player 2 does not share knowledge with Livia in this setup → Livia's details stay hidden.
-    expect(p2.view!.tokens.find((t) => t.id === 'livia')?.details).toBeUndefined();
+    expect(gm.state!.tokens.sinna.pos).toEqual({ q: 1, r: 0 });
+    // Player 2 does not share knowledge with Sinna in this setup → Sinna's details stay hidden.
+    expect(p2.view!.tokens.find((t) => t.id === 'sinna')?.details).toBeUndefined();
   });
 });
 
@@ -262,7 +262,7 @@ describe('Online API – email code login', () => {
   it('the health check is public but reveals no campaign data', async () => {
     const h = await call(null, 'GET', 'health');
     expect(h.status).toBe(200);
-    expect(JSON.stringify(h.body)).not.toMatch(/livia|@example/i);
+    expect(JSON.stringify(h.body)).not.toMatch(/sinna|@example/i);
   });
 });
 
@@ -278,7 +278,7 @@ describe('Online API – presence', () => {
   it('ping returns the current version so clients can detect missed updates', async () => {
     await call('t-p1', 'GET', 'session');
     const v1 = (await call('t-p1', 'GET', 'ping')).body as { version: number };
-    await call('t-p1', 'POST', 'command', { campaignId: CID, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 0 } } });
+    await call('t-p1', 'POST', 'command', { campaignId: CID, command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } });
     const v2 = (await call('t-p1', 'GET', 'ping')).body as { version: number };
     expect(v2.version).toBe(v1.version + 1);
   });
@@ -290,5 +290,131 @@ describe('Online API – presence', () => {
     expect((await call('t-p1', 'GET', 'state')).status).toBe(403);
     expect((await call(null, 'POST', 'request-code', { email: 'p1@example.com' })).status).toBe(200);
     expect(repo.sentCodes).not.toContain('p1@example.com');
+  });
+});
+
+describe('Online API – "Who are you?" profiles', () => {
+  const seedProfiles = () => {
+    const mk = (key: string, displayName: string, characterName: string, role: 'gm' | 'player', tokenIds: string[], email: string | null = null) => ({
+      campaignId: CID,
+      key,
+      displayName,
+      characterName,
+      role,
+      tokenIds,
+      email,
+      userId: null,
+    });
+    repo.profileList = [
+      mk('gm', 'GM', 'All characters', 'gm', []),
+      mk('hannah', 'Hannah', 'Sinna', 'player', ['sinna'], 'hannah@example.com'),
+      mk('jean', 'Jean', 'Aster', 'player', ['aster'], 'jean@example.com'),
+      mk('simon', 'Simon', 'Elwin', 'player', ['elwin']),
+      mk('jerba', 'Jerba', 'Javi', 'player', ['javi']),
+    ];
+    repo.users.set('t-hannah', { id: 'u-hannah', email: 'hannah@example.com', emailConfirmed: true });
+    repo.users.set('t-jean', { id: 'u-jean', email: 'jean@example.com', emailConfirmed: true });
+  };
+  const code = (email: string, profile: string) => call(null, 'POST', 'request-code', { email, profile });
+
+  it('lists which profiles are active without revealing any account', async () => {
+    seedProfiles();
+    const r = (await call(null, 'GET', 'profiles')).body as { profiles: Array<{ key: string; active: boolean }> };
+    expect(Object.fromEntries(r.profiles.map((p) => [p.key, p.active]))).toEqual({ gm: true, hannah: true, jean: true, simon: false, jerba: false });
+    expect(JSON.stringify(r)).not.toContain('@');
+  });
+
+  it('sends a code only when the email belongs to the chosen profile', async () => {
+    seedProfiles();
+    const ok = await code('hannah@example.com', 'hannah');
+    const wrong = await code('jean@example.com', 'hannah'); // Jean picks Hannah's profile
+    const inactive = await code('someone@example.com', 'simon');
+    expect([ok.status, wrong.status, inactive.status]).toEqual([200, 200, 200]);
+    expect(ok.body).toEqual(wrong.body); // identical answer: no hint whose email it is
+    expect(repo.sentCodes).toEqual(['hannah@example.com']);
+  });
+
+  it('the GM profile accepts only Game Master accounts', async () => {
+    seedProfiles();
+    await code('p1@example.com', 'gm');
+    await code('gm@example.com', 'gm');
+    expect(repo.sentCodes).toEqual(['gm@example.com']);
+  });
+
+  it('first verified sign-in binds the account to its profile and assigns the character', async () => {
+    seedProfiles();
+    const s = (await call('t-hannah', 'GET', 'state', null, { profile: 'hannah' })).body as PlayerPayload;
+    expect(s.activeCharacter).toBe('sinna');
+    expect(repo.profileList.find((p) => p.key === 'hannah')?.userId).toBe('u-hannah');
+    expect(repo.assignmentList).toContainEqual({ campaignId: CID, tokenId: 'sinna', userId: 'u-hannah' });
+  });
+
+  it('choosing someone else’s profile is refused, even when signed in', async () => {
+    seedProfiles();
+    await call('t-hannah', 'GET', 'session');
+    const r = await call('t-jean', 'GET', 'state', null, { profile: 'hannah' });
+    expect(r.status).toBe(403);
+    expect((r.body as { code: string }).code).toBe('profile_mismatch');
+    expect(JSON.stringify(r.body)).not.toContain('hannah@');
+    expect((await call('t-p1', 'GET', 'state', null, { profile: 'gm' })).status).toBe(403); // player → GM profile
+    const cmd = { campaignId: CID, profile: 'hannah', command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } };
+    expect((await call('t-jean', 'POST', 'command', cmd)).status).toBe(403);
+  });
+
+  it('each player controls only the profile character; the GM controls all', async () => {
+    seedProfiles();
+    await call('t-gm', 'GET', 'session');
+    await call('t-hannah', 'GET', 'session');
+    await call('t-jean', 'GET', 'session');
+    const move = (t: string, profile: string, tokenId: string) =>
+      call(t, 'POST', 'command', { campaignId: CID, profile, command: { type: 'move', tokenId, to: { q: 1, r: 1 } } });
+    expect((await move('t-hannah', 'hannah', 'aster')).status).toBe(403);
+    expect((await move('t-hannah', 'hannah', 'sinna')).status).toBe(200);
+    expect((await move('t-gm', 'gm', 'aster')).status).toBe(200);
+  });
+
+  it('the GM links Simon later; only then can Simon sign in and play Elwin', async () => {
+    seedProfiles();
+    await call('t-gm', 'GET', 'session');
+    await code('simon@example.com', 'simon');
+    expect(repo.sentCodes).toEqual([]);
+    const ov = await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'linkProfile', profile: 'simon', email: 'Simon@Example.com' });
+    expect(ov.status).toBe(200);
+    expect(((ov.body as { profiles: Array<{ key: string; email: string }> }).profiles.find((p) => p.key === 'simon'))?.email).toBe('simon@example.com');
+    await code('simon@example.com', 'simon');
+    expect(repo.sentCodes).toEqual(['simon@example.com']);
+    repo.users.set('t-simon', { id: 'u-simon', email: 'simon@example.com', emailConfirmed: true });
+    const s = (await call('t-simon', 'GET', 'state', null, { profile: 'simon' })).body as PlayerPayload;
+    expect(s.activeCharacter).toBe('elwin');
+  });
+
+  it('relinking a profile moves the character and locks out the previous account', async () => {
+    seedProfiles();
+    await call('t-gm', 'GET', 'session');
+    await call('t-hannah', 'GET', 'state', null, { profile: 'hannah' });
+    await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'linkProfile', profile: 'hannah', email: 'p1@example.com' });
+    expect((await call('t-hannah', 'GET', 'state', null, { profile: 'hannah' })).status).toBe(403);
+    const p1 = (await call('t-p1', 'GET', 'state', null, { profile: 'hannah' })).body as PlayerPayload;
+    expect(p1.characters.map((c) => c.id)).toContain('sinna');
+    expect(repo.assignmentList.filter((a) => a.tokenId === 'sinna').map((a) => a.userId)).toEqual(['u-p1']);
+  });
+
+  it('one email cannot be linked to two profiles; players cannot change profiles', async () => {
+    seedProfiles();
+    await call('t-gm', 'GET', 'session');
+    const r = await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'linkProfile', profile: 'simon', email: 'hannah@example.com' });
+    expect(r.status).toBe(400);
+    expect((await call('t-p1', 'POST', 'admin', { campaignId: CID, action: 'linkProfile', profile: 'simon', email: 'p1@example.com' })).status).toBe(403);
+  });
+});
+
+describe('Online API – infrastructure failures', () => {
+  it('an unreachable database is reported as a clear 503, not a generic error', async () => {
+    repo.profiles = async () => {
+      throw new Error('profiles: TypeError: fetch failed');
+    };
+    const r = await call(null, 'POST', 'request-code', { email: 'p1@example.com', profile: 'hannah' });
+    expect(r.status).toBe(503);
+    expect((r.body as { code: string }).code).toBe('db_unreachable');
   });
 });

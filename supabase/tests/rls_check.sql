@@ -50,3 +50,14 @@ do $$ begin
   assert exists (select 1 from information_schema.columns where table_name = 'apex_campaign_members' and column_name = 'last_seen_at'), 'last_seen_at missing';
 end $$;
 \echo 'Presence migration checks passed.'
+
+-- Profiles (migration 20261103000100): seeded, no emails, invisible to clients.
+do $$ begin
+  assert (select count(*) from apex_profiles) = 5, 'five profiles seeded';
+  assert (select count(*) from apex_profiles where email is not null) = 0, 'no emails in seed';
+end $$;
+begin;
+select pg_temp.expect_denied('select * from apex_profiles', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('update apex_profiles set email = ''x@y.z''', '22222222-2222-2222-2222-222222222222');
+commit;
+\echo 'Profile checks passed.'

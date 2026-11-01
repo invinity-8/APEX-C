@@ -12,6 +12,7 @@ import type {
   HealthReport,
   Invite,
   Member,
+  Profile,
   Repo,
   Role,
   SendCodeResult,
@@ -109,13 +110,42 @@ export class SupabaseRepo implements Repo {
     return { ok: false, reason: 'failed', detail: error.message };
   }
 
+  async profiles(campaignId: string | null): Promise<Profile[]> {
+    let q = this.db.from('apex_profiles').select('*').order('sort');
+    if (campaignId) q = q.eq('campaign_id', campaignId);
+    const { data, error } = await q;
+    if (error) {
+      // Before the profiles migration is applied the welcome screen still works (all profiles inactive).
+      if (/apex_profiles|does not exist|schema cache/i.test(error.message)) return [];
+      throw new Error(`profiles: ${error.message}`);
+    }
+    return (data as Array<Record<string, unknown>>).map((r) => ({
+      campaignId: r.campaign_id as string,
+      key: r.profile_key as string,
+      displayName: r.display_name as string,
+      characterName: r.character_name as string,
+      role: r.role as Role,
+      tokenIds: (r.token_ids as string[] | null) ?? [],
+      email: (r.email as string | null) ?? null,
+      userId: (r.user_id as string | null) ?? null,
+    }));
+  }
+
+  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>): Promise<void> {
+    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.email !== undefined) row.email = patch.email;
+    if (patch.userId !== undefined) row.user_id = patch.userId;
+    if (patch.tokenIds !== undefined) row.token_ids = patch.tokenIds;
+    check(await this.db.from('apex_profiles').update(row).eq('campaign_id', campaignId).eq('profile_key', key), 'update profile');
+  }
+
   async touchMember(campaignId: string, userId: string): Promise<void> {
     await this.db.from('apex_campaign_members').update({ last_seen_at: new Date().toISOString() }).eq('campaign_id', campaignId).eq('user_id', userId);
   }
 
   async health(): Promise<HealthReport> {
     const errors: string[] = [];
-    const r: HealthReport = { database: false, authAdmin: false, campaignSeeded: false, presenceColumn: false, errors };
+    const r: HealthReport = { database: false, authAdmin: false, campaignSeeded: false, presenceColumn: false, profilesTable: false, errors };
     const camps = await this.db.from('apex_campaigns').select('id', { count: 'exact', head: true });
     if (camps.error) errors.push(`database: ${camps.error.message}`);
     else {
@@ -131,6 +161,9 @@ export class SupabaseRepo implements Repo {
     const presence = await this.db.from('apex_campaign_members').select('last_seen_at').limit(1);
     r.presenceColumn = !presence.error;
     if (presence.error) errors.push('Presence migration (20261102000100) not applied yet.');
+    const prof = await this.db.from('apex_profiles').select('profile_key', { count: 'exact', head: true });
+    r.profilesTable = !prof.error && (prof.count ?? 0) > 0;
+    if (!r.profilesTable) errors.push('Profiles migration (20261103000100) not applied yet.');
     const admin = await this.db.auth.admin.listUsers({ page: 1, perPage: 1 });
     r.authAdmin = !admin.error;
     if (admin.error) errors.push(`auth admin: ${admin.error.message}`);

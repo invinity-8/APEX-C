@@ -67,10 +67,27 @@ export interface InviteInfo {
   acceptedAt: string | null;
 }
 
+export interface ProfileInfo {
+  key: string;
+  displayName: string;
+  characterName: string;
+  role: Role;
+  tokenIds: string[];
+  /** Linked email – visible to the GM only. */
+  email: string | null;
+  /** Has the linked person signed in at least once? */
+  signedIn: boolean;
+  active: boolean;
+  online: boolean;
+}
+
 export interface AdminOverview {
   members: MemberInfo[];
   invites: InviteInfo[];
   snapshots: SnapshotInfo[];
+  profiles: ProfileInfo[];
+  /** The stored campaign still uses the old placeholder characters (Livia, Marcus, …). */
+  rosterOutdated: boolean;
 }
 
 export type AdminAction =
@@ -82,6 +99,9 @@ export type AdminAction =
   | { action: 'removeMember'; userId: string }
   | { action: 'initCampaign'; radius: number; seed: number }
   | { action: 'importState'; state: unknown }
+  | { action: 'linkProfile'; profile: string; email: string | null }
+  | { action: 'setProfileCharacters'; profile: string; tokenIds: string[] }
+  | { action: 'applyRoster' }
   | { action: 'createSnapshot'; label: string }
   | { action: 'restoreSnapshot'; id: number };
 
