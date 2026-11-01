@@ -19,7 +19,7 @@ export function IntelPanel({ view, onFocus }: { view: ViewModel; onFocus: (q: nu
                 <button
                   className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-ink-700"
                   onClick={() => pos && onFocus(pos.q, pos.r)}
-                  title="Auf der Karte zeigen"
+                  title="Show on map"
                 >
                   <span style={{ color: t.color }}>{t.emblem}</span>
                   <span className="text-marble-50">{t.name}</span>
