@@ -7,6 +7,8 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** Seconds the server asks us to wait (rate limits). */
+    public retryAfter?: number,
   ) {
     super(message);
   }
@@ -44,16 +46,16 @@ async function request<T>(
     /* non-JSON error page */
   }
   if (!res.ok) {
-    const err = (json ?? {}) as { error?: string; code?: string };
+    const err = (json ?? {}) as { error?: string; code?: string; retryAfter?: number };
     const fallback =
       res.status === 404 ? 'The APEX server (/api/apex) was not found on this deployment.' : `The APEX server answered with an error (${res.status}).`;
-    throw new ApiError(res.status, err.error ?? fallback, err.code);
+    throw new ApiError(res.status, err.error ?? fallback, err.code, typeof err.retryAfter === 'number' ? err.retryAfter : undefined);
   }
   return json as T;
 }
 
 export const api = {
-  requestCode: (email: string, profile?: string) => request<{ sent: boolean; message: string }>('POST', 'request-code', {}, { email, profile }, true),
+  requestCode: (email: string, profile?: string) => request<{ sent: boolean; message: string; retryAfter?: number }>('POST', 'request-code', {}, { email, profile }, true),
   health: () => request<import('../server/repo').HealthReport>('GET', 'health', {}, undefined, true),
   ping: (campaign: string, profile?: string) => request<{ version: number }>('GET', 'ping', { campaign, profile }),
   session: () => request<SessionInfo>('GET', 'session'),

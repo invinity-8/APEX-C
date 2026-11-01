@@ -1,5 +1,5 @@
 import type { GameState } from '../src/game/types';
-import type { Assignment, AuthUser, Campaign, CommandLogEntry, DeployStatus, Invite, Member, Profile, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
+import type { Assignment, AuthUser, Campaign, CommandLogEntry, DeployStatus, Invite, LoginRequestStats, Member, Profile, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
 
 /** In-memory Repo with the same contract as SupabaseRepo – used by the security tests. */
 export class MemoryRepo implements Repo {
@@ -37,7 +37,7 @@ export class MemoryRepo implements Repo {
     }
     if (!this.authAccounts.has(email)) return { ok: false, reason: 'failed', detail: 'no such user' };
     this.sentCodes.push(email);
-    return { ok: true };
+    return { ok: true, via: 'smtp' };
   }
   profileList: Profile[] = [];
   async profiles(campaignId: string | null) {
@@ -47,6 +47,25 @@ export class MemoryRepo implements Repo {
     const p = this.profileList.find((x) => x.campaignId === campaignId && x.key === key);
     if (p) Object.assign(p, patch);
   }
+  /** Login request log (emailHash, outcome, time). `now` can be moved forward in tests. */
+  loginRequests: Array<{ emailHash: string; outcome: string; at: number }> = [];
+  now = () => Date.now();
+  async loginRequestStats(emailHash: string): Promise<LoginRequestStats> {
+    const hourAgo = this.now() - 3600_000;
+    const mine = this.loginRequests.filter((r) => r.emailHash === emailHash);
+    const last = mine.filter((r) => r.outcome === 'accepted' || r.outcome === 'ignored').sort((a, b) => b.at - a.at)[0];
+    return {
+      lastAcceptedAt: last ? new Date(last.at).toISOString() : null,
+      emailCountHour: mine.filter((r) => r.at >= hourAgo).length,
+      globalAcceptedHour: this.loginRequests.filter((r) => r.outcome === 'accepted' && r.at >= hourAgo).length,
+    };
+  }
+  async recordLoginRequest(emailHash: string, outcome: 'accepted' | 'ignored' | 'rate_limited' | 'delivery_failed' | 'quota') {
+    this.loginRequests.push({ emailHash, outcome, at: this.now() });
+  }
+  async emailDelivery() {
+    return { via: 'smtp' as const, ok: true };
+  }
   async touchMember(campaignId: string, userId: string) {
     const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
     if (m) m.lastSeenAt = new Date().toISOString();
@@ -54,7 +73,7 @@ export class MemoryRepo implements Repo {
   /** Test hook: simulated database deployment status. */
   deploy: DeployStatus = {
     schemaVersion: 1,
-    migrations: ['20261101145653', '20261101151000'],
+    migrations: ['20261101145653', '20261101151000', '20261101160000'],
     campaignSeeded: true,
     profiles: 5,
     realtime: true,

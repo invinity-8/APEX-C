@@ -91,57 +91,101 @@ function Message({ kind, children }: { kind: 'error' | 'info'; children: ReactNo
  *  2. The player types the 6-digit code; Supabase Auth verifies it (single use, expiring, rate-limited).
  * No passwords, no public self-registration.
  */
+type RequestState =
+  | { kind: 'idle' }
+  | { kind: 'requested'; message: string }
+  | { kind: 'rate_limited'; message: string }
+  | { kind: 'quota'; message: string }
+  | { kind: 'delivery_failed'; message: string }
+  | { kind: 'error'; message: string };
+
+/** Formats a wait time for humans ("45 s", "12 min"). */
+const waitText = (s: number) => (s >= 90 ? `${Math.ceil(s / 60)} min` : `${s} s`);
+
 export function LoginPage({ profile, onBack }: { profile: ProfileConfig; onBack: () => void }) {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [req, setReq] = useState<RequestState>({ kind: 'idle' });
+  /** Seconds until a new code may be requested – only ever set from a server answer. */
+  const [wait, setWait] = useState(0);
+  const inFlight = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     headingRef.current?.focus();
   }, [step]);
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    if (wait <= 0) return;
+    const id = setTimeout(() => setWait((w) => w - 1), 1000);
     return () => clearTimeout(id);
-  }, [cooldown]);
+  }, [wait]);
 
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  /** Exactly one request per click; never retried automatically. */
   const sendCode = async () => {
+    if (inFlight.current || !emailValid) return;
+    inFlight.current = true;
     setBusy(true);
-    setError(null);
-    setInfo(null);
+    setVerifyError(null);
     try {
       const { api } = await import('./api');
-      await api.requestCode(email.trim(), profile.key);
+      const res = await api.requestCode(email.trim(), profile.key);
+      setReq({
+        kind: 'requested',
+        message: `Code requested. If ${email.trim()} belongs to ${profile.name}’s profile, an email with a 6-digit code is on its way – check your inbox and spam folder.`,
+      });
+      setWait(res.retryAfter ?? 60);
       setStep('code');
       setCode('');
-      setCooldown(60);
-      setInfo(
-        `If ${email.trim()} belongs to ${profile.name}’s profile, a 6-digit code is on its way. Check your inbox (and spam folder). The code can be used once and expires soon.`,
-      );
     } catch (e) {
-      setError((e as Error).message);
-      if ((e as { code?: string }).code === 'rate_limited') setCooldown(60);
+      const err = e as { message: string; code?: string; retryAfter?: number };
+      const kind =
+        err.code === 'rate_limited' ? 'rate_limited' : err.code === 'email_quota' ? 'quota' : err.code === 'delivery_failed' ? 'delivery_failed' : 'error';
+      setReq({ kind, message: err.message });
+      // Only a server-reported limit starts a countdown – failures never do.
+      setWait(kind === 'rate_limited' || kind === 'quota' ? (err.retryAfter ?? 0) : 0);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
 
   const verify = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     const token = code.replace(/\D/g, '');
-    if (token.length < 6) return setError('Please enter the complete code from the email.');
+    if (token.length < 6) return setVerifyError('Please enter the complete code from the email.');
     setBusy(true);
-    setError(null);
+    setVerifyError(null);
     const { error } = await supabase().auth.verifyOtp({ email: email.trim(), token, type: 'email' });
     setBusy(false);
-    if (error) setError(friendlyAuthError(error.message));
+    if (error) setVerifyError(friendlyAuthError(error.message));
     // On success onAuthStateChange (OnlineRoot) opens the campaign.
   };
+
+  const requestNotice =
+    req.kind === 'idle' ? null : (
+      <Message kind={req.kind === 'requested' ? 'info' : 'error'}>
+        <span className="font-semibold">
+          {req.kind === 'requested'
+            ? 'Code requested'
+            : req.kind === 'rate_limited'
+              ? 'Please wait'
+              : req.kind === 'quota'
+                ? 'Email limit reached'
+                : req.kind === 'delivery_failed'
+                  ? 'Email delivery failed'
+                  : 'Request failed'}
+          {': '}
+        </span>
+        {req.message}
+        {wait > 0 && req.kind !== 'requested' && <span className="block pt-1 tabular-nums">New request possible in {waitText(wait)}.</span>}
+      </Message>
+    );
 
   return (
     <AuthShell>
@@ -162,10 +206,21 @@ export function LoginPage({ profile, onBack }: { profile: ProfileConfig; onBack:
             Enter the email address of {profile.name}’s account. We will email you a one-time 6-digit code – no password needed.
           </p>
           <Field label="Email address" type="email" value={email} onChange={setEmail} autoComplete="email" autoFocus />
-          {error && <Message kind="error">{error}</Message>}
-          <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy || cooldown > 0}>
+          {requestNotice}
+          <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy || wait > 0 || !emailValid}>
             {busy ? <Spinner /> : null}
-            {cooldown > 0 ? `Send code (wait ${cooldown}s)` : 'Send me a code'}
+            {busy ? 'Requesting code…' : wait > 0 ? `Send code (in ${waitText(wait)})` : 'Send me a code'}
+          </button>
+          <button
+            type="button"
+            className="block w-full text-center text-xs text-marble-300 underline-offset-2 hover:underline disabled:opacity-40"
+            disabled={!emailValid}
+            onClick={() => {
+              setStep('code');
+              setVerifyError(null);
+            }}
+          >
+            I already have a code
           </button>
           <button type="button" className="block w-full text-center text-xs text-gold-300 underline-offset-2 hover:underline" onClick={onBack}>
             Not {profile.name}? Choose another profile
@@ -177,9 +232,12 @@ export function LoginPage({ profile, onBack }: { profile: ProfileConfig; onBack:
           <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-marble-50 focus:outline-none">
             Enter your code
           </h2>
-          {info && <Message kind="info">{info}</Message>}
+          <p className="text-xs text-marble-300">
+            Code for <b className="text-marble-50">{email.trim()}</b>. You can use a code you already received – no new request needed.
+          </p>
+          {requestNotice}
           <CodeField value={code} onChange={setCode} />
-          {error && <Message kind="error">{error}</Message>}
+          {verifyError && <Message kind="error">{verifyError}</Message>}
           <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy}>
             {busy ? <Spinner /> : null} Sign in
           </button>
@@ -189,13 +247,18 @@ export function LoginPage({ profile, onBack }: { profile: ProfileConfig; onBack:
               className="text-gold-300 underline-offset-2 hover:underline"
               onClick={() => {
                 setStep('email');
-                setError(null);
+                setVerifyError(null);
               }}
             >
               ← Use a different email
             </button>
-            <button type="button" className="text-marble-300 underline-offset-2 hover:underline disabled:opacity-50" disabled={busy || cooldown > 0} onClick={() => void sendCode()}>
-              {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Send a new code'}
+            <button
+              type="button"
+              className="text-marble-300 underline-offset-2 hover:underline disabled:opacity-50"
+              disabled={busy || wait > 0}
+              onClick={() => void sendCode()}
+            >
+              {wait > 0 ? `New code possible in ${waitText(wait)}` : 'Send a new code'}
             </button>
           </div>
         </form>
