@@ -8,13 +8,18 @@
  *   - /realtime/v1/websocket     Phoenix (vsn 2.0.0) postgres_changes for apex_campaign_heads
  *   - /api/apex                  the REAL handleApi() with an in-memory repository
  *
- * Usage: npm run dev:mock  → http://localhost:5174  (accounts listed in MOCK_USERS below)
+ * Usage: npm run dev:mock  → http://localhost:5174  (accounts listed in MOCK_USERS below).
+ * Login works like production: enter the email, then the 6-digit code. In the mock the code is
+ * printed to the terminal and readable at /__mock/code?email=… instead of being emailed.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-export const MOCK_PASSWORD = 'apex-test-123';
+/** Last emailed one-time code per address (exposed at /__mock/code?email=… for the E2E script). */
+const codes = new Map<string, { code: string; expires: number; used: boolean }>();
+/** When true, /api/apex answers 503 – simulates a server/database outage. */
+let apiDown = false;
 export const MOCK_USERS = [
   { id: '00000000-0000-4000-8000-000000000001', email: 'gm@apex.test' },
   { id: '00000000-0000-4000-8000-000000000002', email: 'player1@apex.test' },
@@ -123,6 +128,16 @@ export function mockSupabase(): Plugin {
       notify(a[0]);
       return v;
     };
+    // Emailed codes → generated here, verified by the /auth/v1/verify mock (single use, 10 min).
+    r.sendLoginCode = async (email) => {
+      if (!r.authAccounts.has(email)) return { ok: false, reason: 'failed', detail: 'no such user' };
+      const prev = codes.get(email);
+      if (prev && !prev.used && prev.expires - 600_000 + 5_000 > Date.now()) return { ok: false, reason: 'rate_limited' };
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      codes.set(email, { code, expires: Date.now() + 600_000, used: false });
+      console.log(`[mock] login code for ${email}: ${code}`);
+      return { ok: true };
+    };
     repo = r;
     return r;
   }
@@ -134,14 +149,20 @@ export function mockSupabase(): Plugin {
       server.middlewares.use('/auth/v1', async (req, res) => {
         const url = new URL(req.url ?? '/', 'http://x');
         const body = req.method === 'POST' ? await readBody(req) : '';
+        if (url.pathname === '/verify') {
+          const data = body ? JSON.parse(body) : {};
+          const email = String(data.email ?? '').toLowerCase();
+          const c = codes.get(email);
+          const u = MOCK_USERS.find((x) => x.email === email);
+          if (!u || !c || c.used || c.expires < Date.now() || c.code !== data.token) {
+            return send(res, 403, { code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
+          }
+          c.used = true;
+          return send(res, 200, session(u));
+        }
         if (url.pathname === '/token') {
           const data = body ? JSON.parse(body) : {};
           const grant = url.searchParams.get('grant_type');
-          if (grant === 'password') {
-            const u = MOCK_USERS.find((x) => x.email === String(data.email).toLowerCase());
-            if (!u || data.password !== MOCK_PASSWORD) return send(res, 400, { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' });
-            return send(res, 200, session(u));
-          }
           if (grant === 'refresh_token') {
             const u = MOCK_USERS.find((x) => `ref-${x.id}` === data.refresh_token);
             return u ? send(res, 200, session(u)) : send(res, 400, { code: 400, msg: 'Invalid Refresh Token' });
@@ -156,8 +177,20 @@ export function mockSupabase(): Plugin {
         return send(res, 404, { msg: 'mock: not implemented' });
       });
 
+      // ---------- Test controls ----------
+      server.middlewares.use('/__mock', (req, res) => {
+        const url = new URL(req.url ?? '/', 'http://x');
+        if (url.pathname === '/code') return send(res, 200, { code: codes.get(String(url.searchParams.get('email')).toLowerCase())?.code ?? null });
+        if (url.pathname === '/api-down') {
+          apiDown = url.searchParams.get('on') === '1';
+          return send(res, 200, { apiDown });
+        }
+        return send(res, 404, {});
+      });
+
       // ---------- API (real handler, in-memory repo) ----------
       server.middlewares.use('/api/apex', async (req, res) => {
+        if (apiDown) return send(res, 503, { error: 'Database unavailable (simulated outage).' });
         const r = await getRepo(server);
         const { handleApi } = (await server.ssrLoadModule('/src/server/api.ts')) as typeof import('../src/server/api');
         const url = new URL(req.url ?? '/', 'http://x');
