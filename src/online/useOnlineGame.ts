@@ -2,7 +2,8 @@
  * Online backend: the shared campaign lives in Supabase; every change goes through /api/apex.
  *
  * Sync strategy
- *  - Supabase Realtime pushes only a tiny version counter (apex_campaign_heads, RLS-protected).
+ *  - Supabase Realtime broadcasts only a tiny version counter on a secret topic that the server
+ *    hands out to signed-in profiles (rotated when the GM revokes someone's access).
  *  - When the counter is newer than ours, we re-fetch our own filtered view from the server.
  *  - A heartbeat (/api/apex?op=ping, every 25 s; every 8 s while realtime is down) keeps presence
  *    fresh and detects missed pings by comparing versions.
@@ -14,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Command } from '../game/commands';
 import { buildGmView, type ViewModel } from '../game/visibility';
 import type { CampaignPayload } from '../server/protocol';
-import { withLookup, type Connection, type GameApi } from '../state/gameApi';
+import { withLookup, type Connection, type GameApi, type SheetApi, type SheetResult } from '../state/gameApi';
 import { api, ApiError } from './api';
 import { supabase } from './supabase';
 
@@ -29,11 +30,18 @@ export interface OnlineGameResult {
 }
 
 /**
- * @param profile key chosen on "Who are you?" – sent with every request; the server rejects it
- *                unless the signed-in account is linked to that profile.
+ * @param initialTopic secret Realtime topic from the session (refreshed by the heartbeat).
  * @param initialCharacter the profile's character, selected first.
  */
-export function useOnlineGame(campaignId: string, email: string, signOut: () => void, profile?: string, initialCharacter?: string): OnlineGameResult {
+export function useOnlineGame(
+  campaignId: string,
+  profileName: string,
+  initialTopic: string,
+  signOut: () => void,
+  initialCharacter?: string,
+): OnlineGameResult {
+  const [syncTopic, setSyncTopic] = useState(initialTopic);
+  const [sheetRevision, setSheetRevision] = useState(0);
   const [payload, setPayload] = useState<CampaignPayload | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [realtime, setRealtime] = useState<'live' | 'connecting' | 'down'>('connecting');
@@ -78,7 +86,7 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     }
     const run = (async () => {
       try {
-        accept(await api.state(campaignId, activeRef.current ?? undefined, profile), force);
+        accept(await api.state(campaignId, activeRef.current ?? undefined), force);
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError(0, String(e));
         if (err.status === 401 || err.status === 403) setError(err);
@@ -96,30 +104,28 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     })();
     inflight.current = run;
     return run;
-  }, [accept, campaignId, profile]);
+  }, [accept, campaignId]);
 
   // Initial load
   useEffect(() => {
     void refresh(true);
   }, [refresh]);
 
-  // Realtime version pings
+  // Realtime: version pings on the campaign's secret broadcast topic (handed out by the server).
   useEffect(() => {
     const client = supabase();
     const channel = client
-      .channel(`apex-head-${campaignId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'apex_campaign_heads', filter: `campaign_id=eq.${campaignId}` },
-        (msg) => {
-          const v = Number((msg.new as { version?: number } | null)?.version ?? 0);
-          if (v > versionRef.current) void refresh();
-        },
-      )
+      .channel(syncTopic, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'version' }, (msg) => {
+        const v = Number((msg.payload as { version?: number } | undefined)?.version ?? 0);
+        if (v > versionRef.current) void refresh();
+      })
+      .on('broadcast', { event: 'sheet' }, () => setSheetRevision((r) => r + 1))
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setRealtime('live');
           void refresh(); // catch up on anything missed while disconnected
+          setSheetRevision((r) => r + 1);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setRealtime('down'); // supabase-js retries on its own; the heartbeat polls meanwhile
         }
@@ -127,13 +133,15 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     return () => {
       void client.removeChannel(channel);
     };
-  }, [campaignId, refresh, profile]);
+  }, [campaignId, refresh, syncTopic]);
 
   // Heartbeat: presence + missed-update detection + server reachability
   const beat = useCallback(async () => {
     try {
-      const { version } = await api.ping(campaignId, profile);
+      const { version, syncTopic: topic } = await api.ping(campaignId);
       setApiOk(true);
+      if (topic && topic !== syncTopic) setSyncTopic(topic);
+      if (realtime !== 'live') setSheetRevision((r) => r + 1); // no live pings → poll sheets too
       if (version !== versionRef.current) void refresh(true);
       else setSyncError(null);
     } catch (e) {
@@ -144,7 +152,7 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
         setSyncError(err.message);
       }
     }
-  }, [campaignId, refresh]);
+  }, [campaignId, refresh, syncTopic, realtime]);
 
   useEffect(() => {
     const every = realtime === 'live' && apiOk !== false ? 25_000 : 8_000;
@@ -210,11 +218,11 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
 
   const dispatch = useCallback(
     async (cmd: Command) => {
-      const r = await run(() => api.command(campaignId, cmd, activeRef.current ?? undefined, profile));
+      const r = await run(() => api.command(campaignId, cmd, activeRef.current ?? undefined));
       if (r.ok) accept(r.value, true);
       return r.ok ? { ok: true } : { ok: false, error: r.error };
     },
-    [accept, campaignId, run, profile],
+    [accept, campaignId, run],
   );
 
   const adminCall = useCallback(
@@ -225,6 +233,26 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
       return { ok: true };
     },
     [accept, campaignId, run],
+  );
+
+  const sheetCall = useCallback(async (fn: () => Promise<import('../server/protocol').SheetPayload>): Promise<SheetResult> => {
+    try {
+      return { ok: true, sheet: await fn() };
+    } catch (e) {
+      const err = e instanceof ApiError ? e : new ApiError(0, String(e));
+      if (err.status === 401) setError(err);
+      const conflict = err.details?.current as import('../server/protocol').SheetPayload | undefined;
+      return { ok: false, error: err.status === 0 || err.status >= 500 ? `${err.message} Your change was NOT saved.` : err.message, conflict };
+    }
+  }, []);
+  const sheets: SheetApi = useMemo(
+    () => ({
+      revision: sheetRevision,
+      load: (tokenId) => sheetCall(() => api.sheet(tokenId)),
+      save: (tokenId, sheet, expectedVersion, reason) => sheetCall(() => api.saveSheet(tokenId, sheet, expectedVersion, reason)),
+      adjust: (tokenId, target, delta, resourceId) => sheetCall(() => api.adjustSheet(tokenId, target, delta, resourceId)),
+    }),
+    [sheetCall, sheetRevision],
   );
 
   const gmState = payload?.role === 'gm' ? payload.state : null;
@@ -252,8 +280,17 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
             }
             return adminCall({ action: 'importState', state: parsed });
           },
+          sheets,
           online: {
-            email,
+            profileName,
+            changePassword: async (current, next) => {
+              try {
+                await api.changePassword(current, next);
+                return { ok: true };
+              } catch (e) {
+                return { ok: false, error: (e as Error).message };
+              }
+            },
             campaignId,
             campaignName: payload.campaignName,
             characters: payload.role === 'player' ? payload.characters : [],

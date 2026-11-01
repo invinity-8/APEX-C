@@ -1,12 +1,12 @@
 /**
  * Campaign profiles shown on the "Who are you?" screen.
  *
- * DISPLAY ONLY. Choosing a profile grants nothing: the server only lets a person in when the
- * email they verified with a one-time code is linked to that profile in Supabase
- * (table apex_profiles). No email addresses or secrets belong in this file.
+ * DISPLAY ONLY. Choosing a profile grants nothing: the server only opens a profile with its
+ * password (checked against an Argon2id hash in Supabase). Role and characters always come from
+ * the database (table apex_profiles). No passwords or secrets belong in this file.
  *
- * The same five profiles are seeded into Supabase by
- * supabase/migrations/20261103000100_apex_profiles.sql (keys and token ids must match).
+ * The same five profiles are seeded into Supabase by the baseline migration
+ * supabase/migrations/20261101145653_apex_baseline.sql (keys and token ids must match).
  */
 export type ProfileRole = 'gm' | 'player';
 

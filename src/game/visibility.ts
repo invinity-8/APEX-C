@@ -22,7 +22,9 @@ import type {
   Token,
   TokenKind,
   WillPool,
+  InventoryContainer,
 } from './types.js';
+import { containersOf } from './inventory.js';
 
 // ---------------- Grundfunktionen ----------------
 
@@ -118,7 +120,9 @@ export interface TokenDetails {
   controllers: string[];
   sharesWithParty: boolean;
   will: WillPool;
+  /** Private: only the character's own player and the GM receive the inventory. */
   inventory: Item[];
+  containers?: InventoryContainer[];
 }
 
 export interface TokenView {
@@ -182,7 +186,7 @@ export function edgeMask(state: GameState, h: Axial): number {
   return mask;
 }
 
-const detailsOf = (t: Token): TokenDetails => ({
+const detailsOf = (t: Token, withInventory = true): TokenDetails => ({
   movePoints: t.movePoints,
   maxMovePoints: t.maxMovePoints,
   visionRadius: t.visionRadius,
@@ -190,10 +194,11 @@ const detailsOf = (t: Token): TokenDetails => ({
   controllers: [...t.controllers],
   sharesWithParty: t.sharesWithParty,
   will: { ...t.will },
-  inventory: t.inventory.map((i) => ({ ...i })),
+  inventory: withInventory ? t.inventory.map((i) => ({ ...i })) : [],
+  containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
 });
 
-const tokenView = (t: Token, withDetails: boolean): TokenView => ({
+const tokenView = (t: Token, withDetails: boolean, withInventory = true): TokenView => ({
   id: t.id,
   name: t.name,
   kind: t.kind,
@@ -202,7 +207,7 @@ const tokenView = (t: Token, withDetails: boolean): TokenView => ({
   color: t.color,
   initials: t.initials,
   pos: { ...t.pos },
-  details: withDetails ? detailsOf(t) : undefined,
+  details: withDetails ? detailsOf(t, withInventory) : undefined,
 });
 
 /** Vollansicht für den Spielleiter. */
@@ -319,7 +324,8 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
   // Figuren: eigene Gruppe vollständig, Rivalen nur aktuell sichtbar bzw. vom GM enthüllt.
   const tokens: TokenView[] = [];
   for (const t of Object.values(state.tokens)) {
-    if (groupIds.has(t.id)) tokens.push(tokenView(t, true));
+    // Party members' movement/Will stay shared, but inventories are private to their owner.
+    if (groupIds.has(t.id)) tokens.push(tokenView(t, true, t.id === viewerId));
     else if (t.kind === 'rival') {
       const team = state.teams[t.teamId];
       const seen = team?.visibility === 'revealed' || (team?.visibility === 'auto' && visible.has(hexKey(t.pos)));

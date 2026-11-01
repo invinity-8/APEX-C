@@ -90,6 +90,18 @@ export interface Item {
   /** Nur für Willensgefäße: gespeicherte Willenskraft. */
   willCharge?: number;
   willCapacity?: number;
+  /** APEX 0.3: inventory container id (missing = derived default, see inventory.ts). */
+  container?: string;
+  /** Free-text notes of the owner. */
+  notes?: string;
+  /** Revision counter – edits must name the revision they are based on (no silent overwrites). */
+  rev?: number;
+}
+
+/** A place in a character's inventory (Backpack, Pockets … or custom). */
+export interface InventoryContainer {
+  id: string;
+  name: string;
 }
 
 export interface Token {
@@ -113,6 +125,8 @@ export interface Token {
   sharesWithParty: boolean;
   will: WillPool;
   inventory: Item[];
+  /** APEX 0.3: inventory containers (missing = the default set, see inventory.ts). */
+  containers?: InventoryContainer[];
 }
 
 export type TeamVisibility = 'auto' | 'hidden' | 'revealed';

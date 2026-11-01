@@ -1,5 +1,5 @@
 /**
- * Entry experience: Welcome → "Who are you?" → (login, handled by the online module).
+ * Entry experience: Welcome → "Who are you?" → password (handled by the online module).
  * These screens contain no Supabase code, so they also render when the deployment
  * is not configured – joining then shows a clear setup error instead of a local game.
  */
@@ -65,11 +65,13 @@ export function WelcomeScreen({ onJoin }: { onJoin: () => void }) {
   );
 }
 
+/** key → can be selected (activated with a password, or the GM profile awaiting first-time setup). */
 export type ProfileStatus = Record<string, boolean> | null;
 
 /** Loads which profiles are active (public, no account data). null = unknown. */
-export function useProfileStatus(enabled: boolean): { status: ProfileStatus; error: string | null; loading: boolean } {
+export function useProfileStatus(enabled: boolean): { status: ProfileStatus; needsSetup: string[]; error: string | null; loading: boolean } {
   const [status, setStatus] = useState<ProfileStatus>(null);
+  const [needsSetup, setNeedsSetup] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
   useEffect(() => {
@@ -79,16 +81,20 @@ export function useProfileStatus(enabled: boolean): { status: ProfileStatus; err
       .then(async (r) => {
         const body = await r.json().catch(() => null);
         if (!r.ok) throw new Error(body?.error ?? `The APEX server answered with an error (${r.status}).`);
-        return body as { profiles: Array<{ key: string; active: boolean }> };
+        return body as { profiles: Array<{ key: string; active: boolean; needsSetup?: boolean }> };
       })
-      .then((b) => !cancelled && setStatus(Object.fromEntries(b.profiles.map((p) => [p.key, p.active]))))
+      .then((b) => {
+        if (cancelled) return;
+        setStatus(Object.fromEntries(b.profiles.map((p) => [p.key, p.active || !!p.needsSetup])));
+        setNeedsSetup(b.profiles.filter((p) => p.needsSetup).map((p) => p.key));
+      })
       .catch((e: Error) => !cancelled && setError(e.message.includes('fetch') ? 'Cannot reach the APEX server.' : e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
   }, [enabled]);
-  return { status, error, loading };
+  return { status, needsSetup, error, loading };
 }
 
 export function ProfileSelect({
@@ -111,7 +117,7 @@ export function ProfileSelect({
       <div className="text-center">
         <p className="text-[11px] uppercase tracking-[0.35em] text-marble-500">APEX – Arena of the Eternal Will</p>
         <h1 className="mt-2 font-display text-3xl font-black text-gold-300">Who are you?</h1>
-        <p className="mt-2 text-sm text-marble-300">Choose your profile. You will confirm it with a code sent to your email.</p>
+        <p className="mt-2 text-sm text-marble-300">Choose your profile. You will confirm it with your password.</p>
       </div>
       {statusError && (
         <div role="alert" className="mx-auto mt-4 max-w-xl rounded-lg border border-blood-400/50 bg-blood-600/20 px-3 py-2 text-center text-xs text-red-200">

@@ -1,33 +1,26 @@
 /**
  * LOCAL TEST HARNESS ONLY – never deployed.
  *
- * A Vite plugin that imitates the parts of Supabase the APEX client uses, so the real
- * online client (supabase-js auth + realtime, /api/apex) can be exercised in browsers
+ * A Vite plugin that runs the REAL APEX server code (handleApi) with an in-memory repository
+ * and imitates Supabase Realtime broadcast, so the online client can be exercised in browsers
  * without network access to Supabase:
- *   - /auth/v1/*                 email/password auth with fixed test accounts
- *   - /realtime/v1/websocket     Phoenix (vsn 2.0.0) postgres_changes for apex_campaign_heads
- *   - /api/apex                  the REAL handleApi() with an in-memory repository
+ *   - /api/apex                  the REAL handleApi() (password login, HttpOnly session cookies, CSRF)
+ *   - /realtime/v1/websocket     Phoenix (vsn 2.0.0) broadcast on the campaign's secret topic
  *
- * Usage: npm run dev:mock  → http://localhost:5174  (accounts listed in MOCK_USERS below).
- * Login works like production: enter the email, then the 6-digit code. In the mock the code is
- * printed to the terminal and readable at /__mock/code?email=… instead of being emailed.
+ * Usage: npm run dev:mock  → http://localhost:5174
+ * Test profiles: Hannah (password "hannah-test-pass"), Jean ("jean-test-pass"). The GM profile needs
+ * first-time setup: the one-time setup code is printed in the terminal and readable at /__mock/setup-code.
+ * Simon and Jerba are locked until the GM sets a password.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-/** Last emailed one-time code per address (exposed at /__mock/code?email=… for the E2E script). */
-const codes = new Map<string, { code: string; expires: number; used: boolean }>();
 /** When true, /api/apex answers 503 – simulates a server/database outage. */
 let apiDown = false;
-export const MOCK_USERS = [
-  { id: '00000000-0000-4000-8000-000000000001', email: 'gm@apex.test' },
-  { id: '00000000-0000-4000-8000-000000000002', email: 'hannah@apex.test' },
-  { id: '00000000-0000-4000-8000-000000000003', email: 'jean@apex.test' },
-  { id: '00000000-0000-4000-8000-000000000004', email: 'stranger@apex.test' },
-  { id: '00000000-0000-4000-8000-000000000005', email: 'simon@apex.test' },
-];
 const CAMPAIGN = 'c0000000-0000-4000-8000-000000000001';
+export const MOCK_PASSWORDS = { hannah: 'hannah-test-pass', jean: 'jean-test-pass' };
+const SETUP_CODE = 'A1B2-C3D4-E5F6-0718-293A-4B5C';
 
 type Repo = import('../tests/memoryRepo').MemoryRepo;
 
@@ -39,120 +32,56 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function send(res: ServerResponse, status: number, body: unknown) {
+function send(res: ServerResponse, status: number, body: unknown, cookies: string[] = []) {
   res.statusCode = status;
   res.setHeader('content-type', 'application/json');
+  res.setHeader('cache-control', 'no-store');
+  if (cookies.length) res.setHeader('set-cookie', cookies);
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-const userJson = (u: (typeof MOCK_USERS)[number]) => ({
-  id: u.id,
-  aud: 'authenticated',
-  role: 'authenticated',
-  email: u.email,
-  email_confirmed_at: '2026-11-01T00:00:00Z',
-  app_metadata: { provider: 'email' },
-  user_metadata: {},
-  created_at: '2026-11-01T00:00:00Z',
-});
-
-const session = (u: (typeof MOCK_USERS)[number]) => ({
-  access_token: `tok-${u.id}`,
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: Math.floor(Date.now() / 1000) + 3600,
-  refresh_token: `ref-${u.id}`,
-  user: userJson(u),
-});
-
-const userFromBearer = (req: IncomingMessage) => {
-  const t = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-  return MOCK_USERS.find((u) => `tok-${u.id}` === t) ?? null;
-};
-
 export function mockSupabase(): Plugin {
   let repo: Repo | null = null;
-  const subs = new Set<{ ws: WebSocket; topic: string; joinRef: string; id: number; campaign: string; userId: string }>();
+  const subs = new Set<{ ws: WebSocket; topic: string; joinRef: string }>();
 
   async function getRepo(server: ViteDevServer): Promise<Repo> {
     if (repo) return repo;
     const { MemoryRepo } = (await server.ssrLoadModule('/tests/memoryRepo.ts')) as typeof import('../tests/memoryRepo');
+    const seed = (await server.ssrLoadModule('/tests/seed.ts')) as typeof import('../tests/seed');
     const r = new MemoryRepo();
     r.campaigns.push({ id: CAMPAIGN, slug: 'main', name: 'APEX – Arena of the Eternal Will' });
-    for (const u of MOCK_USERS) r.users.set(`tok-${u.id}`, { id: u.id, email: u.email, emailConfirmed: true });
-    r.inviteList.push({ campaignId: CAMPAIGN, email: 'gm@apex.test', role: 'gm', tokenIds: [], acceptedAt: null });
-    // Same profiles as supabase/migrations/20261103000100_apex_profiles.sql; Hannah & Jean linked to TEST
-    // addresses, Simon & Jerba inactive (the GM links them in the E2E test).
-    const prof = (key: string, displayName: string, characterName: string, role: 'gm' | 'player', tokenIds: string[], email: string | null) => ({
-      campaignId: CAMPAIGN,
-      key,
-      displayName,
-      characterName,
-      role,
-      tokenIds,
-      email,
-      userId: null,
-    });
-    r.profileList = [
-      prof('gm', 'GM', 'All characters', 'gm', [], null),
-      prof('hannah', 'Hannah', 'Sinna', 'player', ['sinna'], 'hannah@apex.test'),
-      prof('jean', 'Jean', 'Aster', 'player', ['aster'], 'jean@apex.test'),
-      prof('simon', 'Simon', 'Elwin', 'player', ['elwin'], null),
-      prof('jerba', 'Jerba', 'Javi', 'player', ['javi'], null),
-    ];
-    // Realtime: broadcast the head version after every write (like the DB trigger).
-    const notify = (campaignId: string) => {
-      const v = r.states.get(campaignId)?.version ?? 0;
+    seed.seedProfiles(r, CAMPAIGN);
+    await seed.activate(r, CAMPAIGN, 'hannah', MOCK_PASSWORDS.hannah);
+    await seed.activate(r, CAMPAIGN, 'jean', MOCK_PASSWORDS.jean);
+    seed.addSetupCode(r, CAMPAIGN, SETUP_CODE, 24 * 3600_000);
+    console.log(`[mock] GM setup code: ${SETUP_CODE}`);
+
+    // Realtime: broadcast like the database triggers do (version after game-state writes, "sheet" after sheet writes).
+    const broadcast = async (campaignId: string, event: 'version' | 'sheet') => {
+      const topic = `realtime:${await r.syncTopic(campaignId)}`;
+      const payload = event === 'version' ? { version: r.states.get(campaignId)?.version ?? 0 } : { sheet: true };
       for (const s of subs) {
-        if (s.campaign !== campaignId || !r.memberList.some((m) => m.campaignId === campaignId && m.userId === s.userId)) continue;
-        s.ws.send(
-          JSON.stringify([
-            s.joinRef,
-            null,
-            s.topic,
-            'postgres_changes',
-            {
-              ids: [s.id],
-              data: {
-                schema: 'public',
-                table: 'apex_campaign_heads',
-                commit_timestamp: new Date().toISOString(),
-                type: 'UPDATE',
-                columns: [
-                  { name: 'campaign_id', type: 'uuid' },
-                  { name: 'version', type: 'int8' },
-                  { name: 'updated_at', type: 'timestamptz' },
-                ],
-                record: { campaign_id: campaignId, version: v, updated_at: new Date().toISOString() },
-                old_record: { campaign_id: campaignId },
-                errors: null,
-              },
-            },
-          ]),
-        );
+        if (s.topic !== topic) continue;
+        s.ws.send(JSON.stringify([s.joinRef, null, s.topic, 'broadcast', { type: 'broadcast', event, payload }]));
       }
     };
     const save = r.saveState.bind(r);
     const replace = r.replaceState.bind(r);
+    const saveSheet = r.saveSheet.bind(r);
     r.saveState = async (...a) => {
       const v = await save(...a);
-      if (v !== null) notify(a[0]);
+      if (v !== null) void broadcast(a[0], 'version');
       return v;
     };
     r.replaceState = async (...a) => {
       const v = await replace(...a);
-      notify(a[0]);
+      void broadcast(a[0], 'version');
       return v;
     };
-    // Emailed codes → generated here, verified by the /auth/v1/verify mock (single use, 10 min).
-    r.sendLoginCode = async (email) => {
-      if (!r.authAccounts.has(email)) return { ok: false, reason: 'failed', detail: 'no such user' };
-      const prev = codes.get(email);
-      if (prev && !prev.used && prev.expires - 600_000 + 5_000 > Date.now()) return { ok: false, reason: 'rate_limited', retryAfter: 5 };
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      codes.set(email, { code, expires: Date.now() + 600_000, used: false });
-      console.log(`[mock] login code for ${email}: ${code}`);
-      return { ok: true, via: 'smtp' };
+    r.saveSheet = async (...a) => {
+      const v = await saveSheet(...a);
+      if (v !== null) void broadcast(a[0], 'sheet');
+      return v;
     };
     repo = r;
     return r;
@@ -161,45 +90,22 @@ export function mockSupabase(): Plugin {
   return {
     name: 'apex-mock-supabase',
     configureServer(server) {
-      // ---------- Auth ----------
-      server.middlewares.use('/auth/v1', async (req, res) => {
-        const url = new URL(req.url ?? '/', 'http://x');
-        const body = req.method === 'POST' ? await readBody(req) : '';
-        if (url.pathname === '/verify') {
-          const data = body ? JSON.parse(body) : {};
-          const email = String(data.email ?? '').toLowerCase();
-          const c = codes.get(email);
-          const u = MOCK_USERS.find((x) => x.email === email);
-          if (!u || !c || c.used || c.expires < Date.now() || c.code !== data.token) {
-            return send(res, 403, { code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
-          }
-          c.used = true;
-          return send(res, 200, session(u));
-        }
-        if (url.pathname === '/token') {
-          const data = body ? JSON.parse(body) : {};
-          const grant = url.searchParams.get('grant_type');
-          if (grant === 'refresh_token') {
-            const u = MOCK_USERS.find((x) => `ref-${x.id}` === data.refresh_token);
-            return u ? send(res, 200, session(u)) : send(res, 400, { code: 400, msg: 'Invalid Refresh Token' });
-          }
-        }
-        if (url.pathname === '/user') {
-          const u = userFromBearer(req);
-          return u ? send(res, 200, userJson(u)) : send(res, 401, { code: 401, msg: 'invalid JWT' });
-        }
-        if (url.pathname === '/logout') return send(res, 204, undefined);
-        if (url.pathname === '/recover') return send(res, 200, {});
-        return send(res, 404, { msg: 'mock: not implemented' });
-      });
-
       // ---------- Test controls ----------
       server.middlewares.use('/__mock', (req, res) => {
         const url = new URL(req.url ?? '/', 'http://x');
-        if (url.pathname === '/code') return send(res, 200, { code: codes.get(String(url.searchParams.get('email')).toLowerCase())?.code ?? null });
+        if (url.pathname === '/setup-code') return send(res, 200, { code: SETUP_CODE });
         if (url.pathname === '/api-down') {
           apiDown = url.searchParams.get('on') === '1';
           return send(res, 200, { apiDown });
+        }
+        if (url.pathname === '/inspect') {
+          // Test-only: proves what is stored (hashes, never plain passwords).
+          const r = repo;
+          return send(res, 200, {
+            credentials: r ? [...r.credentials.entries()].map(([k, c]) => [k, c.passwordHash.slice(0, 30)]) : [],
+            sessions: r ? [...r.sessions.values()].filter((s) => !s.revokedAt).map((s) => s.profileKey) : [],
+            sheets: r ? [...r.sheets.keys()] : [],
+          });
         }
         return send(res, 404, {});
       });
@@ -211,42 +117,42 @@ export function mockSupabase(): Plugin {
         const { handleApi } = (await server.ssrLoadModule('/src/server/api.ts')) as typeof import('../src/server/api');
         const url = new URL(req.url ?? '/', 'http://x');
         const raw = req.method === 'POST' ? await readBody(req) : '';
-        const auth = req.headers.authorization ?? '';
+        const headers: Record<string, string> = {};
+        for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v;
+        let body: unknown = null;
+        try {
+          body = raw ? JSON.parse(raw) : null;
+        } catch {
+          return send(res, 400, { error: 'Invalid JSON.' });
+        }
         const out = await handleApi(
           {
             method: req.method ?? 'GET',
             op: url.searchParams.get('op') ?? '',
-            token: auth.toLowerCase().startsWith('bearer ') ? auth.slice(7) : null,
             query: Object.fromEntries(url.searchParams.entries()),
-            body: raw ? JSON.parse(raw) : null,
+            body,
+            headers,
+            ip: req.socket.remoteAddress ?? null,
           },
           r,
         );
-        send(res, out.status, out.body);
+        send(res, out.status, out.body, out.cookies);
       });
 
-      // ---------- Realtime (Phoenix vsn 2.0.0, JSON array frames) ----------
+      // ---------- Realtime (Phoenix vsn 2.0.0, JSON array frames, broadcast only) ----------
       const wss = new WebSocketServer({ noServer: true });
       server.httpServer?.on('upgrade', (req, socket, head) => {
         if (!req.url?.startsWith('/realtime/v1/websocket')) return;
         wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
       });
-      let nextId = 1000;
       wss.on('connection', (ws) => {
         ws.on('message', (raw) => {
-          const [joinRef, ref, topic, event, payload] = JSON.parse(String(raw));
+          const [joinRef, ref, topic, event] = JSON.parse(String(raw));
           const reply = (response: unknown, status = 'ok') => ws.send(JSON.stringify([joinRef, ref, topic, 'phx_reply', { status, response }]));
           if (event === 'heartbeat') return reply({});
           if (event === 'phx_join') {
-            const token = payload?.access_token as string | undefined;
-            const user = MOCK_USERS.find((u) => `tok-${u.id}` === token);
-            const filters = (payload?.config?.postgres_changes ?? []) as Array<{ event: string; schema: string; table: string; filter?: string }>;
-            const out = filters.map((f) => ({ ...f, id: nextId++ }));
-            for (const f of out) {
-              const campaign = /campaign_id=eq\.(.+)$/.exec(f.filter ?? '')?.[1];
-              if (campaign && user) subs.add({ ws, topic, joinRef, id: f.id, campaign, userId: user.id });
-            }
-            return reply({ postgres_changes: out });
+            subs.add({ ws, topic, joinRef });
+            return reply({ postgres_changes: [] });
           }
           if (event === 'phx_leave') {
             for (const s of subs) if (s.ws === ws && s.topic === topic) subs.delete(s);

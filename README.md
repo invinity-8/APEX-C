@@ -2,7 +2,11 @@
 
 An online Game Master platform for a Dungeons & Dragons campaign set in a magical arena of the Roman Empire.
 
-**Version 0.2** adds secure accounts and a shared, server-validated multiplayer campaign (Supabase + a Vercel
+**Version 0.3** replaces the email-code login with **profile + password** (no email at all), adds a persistent
+**Character sheet** per player (with **PDF import**) and a flexible free-text **Inventory** with containers.
+See [section 3a](#3a-new-in-v03).
+
+**Version 0.2** added secure accounts and a shared, server-validated multiplayer campaign (Supabase + a Vercel
 Function), a ten-times larger procedurally generated world, true exploration Fog of War that hides the arena's
 outline, a day/night cycle, a new painted 2.5D map with the golden *Aquila Aurea* and its labyrinth, and a fully
 English interface.
@@ -26,15 +30,15 @@ npm run dev            # demo mode at http://localhost:5173
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Development server (demo mode unless `.env.local` configures Supabase) |
-| `npm test` | 91 unit/security tests (Vitest) |
+| `npm test` | 119 unit/security tests (Vitest) |
 | `npm run typecheck` | TypeScript check |
 | `npm run build` | Type check + production bundle in `dist/` |
 | `npm run dev:mock` | Online mode against a **local mock** of Supabase (http://localhost:5174) |
-| `node dev/e2e-online.cjs` | 24 multi-browser acceptance checks against `dev:mock` (needs Playwright) |
+| `node dev/e2e-online.cjs` | 43 multi-browser acceptance checks against `dev:mock` or a real deployment (needs Playwright) |
 | `npm run verify:db` | Runs the SQL migrations twice + RLS tests on a local PostgreSQL |
 
-Mock accounts for `dev:mock` (email-code login; the code is printed in the terminal): GM profile `gm@apex.test`,
-Hannah `hannah@apex.test`, Jean `jean@apex.test`; `simon@apex.test` (profile not yet linked) and `stranger@apex.test`.
+Mock profiles for `dev:mock`: Hannah (`hannah-test-pass`), Jean (`jean-test-pass`); the GM uses first-time setup with
+the setup code printed in the terminal (also at `/__mock/setup-code`); Simon and Jerba are locked until the GM sets a password.
 
 To use the real Supabase project locally, copy `.env.example` to `.env.local` and fill in the values
 (the `/api/apex` function is served by `vercel dev`, not by plain `vite`).
@@ -52,9 +56,21 @@ To use the real Supabase project locally, copy `.env.example` to `.env.local` an
 **GM tools:** movement points and points per day, vision and temporary vision bonus, free placement, control
 rights, knowledge sharing, rival visibility and tracking (approximate/exact), events, site visibility, clock
 correction, shrinking arena, party-vision overlay, new arena (radius 4–45, seed), JSON export/import.
-Online only: **Players & Access** (invitations, roles, character assignment, backups/restore).
+Online only: **Players & Access** (passwords, activation, signed-in devices, character assignment, backups/restore),
+**Character sheets** and **Inventory** of every character.
 
 ---
+
+## 3a. New in v0.3
+
+| Area | What changed |
+|---|---|
+| Sign-in | *Join Campaign* → *Who are you?* → password → *Enter the Arena*. Argon2id hashes, HttpOnly/Secure/SameSite=Strict session cookie (14 days idle, 30 days max), CSRF header + Origin check, rate limits (5 wrong passwords per profile / 20 per IP / 300 overall per 15 min). No email, OTP, magic link or SMTP. |
+| GM bootstrap | `select apex_private.create_gm_setup_code();` in the Supabase SQL editor → one-time code (24 h) → *First-time setup*. Also the recovery path for a forgotten GM password. |
+| GM administration | *Players & Access → Profiles*: set / reset / remove passwords, activate / deactivate, sign out devices, assign characters. Resetting or deactivating revokes all sessions of that profile immediately. |
+| Character | Navigation *Map · Character · Inventory*. Will, movement and vision come from the game state; the sheet adds optional hit points, details, attributes, skills, custom resources, abilities and notes. Quick +/− buttons, edit mode, conflict handling. |
+| PDF import | Fillable PDFs (e.g. the D&D 5e sheet) and text PDFs, read in the browser – the file is never uploaded. Review screen with *Recognized / Please check / Missing / Unknown field*, merge / replace / cancel, backup before saving, equipment lines → inventory. Scanned PDFs are reported as unreadable (no OCR). |
+| Inventory | Free-text entries with quantity, description and notes; containers Backpack, Pockets, Side Pouch, Equipped / Worn, Other + custom ones (rename, delete when empty), move between containers. Stored in the existing game state; inventories are private to the owner and the GM. Stale edits from another device are rejected instead of overwriting. |
 
 ## 3. Rules and rule changes in v0.2
 
@@ -86,7 +102,7 @@ src/
 │               day/night, events, shrinking zone, commands, text (all user-facing game strings)
 ├─ data/        Demo campaign factory (also used to create the online campaign)
 ├─ server/      Online API: auth & roles, command validation, GM admin, Supabase repository
-├─ online/      Login screens, Supabase client, API client, useOnlineGame (realtime sync)
+├─ online/      Login screens, Realtime client, API client, useOnlineGame (realtime sync)
 ├─ state/       GameApi interface, local demo backend, local storage
 └─ components/  UI; map/ = layered renderer (Canvas terrain, lights, SVG overlay)
 api/apex.ts     Vercel Function → /api/apex
@@ -95,7 +111,7 @@ dev/            Local mock Supabase harness and E2E script (never deployed)
 tests/          Vitest: rules, map generation, visibility/secrecy, day/night, server security
 ```
 
-Data flow (online): click → `POST /api/apex?op=command` → token verified → role from DB → `executeCommand()`
+Data flow (online): click → `POST /api/apex?op=command` → session cookie verified → role from DB → `executeCommand()`
 → saved with version check → Realtime "version" ping → every client refetches **its own** filtered view.
 Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -122,10 +138,8 @@ Production builds **never** fall back to a local game: without these variables t
 *“APEX is not connected yet”*. Check a deployment any time at `/api/apex?op=health` (no secrets in the answer).
 
 **Entry & login:** *Welcome to APEX* → *Join Campaign* → *Who are you?* (GM, Hannah/Sinna, Jean/Aster, Simon/Elwin,
-Jerba/Javi) → *Continue as …* → email code. Invite-only and passwordless: a code is only sent when the email is linked to
-the chosen profile (the GM links profiles in *Players & Access → Profiles*). Supabase Auth emails a
-single-use 6-digit code (expiring, rate-limited, verified by Supabase). Uninvited addresses get the same neutral
-answer and no email. The GM sees who is online in *Players & Access*.
+Jerba/Javi) → password → *Enter the Arena*. No email is needed or sent. Profiles without a password are locked. The GM
+sets passwords in *Players & Access → Profiles* and sees who is online. German step-by-step guide: [`docs/SETUP_DE.md`](docs/SETUP_DE.md).
 
 ---
 
@@ -150,11 +164,12 @@ answer and no email. The GM sees who is online in *Players & Access*.
   v0.2 had no network access to Supabase/Vercel. The steps and checklist in `docs/DEPLOYMENT.md` must be run
   before go-live. The schema was tested on PostgreSQL with a Supabase stub, the client against a protocol mock.
 - No line of sight yet (mountains/forests do not block vision).
-- Rival strategies are stored but not automated; inventory and willpower are displayed but not playable.
+- Rival strategies are stored but not automated. Will vessels (charge) are displayed but not yet playable.
+- PDF import: no OCR for scanned sheets; Aurora's own character files are not supported yet (use its PDF export).
 - Tree crowns do not sway (water glints, flickering lights and arcane motes are animated).
 - Performance was measured in headless Chromium without GPU; real laptops should be faster, but a check on the
   players' actual devices is recommended (especially Safari and touch devices).
-- No rate limiting on `/api/apex` beyond Vercel's defaults; no undo (use backups or free placement).
+- Rate limiting covers sign-in and setup; other endpoints rely on authentication and Vercel's defaults. No undo (use backups).
 
 ## 8. Roadmap
 
@@ -162,5 +177,5 @@ answer and no email. The GM sees who is online in *Players & Access*.
 |---|---|---|
 | 0.1 | Demo harness: map, movement, days, fog, roles, local saves | ✅ |
 | 0.2 | Accounts, secure multiplayer, large world, true exploration fog, day/night, new visuals | ✅ (pending live verification) |
-| 0.3 | Line of sight, terrain/site/event editors, weather, landmark events | planned |
-| 0.4 | Inventory & Voluntas mechanics, rival automation, factions | data models prepared |
+| 0.3 | Password login without email, character sheets with PDF import, free-text inventory | ✅ (this release) |
+| 0.4 | Line of sight, terrain/site/event editors, weather, landmark events, Voluntas mechanics, rival automation | planned |

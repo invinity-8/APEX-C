@@ -1,79 +1,133 @@
 import type { GameState } from '../src/game/types';
-import type { Assignment, AuthUser, Campaign, CommandLogEntry, DeployStatus, Invite, LoginRequestStats, Member, Profile, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
+import type {
+  Assignment,
+  Campaign,
+  CommandLogEntry,
+  Credential,
+  DeployStatus,
+  LoginAttemptStats,
+  Member,
+  Profile,
+  Repo,
+  SessionRecord,
+  SnapshotInfo,
+  StoredSheet,
+  StoredState,
+} from '../src/server/repo';
+import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from '../src/server/schema';
 
-/** In-memory Repo with the same contract as SupabaseRepo – used by the security tests. */
+/** In-memory Repo with the same contract as SupabaseRepo – used by the security tests and the mock harness. */
 export class MemoryRepo implements Repo {
-  users = new Map<string, AuthUser>(); // token → user
-  campaigns: Campaign[] = [];
+  campaigns: Array<Campaign & { syncTopic?: string }> = [];
+  profileList: Profile[] = [];
+  credentials = new Map<string, Credential>(); // `${campaign}:${key}` → hash
+  setupCodes: Array<{ campaignId: string; codeHash: string; expiresAt: number; usedAt: number | null }> = [];
+  sessions = new Map<string, SessionRecord>();
+  attempts: Array<{ profileKey: string; ipHash: string; ok: boolean; at: number }> = [];
   memberList: Member[] = [];
-  inviteList: Invite[] = [];
   assignmentList: Assignment[] = [];
   states = new Map<string, StoredState>();
+  sheets = new Map<string, StoredSheet>(); // `${campaign}:${token}`
+  sheetBackups: Array<{ campaignId: string; tokenId: string; data: unknown; version: number; reason: string }> = [];
   snapshots: Array<SnapshotInfo & { campaignId: string; state: GameState }> = [];
   log: CommandLogEntry[] = [];
   /** Test hook: runs before the next optimistic write (simulates a concurrent writer). */
   beforeSave: (() => void) | null = null;
+  /** Test hook: runs before the next sheet write. */
+  beforeSheetSave: (() => void) | null = null;
+  now = () => Date.now();
 
-  /** Auth accounts by email (simulates Supabase Auth users). */
-  authAccounts = new Map<string, { confirmed: boolean }>();
-  sentCodes: string[] = [];
-  /** Test hook: next sendLoginCode result. */
-  nextSendResult: SendCodeResult | null = null;
-
-  async userFromToken(token: string) {
-    return this.users.get(token) ?? null;
-  }
-  async isEmailAuthorized(email: string) {
-    return this.inviteList.some((i) => i.email === email && !i.acceptedAt) || this.memberList.some((m) => m.email === email);
-  }
-  async ensureAuthUser(email: string) {
-    this.authAccounts.set(email, { confirmed: true });
-  }
-  async sendLoginCode(email: string): Promise<SendCodeResult> {
-    if (this.nextSendResult) {
-      const r = this.nextSendResult;
-      this.nextSendResult = null;
-      return r;
-    }
-    if (!this.authAccounts.has(email)) return { ok: false, reason: 'failed', detail: 'no such user' };
-    this.sentCodes.push(email);
-    return { ok: true, via: 'smtp' };
-  }
-  profileList: Profile[] = [];
   async profiles(campaignId: string | null) {
     return this.profileList.filter((p) => !campaignId || p.campaignId === campaignId).map((p) => ({ ...p, tokenIds: [...p.tokenIds] }));
   }
-  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>) {
+  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>) {
     const p = this.profileList.find((x) => x.campaignId === campaignId && x.key === key);
     if (p) Object.assign(p, patch);
   }
-  /** Login request log (emailHash, outcome, time). `now` can be moved forward in tests. */
-  loginRequests: Array<{ emailHash: string; outcome: string; at: number }> = [];
-  now = () => Date.now();
-  async loginRequestStats(emailHash: string): Promise<LoginRequestStats> {
-    const hourAgo = this.now() - 3600_000;
-    const mine = this.loginRequests.filter((r) => r.emailHash === emailHash);
-    const last = mine.filter((r) => r.outcome === 'accepted' || r.outcome === 'ignored').sort((a, b) => b.at - a.at)[0];
+  async credential(campaignId: string, key: string) {
+    const c = this.credentials.get(`${campaignId}:${key}`);
+    return c ? { ...c } : null;
+  }
+  async setCredential(campaignId: string, key: string, passwordHash: string | null) {
+    if (passwordHash === null) this.credentials.delete(`${campaignId}:${key}`);
+    else this.credentials.set(`${campaignId}:${key}`, { passwordHash, updatedAt: new Date(this.now()).toISOString() });
+  }
+  async consumeSetupCode(codeHash: string) {
+    const c = this.setupCodes.find((x) => x.codeHash === codeHash && x.usedAt === null && x.expiresAt > this.now());
+    if (!c) return null;
+    c.usedAt = this.now();
+    return c.campaignId;
+  }
+  async createSession(s: Omit<SessionRecord, 'revokedAt' | 'lastSeenAt' | 'createdAt'> & { userAgent: string | null }) {
+    const now = new Date(this.now()).toISOString();
+    this.sessions.set(s.tokenHash, {
+      tokenHash: s.tokenHash,
+      campaignId: s.campaignId,
+      profileKey: s.profileKey,
+      userId: s.userId,
+      expiresAt: s.expiresAt,
+      createdAt: now,
+      lastSeenAt: now,
+      revokedAt: null,
+    });
+  }
+  async session(tokenHash: string) {
+    const s = this.sessions.get(tokenHash);
+    return s ? { ...s } : null;
+  }
+  async touchSession(tokenHash: string, expiresAt: string) {
+    const s = this.sessions.get(tokenHash);
+    if (s) Object.assign(s, { lastSeenAt: new Date(this.now()).toISOString(), expiresAt });
+  }
+  async revokeSession(tokenHash: string) {
+    const s = this.sessions.get(tokenHash);
+    if (s && !s.revokedAt) s.revokedAt = new Date(this.now()).toISOString();
+  }
+  async revokeProfileSessions(campaignId: string, key: string, exceptHash?: string) {
+    let n = 0;
+    for (const s of this.sessions.values()) {
+      if (s.campaignId === campaignId && s.profileKey === key && !s.revokedAt && s.tokenHash !== exceptHash) {
+        s.revokedAt = new Date(this.now()).toISOString();
+        n++;
+      }
+    }
+    return n;
+  }
+  async activeSessionCounts(campaignId: string) {
+    const out: Record<string, number> = {};
+    for (const s of this.sessions.values()) {
+      if (s.campaignId === campaignId && !s.revokedAt && Date.parse(s.expiresAt) > this.now()) out[s.profileKey] = (out[s.profileKey] ?? 0) + 1;
+    }
+    return out;
+  }
+  async loginAttemptStats(profileKey: string, ipHash: string, sinceIso: string): Promise<LoginAttemptStats> {
+    const since = Date.parse(sinceIso);
+    const fails = this.attempts.filter((a) => !a.ok && a.at >= since);
+    const mine = fails.filter((a) => a.profileKey === profileKey).sort((a, b) => a.at - b.at);
     return {
-      lastAcceptedAt: last ? new Date(last.at).toISOString() : null,
-      emailCountHour: mine.filter((r) => r.at >= hourAgo).length,
-      globalAcceptedHour: this.loginRequests.filter((r) => r.outcome === 'accepted' && r.at >= hourAgo).length,
+      profileFailures: mine.length,
+      ipFailures: fails.filter((a) => a.ipHash === ipHash).length,
+      globalFailures: fails.length,
+      oldestProfileFailure: mine[0] ? new Date(mine[0].at).toISOString() : null,
     };
   }
-  async recordLoginRequest(emailHash: string, outcome: 'accepted' | 'ignored' | 'rate_limited' | 'delivery_failed' | 'quota') {
-    this.loginRequests.push({ emailHash, outcome, at: this.now() });
+  async recordLoginAttempt(profileKey: string, ipHash: string, ok: boolean) {
+    this.attempts.push({ profileKey, ipHash, ok, at: this.now() });
   }
-  async emailDelivery() {
-    return { via: 'smtp' as const, ok: true };
+  async syncTopic(campaignId: string) {
+    const c = this.campaigns.find((x) => x.id === campaignId);
+    if (!c) throw new Error('campaign not found');
+    c.syncTopic ??= `topic-${Math.random().toString(36).slice(2)}`;
+    return `apex-sync-${c.syncTopic}`;
   }
-  async touchMember(campaignId: string, userId: string) {
-    const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
-    if (m) m.lastSeenAt = new Date().toISOString();
+  async rotateSyncTopic(campaignId: string) {
+    const c = this.campaigns.find((x) => x.id === campaignId);
+    if (c) c.syncTopic = `topic-${Math.random().toString(36).slice(2)}`;
   }
   /** Test hook: simulated database deployment status. */
   deploy: DeployStatus = {
-    schemaVersion: 1,
-    migrations: ['20261101145653', '20261101151000', '20261101160000'],
+    schemaVersion: REQUIRED_SCHEMA_VERSION,
+    migrations: [...EXPECTED_MIGRATIONS],
     campaignSeeded: true,
     profiles: 5,
     realtime: true,
@@ -82,14 +136,8 @@ export class MemoryRepo implements Repo {
   async deployStatus() {
     return { ...this.deploy, migrations: [...this.deploy.migrations] };
   }
-  async authAdminOk() {
-    return true;
-  }
   async campaignsById(ids: string[]) {
-    return this.campaigns.filter((c) => ids.includes(c.id));
-  }
-  async membershipsOf(userId: string) {
-    return this.memberList.filter((m) => m.userId === userId).map((m) => ({ ...m }));
+    return this.campaigns.filter((c) => ids.includes(c.id)).map(({ id, slug, name }) => ({ id, slug, name }));
   }
   async members(campaignId: string) {
     return this.memberList.filter((m) => m.campaignId === campaignId).map((m) => ({ ...m }));
@@ -98,26 +146,9 @@ export class MemoryRepo implements Repo {
     this.memberList = this.memberList.filter((x) => !(x.campaignId === m.campaignId && x.userId === m.userId));
     this.memberList.push({ ...m });
   }
-  async removeMember(campaignId: string, userId: string) {
-    this.memberList = this.memberList.filter((x) => !(x.campaignId === campaignId && x.userId === userId));
-    this.assignmentList = this.assignmentList.filter((a) => !(a.campaignId === campaignId && a.userId === userId));
-  }
-  async openInvitesFor(email: string) {
-    return this.inviteList.filter((i) => i.email === email && !i.acceptedAt).map((i) => ({ ...i }));
-  }
-  async invites(campaignId: string) {
-    return this.inviteList.filter((i) => i.campaignId === campaignId);
-  }
-  async upsertInvite(i: Omit<Invite, 'acceptedAt'>) {
-    this.inviteList = this.inviteList.filter((x) => !(x.campaignId === i.campaignId && x.email === i.email));
-    this.inviteList.push({ ...i, acceptedAt: null });
-  }
-  async markInviteAccepted(campaignId: string, email: string) {
-    const i = this.inviteList.find((x) => x.campaignId === campaignId && x.email === email);
-    if (i) i.acceptedAt = new Date().toISOString();
-  }
-  async deleteInvite(campaignId: string, email: string) {
-    this.inviteList = this.inviteList.filter((x) => !(x.campaignId === campaignId && x.email === email));
+  async touchMember(campaignId: string, userId: string) {
+    const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
+    if (m) m.lastSeenAt = new Date(this.now()).toISOString();
   }
   async assignments(campaignId: string) {
     return this.assignmentList.filter((a) => a.campaignId === campaignId);
@@ -160,6 +191,25 @@ export class MemoryRepo implements Repo {
     return this.snapshots.find((s) => s.campaignId === campaignId && s.id === id)?.state ?? null;
   }
   async pruneSnapshots() {}
+  async loadSheet(campaignId: string, tokenId: string) {
+    const s = this.sheets.get(`${campaignId}:${tokenId}`);
+    return s ? structuredClone(s) : null;
+  }
+  async saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string) {
+    if (this.beforeSheetSave) {
+      const f = this.beforeSheetSave;
+      this.beforeSheetSave = null;
+      f();
+    }
+    const k = `${campaignId}:${tokenId}`;
+    const cur = this.sheets.get(k);
+    if ((cur?.version ?? 0) !== expectedVersion) return null;
+    this.sheets.set(k, { data: structuredClone(data), version: expectedVersion + 1, updatedAt: new Date(this.now()).toISOString(), updatedBy: userId });
+    return expectedVersion + 1;
+  }
+  async backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string) {
+    this.sheetBackups.push({ campaignId, tokenId, data: structuredClone(data), version, reason });
+  }
   async logCommand(e: CommandLogEntry) {
     this.log.push(e);
   }
