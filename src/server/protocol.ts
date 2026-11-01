@@ -39,6 +39,8 @@ export interface GmPayload {
   version: number;
   /** null = the campaign has not been initialised yet. */
   state: GameState | null;
+  /** The request id had already been applied – this is the current state, nothing was changed again. */
+  duplicate?: boolean;
 }
 
 export interface PlayerPayload {
@@ -51,6 +53,13 @@ export interface PlayerPayload {
   /** null = no character assigned yet or campaign not initialised. */
   view: WireView | null;
   notice?: string;
+  duplicate?: boolean;
+}
+
+/** Answer of GET op=state&since=N when nothing changed. */
+export interface UnchangedPayload {
+  unchanged: true;
+  version: number;
 }
 
 export type CampaignPayload = GmPayload | PlayerPayload;
@@ -79,8 +88,6 @@ export interface ProfileInfo {
 export interface AdminOverview {
   snapshots: SnapshotInfo[];
   profiles: ProfileInfo[];
-  /** The stored campaign still uses the old placeholder characters (Livia, Marcus, …). */
-  rosterOutdated: boolean;
 }
 
 export type AdminAction =
