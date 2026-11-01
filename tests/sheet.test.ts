@@ -61,14 +61,15 @@ describe('PDF field mapping', () => {
     const m = mapExtraction({ fields: fivee, text: '', pages: 3 });
     expect(m.format).toBe('Fillable D&D 5e character sheet');
     const by = (label: string) => m.rows.find((r) => r.label === label)!;
-    expect(by('Class & Level')).toMatchObject({ value: 'Sorcerer 3', status: 'recognized', include: true });
+    expect(by('Class & level')).toMatchObject({ value: 'Sorcerer 3', status: 'recognized', include: true, group: 'identity' });
     expect(by('Charisma')).toMatchObject({ value: '17', modifier: '+3', status: 'recognized' });
     expect(by('Dexterity').modifier).toBe('+2');
     expect(by('Hit points (maximum)').value).toBe('20');
-    expect(by('Weapon: Dagger').value).toBe('Attack bonus +4 · Damage 1d4+2 piercing');
-    expect(m.rows.filter((r) => r.section === 'inventory').map((r) => r.value)).toEqual(['Bedroll', 'Rope (50 ft)', 'Aqueduct-Stone Staff']);
-    // unknown fields are listed but not imported by default; checkboxes are ignored
-    expect(by('MysteryField')).toMatchObject({ status: 'unrecognized', include: false });
+    expect(by('Armor Class')).toMatchObject({ value: '12', group: 'combat' });
+    expect(m.rows.find((r) => r.kind === 'attack')).toMatchObject({ value: 'Dagger', bonus: '+4', damage: '1d4+2 piercing' });
+    expect(m.rows.filter((r) => r.kind === 'item').map((r) => r.value)).toEqual(['Bedroll', 'Rope (50 ft)', 'Aqueduct-Stone Staff']);
+    // unknown fields go to the Advanced section, not imported by default; checkboxes are ignored
+    expect(by('MysteryField')).toMatchObject({ status: 'unrecognized', include: false, group: 'raw' });
     expect(m.rows.some((r) => r.source === 'Check Box 11')).toBe(false);
     // nothing important is missing here
     expect(m.rows.filter((r) => r.status === 'missing')).toEqual([]);
@@ -81,7 +82,12 @@ describe('PDF field mapping', () => {
     expect(sheet.hitPoints).toEqual({ current: 17, max: 20, temp: 0 });
     expect(sheet.resources.find((r) => r.name === 'Gold (gp)')?.current).toBe(15);
     expect(sheet.details.some((d) => d.label === 'MysteryField')).toBe(false);
-    expect(items).toHaveLength(3);
+    expect(sheet.raw).toEqual([]);
+    expect(items).toEqual([
+      { name: 'Bedroll', quantity: 1 },
+      { name: 'Rope (50 ft)', quantity: 1 },
+      { name: 'Aqueduct-Stone Staff', quantity: 1 },
+    ]);
     expect(sheet.source).toMatchObject({ kind: 'pdf', fileName: 'sinna.pdf' });
     expect(parseSheet(sheet).ok).toBe(true);
   });
@@ -93,10 +99,10 @@ describe('PDF field mapping', () => {
     const str = m.rows.find((r) => r.label === 'Strength')!;
     expect(str).toMatchObject({ value: '16', modifier: '+3', status: 'uncertain' });
     expect(m.rows.find((r) => r.label === 'Hit points (maximum)')).toMatchObject({ value: '44', status: 'uncertain' });
-    expect(m.rows.find((r) => r.label === 'Class & Level')?.value).toBe('Fighter 5');
+    expect(m.rows.find((r) => r.label === 'Class & level')?.value).toBe('Fighter 5');
     expect(m.rows.find((r) => r.label === 'Complete page text')?.include).toBe(false);
     const sparse = mapExtraction({ fields: {}, text: 'Some backstory without any numbers at all, just prose.', pages: 1 });
-    expect(sparse.rows.filter((r) => r.status === 'missing').map((r) => r.label)).toEqual(['Hit points (maximum)', 'Attributes / ability scores', 'Class & Level', 'Armor Class']);
+    expect(sparse.rows.filter((r) => r.status === 'missing').map((r) => r.label)).toEqual(['Hit points (maximum)', 'Attributes / ability scores', 'Class & level', 'Armor Class']);
     expect(sparse.rows.filter((r) => r.status === 'missing').every((r) => !r.include && r.value === '')).toBe(true);
   });
 

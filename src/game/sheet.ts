@@ -31,6 +31,31 @@ export interface SheetSkill {
   name: string;
   value: string;
   proficient: boolean;
+  /** Double proficiency (e.g. Rogue/Bard expertise). */
+  expertise?: boolean;
+}
+
+/** Weapon or spell attack line. */
+export interface SheetAttack {
+  id: string;
+  name: string;
+  /** Attack bonus or save, as written ("+2 vs AC"). */
+  bonus: string;
+  damage: string;
+  range: string;
+  notes: string;
+}
+
+/** A spell the character knows. level 0 = cantrip. */
+export interface SheetSpell {
+  id: string;
+  name: string;
+  level: number;
+  /** Actually prepared (cantrips count as always prepared). */
+  prepared: boolean;
+  /** Spellcasting source, e.g. "Druid". */
+  source: string;
+  notes: string;
 }
 
 /** Numeric resource with an editable name (spell slots, ki, rage, luck …). max null = no maximum. */
@@ -65,17 +90,29 @@ export interface CharacterSheet {
   schema: typeof SHEET_SCHEMA;
   /** Optional – not every system uses hit points. */
   hitPoints: HitPoints | null;
+  /** Identity: class & level, background, alignment … */
   details: SheetEntry[];
+  /** Physical description: gender, age, height, eyes … */
+  appearance: SheetEntry[];
   attributes: SheetStat[];
+  /** Combat values: armour class, initiative, speed, passive perception … */
+  combat: SheetEntry[];
+  saves: SheetSkill[];
   skills: SheetSkill[];
+  attacks: SheetAttack[];
   resources: SheetResource[];
   abilities: SheetAbility[];
+  /** Spellcasting summary per class: ability, attack bonus, save DC … */
+  spellcasting: SheetEntry[];
+  spells: SheetSpell[];
   notes: string;
+  /** Advanced: unrecognised but possibly meaningful imported fields, kept apart from the sheet. */
+  raw: SheetEntry[];
   source: SheetSource;
 }
 
 export const SHEET_LIMITS = {
-  listItems: 120,
+  listItems: 200,
   label: 80,
   value: 2000,
   text: 8000,
@@ -87,11 +124,18 @@ export const emptySheet = (): CharacterSheet => ({
   schema: SHEET_SCHEMA,
   hitPoints: null,
   details: [],
+  appearance: [],
   attributes: [],
+  combat: [],
+  saves: [],
   skills: [],
+  attacks: [],
   resources: [],
   abilities: [],
+  spellcasting: [],
+  spells: [],
   notes: '',
+  raw: [],
   source: { kind: 'manual' },
 });
 
@@ -131,10 +175,37 @@ export function parseSheet(raw: unknown): SheetParse {
     return out;
   };
 
-  const details = list(raw.details, 'details', (o) => {
+  const entry = (o: Obj) => {
     const label = str(o.label, L.label);
     const value = str(o.value, L.value);
     return label !== null && value !== null ? { id: o.id as string, label, value } : null;
+  };
+  const details = list(raw.details, 'details', entry);
+  const appearance = list(raw.appearance, 'appearance', entry);
+  const combat = list(raw.combat, 'combat values', entry);
+  const spellcasting = list(raw.spellcasting, 'spellcasting', entry);
+  const rawFields = list(raw.raw, 'raw fields', entry);
+  const skillOf = (o: Obj) => {
+    const name = str(o.name, L.label);
+    const value = str(o.value ?? '', 40);
+    return name !== null && value !== null ? { id: o.id as string, name, value, proficient: o.proficient === true, ...(o.expertise === true ? { expertise: true } : {}) } : null;
+  };
+  const saves = list(raw.saves, 'saving throws', skillOf);
+  const attacks = list(raw.attacks, 'attacks', (o) => {
+    const name = str(o.name, L.label * 2);
+    const bonus = str(o.bonus ?? '', 60);
+    const damage = str(o.damage ?? '', 120);
+    const range = str(o.range ?? '', 60);
+    const notes = str(o.notes ?? '', L.value);
+    return name !== null && bonus !== null && damage !== null && range !== null && notes !== null ? { id: o.id as string, name, bonus, damage, range, notes } : null;
+  });
+  const spells = list(raw.spells, 'spells', (o) => {
+    const name = str(o.name, L.label * 2);
+    const level = typeof o.level === 'number' && Number.isInteger(o.level) && o.level >= 0 && o.level <= 9 ? o.level : null;
+    const source = str(o.source ?? '', L.label);
+    const notes = str(o.notes ?? '', L.value);
+    if (name === null || level === null || source === null || notes === null) return null;
+    return { id: o.id as string, name, level, prepared: level === 0 || o.prepared === true, source, notes };
   });
   const attributes = list(raw.attributes, 'attributes', (o) => {
     const name = str(o.name, L.label);
@@ -142,11 +213,7 @@ export function parseSheet(raw: unknown): SheetParse {
     const modifier = str(o.modifier ?? '', 40);
     return name !== null && value !== null && modifier !== null ? { id: o.id as string, name, value, modifier } : null;
   });
-  const skills = list(raw.skills, 'skills', (o) => {
-    const name = str(o.name, L.label);
-    const value = str(o.value ?? '', 40);
-    return name !== null && value !== null ? { id: o.id as string, name, value, proficient: o.proficient === true } : null;
-  });
+  const skills = list(raw.skills, 'skills', skillOf);
   const resources = list(raw.resources, 'resources', (o) => {
     const name = str(o.name, L.label);
     const current = num(o.current);
@@ -159,7 +226,7 @@ export function parseSheet(raw: unknown): SheetParse {
     const text = str(o.text ?? '', L.text);
     return name !== null && text !== null ? { id: o.id as string, name, text } : null;
   });
-  for (const r of [details, attributes, skills, resources, abilities]) if (typeof r === 'string') return bad(r);
+  for (const r of [details, appearance, attributes, combat, saves, skills, attacks, resources, abilities, spellcasting, spells, rawFields]) if (typeof r === 'string') return bad(r);
 
   let hitPoints: HitPoints | null = null;
   if (raw.hitPoints !== null && raw.hitPoints !== undefined) {
@@ -188,11 +255,18 @@ export function parseSheet(raw: unknown): SheetParse {
       schema: SHEET_SCHEMA,
       hitPoints,
       details: details as SheetEntry[],
+      appearance: appearance as SheetEntry[],
       attributes: attributes as SheetStat[],
+      combat: combat as SheetEntry[],
+      saves: saves as SheetSkill[],
       skills: skills as SheetSkill[],
+      attacks: attacks as SheetAttack[],
       resources: resources as SheetResource[],
       abilities: abilities as SheetAbility[],
+      spellcasting: spellcasting as SheetEntry[],
+      spells: spells as SheetSpell[],
       notes,
+      raw: rawFields as SheetEntry[],
       source,
     },
   };
@@ -224,15 +298,24 @@ export function mergeSheets(existing: CharacterSheet, imported: CharacterSheet):
     schema: SHEET_SCHEMA,
     hitPoints: imported.hitPoints ?? existing.hitPoints,
     details: mergeList(existing.details, imported.details, (x) => x.label),
+    appearance: mergeList(existing.appearance, imported.appearance, (x) => x.label),
     attributes: mergeList(existing.attributes, imported.attributes, (x) => x.name),
+    combat: mergeList(existing.combat, imported.combat, (x) => x.label),
+    saves: mergeList(existing.saves, imported.saves, (x) => x.name),
     skills: mergeList(existing.skills, imported.skills, (x) => x.name),
+    attacks: mergeList(existing.attacks, imported.attacks, (x) => x.name),
     resources: mergeList(existing.resources, imported.resources, (x) => x.name),
     abilities: mergeList(existing.abilities, imported.abilities, (x) => x.name),
+    spellcasting: mergeList(existing.spellcasting, imported.spellcasting, (x) => x.label),
+    spells: mergeList(existing.spells, imported.spells, (x) => `${x.level}:${x.name}`),
     notes,
+    raw: mergeList(existing.raw, imported.raw, (x) => x.label),
     source: imported.source,
   };
 }
 
 /** Is the sheet still empty (nothing entered yet)? */
 export const sheetIsEmpty = (s: CharacterSheet) =>
-  !s.hitPoints && !s.details.length && !s.attributes.length && !s.skills.length && !s.resources.length && !s.abilities.length && !s.notes.trim();
+  !s.hitPoints &&
+  ![s.details, s.appearance, s.attributes, s.combat, s.saves, s.skills, s.attacks, s.resources, s.abilities, s.spellcasting, s.spells, s.raw].some((l) => l.length) &&
+  !s.notes.trim();
