@@ -21,12 +21,12 @@ describe('Day & night cycle', () => {
 
   it('movement points are restored at dawn only, not at nightfall', () => {
     let s = flatState();
-    s = executeCommand(s, GM, { type: 'move', tokenId: 'livia', to: { q: 3, r: 0 } }).state;
-    expect(s.tokens.livia.movePoints).toBe(5);
+    s = executeCommand(s, GM, { type: 'move', tokenId: 'sinna', to: { q: 3, r: 0 } }).state;
+    expect(s.tokens.sinna.movePoints).toBe(5);
     s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Night 1
-    expect(s.tokens.livia.movePoints).toBe(5);
+    expect(s.tokens.sinna.movePoints).toBe(5);
     s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Day 2
-    expect(s.tokens.livia.movePoints).toBe(8);
+    expect(s.tokens.sinna.movePoints).toBe(8);
     expect(s.log.some((e) => e.kind === 'day' && e.text.includes('Day 2') && e.phase === 'day')).toBe(true);
     expect(s.log.some((e) => e.text.includes('Night 1') && e.phase === 'night')).toBe(true);
   });
@@ -41,21 +41,21 @@ describe('Day & night cycle', () => {
   it('night reduces vision by one (but never below 1)', () => {
     let s = flatState(8);
     for (const t of Object.values(s.tokens)) t.sharesWithParty = false;
-    const dayVisible = buildPlayerView(s, 'livia').hexes.filter((h) => h.fog === 'visible').length;
+    const dayVisible = buildPlayerView(s, 'sinna').hexes.filter((h) => h.fog === 'visible').length;
     expect(dayVisible).toBe(19); // radius 2
     s = executeCommand(s, GM, { type: 'advancePhase' }).state;
-    const nightVisible = buildPlayerView(s, 'livia').hexes.filter((h) => h.fog === 'visible').length;
+    const nightVisible = buildPlayerView(s, 'sinna').hexes.filter((h) => h.fog === 'visible').length;
     expect(nightVisible).toBe(7); // radius 1
-    expect(buildPlayerView(s, 'livia').phase).toBe('night');
+    expect(buildPlayerView(s, 'sinna').phase).toBe('night');
   });
 
   it('the temporary vision bonus expires at dawn', () => {
     let s = flatState();
-    s = executeCommand(s, GM, { type: 'adjustVisionBonus', tokenId: 'nyx', delta: 2 }).state;
+    s = executeCommand(s, GM, { type: 'adjustVisionBonus', tokenId: 'elwin', delta: 2 }).state;
     s = executeCommand(s, GM, { type: 'advancePhase' }).state;
-    expect(s.tokens.nyx.visionBonus).toBe(2); // still active during the night
+    expect(s.tokens.elwin.visionBonus).toBe(2); // still active during the night
     s = executeCommand(s, GM, { type: 'advancePhase' }).state;
-    expect(s.tokens.nyx.visionBonus).toBe(0);
+    expect(s.tokens.elwin.visionBonus).toBe(0);
   });
 
   it('day-bound events fire automatically at dawn', () => {
@@ -69,7 +69,7 @@ describe('Day & night cycle', () => {
     expect(s.hexes[floodKey].terrain).toBe('water');
     s = executeCommand(s, GM, { type: 'endDay' }).state; // Day 3
     expect(s.sites['donum-imperatoris'].visibility).toBe('public');
-    expect(buildPlayerView(s, 'livia').sites.some((x) => x.id === 'donum-imperatoris')).toBe(true);
+    expect(buildPlayerView(s, 'sinna').sites.some((x) => x.id === 'donum-imperatoris')).toBe(true);
   });
 
   it('phase-bound events fire when that phase begins', () => {
@@ -77,14 +77,14 @@ describe('Day & night cycle', () => {
     s.events.willstorm.trigger = { type: 'phase', day: 1, phase: 'night' };
     s = executeCommand(s, GM, { type: 'advancePhase' }).state;
     expect(s.events.willstorm.status).toBe('done');
-    expect(s.tokens.livia.movePoints).toBe(6);
+    expect(s.tokens.sinna.movePoints).toBe(6);
   });
 
   it('manual events can be triggered exactly once', () => {
     let s = createDemoState({ radius: 12 });
     const r1 = executeCommand(s, GM, { type: 'triggerEvent', eventId: 'willstorm' });
     expect(r1.ok).toBe(true);
-    expect(r1.state.tokens.livia.movePoints).toBe(6);
+    expect(r1.state.tokens.sinna.movePoints).toBe(6);
     s = r1.state;
     expect(executeCommand(s, GM, { type: 'triggerEvent', eventId: 'willstorm' }).ok).toBe(false);
   });
@@ -118,8 +118,8 @@ describe('Day & night cycle', () => {
   it('the closed zone blocks movement into it', () => {
     const s = flatState(6);
     s.config.shrink = { ...s.config.shrink, enabled: true, startDay: 1, mode: 'closed' };
-    s.tokens.livia.pos = { q: 3, r: 0 };
-    const res = executeCommand(s, GM, { type: 'move', tokenId: 'livia', to: { q: 6, r: 0 } });
+    s.tokens.sinna.pos = { q: 3, r: 0 };
+    const res = executeCommand(s, GM, { type: 'move', tokenId: 'sinna', to: { q: 6, r: 0 } });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/closed zone/);
   });
