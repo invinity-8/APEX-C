@@ -185,6 +185,17 @@ Rechts im Bereich **World Management**:
 **Neu pro Welt:** Karte, Positionen, erkundete Felder (Fog of War), Tag/Nacht, schrumpfende Arena, Ereignisse.
 Alle Spieler werden automatisch auf die neue Welt umgestellt und bekommen einen Hinweis. Schlägt etwas fehl, bleibt die alte Welt aktiv.
 
+## Teil I – Charakterbogen, Import und Aussehen (alle Spieler)
+
+- Oben **Character** öffnet das Charakter-Menü mit den Reitern *Overview, Attributes & Skills, Abilities & Spells, Resources,
+  Inventory, Appearance, Notes*.
+- **Import Character Sheet**: Aurora-PDF auswählen → APEX zeigt eine lesbare Vorschau, gruppiert nach Bereichen. Gelb markierte Werte
+  bitte prüfen, rot markierte würden vorhandene Werte überschreiben. Erst **Save / Merge / Replace** speichert (vor dem Ersetzen wird
+  automatisch eine Sicherung angelegt). Das PDF selbst wird nicht hochgeladen.
+- **Edit**: Alle Felder lassen sich auch ohne PDF von Hand pflegen. Zauber lassen sich direkt mit einem Klick als *prepared* markieren.
+- **Appearance**: Porträt hochladen (zoomen und verschieben), Titel unter dem Namen, Haupt- und Akzentfarbe sowie Marker-Form wählen.
+  Das ist rein kosmetisch und gibt keinerlei Rechte.
+
 ## Teil G – Neue Spieler später freischalten
 
 1. Als Spielleiter anmelden → **Players & Access** → **Profiles**.

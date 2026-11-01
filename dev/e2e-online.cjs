@@ -169,7 +169,7 @@ const waitText = (page, re, timeout = 10000) =>
   const leak = JSON.stringify((await apiFetch(hannah, 'state')).body);
   check('player state contains no hidden map data', !/"seed"|gmNotes|"mapRadius":\d/.test(leak));
 
-  // ---------- character sheet + PDF import ----------
+  // ---------- character sheet + PDF import (real Aurora sample) ----------
   await hannah.getByRole('button', { name: /Character$/ }).click();
   await hannah.getByRole('button', { name: /Import Character Sheet/ }).click();
   await hannah.getByLabel('Choose a PDF file').setInputFiles(path.join(FIX, 'not-a-pdf.pdf'));
@@ -178,31 +178,84 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.getByLabel('Choose a PDF file').setInputFiles(path.join(FIX, 'scanned-image.pdf'));
   check('image-only PDFs are explained honestly (no OCR)', await waitText(hannah, /no readable text or form fields/, 20000));
   await hannah.getByRole('button', { name: 'Choose another file' }).click();
-  await hannah.getByLabel('Choose a PDF file').setInputFiles(path.join(FIX, 'sinna-5e-fillable.pdf'));
-  check('fillable PDF is read and shown for review', await waitText(hannah, /Fillable D&D 5e character sheet/, 20000));
+  await hannah.getByLabel('Choose a PDF file').setInputFiles(path.join(__dirname, '..', 'tests', 'fixtures', 'sinna.pdf'));
+  check('Aurora PDF is detected and read from its form fields', await waitText(hannah, /Aurora Builder character sheet/, 30000));
   const review = await hannah.locator('[role=dialog]').innerText();
-  check('review shows recognized values and highlights unknown fields', /Recognized/.test(review) && /Unknown field/.test(review) && (await hannah.getByLabel('Value of Class & Level').inputValue()) === 'Sorcerer 3');
-  await hannah.getByLabel('Value of Hit points (current)').fill('16');
+  check('review is grouped into readable sections', ['Identity & appearance', 'Attributes', 'Combat & resources', 'Skills & saving throws', 'Features & traits', 'Spells', 'Equipment & inventory'].every((g) => review.toUpperCase().includes(g.toUpperCase())));
+  check(
+    'review shows name, build, AC 16, max HP 9, Wisdom 18',
+    (await hannah.getByLabel('Value of Character name', { exact: true }).inputValue()) === 'Sinna' &&
+      (await hannah.getByLabel('Value of Race, class & level', { exact: true }).inputValue()) === 'Level 1 Kor Druid' &&
+      (await hannah.getByLabel('Value of Armor Class', { exact: true }).inputValue()) === '16' &&
+      (await hannah.getByLabel('Value of Hit points (maximum)', { exact: true }).inputValue()) === '9' &&
+      (await hannah.getByLabel('Value of Wisdom', { exact: true }).inputValue()) === '18',
+  );
+  check('review distinguishes prepared spells from the spell list', /2 cantrips · 5 prepared · \d+ known/.test(review) && !/EXPERIENCE/.test(review));
   await hannah.screenshot({ path: out + '/e2e-import-review.png', fullPage: true });
   await hannah.getByRole('button', { name: /Save character sheet/ }).click();
-  check('imported sheet is saved', await waitText(hannah, /Imported character sheet saved|Sorcerer 3/));
+  check('imported sheet is saved', await waitText(hannah, /Imported character sheet saved|Level 1 Kor Druid/, 15000));
   await hannah.reload();
   await hannah.getByRole('button', { name: /Character$/ }).click();
-  check('imported data persists after refreshing', await waitText(hannah, /Sorcerer 3/, 15000) && (await waitText(hannah, /16\s*\/\s*20/)));
+  await hannah.getByRole('tab', { name: 'Overview' }).click();
+  check('imported data persists after refreshing (overview: build, HP 9/9, 5 prepared)', (await waitText(hannah, /Level 1 Kor Druid/, 15000)) && (await waitText(hannah, /9 \/ 9/)) && (await waitText(hannah, /5 prepared/)));
   await hannah.screenshot({ path: out + '/e2e-character.png', fullPage: true });
+  await hannah.getByRole('tab', { name: 'Attributes & Skills' }).click();
+  check('attributes, saves and skills with proficiency are shown', (await waitText(hannah, /Perception \(Wis\)\s*\+6/)) && (await waitText(hannah, /Wisdom save\s*\+6/)));
+  await hannah.getByRole('tab', { name: 'Abilities & Spells' }).click();
+  const prepView = await hannah.locator('main, body').first().innerText();
+  check('spells tab shows prepared spells by default', /Entangle/.test(prepView) && !/Goodberry/.test(prepView) && /Lucky/.test(prepView));
+  await hannah.getByRole('button', { name: 'All known' }).click();
+  await hannah.getByLabel('Goodberry prepared').click();
+  check('a spell can be prepared with one click (saved immediately)', await hannah.waitForFunction(async () => {
+    const r = await fetch('/api/apex?op=sheet&token=sinna', { headers: { 'x-apex-csrf': '1' } });
+    return (await r.json()).sheet.spells.some((s) => s.name === 'Goodberry' && s.prepared);
+  }, null, { timeout: 10000 }).then(() => true, () => false));
+  // manual editing of any field
+  await hannah.getByRole('tab', { name: 'Attributes & Skills' }).click();
+  await hannah.getByRole('button', { name: /^✎ Edit$/ }).click();
+  await hannah.getByLabel('Score').first().fill('12');
+  await hannah.getByRole('button', { name: 'Save changes' }).click();
+  await hannah.reload();
+  await hannah.getByRole('button', { name: /Character$/ }).click();
+  await hannah.getByRole('tab', { name: 'Attributes & Skills' }).click();
+  const strNow = (await apiFetch(hannah, 'sheet', null, '&token=sinna')).body.sheet.attributes[0];
+  check('manual edit persists after refresh (Strength 11 → 12)', strNow.name === 'Strength' && strNow.value === '12');
 
   // manual resource edit
+  await hannah.getByRole('tab', { name: 'Resources' }).click();
   await hannah.getByRole('button', { name: 'Decrease Hit points' }).click();
-  check('a player can change a resource manually (HP 16 → 15)', await waitText(hannah, /15\s*\/\s*20/));
+  check('a player can change a resource manually (HP 9 → 8)', await waitText(hannah, /8\s*\/\s*9/));
   const willBefore = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.will.current;
   await hannah.getByRole('button', { name: 'Decrease Willpower' }).click();
   await sleep(800);
   const willAfter = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.will.current;
   check('Willpower comes from the game state and can be spent', willAfter === willBefore - 1);
-  // import added equipment lines to the inventory
+
+  // ---------- appearance ----------
+  await hannah.getByRole('tab', { name: 'Appearance' }).click();
+  await hannah.getByLabel('Character tag').fill('Druid of the Wilds');
+  await hannah.getByRole('button', { name: 'Primary colour #3a7d44' }).click();
+  await hannah.getByRole('button', { name: /Gem/ }).click();
+  await hannah.getByRole('button', { name: 'Save appearance' }).click();
+  check('appearance saved (tag, colour, marker)', await waitText(hannah, /Appearance saved/));
+  const gmTok = (await apiFetch(gm, 'state')).body.state.tokens.sinna;
+  check('tag/colour/marker reach the shared game state', gmTok.title === 'Druid of the Wilds' && gmTok.color === '#3a7d44' && gmTok.marker === 'gem');
+  const png = path.join(require('node:os').tmpdir(), 'apex-portrait.png');
+  require('node:fs').writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
+  await hannah.getByRole('button', { name: /Upload portrait/ }).click().catch(() => undefined);
+  await hannah.getByLabel('Choose a portrait picture').setInputFiles(png);
+  await hannah.getByRole('button', { name: 'Save portrait' }).click();
+  check('portrait uploaded', await waitText(hannah, /Portrait saved/, 15000));
+  const portraitFetch = (pg) => pg.evaluate(async () => { const r = await fetch('/api/apex?op=portrait&token=sinna'); return { status: r.status, type: r.headers.get('content-type') }; });
+  const own = await portraitFetch(hannah);
+  const other = await portraitFetch(jean);
+  const anonP = await portraitFetch(anon);
+  check('portrait is served to campaign members only (private storage)', own.status === 200 && /image\//.test(own.type ?? '') && other.status === 200 && anonP.status === 401);
+  await hannah.screenshot({ path: out + '/e2e-appearance.png', fullPage: true });
+  // ---------- top-level inventory still works ----------
   // ---------- inventory ----------
   await hannah.getByRole('button', { name: /Inventory/ }).click();
-  check('equipment from the PDF was added to the inventory', await waitText(hannah, /Bedroll/));
+  check('equipment from the PDF was added to the inventory (no duplicates)', (await waitText(hannah, /Breastplate/)) && (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.inventory.filter((i) => i.name === 'Breastplate').length === 1);
   await hannah.getByPlaceholder(/Old iron key/).fill('Old iron key, wrapped in red cloth');
   await hannah.getByRole('button', { name: '+ Add' }).click();
   check('a player can add a free-text inventory item', await waitText(hannah, /Old iron key, wrapped in red cloth/));
@@ -215,7 +268,7 @@ const waitText = (page, re, timeout = 10000) =>
 
   // ---------- privacy ----------
   const jeanReadsSheet = await apiFetch(jean, 'sheet', null, '&token=sinna');
-  check('Jean cannot read Hannah’s character sheet', jeanReadsSheet.status === 403 && !JSON.stringify(jeanReadsSheet.body).includes('Sorcerer'));
+  check('Jean cannot read Hannah’s character sheet', jeanReadsSheet.status === 403 && !JSON.stringify(jeanReadsSheet.body).includes('Kor Druid'));
   const jeanView = JSON.stringify((await apiFetch(jean, 'state')).body);
   check('Jean does not receive Sinna’s inventory', !jeanView.includes('Old iron key'));
   const jeanEdits = await apiFetch(jean, 'command', { campaignId: beforeJean.body.campaignId, command: { type: 'invAddItem', tokenId: 'sinna', itemId: 'evil', name: 'x' } });
@@ -224,12 +277,14 @@ const waitText = (page, re, timeout = 10000) =>
   // ---------- GM oversight ----------
   await gm.getByRole('button', { name: /Character sheets/ }).click();
   await gm.getByLabel('Character to inspect').selectOption({ label: 'Sinna' });
-  check('the GM sees Hannah’s sheet', await waitText(gm, /Sorcerer 3/, 15000));
-  await gm.getByRole('button', { name: /Edit sheet/ }).click();
+  check('the GM sees Hannah’s sheet', await waitText(gm, /Level 1 Kor Druid/, 15000));
+  await gm.getByRole('tab', { name: 'Notes' }).click();
+  await gm.getByRole('button', { name: /^✎ Edit$/ }).click();
   await gm.getByLabel('Notes').fill('GM note: owes the Gamemakers a favour.');
   await gm.getByRole('button', { name: 'Save changes' }).click();
   check('the GM edits the sheet', await waitText(gm, /owes the Gamemakers/));
   await hannah.getByRole('button', { name: /Character$/ }).click();
+  await hannah.getByRole('tab', { name: 'Notes' }).click();
   check('GM edit reaches Hannah’s device (live/poll)', await waitText(hannah, /owes the Gamemakers/, 30000));
   await gm.getByRole('button', { name: /Inventory/ }).click();
   check('the GM sees Hannah’s inventory', await waitText(gm, /Old iron key/));
@@ -290,7 +345,7 @@ const waitText = (page, re, timeout = 10000) =>
     check('inventory and character data survived the new world', after.tokens.sinna.inventory.some((i) => i.name.startsWith('Old iron key')));
     check('the player is switched to the new world and told so', await waitText(hannah, /switched to the world “E2E Second World”/, 30000) && (await hannahWorld()) === 'E2E Second World');
     const sheetStill = await apiFetch(hannah, 'sheet', null, '&token=sinna');
-    check('character sheet unchanged by the new world', sheetStill.status === 200 && JSON.stringify(sheetStill.body).includes('Sorcerer'));
+    check('character sheet unchanged by the new world', sheetStill.status === 200 && JSON.stringify(sheetStill.body).includes('Kor Druid'));
     const stale = await apiFetch(hannah, 'command', { worldId: before.world?.id ?? 'old', requestId: 'e2e-stale-001', command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } });
     check('a command for the replaced world is rejected', stale.status === 409 && stale.body.code === 'world_changed');
     // restore

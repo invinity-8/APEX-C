@@ -61,6 +61,20 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3c. Character experience (v0.4)
+
+- **Aurora Builder PDFs** are imported from their real form fields (identity, abilities, saves and skills with proficiency,
+  combat values, attacks, equipment without duplicates, currency, spellcasting, cantrips / prepared spells / full spell list,
+  spell slots, background). Features & traits come from Aurora's printed "Name. Description" block (marked *Please check*).
+  Other fillable sheets and text PDFs still work; page-text guesses are only used when no form field exists.
+- **Readable import preview** grouped into Identity & appearance, Attributes, Combat & resources, Skills & saving throws,
+  Features & traits, Spells, Equipment & inventory, Background & notes – with overwrite warnings and an optional Advanced
+  section for unrecognised fields.
+- **Character dashboard** with tabs Overview · Attributes & Skills · Abilities & Spells · Resources · Inventory · Appearance · Notes;
+  every field can be edited by hand (player: own character, GM: all), saved with conflict protection.
+- **Appearance**: portrait (JPG/PNG/WebP, crop & reposition, private Supabase Storage, signed URLs), character tag, primary and
+  accent colour, marker style (medallion, gem, hexagon, crest) – shown on the map and on character cards. Cosmetic only.
+
 ## 3b. World Management (v0.4)
 
 GM: *Archive World*, *Create New World*, *Reset Current World*, *Restore Archived World* – atomic, idempotent, accounts/passwords/
