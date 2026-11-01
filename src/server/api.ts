@@ -26,6 +26,7 @@ import type { Actor, GameState } from '../game/types.js';
 import { phaseName } from '../game/text.js';
 import { buildPlayerView } from '../game/visibility.js';
 import { applyRoster, needsRosterUpdate } from '../game/roster.js';
+import { carryCharacters, newWorldMeta, reconcileRestore, worldIdOf } from '../game/world.js';
 import {
   SESSION_ABSOLUTE_MS,
   SESSION_COOKIE,
@@ -51,7 +52,7 @@ import type {
   SheetPayload,
   WireView,
 } from './protocol.js';
-import type { AuthUser, HealthReport, Profile, Repo } from './repo.js';
+import { WorldConflictError, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
 import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
 import { isId, isInt, isObj, parseCommand } from './validate.js';
 
@@ -539,6 +540,10 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         const stored = await repo.loadState(user.campaignId);
         if (!stored) throw new HttpError(409, 'The campaign has not been initialised yet.', 'not_initialised');
+        // A command prepared for a world that has since been replaced (reset / new world / restore) is never applied.
+        if (body.worldId !== undefined && body.worldId !== worldIdOf(stored.state)) {
+          throw new HttpError(409, 'The Game Master has switched to another world. Your view is being reloaded – please repeat your action there if it still makes sense.', 'world_changed');
+        }
 
         let actor: Actor;
         try {
@@ -677,7 +682,42 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
 // ---------------------------------------------------------------- admin (GM only)
 
 /** Admin actions that replace the world – applied at most once per request id. */
-const WORLD_ACTIONS = new Set(['initCampaign', 'importState', 'applyRoster', 'restoreSnapshot']);
+const WORLD_ACTIONS = new Set(['initCampaign', 'importState', 'applyRoster', 'restoreSnapshot', 'archiveWorld', 'createWorld', 'resetWorld', 'restoreArchive']);
+
+const worldName = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 80) : null);
+const describeText = (v: unknown): string => (typeof v === 'string' ? v.trim().slice(0, 2000) : '');
+const randomSeed = () => 1 + Math.floor(Math.random() * 1_999_999_999);
+
+/** Runs the atomic archive + replace; a concurrent change aborts it and leaves the current world untouched. */
+async function transition(repo: Repo, cid: string, expected: number, next: GameState, archive: { name: string; description: string; kind: ArchiveKind }, userId: string) {
+  try {
+    return await repo.worldTransition(cid, expected, next, archive, userId);
+  } catch (e) {
+    if (e instanceof WorldConflictError) {
+      throw new HttpError(409, 'The world changed while this was being prepared. Nothing was replaced – please try again.', 'conflict');
+    }
+    throw e;
+  }
+}
+
+/**
+ * Create New World / Reset Current World: generate, carry character-level data over, then archive the
+ * current world and switch to the new one in ONE transaction. Accounts, passwords, profiles, character
+ * assignments and character sheets are in other tables and stay untouched.
+ */
+async function createWorld(
+  user: AuthUser,
+  repo: Repo,
+  o: { name: string; radius: number; seed: number; keepProgress: boolean; kind: 'before-create' | 'before-reset' },
+  cur: { state: GameState; version: number },
+): Promise<CampaignPayload> {
+  const fresh = { ...createDemoState({ radius: o.radius, seed: o.seed }), world: newWorldMeta(o.name) };
+  const next = carryCharacters(cur.state, fresh, { keepProgress: o.keepProgress });
+  const oldName = cur.state.world?.name ?? 'World';
+  const label = `${oldName} – ${o.kind === 'before-reset' ? 'before reset' : 'before new world'} (${phaseName(cur.state.phase, cur.state.day)})`;
+  await transition(repo, user.campaignId, cur.version, next, { name: label, description: '', kind: o.kind }, user.id);
+  return campaignPayload(user, repo);
+}
 
 async function runAdmin(user: AuthUser, body: unknown, repo: Repo): Promise<unknown> {
   if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
@@ -774,9 +814,58 @@ async function runAdminAction(user: AuthUser, body: Record<string, unknown>, rep
         throw new HttpError(400, `Radius must be between ${MIN_RADIUS} and ${MAX_RADIUS}.`);
       }
       if (!isInt(body.seed, 2_000_000_000)) throw new HttpError(400, 'Invalid seed.');
-      await snapshotCurrent(cid, repo, user.id, 'Before new arena');
-      const state = createDemoState({ radius: body.radius, seed: body.seed });
+      const existing = await repo.loadState(cid);
+      if (existing) {
+        // A world already exists: never replace it without an archive – behave like "Create New World".
+        return createWorld(user, repo, { name: 'New world', radius: body.radius, seed: body.seed, keepProgress: true, kind: 'before-create' }, existing);
+      }
+      const state = { ...createDemoState({ radius: body.radius, seed: body.seed }), world: newWorldMeta(worldName(body.name) ?? 'First world') };
       await repo.replaceState(cid, state, user.id);
+      return campaignPayload(user, repo);
+    }
+    // ------------------------------------------------ world management
+    case 'listArchives':
+      return { archives: await repo.listArchives(cid) };
+    case 'archiveWorld': {
+      const cur = await repo.loadState(cid);
+      if (!cur) throw new HttpError(409, 'There is no world to archive yet.', 'not_initialised');
+      const name = worldName(body.name) ?? `${cur.state.world?.name ?? 'World'} – ${phaseName(cur.state.phase, cur.state.day)}`;
+      const r = await repo.worldTransition(cid, null, null, { name, description: describeText(body.description), kind: 'manual' }, user.id);
+      return { archiveId: r.archiveId, archives: await repo.listArchives(cid) };
+    }
+    case 'createWorld':
+    case 'resetWorld': {
+      const cur = await repo.loadState(cid);
+      if (!cur) throw new HttpError(409, 'There is no world yet – generate the first arena instead.', 'not_initialised');
+      if (body.action === 'resetWorld' && body.confirm !== 'RESET') throw new HttpError(400, 'Please confirm the reset by typing RESET.');
+      const radius = body.radius === undefined ? cur.state.config.mapRadius : body.radius;
+      if (!isInt(radius) || radius < MIN_RADIUS || radius > MAX_RADIUS) throw new HttpError(400, `Radius must be between ${MIN_RADIUS} and ${MAX_RADIUS}.`);
+      const seed = body.seed === undefined || body.seed === null || body.seed === '' ? randomSeed() : body.seed;
+      if (!isInt(seed, 2_000_000_000) || seed === 0) throw new HttpError(400, 'Invalid seed.');
+      if (typeof body.keepProgress !== 'boolean') throw new HttpError(400, 'Please choose whether to keep character progress.');
+      const name = body.action === 'resetWorld' ? (worldName(body.name) ?? cur.state.world?.name ?? 'World') : worldName(body.name);
+      if (!name) throw new HttpError(400, 'Please enter a name for the new world.');
+      return createWorld(user, repo, { name, radius, seed, keepProgress: body.keepProgress, kind: body.action === 'resetWorld' ? 'before-reset' : 'before-create' }, cur);
+    }
+    case 'restoreArchive': {
+      if (typeof body.archiveId !== 'string') throw new HttpError(400, 'Invalid archive.');
+      if (body.inventory !== 'keep-current' && body.inventory !== 'use-archived') throw new HttpError(400, 'Please choose how inventories are reconciled.');
+      const [cur, archive] = await Promise.all([repo.loadState(cid), repo.loadArchive(cid, body.archiveId)]);
+      if (!archive) throw new HttpError(404, 'Archive not found.');
+      let restored: GameState;
+      try {
+        restored = migrateState(archive.state);
+      } catch (e) {
+        throw new HttpError(422, `This archive cannot be restored: ${(e as Error).message}`);
+      }
+      restored = cur ? reconcileRestore(cur.state, restored, body.inventory) : restored;
+      restored.world ??= newWorldMeta(archive.worldName ?? archive.name);
+      if (!cur) {
+        await repo.replaceState(cid, restored, user.id);
+        return campaignPayload(user, repo);
+      }
+      const label = `${cur.state.world?.name ?? 'World'} – before restoring “${archive.name}”`;
+      await transition(repo, cid, cur.version, restored, { name: label, description: '', kind: 'before-restore' }, user.id);
       return campaignPayload(user, repo);
     }
     case 'importState': {

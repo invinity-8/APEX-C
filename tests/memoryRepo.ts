@@ -1,4 +1,5 @@
 import type { GameState } from '../src/game/types';
+import { WorldConflictError, type ArchiveInfo, type ArchiveKind } from '../src/server/repo';
 import type {
   Assignment,
   AuthBundle,
@@ -246,6 +247,55 @@ export class MemoryRepo implements Repo {
     return this.snapshots.find((s) => s.campaignId === campaignId && s.id === id)?.state ?? null;
   }
   async pruneSnapshots() {}
+  archives: Array<ArchiveInfo & { campaignId: string; state: GameState }> = [];
+  /** Test hook: fail the next world transition (simulated database error). */
+  failNextTransition: Error | null = null;
+  async worldTransition(
+    campaignId: string,
+    expectedVersion: number | null,
+    newState: GameState | null,
+    archive: { name: string; description: string; kind: ArchiveKind },
+  ) {
+    if (this.failNextTransition) {
+      const e = this.failNextTransition;
+      this.failNextTransition = null;
+      throw e;
+    }
+    const cur = this.states.get(campaignId);
+    if (!cur) throw new Error('apex:no_world');
+    if (expectedVersion !== null && cur.version !== expectedVersion) throw new WorldConflictError();
+    const id = `00000000-0000-4000-8000-${String(this.archives.length + 1).padStart(12, '0')}`;
+    this.archives.unshift({
+      id,
+      campaignId,
+      name: archive.name.trim().slice(0, 120) || 'Archived world',
+      description: archive.description.slice(0, 2000),
+      kind: archive.kind,
+      createdAt: new Date(this.now()).toISOString(),
+      stateVersion: cur.version,
+      worldName: cur.state.world?.name ?? null,
+      seed: cur.state.config.seed,
+      radius: cur.state.config.mapRadius,
+      day: cur.state.day,
+      phase: cur.state.phase,
+      state: structuredClone(cur.state),
+    });
+    let version = cur.version;
+    if (newState) {
+      version = cur.version + 1;
+      this.states.set(campaignId, { state: structuredClone(newState), version });
+    }
+    return { archiveId: id, version };
+  }
+  async listArchives(campaignId: string) {
+    return this.archives.filter((a) => a.campaignId === campaignId).map(({ state: _s, campaignId: _c, ...info }) => info);
+  }
+  async loadArchive(campaignId: string, id: string) {
+    const a = this.archives.find((x) => x.campaignId === campaignId && x.id === id);
+    if (!a) return null;
+    const { campaignId: _c, ...rest } = a;
+    return structuredClone(rest);
+  }
   async loadSheet(campaignId: string, tokenId: string) {
     const s = this.sheets.get(`${campaignId}:${tokenId}`);
     return s ? structuredClone(s) : null;

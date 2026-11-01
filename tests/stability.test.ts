@@ -126,7 +126,7 @@ describe('Idempotent actions', () => {
     const second = await call('POST', 'admin', body, {}, c);
     expect((second.body as { duplicate?: boolean }).duplicate).toBe(true);
     expect(repo.states.get(CID)!.version).toBe(v);
-    expect(repo.snapshots.filter((s) => s.label === 'Before new arena')).toHaveLength(1);
+    expect(repo.archives).toHaveLength(1); // the replaced world was archived exactly once
   });
 
   it('invalid request ids are rejected', async () => {
