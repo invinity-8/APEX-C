@@ -24,7 +24,7 @@ export function PartyPanel({ view, selectedTokenId, onSelect }: Props) {
                 className={`flex w-full items-center gap-2.5 rounded-lg border px-2 py-1.5 text-left transition-colors ${
                   selectedTokenId === t.id ? 'border-gold-400/70 bg-gold-400/10' : 'border-transparent hover:bg-ink-700/60'
                 }`}
-                title={`${t.name} auswählen und auf der Karte zeigen`}
+                title={`${t.name} select and show on map`}
               >
                 <span
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-ink-950"
