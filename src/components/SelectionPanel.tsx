@@ -36,7 +36,7 @@ export function SelectionPanel(props: Props) {
   const hexK = selectedHex ?? (token ? hexKey(token.pos) : null);
   if (!token && !hexK) {
     return (
-      <Section title="Auswahl">
+      <Section title="Selection">
         <p className="text-xs leading-relaxed text-marble-300">
           Click a <b className="text-marble-50">Character</b>, to select them. Reachable hexes glow gold. Click a hex to move.
           Ein Klick auf ein beliebiges Hex zeigt dessen Informationen.
@@ -64,9 +64,9 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
 
   return (
     <Section
-      title={token.kind === 'player' ? 'Character' : 'Rivalenteam'}
+      title={token.kind === 'player' ? 'Character' : 'Rival Team'}
       right={
-        <button className="btn btn-ghost px-2 py-0.5" onClick={onClear} title="Auswahl aufheben (Esc)">
+        <button className="btn btn-ghost px-2 py-0.5" onClick={onClear} title="Selection aufheben (Esc)">
           ✕
         </button>
       }
@@ -117,7 +117,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
               </div>
               <div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-marble-300" title="Gebundene Willenskraft (Voluntas)">Willenskraft</span>
+                  <span className="text-marble-300" title="Bound willpower (Voluntas)">Willpower</span>
                   <span className="tabular-nums text-arcane-300">
                     {d.will.current} / {d.will.max}
                   </span>
@@ -153,7 +153,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
           ? '✥ Frei platzieren aktiv: Klicke irgendein Hex.'
           : canMove
             ? d && d.movePoints <= 0
-              ? 'Keine Movement points mehr – warte auf den nächsten Tag.'
+              ? 'No movement points left — wait for the next day.'
               : 'Klicke ein golden markiertes Hex, um dorthin zu ziehen.'
             : 'Du kannst diese Character nicht bewegen.'}
       </p>
@@ -161,11 +161,11 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
       {/* ---------- GM-Werkzeuge ---------- */}
       {isGm && full && (
         <div className="mt-3 space-y-2 border-t border-ink-600 pt-3">
-          <div className="label">Spielleitung</div>
+          <div className="label">Game Master</div>
           <button
             className={`btn w-full ${placeMode ? 'btn-active' : 'btn-ghost'}`}
             onClick={() => setPlaceMode(!placeMode)}
-            title="Character ohne Bewegungskosten auf ein beliebiges Hex setzen"
+            title="Place character on any hex without movement cost"
           >
             ✥ {placeMode ? 'Frei platzieren beenden' : 'Frei platzieren'}
           </button>
@@ -176,7 +176,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
             onInc={() => run({ type: 'adjustMovePoints', tokenId: full.id, delta: 1 })}
           />
           <Stepper
-            label="BP pro Tag"
+            label="Points per day"
             value={full.maxMovePoints}
             hint="Starting value for each new day"
             onDec={() => run({ type: 'adjustMaxMovePoints', tokenId: full.id, delta: -1 })}
@@ -185,23 +185,23 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
           {full.kind === 'player' && (
             <>
               <Stepper
-                label="Vision range (Basis)"
+                label="Vision range (base)"
                 value={full.visionRadius}
                 onDec={() => run({ type: 'adjustVisionRadius', tokenId: full.id, delta: -1 })}
                 onInc={() => run({ type: 'adjustVisionRadius', tokenId: full.id, delta: 1 })}
               />
               <Stepper
-                label="Sichtbonus heute"
+                label="Vision bonus today"
                 value={(full.visionBonus > 0 ? '+' : '') + full.visionBonus}
                 hint="Temporary, e.g. after climbing a tree or tower. Expires when the day ends."
                 onDec={() => run({ type: 'adjustVisionBonus', tokenId: full.id, delta: -1 })}
                 onInc={() => run({ type: 'adjustVisionBonus', tokenId: full.id, delta: 1 })}
               />
               <Toggle
-                label="Teilt Sicht & Wissen mit der Gruppe"
+                label="Share vision and knowledge with party"
                 checked={full.sharesWithParty}
                 onChange={() => run({ type: 'toggleShare', tokenId: full.id })}
-                hint="Aus: Die anderen Player sehen diese Character und ihre Entdeckungen nicht."
+                hint="Off: other players do not share this character's vision or discoveries."
               />
               <div>
                 <div className="mb-1 text-xs text-marble-300">May also be controlled by:</div>
@@ -287,10 +287,10 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
           <span className="text-marble-500">Aggression:</span> {team.aggression}/10
         </div>
         <div>
-          <span className="text-marble-500">Ziele:</span> {team.goals.join(' · ')}
+          <span className="text-marble-500">Goals:</span> {team.goals.join(' · ')}
         </div>
         <div>
-          <span className="text-marble-500">Ressourcen:</span> {team.resources.join(' · ') || '—'}
+          <span className="text-marble-500">Resources:</span> {team.resources.join(' · ') || '—'}
         </div>
       </div>
     </div>
@@ -352,7 +352,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
           )}
           {site.rewards.length > 0 && (
             <div className="text-[11px]">
-              <span className="text-marble-500">Belohnung: </span>
+              <span className="text-marble-500">Rewards: </span>
               {site.rewards.join(' · ')}
             </div>
           )}
@@ -378,7 +378,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
 
       {tokens.length > 0 && (
         <div className="mt-3">
-          <div className="label mb-1">Auf diesem Hex ({tokens.length})</div>
+          <div className="label mb-1">On this hex ({tokens.length})</div>
           <ul className="space-y-1">
             {tokens.map((t) => (
               <li key={t.id}>
