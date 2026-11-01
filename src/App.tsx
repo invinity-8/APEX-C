@@ -13,6 +13,10 @@ import { visibleFrom, type Fog } from './game/visibility';
 import type { GameApi } from './state/gameApi';
 import { phaseName } from './game/text';
 import { PlayersPanel } from './components/PlayersPanel';
+import { CharacterPanel } from './components/CharacterPanel';
+import { InventoryPanel } from './components/InventoryPanel';
+
+type View = 'map' | 'character' | 'inventory';
 
 interface Toast {
   id: number;
@@ -30,6 +34,8 @@ export default function App({ game }: { game: GameApi }) {
   const [placeMode, setPlaceMode] = useState(false);
   const [showPartyFog, setShowPartyFog] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [screen, setScreen] = useState<View>('map');
+  const [gmCharacter, setGmCharacter] = useState<string | null>(null);
   const mapRef = useRef<MapHandle>(null);
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'error') => setToast({ id: Date.now(), text, kind }), []);
@@ -153,6 +159,17 @@ export default function App({ game }: { game: GameApi }) {
     [isGm, state],
   );
 
+  // Character & inventory: players see their own character, the GM picks any player character.
+  const playerTokens = view.tokens.filter((t) => t.kind === 'player');
+  const sheetTokenId = isGm ? (gmCharacter ?? (selectedToken?.kind === 'player' ? selectedToken.id : playerTokens[0]?.id) ?? null) : view.viewerId;
+  const sheetToken = view.tokens.find((t) => t.id === sheetTokenId) ?? null;
+
+  const tabs: Array<{ id: View; label: string }> = [
+    { id: 'map', label: '🗺 Map' },
+    { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
+    { id: 'inventory', label: '🎒 Inventory' },
+  ];
+
   return (
     <div className="flex min-h-full flex-col lg:h-full">
       {game.demo && (
@@ -179,7 +196,60 @@ export default function App({ game }: { game: GameApi }) {
           if ((await run({ type: 'advancePhase' })).ok) notify(`${next} begins.`, 'info');
         }}
       />
-      <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Player navigation">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setScreen(t.id)}
+            aria-current={screen === t.id ? 'page' : undefined}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              screen === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(212,166,74,.6)]' : 'text-marble-300 hover:bg-ink-800 hover:text-marble-50'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+        {isGm && screen !== 'map' && (
+          <label className="ml-auto flex items-center gap-2 text-xs text-marble-300">
+            Character
+            <select
+              aria-label="Character to inspect"
+              className="rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-sm text-marble-50"
+              value={sheetTokenId ?? ''}
+              onChange={(e) => setGmCharacter(e.target.value)}
+            >
+              {playerTokens.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </nav>
+      {screen !== 'map' && (
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
+          {toast && (
+            <div
+              key={toast.id}
+              role="status"
+              className={`fixed top-24 left-1/2 z-40 max-w-[90%] -translate-x-1/2 rounded-lg border px-4 py-2 text-sm shadow-2xl ${
+                toast.kind === 'error' ? 'border-blood-400/60 bg-blood-600/90 text-white' : 'border-gold-400/50 bg-ink-900/95 text-gold-200'
+              }`}
+            >
+              {toast.text}
+            </div>
+          )}
+          {!sheetToken ? (
+            <p className="p-6 text-sm text-marble-500">No character available.</p>
+          ) : screen === 'character' ? (
+            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} />
+          ) : (
+            <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} />
+          )}
+        </div>
+      )}
+      <main className={`min-h-0 flex-1 flex-col lg:flex-row ${screen === 'map' ? 'flex' : 'hidden'}`}>
         <div className="relative h-[65vh] min-h-[420px] flex-1 lg:h-auto">
           <ArenaMap
             mapRef={mapRef}
