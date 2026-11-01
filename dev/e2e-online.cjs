@@ -108,6 +108,23 @@ const waitText = (page, re, timeout = 8000) =>
   check('a player’s email cannot open the GM profile', (await startLogin(gmFake, 'GM', 'hannah@apex.test')) === null);
   await Promise.all([jeanAsHannah.context().close(), strangerPage.context().close(), gmFake.context().close()]);
 
+  // ---------- Rate limit UI: a second request for the same address is refused with the server's wait time ----------
+  const rl = await newDevice(b);
+  await rl.goto(URL);
+  await rl.getByRole('button', { name: 'Join Campaign' }).click();
+  await rl.getByRole('button', { name: /^Jean –/ }).click();
+  await rl.getByLabel('Email address').fill('jean@apex.test');
+  await rl.getByRole('button', { name: /Send me a code/ }).click();
+  await rl.getByText('Please wait').waitFor({ timeout: 5000 });
+  const rlText = await rl.locator('body').innerText();
+  check(
+    'rate limit shows the server wait time, no fake code step, and "I already have a code" stays available',
+    /New request possible in \d+ s/.test(rlText) && (await rl.getByRole('button', { name: 'I already have a code' }).isEnabled()),
+  );
+  await rl.screenshot({ path: out + '/e2e-ratelimit.png' });
+  await rl.context().close();
+  await sleep(5500); // mock interval (APEX_LOGIN_INTERVAL_SEC=5)
+
   // ---------- Authorized logins ----------
   const wrong = await newDevice(b);
   await startLogin(wrong, 'Jean', 'jean@apex.test');

@@ -378,6 +378,7 @@ describe('Online API – "Who are you?" profiles', () => {
     await call('t-gm', 'GET', 'session');
     await code('simon@example.com', 'simon');
     expect(repo.sentCodes).toEqual([]);
+    repo.loginRequests = []; // time passes (per-address limit of 60 s)
     const ov = await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'linkProfile', profile: 'simon', email: 'Simon@Example.com' });
     expect(ov.status).toBe(200);
     expect(((ov.body as { profiles: Array<{ key: string; email: string }> }).profiles.find((p) => p.key === 'simon'))?.email).toBe('simon@example.com');
@@ -431,7 +432,7 @@ describe('Online API – deployment health and schema contract', () => {
     repo.deploy = { ...repo.deploy, migrations: ['20261101094428'] };
     const h = (await call(null, 'GET', 'health')).body as { migrationsComplete: boolean; missingMigrations: string[]; unknownMigrations: string[]; errors: string[] };
     expect(h.migrationsComplete).toBe(false);
-    expect(h.missingMigrations).toEqual(['20261101145653', '20261101151000']);
+    expect(h.missingMigrations).toEqual(['20261101145653', '20261101151000', '20261101160000']);
     expect(h.unknownMigrations).toEqual(['20261101094428']);
     expect(h.errors.length).toBeGreaterThan(0);
   });
@@ -450,5 +451,68 @@ describe('Online API – deployment health and schema contract', () => {
     expect(r.status).toBe(503);
     expect((r.body as { code: string }).code).toBe('schema_outdated');
     resetSchemaCache();
+  });
+});
+
+describe('Online API – login code rate limits and honest errors', () => {
+  const req = (email: string, profile = 'hannah') => call(null, 'POST', 'request-code', { email, profile });
+  const seed = () => {
+    repo.profileList = [
+      { campaignId: CID, key: 'hannah', displayName: 'Hannah', characterName: 'Sinna', role: 'player', tokenIds: ['sinna'], email: 'hannah@example.com', userId: null },
+    ];
+  };
+
+  it('allows one request per address per minute and reports the exact wait time', async () => {
+    seed();
+    expect((await req('hannah@example.com')).status).toBe(200);
+    const second = await req('hannah@example.com');
+    expect(second.status).toBe(429);
+    const body = second.body as { code: string; retryAfter: number; error: string };
+    expect(body.code).toBe('rate_limited');
+    expect(body.retryAfter).toBeGreaterThan(50);
+    expect(body.retryAfter).toBeLessThanOrEqual(60);
+    expect(body.error).toMatch(/enter the code you already received/);
+    expect(repo.sentCodes).toEqual(['hannah@example.com']); // no second email
+  });
+
+  it('applies the same limits to uninvited addresses (no enumeration via rate limits)', async () => {
+    seed();
+    expect((await req('stranger@example.com')).status).toBe(200);
+    expect((await req('stranger@example.com')).status).toBe(429);
+    expect(repo.sentCodes).toEqual([]);
+  });
+
+  it('blocks an address after 5 requests per hour, but never other addresses', async () => {
+    seed();
+    const { createHash } = await import('node:crypto');
+    const hash = (e: string) => createHash('sha256').update(e).digest('hex');
+    for (let i = 1; i <= 5; i++) repo.loginRequests.push({ emailHash: hash('hannah@example.com'), outcome: 'accepted', at: Date.now() - i * 70_000 });
+    const blocked = await req('hannah@example.com');
+    expect(blocked.status).toBe(429);
+    expect((blocked.body as { retryAfter: number }).retryAfter).toBe(3600);
+    // many requests for other addresses never block Jean's real login
+    repo.profileList.push({ campaignId: CID, key: 'jean', displayName: 'Jean', characterName: 'Aster', role: 'player', tokenIds: ['aster'], email: 'jean@example.com', userId: null });
+    for (let i = 0; i < 100; i++) repo.loginRequests.push({ emailHash: `spam${i}`, outcome: 'ignored', at: Date.now() - 120_000 });
+    expect((await req('jean@example.com', 'jean')).status).toBe(200);
+    expect(repo.sentCodes).toEqual(['jean@example.com']);
+  });
+
+  it('reports a mail-service quota as such – not as "wait a minute"', async () => {
+    seed();
+    repo.nextSendResult = { ok: false, reason: 'quota', retryAfter: 3600 };
+    const r = await req('hannah@example.com');
+    expect(r.status).toBe(503);
+    expect((r.body as { code: string; retryAfter: number }).code).toBe('email_quota');
+    expect((r.body as { retryAfter: number }).retryAfter).toBe(3600);
+  });
+
+  it('reports delivery failures separately and does not block an immediate retry', async () => {
+    seed();
+    repo.nextSendResult = { ok: false, reason: 'failed', detail: 'SMTP: connection refused' };
+    const r = await req('hannah@example.com');
+    expect(r.status).toBe(502);
+    expect((r.body as { code: string }).code).toBe('delivery_failed');
+    expect(JSON.stringify(r.body)).not.toContain('connection refused');
+    expect((await req('hannah@example.com')).status).toBe(200); // a failed delivery starts no cooldown
   });
 });

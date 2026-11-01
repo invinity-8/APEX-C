@@ -8,4 +8,4 @@
  */
 export const REQUIRED_SCHEMA_VERSION = 1;
 
-export const EXPECTED_MIGRATIONS: readonly string[] = ['20261101145653', '20261101151000'];
+export const EXPECTED_MIGRATIONS: readonly string[] = ['20261101145653', '20261101151000', '20261101160000'];

@@ -148,11 +148,11 @@ export function mockSupabase(): Plugin {
     r.sendLoginCode = async (email) => {
       if (!r.authAccounts.has(email)) return { ok: false, reason: 'failed', detail: 'no such user' };
       const prev = codes.get(email);
-      if (prev && !prev.used && prev.expires - 600_000 + 5_000 > Date.now()) return { ok: false, reason: 'rate_limited' };
+      if (prev && !prev.used && prev.expires - 600_000 + 5_000 > Date.now()) return { ok: false, reason: 'rate_limited', retryAfter: 5 };
       const code = String(Math.floor(100000 + Math.random() * 900000));
       codes.set(email, { code, expires: Date.now() + 600_000, used: false });
       console.log(`[mock] login code for ${email}: ${code}`);
-      return { ok: true };
+      return { ok: true, via: 'smtp' };
     };
     repo = r;
     return r;

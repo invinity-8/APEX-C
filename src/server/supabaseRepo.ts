@@ -3,6 +3,7 @@
  * with the secret key, which bypasses RLS. Never import this module from client code.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { readSmtpEnv, sendCodeEmail, verifySmtp, type SmtpConfig } from './mailer.js';
 import type { GameState } from '../game/types.js';
 import type {
   Assignment,
@@ -11,6 +12,7 @@ import type {
   CommandLogEntry,
   DeployStatus,
   Invite,
+  LoginRequestStats,
   Member,
   Profile,
   Repo,
@@ -23,8 +25,10 @@ import type {
 export interface ServerEnv {
   url: string;
   secretKey: string;
-  /** Public key – used to request login codes exactly like a browser would. Optional. */
+  /** Public key – used for the Supabase built-in mailer fallback. Optional. */
   publishableKey?: string;
+  /** Own SMTP account for sign-in codes (recommended). */
+  smtp: SmtpConfig | null;
 }
 
 /** Reads server-side configuration. The secret key must never use a VITE_ prefix. */
@@ -33,7 +37,7 @@ export function readServerEnv(env: Record<string, string | undefined>): ServerEn
   const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !secretKey) return null;
   const publishableKey = env.SUPABASE_PUBLISHABLE_KEY ?? env.VITE_SUPABASE_PUBLISHABLE_KEY ?? env.VITE_SUPABASE_ANON_KEY;
-  return { url, secretKey, publishableKey };
+  return { url, secretKey, publishableKey, smtp: readSmtpEnv(env) };
 }
 
 function check<T>(res: { data: T; error: { message: string } | null }, what: string): T {
@@ -57,8 +61,10 @@ export class SupabaseRepo implements Repo {
   private db: SupabaseClient;
   /** Client for public auth endpoints (sending codes). Falls back to the admin client. */
   private pub: SupabaseClient;
+  private smtp: SmtpConfig | null;
 
   constructor(env: ServerEnv) {
+    this.smtp = env.smtp;
     const opts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
     this.db = createClient(env.url, env.secretKey, opts);
     this.pub = env.publishableKey ? createClient(env.url, env.publishableKey, opts) : this.db;
@@ -103,11 +109,78 @@ export class SupabaseRepo implements Repo {
   }
 
   async sendLoginCode(email: string): Promise<SendCodeResult> {
+    if (this.smtp) {
+      // Supabase generates the one-time code (and later verifies it); APEX delivers it via its own SMTP.
+      const { data, error } = await this.db.auth.admin.generateLink({ type: 'magiclink', email });
+      if (error) {
+        const status = (error as { status?: number }).status;
+        if (status === 429) return { ok: false, reason: 'rate_limited', retryAfter: 60, detail: error.message };
+        return { ok: false, reason: 'failed', detail: `generateLink: ${error.message}` };
+      }
+      const code = data.properties?.email_otp;
+      if (!code) return { ok: false, reason: 'failed', detail: 'generateLink returned no email_otp' };
+      try {
+        const sent = await sendCodeEmail(this.smtp, email, code);
+        if (!sent.accepted) return { ok: false, reason: 'not_deliverable', detail: `SMTP rejected recipient: ${sent.response}` };
+        return { ok: true, via: 'smtp', detail: `SMTP accepted: ${sent.response.slice(0, 80)}` };
+      } catch (e) {
+        return { ok: false, reason: 'failed', detail: `SMTP: ${(e as Error).message}` };
+      }
+    }
+    // Fallback: Supabase built-in mailer (only for team members, about 2 emails per hour per project).
     const { error } = await this.pub.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-    if (!error) return { ok: true };
+    if (!error) return { ok: true, via: 'supabase' };
     const status = (error as { status?: number }).status;
-    if (status === 429 || /rate limit|security purposes|seconds/i.test(error.message)) return { ok: false, reason: 'rate_limited' };
+    const code = (error as { code?: string }).code ?? '';
+    if (code === 'over_email_send_rate_limit') return { ok: false, reason: 'quota', retryAfter: 3600, detail: error.message };
+    if (code === 'email_address_not_authorized') return { ok: false, reason: 'not_deliverable', detail: error.message };
+    const secs = /after (\d+) seconds?/i.exec(error.message)?.[1];
+    if (status === 429 || code === 'over_request_rate_limit' || secs) {
+      return { ok: false, reason: 'rate_limited', retryAfter: secs ? Number(secs) : 60, detail: error.message };
+    }
     return { ok: false, reason: 'failed', detail: error.message };
+  }
+
+  async loginRequestStats(emailHash: string): Promise<LoginRequestStats> {
+    const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+    try {
+      const [last, perEmail, global] = await Promise.all([
+        this.db
+          .from('apex_login_requests')
+          .select('created_at')
+          .eq('email_hash', emailHash)
+          .in('outcome', ['accepted', 'ignored'])
+          .order('created_at', { ascending: false })
+          .limit(1),
+        this.db.from('apex_login_requests').select('id', { count: 'exact', head: true }).eq('email_hash', emailHash).gte('created_at', hourAgo),
+        this.db.from('apex_login_requests').select('id', { count: 'exact', head: true }).eq('outcome', 'accepted').gte('created_at', hourAgo),
+      ]);
+      if (last.error || perEmail.error || global.error) throw new Error((last.error ?? perEmail.error ?? global.error)!.message);
+      return {
+        lastAcceptedAt: (last.data as Array<{ created_at: string }>)[0]?.created_at ?? null,
+        emailCountHour: perEmail.count ?? 0,
+        globalAcceptedHour: global.count ?? 0,
+      };
+    } catch (e) {
+      // Table not deployed yet (migration pending): do not block logins, Supabase's own limits still apply.
+      console.warn('[apex-api] login rate-limit table unavailable:', (e as Error).message);
+      return { lastAcceptedAt: null, emailCountHour: 0, globalAcceptedHour: 0 };
+    }
+  }
+
+  async recordLoginRequest(emailHash: string, outcome: 'accepted' | 'ignored' | 'rate_limited' | 'delivery_failed' | 'quota'): Promise<void> {
+    const { error } = await this.db.from('apex_login_requests').insert({ email_hash: emailHash, outcome });
+    if (error) console.warn('[apex-api] recording login request failed:', error.message);
+    if (Math.random() < 0.05) {
+      await this.db.from('apex_login_requests').delete().lt('created_at', new Date(Date.now() - 2 * 86400_000).toISOString());
+    }
+  }
+
+  async emailDelivery(check: boolean): Promise<{ via: 'smtp' | 'supabase'; ok: boolean | null; detail?: string }> {
+    if (!this.smtp) return { via: 'supabase', ok: null };
+    if (!check) return { via: 'smtp', ok: null };
+    const r = await verifySmtp(this.smtp);
+    return { via: 'smtp', ok: r.ok, detail: r.detail };
   }
 
   async profiles(campaignId: string | null): Promise<Profile[]> {

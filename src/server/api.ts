@@ -45,6 +45,8 @@ class HttpError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** Seconds until a retry makes sense (rate limits). */
+    public retryAfter?: number,
   ) {
     super(message);
   }
@@ -59,7 +61,7 @@ const TOUCH_EVERY_MS = 20_000;
 export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
   try {
     // ---- public operations (no session yet) ----
-    if (req.method === 'GET' && req.op === 'health') return ok(await health(repo));
+    if (req.method === 'GET' && req.op === 'health') return ok(await health(repo, req.query.smtp === '1'));
     await requireCompatibleSchema(repo);
     if (req.method === 'POST' && req.op === 'request-code') return ok(await requestCode(req.body, repo));
     if (req.method === 'GET' && req.op === 'profiles') return ok(await profileStatus(repo));
@@ -90,7 +92,7 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
         throw new HttpError(404, 'Unknown API operation.');
     }
   } catch (e) {
-    if (e instanceof HttpError) return { status: e.status, body: { error: e.message, code: e.code } };
+    if (e instanceof HttpError) return { status: e.status, body: { error: e.message, code: e.code, ...(e.retryAfter ? { retryAfter: e.retryAfter } : {}) } };
     console.error('[apex-api]', e);
     if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|timeout/i.test(String((e as Error)?.message ?? e))) {
       return { status: 503, body: { error: 'The campaign database cannot be reached right now. Please try again in a moment.', code: 'db_unreachable' } };
@@ -101,7 +103,7 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
 
 // ---------------------------------------------------------------- deployment health & schema gate
 
-export async function health(repo: Repo): Promise<HealthReport> {
+export async function health(repo: Repo, checkSmtp = false): Promise<HealthReport> {
   const errors: string[] = [];
   const r: HealthReport = {
     database: false,
@@ -138,6 +140,13 @@ export async function health(repo: Repo): Promise<HealthReport> {
   } catch (e) {
     errors.push(`database: ${(e as Error).message}`);
   }
+  const mail = await repo.emailDelivery(checkSmtp).catch((e: Error) => ({ via: 'supabase' as const, ok: false, detail: e.message }));
+  r.emailDelivery = mail.via;
+  if (checkSmtp) {
+    r.smtpOk = mail.ok;
+    if (mail.ok === false) errors.push(`SMTP login failed: ${mail.detail ?? 'unknown error'}`);
+  }
+  if (mail.via === 'supabase') errors.push('Login emails use the Supabase built-in mailer (team members only, about 2 per hour). Configure SMTP_* on Vercel.');
   r.authAdmin = await repo.authAdminOk().catch(() => false);
   if (!r.authAdmin) errors.push('The server key is not accepted by Supabase Auth.');
   return r;
@@ -166,25 +175,90 @@ export function resetSchemaCache() {
  * whether or not the address is authorised, so the endpoint cannot be used to discover who plays.
  * Codes are generated, rate-limited, expired and verified by Supabase Auth – never by APEX.
  */
+/** Server-side limits for login code requests (applied to EVERY address, invited or not). */
+export const LOGIN_LIMITS = {
+  // Test harness only may shorten the interval (dev/mockSupabase.ts); production uses 60 s.
+  perEmailIntervalSec: Number(globalThis.process?.env?.APEX_LOGIN_INTERVAL_SEC) || 60,
+  perEmailPerHour: 5,
+  globalPerHour: 60,
+};
+
+async function sha256(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Sends a one-time sign-in code, but only to the account linked to the chosen profile.
+ * - Rate limits are checked BEFORE authorisation and identically for every address, so neither the
+ *   answer nor the limits reveal who is invited.
+ * - The code is generated, expired and verified by Supabase Auth – APEX only delivers it.
+ * - Every failure is reported precisely (rate limit with retryAfter, mail quota, delivery failure).
+ */
 async function requestCode(body: unknown, repo: Repo) {
   if (!isObj(body) || !isEmail(body.email)) throw new HttpError(400, 'Please enter a valid email address.');
   const email = body.email.trim().toLowerCase();
   const profileKey = typeof body.profile === 'string' ? body.profile : null;
+  const emailHash = await sha256(email);
+
+  const stats = await repo.loginRequestStats(emailHash);
+  const now = Date.now();
+  const sinceLast = stats.lastAcceptedAt ? (now - Date.parse(stats.lastAcceptedAt)) / 1000 : Infinity;
+  if (sinceLast < LOGIN_LIMITS.perEmailIntervalSec) {
+    const wait = Math.ceil(LOGIN_LIMITS.perEmailIntervalSec - sinceLast);
+    throw new HttpError(429, `A code for this address was just requested. You can request a new one in ${wait} seconds – or enter the code you already received.`, 'rate_limited', wait);
+  }
+  if (stats.emailCountHour >= LOGIN_LIMITS.perEmailPerHour) {
+    await repo.recordLoginRequest(emailHash, 'rate_limited');
+    throw new HttpError(429, 'Too many code requests for this address. Please try again in about an hour – or enter the code you already received.', 'rate_limited', 3600);
+  }
+  if (stats.globalAcceptedHour >= LOGIN_LIMITS.globalPerHour) {
+    throw new HttpError(429, 'APEX is receiving too many sign-in requests right now. Please try again in a few minutes.', 'rate_limited', 300);
+  }
+
   const generic = {
     sent: true,
+    retryAfter: LOGIN_LIMITS.perEmailIntervalSec,
     message: profileKey
       ? 'If this email address belongs to the selected profile, a 6-digit code is on its way.'
       : 'If this email address is invited to APEX, a 6-digit code is on its way.',
   };
-  const authorized = profileKey ? await emailMatchesProfile(email, profileKey, repo) : (await repo.isEmailAuthorized(email)) || (await profileEmailKnown(email, repo));
-  if (!authorized) return generic;
+  const authorized = profileKey
+    ? await emailMatchesProfile(email, profileKey, repo)
+    : (await repo.isEmailAuthorized(email)) || (await profileEmailKnown(email, repo));
+  if (!authorized) {
+    await repo.recordLoginRequest(emailHash, 'ignored'); // counts for the per-address limits like a real request
+    return generic;
+  }
+
   await repo.ensureAuthUser(email);
   const res = await repo.sendLoginCode(email);
   if (!res.ok) {
-    if (res.reason === 'rate_limited') throw new HttpError(429, 'A code was requested very recently. Please wait a minute, then try again.', 'rate_limited');
-    console.error('[apex-api] sending code failed:', res.detail);
-    throw new HttpError(502, 'The code could not be sent right now. Please try again in a minute or contact your Game Master.', 'send_failed');
+    console.error('[apex-api] login code delivery failed:', res.reason, res.detail);
+    if (res.reason === 'rate_limited') {
+      throw new HttpError(429, `Please wait ${res.retryAfter ?? 60} seconds before requesting another code – or enter the code you already received.`, 'rate_limited', res.retryAfter ?? 60);
+    }
+    if (res.reason === 'quota') {
+      await repo.recordLoginRequest(emailHash, 'quota');
+      throw new HttpError(
+        503,
+        'The email service has reached its sending limit, so no code was sent. Please try again later. (Game Master: set up SMTP for APEX.)',
+        'email_quota',
+        res.retryAfter ?? 3600,
+      );
+    }
+    await repo.recordLoginRequest(emailHash, 'delivery_failed');
+    throw new HttpError(
+      502,
+      res.reason === 'not_deliverable'
+        ? 'The email could not be delivered to this address by the mail service, so no code was sent. (Game Master: set up SMTP for APEX.)'
+        : 'The email with your code could not be sent. No code was sent – please try again in a moment.',
+      'delivery_failed',
+    );
   }
+  await repo.recordLoginRequest(emailHash, 'accepted');
+  console.log(`[apex-api] login code delivered via ${res.via}${res.detail ? ` (${res.detail})` : ''}`);
   return generic;
 }
 
