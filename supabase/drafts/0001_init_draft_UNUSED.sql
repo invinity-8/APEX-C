@@ -1,3 +1,7 @@
+-- SUPERSEDED (APEX 0.2): this was the v0.1 design draft and is NOT used by the app.
+-- It was moved out of supabase/migrations/ so that `supabase db push` never runs it.
+-- The real schema lives in supabase/migrations/20261101000100_apex_online.sql.
+
 -- ============================================================================
 -- APEX – Entwurf für den Online-Modus (Phase 2)
 -- STATUS: ENTWURF, NOCH NICHT AKTIV UND NICHT GEGEN EINE ECHTE DATENBANK GETESTET.
