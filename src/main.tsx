@@ -1,5 +1,6 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import App from './App';
 import { SetupNotice } from './components/SetupNotice';
 import { demoAllowed, missingConfig, onlineConfig } from './online/config';
@@ -41,4 +42,9 @@ else if (onlineConfig)
 else if (import.meta.env.DEV) root = <DemoApp />;
 else root = <SetupNotice missing={missingConfig} />;
 
-createRoot(document.getElementById('root')!).render(<StrictMode>{root}</StrictMode>);
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    {root}
+    <SpeedInsights />
+  </StrictMode>,
+);
