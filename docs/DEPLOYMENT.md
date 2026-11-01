@@ -23,20 +23,16 @@ which verifies the Supabase session and runs the game rules on the server.
 
 ## 1. Database migrations (automatic)
 
-Migrations are applied by the **Supabase GitHub integration** ("Deploy to production", branch `main`) when a PR is
-merged. Do not paste them into the SQL editor any more – that bypasses the migration history.
-German step-by-step guide: **[MIGRATIONS_DE.md](MIGRATIONS_DE.md)**.
+Production was rebuilt on 2026-11-01 (see [MIGRATIONS_DE.md](MIGRATIONS_DE.md)): the legacy allow-list migration was
+marked reverted (backup in schema `apex_backup_20261101`) and `20261101145653_apex_baseline.sql` – identical to the file in
+this repository – is the single baseline (schema version 1). Later migrations are applied by the **Supabase GitHub
+integration** ("Deploy to production", branch `main`). Never run schema SQL manually in the dashboard.
 
-- `supabase/remote_history.txt` lists versions registered in production. `npm run check:migrations` (and the
-  workflow `.github/workflows/supabase-migrations.yml`) fail when a registered version has no file, a pending
-  migration is older than the newest applied one, or a pending migration contains unreviewed destructive SQL.
-- With the secret `SUPABASE_CI_DB_URL` (read-only role `apex_ci_readonly`), the workflow compares with the live
-  history on every PR and, after each push to `main`, waits for the integration, then runs
-  `supabase/tests/post_deploy_checks.sql` (tables, RLS, grants, policies, trigger, realtime, legacy tables) and the
-  health endpoint (`APEX_URL`).
-- The historical migration `20261101094428_apex_initial_account_allowlist` exists only in the production history and must
-  be restored from `supabase_migrations.schema_migrations.statements` (never re-written by hand).
-- `npm run verify:db` runs all migrations twice plus RLS and post-deploy checks on a local PostgreSQL.
+- `npm run check:migrations` / workflow check: complete, ordered, no unreviewed destructive SQL.
+- `src/server/schema.ts` (`REQUIRED_SCHEMA_VERSION`, `EXPECTED_MIGRATIONS`) must match the migration files (tested).
+- After every push to `main` the workflow waits until `https://4pex.online/api/apex?op=health` serves the pushed commit,
+  reports all migrations, the schema version and no security problems – otherwise it fails.
+- `npm run verify:db` replays the migrations on a local PostgreSQL that mimics the legacy production state.
 
 ---
 
