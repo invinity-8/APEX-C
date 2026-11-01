@@ -23,7 +23,7 @@ which verifies the Supabase session and runs the game rules on the server.
 
 ## 1. Database migrations (Supabase → SQL Editor)
 
-The repository contains three idempotent, additive migrations. They are safe to run twice, never delete data and
+The repository contains four idempotent, additive migrations. They are safe to run twice, never delete data and
 do **not** touch the manually created `apex_invites` / `apex_access` tables.
 
 1. Open Supabase → **SQL Editor** → *New query*.
@@ -32,6 +32,8 @@ do **not** touch the manually created `apex_invites` / `apex_access` tables.
    (creates the campaign *APEX – Arena of the Eternal Will* and the first three invitations;
    it also imports rows from `apex_access` if that table has `email` and `role` columns).
 4. Run `supabase/migrations/20261102000100_apex_presence_and_grants.sql` (presence column + explicit server grants).
+   Then `supabase/migrations/20261103000100_apex_profiles.sql` (the five "Who are you?" profiles, no emails).
+   After the first GM sign-in, link Hannah/Jean (later Simon/Jerba) in *Players & Access → Profiles*.
 5. Run `supabase/verify_security.sql` and compare with the expected results in its comments:
    - RLS enabled on every `apex_` table → 0 rows
    - client grants → only `SELECT` on `apex_campaign_heads` and `apex_campaign_members` for `authenticated`
