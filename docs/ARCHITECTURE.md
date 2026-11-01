@@ -3,7 +3,8 @@
 ```
 Browser (React)                         Vercel Function /api/apex                 Supabase
 ───────────────                         ─────────────────────────                 ────────
-LoginPage ── supabase-js Auth ───────────────────────────────────────────────▶ Auth (email/password)
+LoginPage ── POST ?op=request-code ─▶ invited? → auth.signInWithOtp ──────────▶ Auth emails a 6-digit code
+          ── supabase-js verifyOtp ──────────────────────────────────────────▶ Auth (single-use, expiring code)
                                                                                     │ access token (JWT)
 useOnlineGame ── GET  ?op=state ─────▶  verify token (auth.getUser)                 │
               ── POST ?op=command ───▶  membership + role  ◀── apex_campaign_members / invites
@@ -37,6 +38,23 @@ supabase-js Realtime ◀──────────────── "versio
 8. **Defence in depth.** RLS is enabled on every table; clients have no table privileges except reading
    their own membership and their campaign's version counter. The secret key exists only in Vercel's
    server environment.
+
+## Login (email code)
+
+1. The browser sends the email to `POST /api/apex?op=request-code` (no session).
+2. The server checks `apex_campaign_invites` / `apex_campaign_members`. Only for an authorised address it makes sure a
+   confirmed Auth account exists and calls `auth.signInWithOtp({ shouldCreateUser: false })`. The answer is identical for
+   authorised and unknown addresses (no account enumeration); rate limits and send failures are reported.
+3. Supabase emails the code (template contains `{{ .Token }}`); the browser calls `auth.verifyOtp({ type: 'email' })`.
+   Supabase generates, expires, rate-limits and verifies the code – APEX never stores codes.
+4. A verified email alone grants nothing: membership comes only from a GM invitation.
+
+## Sync & failure handling
+
+- Realtime pings + a heartbeat (`op=ping`, 25 s; 8 s while realtime is down) that also records presence (`last_seen_at`).
+- Connection states: *Live*, *Synced (polling)*, *Offline – retrying*. Failed saves say “NOT saved”.
+- No local campaign copy exists in online mode; production builds without configuration show a setup notice
+  instead of a demo.
 
 ## Files
 
