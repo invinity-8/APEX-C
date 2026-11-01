@@ -296,6 +296,17 @@ export class MemoryRepo implements Repo {
     const { campaignId: _c, ...rest } = a;
     return structuredClone(rest);
   }
+  portraits = new Map<string, { bytes: Uint8Array; contentType: string }>();
+  async uploadPortrait(path: string, bytes: Uint8Array, contentType: string) {
+    if (this.portraits.has(path)) throw new Error('portrait upload: exists');
+    this.portraits.set(path, { bytes, contentType });
+  }
+  async portraitUrl(path: string) {
+    return this.portraits.has(path) ? `/__mock/portrait?path=${encodeURIComponent(path)}` : null;
+  }
+  async deletePortrait(path: string) {
+    this.portraits.delete(path);
+  }
   async loadSheet(campaignId: string, tokenId: string) {
     const s = this.sheets.get(`${campaignId}:${tokenId}`);
     return s ? structuredClone(s) : null;

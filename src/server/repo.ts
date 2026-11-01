@@ -272,6 +272,12 @@ export interface Repo {
   listArchives(campaignId: string): Promise<ArchiveInfo[]>;
   loadArchive(campaignId: string, id: string): Promise<(ArchiveInfo & { state: GameState }) | null>;
 
+  // ---- portraits (private storage bucket)
+  uploadPortrait(path: string, bytes: Uint8Array, contentType: string): Promise<void>;
+  /** Short-lived signed URL for a private portrait. */
+  portraitUrl(path: string, expiresInSeconds: number): Promise<string | null>;
+  deletePortrait(path: string): Promise<void>;
+
   // ---- character sheets
   loadSheet(campaignId: string, tokenId: string): Promise<StoredSheet | null>;
   /** Optimistic write. expectedVersion 0 = create. Returns the new version, or null if someone else wrote first. */

@@ -18,7 +18,7 @@ import { TERRAIN } from './terrain.js';
 import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
-import type { Actor, GameState, Item, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
+import type { Actor, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
 import { INVENTORY_LIMITS, materializeInventory } from './inventory.js';
 
 export { fmt };
@@ -43,6 +43,7 @@ export type Command =
   | { type: 'setShrink'; enabled?: boolean; mode?: 'danger' | 'closed' }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
   | { type: 'setWill'; tokenId: string; current?: number; max?: number }
+  | { type: 'setAppearance'; tokenId: string; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
   | { type: 'invAddItem'; tokenId: string; itemId: string; name: string; quantity?: number; description?: string; notes?: string; container?: string }
   | { type: 'invUpdateItem'; tokenId: string; itemId: string; rev: number; name?: string; quantity?: number; description?: string; notes?: string; container?: string }
   | { type: 'invRemoveItem'; tokenId: string; itemId: string; rev: number }
@@ -53,6 +54,7 @@ export type Command =
 /** Commands a player may send for their OWN character (besides 'move'). */
 export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'setWill',
+  'setAppearance',
   'invAddItem',
   'invUpdateItem',
   'invRemoveItem',
@@ -293,6 +295,16 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (cmd.current !== undefined) t.will.current = clamp(Math.round(cmd.current), 0, t.will.max);
       else t.will.current = Math.min(t.will.current, t.will.max);
       break;
+    }
+    case 'setAppearance': {
+      // Cosmetic only: tag, colours, marker shape, initials. Never touches rules or permissions.
+      const t = state.tokens[cmd.tokenId];
+      if (cmd.title !== undefined) t.title = cmd.title.trim().slice(0, 40) || t.title;
+      if (cmd.color !== undefined) t.color = cmd.color.toLowerCase();
+      if (cmd.accent !== undefined) t.accent = cmd.accent.toLowerCase();
+      if (cmd.marker !== undefined) t.marker = cmd.marker;
+      if (cmd.initials !== undefined && cmd.initials.trim()) t.initials = cmd.initials.trim().slice(0, 3);
+      return { ok: true, state }; // no knowledge refresh needed
     }
     default:
       return fail(prev, T.gmOnly);

@@ -23,6 +23,7 @@ import type {
   TokenKind,
   WillPool,
   InventoryContainer,
+  MarkerStyle,
 } from './types.js';
 import { containersOf } from './inventory.js';
 
@@ -134,6 +135,11 @@ export interface TokenView {
   color: string;
   initials: string;
   pos: Axial;
+  /** Cosmetic appearance (APEX 0.4). */
+  accent?: string;
+  marker?: MarkerStyle;
+  /** Portrait version (> 0 = a portrait exists; load it via op=portrait). */
+  portraitV?: number;
   /** Nur für eigene/freigegebene Figuren bzw. den GM. */
   details?: TokenDetails;
 }
@@ -210,6 +216,9 @@ const tokenView = (t: Token, withDetails: boolean, withInventory = true): TokenV
   color: t.color,
   initials: t.initials,
   pos: { ...t.pos },
+  ...(t.accent ? { accent: t.accent } : {}),
+  ...(t.marker ? { marker: t.marker } : {}),
+  ...(t.portrait ? { portraitV: t.portrait.v } : {}),
   details: withDetails ? detailsOf(t, withInventory) : undefined,
 });
 

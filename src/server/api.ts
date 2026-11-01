@@ -72,6 +72,8 @@ export interface ApiResponse {
   body: unknown;
   /** Set-Cookie header values. */
   cookies?: string[];
+  /** Extra response headers (e.g. Location for a redirect). */
+  headers?: Record<string, string>;
 }
 
 const MAX_RETRIES = 4;
@@ -141,6 +143,10 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
         return ok(await runAdmin(user, req.body, repo));
       case 'POST password':
         return await changeOwnPassword(user, req, repo);
+      case 'POST portrait':
+        return ok(await uploadPortrait(user, req.body, repo));
+      case 'GET portrait':
+        return await portraitRedirect(user, req.query.token, repo);
       case 'GET sheet':
         return ok(await getSheet(user, req.query.token, repo));
       case 'POST sheet':
@@ -591,6 +597,64 @@ function actorFor(user: AuthUser, cmd: Command, state: GameState): Actor {
     return { role: 'player', tokenId };
   }
   return { role: 'player', tokenId: own[0] };
+}
+
+// ---------------------------------------------------------------- portraits
+
+/** Detects the real image type from its first bytes (never trusts the file name or MIME type). */
+export function imageType(b: Uint8Array): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b.length > 12 && String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...b.subarray(8, 12)) === 'WEBP') return 'image/webp';
+  return null;
+}
+export const PORTRAIT_MAX_BYTES = 1_500_000;
+
+/**
+ * Portrait upload: the browser crops the picture and sends it base64-encoded. The server checks the
+ * permission (own character or GM), the real image type and the size, stores it in the PRIVATE bucket
+ * and records the new version on the token. The storage path is never sent to clients.
+ */
+async function uploadPortrait(user: AuthUser, body: unknown, repo: Repo) {
+  if (!isObj(body) || !isId(body.tokenId) || typeof body.image !== 'string') throw new HttpError(400, 'Invalid portrait upload.');
+  const tokenId = body.tokenId;
+  if (user.role !== 'gm' && !user.tokenIds.includes(tokenId)) throw new HttpError(403, 'You can only change your own portrait.', 'forbidden');
+  const b64 = body.image.replace(/^data:image\/[a-z]+;base64,/, '');
+  if (b64.length > Math.ceil((PORTRAIT_MAX_BYTES * 4) / 3) + 8 || !/^[A-Za-z0-9+/=]+$/.test(b64)) throw new HttpError(413, 'The picture is too large (max. 1.5 MB after cropping).');
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const type = imageType(bytes);
+  if (!type) throw new HttpError(415, 'Please use a JPG, PNG or WebP picture.');
+  const stored = await repo.loadState(user.campaignId);
+  if (!stored || stored.state.tokens[tokenId]?.kind !== 'player') throw new HttpError(404, 'Character not found.');
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/png' ? 'png' : 'webp';
+  const path = `${user.campaignId}/${tokenId}/${crypto.randomUUID()}.${ext}`;
+  await repo.uploadPortrait(path, bytes, type);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const cur = await repo.loadState(user.campaignId);
+    if (!cur) break;
+    const next = structuredClone(cur.state);
+    const t = next.tokens[tokenId];
+    if (!t) break;
+    const old = t.portrait?.path;
+    t.portrait = { path, v: (t.portrait?.v ?? 0) + 1 };
+    const v = await repo.saveState(user.campaignId, next, cur.version, user.id);
+    if (v === null) continue;
+    if (old) await repo.deletePortrait(old).catch(() => undefined);
+    return { tokenId, portraitV: t.portrait.v, version: v };
+  }
+  await repo.deletePortrait(path).catch(() => undefined);
+  throw new HttpError(409, 'The campaign was changed at the same time. Please try again.', 'conflict');
+}
+
+/** Portrait download: any signed-in member of the campaign may see player-character portraits (cosmetic). */
+async function portraitRedirect(user: AuthUser, tokenId: unknown, repo: Repo): Promise<ApiResponse> {
+  if (!isId(tokenId)) throw new HttpError(400, 'Invalid character.');
+  const stored = await repo.loadState(user.campaignId);
+  const t = stored?.state.tokens[tokenId];
+  if (!t || t.kind !== 'player' || !t.portrait) throw new HttpError(404, 'No portrait.');
+  const url = await repo.portraitUrl(t.portrait.path, 600);
+  if (!url) throw new HttpError(404, 'No portrait.');
+  return { status: 302, body: null, headers: { location: url, 'cache-control': 'private, max-age=300' } };
 }
 
 // ---------------------------------------------------------------- character sheets

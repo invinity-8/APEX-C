@@ -5,6 +5,7 @@
  */
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
+import { MARKER_STYLES } from '../game/types.js';
 
 type Obj = Record<string, unknown>;
 
@@ -77,6 +78,33 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.current !== undefined) cmd.current = c.current as number;
       if (c.max !== undefined) cmd.max = c.max as number;
       return { ok: true, command: cmd };
+    }
+    case 'setAppearance': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      const hex = (v: unknown) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+      const out: Record<string, unknown> = { type: 'setAppearance', tokenId: c.tokenId };
+      if (c.title !== undefined) {
+        if (!isText(c.title, 40)) return bad('title');
+        out.title = c.title;
+      }
+      if (c.color !== undefined) {
+        if (!hex(c.color)) return bad('color');
+        out.color = c.color;
+      }
+      if (c.accent !== undefined) {
+        if (!hex(c.accent)) return bad('accent');
+        out.accent = c.accent;
+      }
+      if (c.marker !== undefined) {
+        if (!oneOf(c.marker, MARKER_STYLES)) return bad('marker');
+        out.marker = c.marker;
+      }
+      if (c.initials !== undefined) {
+        if (typeof c.initials !== 'string' || c.initials.length > 6) return bad('initials');
+        out.initials = c.initials;
+      }
+      if (Object.keys(out).length === 2) return bad('nothing to change');
+      return { ok: true, command: out as Command };
     }
     case 'invAddItem':
     case 'invUpdateItem': {
