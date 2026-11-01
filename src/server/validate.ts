@@ -3,7 +3,8 @@
  * Anything that does not match the expected shape exactly is rejected before
  * it reaches the game logic.
  */
-import type { Command } from '../game/commands.js';
+import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
+import { INVENTORY_LIMITS } from '../game/inventory.js';
 
 type Obj = Record<string, unknown>;
 
@@ -11,6 +12,8 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64 && /^[\w.-]+$/.test(v);
 const isInt = (v: unknown, lim = 1000): v is number => typeof v === 'number' && Number.isInteger(v) && Math.abs(v) <= lim;
 const isAxial = (v: unknown): v is { q: number; r: number } => isObj(v) && isInt(v.q) && isInt(v.r);
+/** Text field: string within the length limit (2× for safety; the rules trim to the exact limit). */
+const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max * 2;
 const oneOf = <T extends string>(v: unknown, opts: readonly T[]): v is T => typeof v === 'string' && (opts as readonly string[]).includes(v);
 
 export type ParseResult = { ok: true; command: Command } | { ok: false; error: string };
@@ -65,14 +68,62 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.mode !== undefined) cmd.mode = c.mode as 'danger' | 'closed';
       return { ok: true, command: cmd };
     }
+    case 'setWill': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      if (c.current !== undefined && !isInt(c.current)) return bad('current');
+      if (c.max !== undefined && !isInt(c.max)) return bad('max');
+      if (c.current === undefined && c.max === undefined) return bad('current/max');
+      const cmd: Command = { type: 'setWill', tokenId: c.tokenId };
+      if (c.current !== undefined) cmd.current = c.current as number;
+      if (c.max !== undefined) cmd.max = c.max as number;
+      return { ok: true, command: cmd };
+    }
+    case 'invAddItem':
+    case 'invUpdateItem': {
+      if (!isId(c.tokenId) || !isId(c.itemId)) return bad('tokenId/itemId');
+      const out: Record<string, unknown> = { type: c.type, tokenId: c.tokenId, itemId: c.itemId };
+      if (c.type === 'invUpdateItem') {
+        if (!isInt(c.rev, 1_000_000_000)) return bad('rev');
+        out.rev = c.rev;
+      }
+      if (c.type === 'invAddItem' || c.name !== undefined) {
+        if (!isText(c.name, INVENTORY_LIMITS.name)) return bad('name');
+        out.name = c.name;
+      }
+      if (c.quantity !== undefined) {
+        if (!isInt(c.quantity, INVENTORY_LIMITS.quantity) || (c.quantity as number) < 0) return bad('quantity');
+        out.quantity = c.quantity;
+      }
+      if (c.description !== undefined) {
+        if (!isText(c.description, INVENTORY_LIMITS.description)) return bad('description');
+        out.description = c.description;
+      }
+      if (c.notes !== undefined) {
+        if (!isText(c.notes, INVENTORY_LIMITS.notes)) return bad('notes');
+        out.notes = c.notes;
+      }
+      if (c.container !== undefined) {
+        if (!isId(c.container)) return bad('container');
+        out.container = c.container;
+      }
+      return { ok: true, command: out as Command };
+    }
+    case 'invRemoveItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000)) return bad('tokenId/itemId/rev');
+      return { ok: true, command: { type: 'invRemoveItem', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'invAddContainer':
+    case 'invRenameContainer':
+      if (!isId(c.tokenId) || !isId(c.containerId) || !isText(c.name, INVENTORY_LIMITS.containerName)) return bad('tokenId/containerId/name');
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, containerId: c.containerId, name: c.name } };
+    case 'invRemoveContainer':
+      if (!isId(c.tokenId) || !isId(c.containerId)) return bad('tokenId/containerId');
+      return { ok: true, command: { type: 'invRemoveContainer', tokenId: c.tokenId, containerId: c.containerId } };
     default:
       return bad(`unknown type "${String(c.type).slice(0, 32)}"`);
   }
 }
 
-/** Command types a player may ever send. Everything else is GM-only. */
-export const PLAYER_COMMANDS: ReadonlySet<Command['type']> = new Set(['move']);
+/** Command types a player may ever send (own characters only). Everything else is GM-only. */
+export const PLAYER_COMMANDS: ReadonlySet<Command['type']> = new Set(['move', ...CHARACTER_COMMANDS]);
 
-export const isEmail = (v: unknown): v is string =>
-  typeof v === 'string' && v.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 export { isId, isObj, isInt };

@@ -3,32 +3,27 @@
  * with the secret key, which bypasses RLS. Never import this module from client code.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { readSmtpEnv, sendCodeEmail, verifySmtp, type SmtpConfig } from './mailer.js';
 import type { GameState } from '../game/types.js';
 import type {
   Assignment,
-  AuthUser,
   Campaign,
   CommandLogEntry,
+  Credential,
   DeployStatus,
-  Invite,
-  LoginRequestStats,
+  LoginAttemptStats,
   Member,
   Profile,
   Repo,
   Role,
-  SendCodeResult,
+  SessionRecord,
   SnapshotInfo,
+  StoredSheet,
   StoredState,
 } from './repo.js';
 
 export interface ServerEnv {
   url: string;
   secretKey: string;
-  /** Public key – used for the Supabase built-in mailer fallback. Optional. */
-  publishableKey?: string;
-  /** Own SMTP account for sign-in codes (recommended). */
-  smtp: SmtpConfig | null;
 }
 
 /** Reads server-side configuration. The secret key must never use a VITE_ prefix. */
@@ -36,8 +31,7 @@ export function readServerEnv(env: Record<string, string | undefined>): ServerEn
   const url = env.SUPABASE_URL ?? env.VITE_SUPABASE_URL;
   const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !secretKey) return null;
-  const publishableKey = env.SUPABASE_PUBLISHABLE_KEY ?? env.VITE_SUPABASE_PUBLISHABLE_KEY ?? env.VITE_SUPABASE_ANON_KEY;
-  return { url, secretKey, publishableKey, smtp: readSmtpEnv(env) };
+  return { url, secretKey };
 }
 
 function check<T>(res: { data: T; error: { message: string } | null }, what: string): T {
@@ -45,142 +39,27 @@ function check<T>(res: { data: T; error: { message: string } | null }, what: str
   return res.data;
 }
 
-type MemberRow = { campaign_id: string; user_id: string; email: string; role: Role; last_seen_at?: string | null };
-type InviteRow = { campaign_id: string; email: string; role: Role; token_ids: string[] | null; accepted_at: string | null };
+type MemberRow = { campaign_id: string; user_id: string; email: string | null; role: Role; last_seen_at?: string | null };
+type SessionRow = {
+  token_hash: string;
+  campaign_id: string;
+  profile_key: string;
+  user_id: string;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+};
 
 const toMember = (r: MemberRow): Member => ({ campaignId: r.campaign_id, userId: r.user_id, email: r.email, role: r.role, lastSeenAt: r.last_seen_at ?? null });
-const toInvite = (r: InviteRow): Invite => ({
-  campaignId: r.campaign_id,
-  email: r.email,
-  role: r.role,
-  tokenIds: r.token_ids ?? [],
-  acceptedAt: r.accepted_at,
-});
+const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
 export class SupabaseRepo implements Repo {
   private db: SupabaseClient;
-  /** Client for public auth endpoints (sending codes). Falls back to the admin client. */
-  private pub: SupabaseClient;
-  private smtp: SmtpConfig | null;
 
   constructor(env: ServerEnv) {
-    this.smtp = env.smtp;
     const opts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
     this.db = createClient(env.url, env.secretKey, opts);
-    this.pub = env.publishableKey ? createClient(env.url, env.publishableKey, opts) : this.db;
-  }
-
-  async userFromToken(token: string): Promise<AuthUser | null> {
-    const { data, error } = await this.db.auth.getUser(token);
-    if (error || !data.user) return null;
-    return { id: data.user.id, email: (data.user.email ?? '').toLowerCase(), emailConfirmed: !!data.user.email_confirmed_at };
-  }
-
-  async isEmailAuthorized(email: string): Promise<boolean> {
-    const { count: invites, error: invErr } = await this.db
-      .from('apex_campaign_invites')
-      .select('email', { count: 'exact', head: true })
-      .eq('email', email)
-      .is('accepted_at', null);
-    if (invErr) throw new Error(`invite lookup: ${invErr.message}`);
-    if ((invites ?? 0) > 0) return true;
-    const { count: members, error } = await this.db.from('apex_campaign_members').select('user_id', { count: 'exact', head: true }).eq('email', email);
-    if (error) throw new Error(`member lookup: ${error.message}`);
-    return (members ?? 0) > 0;
-  }
-
-  async ensureAuthUser(email: string): Promise<void> {
-    const created = await this.db.auth.admin.createUser({ email, email_confirm: true });
-    if (!created.error) return;
-    // Already registered → make sure the address counts as confirmed (the emailed code proves ownership).
-    const status = (created.error as { status?: number }).status;
-    const code = (created.error as { code?: string }).code;
-    if (status !== 422 && code !== 'email_exists' && !/already/i.test(created.error.message)) throw new Error(`create user: ${created.error.message}`);
-    for (let page = 1; page <= 20; page++) {
-      const { data, error } = await this.db.auth.admin.listUsers({ page, perPage: 200 });
-      if (error) throw new Error(`list users: ${error.message}`);
-      const u = data.users.find((x) => (x.email ?? '').toLowerCase() === email);
-      if (u) {
-        if (!u.email_confirmed_at) await this.db.auth.admin.updateUserById(u.id, { email_confirm: true });
-        return;
-      }
-      if (data.users.length < 200) return;
-    }
-  }
-
-  async sendLoginCode(email: string): Promise<SendCodeResult> {
-    if (this.smtp) {
-      // Supabase generates the one-time code (and later verifies it); APEX delivers it via its own SMTP.
-      const { data, error } = await this.db.auth.admin.generateLink({ type: 'magiclink', email });
-      if (error) {
-        const status = (error as { status?: number }).status;
-        if (status === 429) return { ok: false, reason: 'rate_limited', retryAfter: 60, detail: error.message };
-        return { ok: false, reason: 'failed', detail: `generateLink: ${error.message}` };
-      }
-      const code = data.properties?.email_otp;
-      if (!code) return { ok: false, reason: 'failed', detail: 'generateLink returned no email_otp' };
-      try {
-        const sent = await sendCodeEmail(this.smtp, email, code);
-        if (!sent.accepted) return { ok: false, reason: 'not_deliverable', detail: `SMTP rejected recipient: ${sent.response}` };
-        return { ok: true, via: 'smtp', detail: `SMTP accepted: ${sent.response.slice(0, 80)}` };
-      } catch (e) {
-        return { ok: false, reason: 'failed', detail: `SMTP: ${(e as Error).message}` };
-      }
-    }
-    // Fallback: Supabase built-in mailer (only for team members, about 2 emails per hour per project).
-    const { error } = await this.pub.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-    if (!error) return { ok: true, via: 'supabase' };
-    const status = (error as { status?: number }).status;
-    const code = (error as { code?: string }).code ?? '';
-    if (code === 'over_email_send_rate_limit') return { ok: false, reason: 'quota', retryAfter: 3600, detail: error.message };
-    if (code === 'email_address_not_authorized') return { ok: false, reason: 'not_deliverable', detail: error.message };
-    const secs = /after (\d+) seconds?/i.exec(error.message)?.[1];
-    if (status === 429 || code === 'over_request_rate_limit' || secs) {
-      return { ok: false, reason: 'rate_limited', retryAfter: secs ? Number(secs) : 60, detail: error.message };
-    }
-    return { ok: false, reason: 'failed', detail: error.message };
-  }
-
-  async loginRequestStats(emailHash: string): Promise<LoginRequestStats> {
-    const hourAgo = new Date(Date.now() - 3600_000).toISOString();
-    try {
-      const [last, perEmail, global] = await Promise.all([
-        this.db
-          .from('apex_login_requests')
-          .select('created_at')
-          .eq('email_hash', emailHash)
-          .in('outcome', ['accepted', 'ignored'])
-          .order('created_at', { ascending: false })
-          .limit(1),
-        this.db.from('apex_login_requests').select('id', { count: 'exact', head: true }).eq('email_hash', emailHash).gte('created_at', hourAgo),
-        this.db.from('apex_login_requests').select('id', { count: 'exact', head: true }).eq('outcome', 'accepted').gte('created_at', hourAgo),
-      ]);
-      if (last.error || perEmail.error || global.error) throw new Error((last.error ?? perEmail.error ?? global.error)!.message);
-      return {
-        lastAcceptedAt: (last.data as Array<{ created_at: string }>)[0]?.created_at ?? null,
-        emailCountHour: perEmail.count ?? 0,
-        globalAcceptedHour: global.count ?? 0,
-      };
-    } catch (e) {
-      // Table not deployed yet (migration pending): do not block logins, Supabase's own limits still apply.
-      console.warn('[apex-api] login rate-limit table unavailable:', (e as Error).message);
-      return { lastAcceptedAt: null, emailCountHour: 0, globalAcceptedHour: 0 };
-    }
-  }
-
-  async recordLoginRequest(emailHash: string, outcome: 'accepted' | 'ignored' | 'rate_limited' | 'delivery_failed' | 'quota'): Promise<void> {
-    const { error } = await this.db.from('apex_login_requests').insert({ email_hash: emailHash, outcome });
-    if (error) console.warn('[apex-api] recording login request failed:', error.message);
-    if (Math.random() < 0.05) {
-      await this.db.from('apex_login_requests').delete().lt('created_at', new Date(Date.now() - 2 * 86400_000).toISOString());
-    }
-  }
-
-  async emailDelivery(check: boolean): Promise<{ via: 'smtp' | 'supabase'; ok: boolean | null; detail?: string }> {
-    if (!this.smtp) return { via: 'supabase', ok: null };
-    if (!check) return { via: 'smtp', ok: null };
-    const r = await verifySmtp(this.smtp);
-    return { via: 'smtp', ok: r.ok, detail: r.detail };
   }
 
   async profiles(campaignId: string | null): Promise<Profile[]> {
@@ -199,17 +78,162 @@ export class SupabaseRepo implements Repo {
       characterName: r.character_name as string,
       role: r.role as Role,
       tokenIds: (r.token_ids as string[] | null) ?? [],
-      email: (r.email as string | null) ?? null,
-      userId: (r.user_id as string | null) ?? null,
+      userId: r.user_id as string,
+      active: r.active === true,
     }));
   }
 
-  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>): Promise<void> {
+  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>): Promise<void> {
     const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (patch.email !== undefined) row.email = patch.email;
-    if (patch.userId !== undefined) row.user_id = patch.userId;
+    if (patch.active !== undefined) row.active = patch.active;
     if (patch.tokenIds !== undefined) row.token_ids = patch.tokenIds;
     check(await this.db.from('apex_profiles').update(row).eq('campaign_id', campaignId).eq('profile_key', key), 'update profile');
+  }
+
+  // ---------------------------------------------------------------- credentials & sessions
+
+  async credential(campaignId: string, key: string): Promise<Credential | null> {
+    const row = check(
+      await this.db.from('apex_profile_credentials').select('password_hash, updated_at').eq('campaign_id', campaignId).eq('profile_key', key).maybeSingle(),
+      'credential',
+    ) as { password_hash: string; updated_at: string } | null;
+    return row ? { passwordHash: row.password_hash, updatedAt: row.updated_at } : null;
+  }
+
+  async setCredential(campaignId: string, key: string, passwordHash: string | null, byUserId: string | null): Promise<void> {
+    if (passwordHash === null) {
+      check(await this.db.from('apex_profile_credentials').delete().eq('campaign_id', campaignId).eq('profile_key', key), 'clear credential');
+      return;
+    }
+    check(
+      await this.db
+        .from('apex_profile_credentials')
+        .upsert(
+          { campaign_id: campaignId, profile_key: key, password_hash: passwordHash, updated_by: byUserId, updated_at: new Date().toISOString() },
+          { onConflict: 'campaign_id,profile_key' },
+        ),
+      'set credential',
+    );
+  }
+
+  async consumeSetupCode(codeHash: string): Promise<string | null> {
+    const rows = check(
+      await this.db
+        .from('apex_setup_codes')
+        .update({ used_at: new Date().toISOString() })
+        .eq('code_hash', codeHash)
+        .is('used_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .select('campaign_id'),
+      'setup code',
+    ) as Array<{ campaign_id: string }>;
+    return rows.length === 1 ? rows[0].campaign_id : null;
+  }
+
+  async createSession(s: Omit<SessionRecord, 'revokedAt' | 'lastSeenAt' | 'createdAt'> & { userAgent: string | null }): Promise<void> {
+    check(
+      await this.db.from('apex_sessions').insert({
+        token_hash: s.tokenHash,
+        campaign_id: s.campaignId,
+        profile_key: s.profileKey,
+        user_id: s.userId,
+        expires_at: s.expiresAt,
+        user_agent: s.userAgent,
+      }),
+      'create session',
+    );
+    if (Math.random() < 0.05) {
+      // Housekeeping: forget sessions that ended more than 30 days ago.
+      await this.db.from('apex_sessions').delete().lt('expires_at', new Date(Date.now() - 30 * 86400_000).toISOString());
+    }
+  }
+
+  async session(tokenHash: string): Promise<SessionRecord | null> {
+    const r = check(await this.db.from('apex_sessions').select('*').eq('token_hash', tokenHash).maybeSingle(), 'session') as SessionRow | null;
+    return r
+      ? {
+          tokenHash: r.token_hash,
+          campaignId: r.campaign_id,
+          profileKey: r.profile_key,
+          userId: r.user_id,
+          createdAt: r.created_at,
+          lastSeenAt: r.last_seen_at,
+          expiresAt: r.expires_at,
+          revokedAt: r.revoked_at,
+        }
+      : null;
+  }
+
+  async touchSession(tokenHash: string, expiresAt: string): Promise<void> {
+    await this.db.from('apex_sessions').update({ last_seen_at: new Date().toISOString(), expires_at: expiresAt }).eq('token_hash', tokenHash);
+  }
+
+  async revokeSession(tokenHash: string): Promise<void> {
+    check(await this.db.from('apex_sessions').update({ revoked_at: new Date().toISOString() }).eq('token_hash', tokenHash).is('revoked_at', null), 'revoke session');
+  }
+
+  async revokeProfileSessions(campaignId: string, key: string, exceptHash?: string): Promise<number> {
+    let q = this.db
+      .from('apex_sessions')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('campaign_id', campaignId)
+      .eq('profile_key', key)
+      .is('revoked_at', null);
+    if (exceptHash) q = q.neq('token_hash', exceptHash);
+    const rows = check(await q.select('token_hash'), 'revoke sessions') as unknown[];
+    return rows.length;
+  }
+
+  async activeSessionCounts(campaignId: string): Promise<Record<string, number>> {
+    const rows = check(
+      await this.db.from('apex_sessions').select('profile_key').eq('campaign_id', campaignId).is('revoked_at', null).gt('expires_at', new Date().toISOString()),
+      'session counts',
+    ) as Array<{ profile_key: string }>;
+    const out: Record<string, number> = {};
+    for (const r of rows) out[r.profile_key] = (out[r.profile_key] ?? 0) + 1;
+    return out;
+  }
+
+  async loginAttemptStats(profileKey: string, ipHash: string, sinceIso: string): Promise<LoginAttemptStats> {
+    const fails = () => this.db.from('apex_login_attempts').select('id', { count: 'exact', head: true }).eq('ok', false).gte('created_at', sinceIso);
+    const [profile, ip, global, oldest] = await Promise.all([
+      fails().eq('profile_key', profileKey),
+      fails().eq('ip_hash', ipHash),
+      fails(),
+      this.db
+        .from('apex_login_attempts')
+        .select('created_at')
+        .eq('ok', false)
+        .eq('profile_key', profileKey)
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: true })
+        .limit(1),
+    ]);
+    const err = profile.error ?? ip.error ?? global.error ?? oldest.error;
+    if (err) throw new Error(`login attempts: ${err.message}`);
+    return {
+      profileFailures: profile.count ?? 0,
+      ipFailures: ip.count ?? 0,
+      globalFailures: global.count ?? 0,
+      oldestProfileFailure: (oldest.data as Array<{ created_at: string }>)[0]?.created_at ?? null,
+    };
+  }
+
+  async recordLoginAttempt(profileKey: string, ipHash: string, ok: boolean): Promise<void> {
+    check(await this.db.from('apex_login_attempts').insert({ profile_key: profileKey, ip_hash: ipHash, ok }), 'record login attempt');
+    if (Math.random() < 0.05) {
+      await this.db.from('apex_login_attempts').delete().lt('created_at', new Date(Date.now() - 2 * 86400_000).toISOString());
+    }
+  }
+
+  async syncTopic(campaignId: string): Promise<string> {
+    const row = check(await this.db.from('apex_campaigns').select('sync_topic').eq('id', campaignId).maybeSingle(), 'sync topic') as { sync_topic: string } | null;
+    if (!row) throw new Error('sync topic: campaign not found');
+    return `apex-sync-${row.sync_topic}`;
+  }
+
+  async rotateSyncTopic(campaignId: string): Promise<void> {
+    check(await this.db.from('apex_campaigns').update({ sync_topic: newTopic() }).eq('id', campaignId), 'rotate sync topic');
   }
 
   async touchMember(campaignId: string, userId: string): Promise<void> {
@@ -237,20 +261,10 @@ export class SupabaseRepo implements Repo {
     };
   }
 
-  async authAdminOk(): Promise<boolean> {
-    const { error } = await this.db.auth.admin.listUsers({ page: 1, perPage: 1 });
-    return !error;
-  }
-
   async campaignsById(ids: string[]): Promise<Campaign[]> {
     if (!ids.length) return [];
     const rows = check(await this.db.from('apex_campaigns').select('id, slug, name').in('id', ids), 'campaigns');
     return rows as Campaign[];
-  }
-
-  async membershipsOf(userId: string): Promise<Member[]> {
-    const rows = check(await this.db.from('apex_campaign_members').select('*').eq('user_id', userId), 'memberships');
-    return (rows as MemberRow[]).map(toMember);
   }
 
   async members(campaignId: string): Promise<Member[]> {
@@ -268,61 +282,6 @@ export class SupabaseRepo implements Repo {
         .upsert({ campaign_id: m.campaignId, user_id: m.userId, email: m.email, role: m.role }, { onConflict: 'campaign_id,user_id' }),
       'upsert member',
     );
-  }
-
-  async removeMember(campaignId: string, userId: string): Promise<void> {
-    check(await this.db.from('apex_campaign_members').delete().eq('campaign_id', campaignId).eq('user_id', userId), 'remove member');
-  }
-
-  async openInvitesFor(email: string): Promise<Invite[]> {
-    const rows = check(
-      await this.db
-        .from('apex_campaign_invites')
-        .select('campaign_id, email, role, token_ids, accepted_at')
-        .eq('email', email)
-        .is('accepted_at', null),
-      'invites',
-    );
-    return (rows as InviteRow[]).map(toInvite);
-  }
-
-  async invites(campaignId: string): Promise<Invite[]> {
-    const rows = check(
-      await this.db
-        .from('apex_campaign_invites')
-        .select('campaign_id, email, role, token_ids, accepted_at')
-        .eq('campaign_id', campaignId)
-        .order('created_at'),
-      'invites',
-    );
-    return (rows as InviteRow[]).map(toInvite);
-  }
-
-  async upsertInvite(i: Omit<Invite, 'acceptedAt'>): Promise<void> {
-    check(
-      await this.db
-        .from('apex_campaign_invites')
-        .upsert(
-          { campaign_id: i.campaignId, email: i.email, role: i.role, token_ids: i.tokenIds, accepted_at: null, accepted_by: null },
-          { onConflict: 'campaign_id,email' },
-        ),
-      'upsert invite',
-    );
-  }
-
-  async markInviteAccepted(campaignId: string, email: string, userId: string): Promise<void> {
-    check(
-      await this.db
-        .from('apex_campaign_invites')
-        .update({ accepted_at: new Date().toISOString(), accepted_by: userId })
-        .eq('campaign_id', campaignId)
-        .eq('email', email),
-      'accept invite',
-    );
-  }
-
-  async deleteInvite(campaignId: string, email: string): Promise<void> {
-    check(await this.db.from('apex_campaign_invites').delete().eq('campaign_id', campaignId).eq('email', email), 'delete invite');
   }
 
   async assignments(campaignId: string): Promise<Assignment[]> {
@@ -418,6 +377,46 @@ export class SupabaseRepo implements Repo {
       'prune snapshots',
     ) as Array<{ id: number }>;
     if (rows.length) check(await this.db.from('apex_state_snapshots').delete().in('id', rows.map((r) => r.id)), 'prune snapshots');
+  }
+
+  // ---------------------------------------------------------------- character sheets
+
+  async loadSheet(campaignId: string, tokenId: string): Promise<StoredSheet | null> {
+    const r = check(
+      await this.db.from('apex_character_sheets').select('data, version, updated_at, updated_by').eq('campaign_id', campaignId).eq('token_id', tokenId).maybeSingle(),
+      'load sheet',
+    ) as { data: unknown; version: number; updated_at: string; updated_by: string | null } | null;
+    return r ? { data: r.data, version: Number(r.version), updatedAt: r.updated_at, updatedBy: r.updated_by } : null;
+  }
+
+  async saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string): Promise<number | null> {
+    const now = new Date().toISOString();
+    if (expectedVersion === 0) {
+      const { error } = await this.db
+        .from('apex_character_sheets')
+        .insert({ campaign_id: campaignId, token_id: tokenId, data, version: 1, updated_by: userId, updated_at: now });
+      if (!error) return 1;
+      if ((error as { code?: string }).code === '23505') return null; // someone created it first
+      throw new Error(`save sheet: ${error.message}`);
+    }
+    const rows = check(
+      await this.db
+        .from('apex_character_sheets')
+        .update({ data, version: expectedVersion + 1, updated_by: userId, updated_at: now })
+        .eq('campaign_id', campaignId)
+        .eq('token_id', tokenId)
+        .eq('version', expectedVersion)
+        .select('version'),
+      'save sheet',
+    ) as unknown[];
+    return rows.length === 1 ? expectedVersion + 1 : null;
+  }
+
+  async backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string, userId: string): Promise<void> {
+    check(
+      await this.db.from('apex_character_sheet_backups').insert({ campaign_id: campaignId, token_id: tokenId, data, version, reason, created_by: userId }),
+      'backup sheet',
+    );
   }
 
   async logCommand(e: CommandLogEntry): Promise<void> {

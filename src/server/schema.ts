@@ -6,6 +6,6 @@
  * The server refuses campaign requests when the database is older than the code, and
  * /api/apex?op=health reports exactly which migrations are missing.
  */
-export const REQUIRED_SCHEMA_VERSION = 1;
+export const REQUIRED_SCHEMA_VERSION = 2;
 
-export const EXPECTED_MIGRATIONS: readonly string[] = ['20261101145653', '20261101151000', '20261101160000'];
+export const EXPECTED_MIGRATIONS: readonly string[] = ['20261101145653', '20261101151000', '20261101160000', '20261101173039'];

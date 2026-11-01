@@ -3,6 +3,7 @@
  * Types only – no runtime code, so the client bundle stays free of server logic.
  */
 import type { Command } from '../game/commands.js';
+import type { CharacterSheet } from '../game/sheet.js';
 import type { GameState } from '../game/types.js';
 import type { ViewModel } from '../game/visibility.js';
 import type { Role, SnapshotInfo } from './repo.js';
@@ -11,8 +12,19 @@ import type { Role, SnapshotInfo } from './repo.js';
 export type WireView = Omit<ViewModel, 'hexByKey'>;
 
 export interface SessionInfo {
-  user: { id: string; email: string };
+  user: { id: string; profile: string; displayName: string; role: Role };
   campaigns: Array<{ id: string; name: string; role: Role }>;
+  /** Secret Realtime topic for live version pings (only for signed-in profiles). */
+  syncTopic: string;
+}
+
+/** Public profile status for "Who are you?" – no account data. */
+export interface PublicProfile {
+  key: string;
+  /** Can sign in: activated by the GM AND a password is set. */
+  active: boolean;
+  /** Only for the GM profile: no password yet → first-time setup with a setup code. */
+  needsSetup?: boolean;
 }
 
 export interface CharacterRef {
@@ -50,40 +62,21 @@ export interface CommandRequest {
   as?: string;
 }
 
-export interface MemberInfo {
-  userId: string;
-  email: string;
-  role: Role;
-  tokenIds: string[];
-  lastSeenAt: string | null;
-  /** Contacted the server within the last ~75 seconds. */
-  online: boolean;
-}
-
-export interface InviteInfo {
-  email: string;
-  role: Role;
-  tokenIds: string[];
-  acceptedAt: string | null;
-}
-
 export interface ProfileInfo {
   key: string;
   displayName: string;
   characterName: string;
   role: Role;
   tokenIds: string[];
-  /** Linked email – visible to the GM only. */
-  email: string | null;
-  /** Has the linked person signed in at least once? */
-  signedIn: boolean;
   active: boolean;
+  passwordSet: boolean;
+  passwordUpdatedAt: string | null;
+  /** Number of signed-in devices (active sessions). */
+  sessions: number;
   online: boolean;
 }
 
 export interface AdminOverview {
-  members: MemberInfo[];
-  invites: InviteInfo[];
   snapshots: SnapshotInfo[];
   profiles: ProfileInfo[];
   /** The stored campaign still uses the old placeholder characters (Livia, Marcus, …). */
@@ -92,18 +85,29 @@ export interface AdminOverview {
 
 export type AdminAction =
   | { action: 'overview' }
-  | { action: 'invite'; email: string; role: Role; tokenIds: string[] }
-  | { action: 'revokeInvite'; email: string }
-  | { action: 'assign'; tokenId: string; userId: string | null }
-  | { action: 'setRole'; userId: string; role: Role }
-  | { action: 'removeMember'; userId: string }
   | { action: 'initCampaign'; radius: number; seed: number }
   | { action: 'importState'; state: unknown }
-  | { action: 'linkProfile'; profile: string; email: string | null }
+  | { action: 'setPassword'; profile: string; password: string }
+  | { action: 'clearPassword'; profile: string }
+  | { action: 'setActive'; profile: string; active: boolean }
+  | { action: 'revokeSessions'; profile: string }
   | { action: 'setProfileCharacters'; profile: string; tokenIds: string[] }
   | { action: 'applyRoster' }
   | { action: 'createSnapshot'; label: string }
   | { action: 'restoreSnapshot'; id: number };
+
+export interface SheetPayload {
+  tokenId: string;
+  characterName: string;
+  sheet: CharacterSheet;
+  /** 0 = no sheet saved yet. */
+  version: number;
+  updatedAt: string | null;
+}
+
+export type SheetAction =
+  | { action: 'save'; tokenId: string; sheet: CharacterSheet; expectedVersion: number; reason?: 'edit' | 'import-merge' | 'import-replace' }
+  | { action: 'adjust'; tokenId: string; target: 'hp' | 'hpTemp' | 'resource'; resourceId?: string; delta: number };
 
 export interface ApiError {
   error: string;

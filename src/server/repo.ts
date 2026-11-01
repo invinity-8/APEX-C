@@ -7,11 +7,19 @@ import type { GameState } from '../game/types.js';
 
 export type Role = 'gm' | 'player';
 
+/** The signed-in identity. Built ONLY from a valid server-side session + the profile row. */
 export interface AuthUser {
+  /** Stable id of the profile (apex_profiles.user_id). */
   id: string;
-  email: string;
-  /** Only users with a confirmed email can redeem invitations. */
-  emailConfirmed: boolean;
+  campaignId: string;
+  profileKey: string;
+  displayName: string;
+  /** Role from the database (apex_profiles.role) – never from the request. */
+  role: Role;
+  /** Characters this profile controls (players). */
+  tokenIds: string[];
+  /** SHA-256 of the session token (used for logout / password change). */
+  sessionHash: string;
 }
 
 export interface Campaign {
@@ -23,29 +31,10 @@ export interface Campaign {
 export interface Member {
   campaignId: string;
   userId: string;
-  email: string;
+  email: string | null;
   role: Role;
   /** Last authenticated API contact (presence). */
   lastSeenAt?: string | null;
-}
-
-export type SendCodeResult =
-  | { ok: true; via: 'smtp' | 'supabase'; detail?: string }
-  | {
-      ok: false;
-      /** rate_limited: per-address wait · quota: mail service limit reached · not_deliverable: address rejected by the mail service · failed: other delivery error */
-      reason: 'rate_limited' | 'quota' | 'not_deliverable' | 'failed';
-      detail?: string;
-      retryAfter?: number;
-    };
-
-export interface LoginRequestStats {
-  /** Last accepted request for this address. */
-  lastAcceptedAt: string | null;
-  /** Requests for this address in the last hour (all outcomes). */
-  emailCountHour: number;
-  /** Real code deliveries across all addresses in the last hour. */
-  globalAcceptedHour: number;
 }
 
 export interface DeployStatus {
@@ -54,6 +43,7 @@ export interface DeployStatus {
   migrations: string[];
   campaignSeeded: boolean;
   profiles: number;
+  /** Live-update broadcast trigger installed. */
   realtime: boolean;
   /** RLS/privilege problems found by the database itself (null = check not deployed yet). */
   securityProblems: string[] | null;
@@ -62,23 +52,17 @@ export interface DeployStatus {
 export interface HealthReport {
   /** Can the server reach the database and read the APEX tables? */
   database: boolean;
-  /** Is the secret key valid for the Auth admin API? */
-  authAdmin: boolean;
   /** Does the main campaign exist? */
   campaignSeeded: boolean;
   /** Are the five profiles present? */
   profilesTable: boolean;
-  /** Is apex_campaign_heads published for Realtime? */
+  /** Is the live-update broadcast installed? */
   realtime: boolean;
   /** RLS, privileges and legacy objects verified by the database (null = not checked). */
   securityOk: boolean | null;
   /** Schema version found in the database / required by this code. */
   schemaVersion: number | null;
   requiredSchemaVersion: number;
-  /** 'smtp' = APEX sends codes itself through SMTP_* · 'supabase' = Supabase built-in mailer (team members only, ~2/hour). */
-  emailDelivery?: 'smtp' | 'supabase';
-  /** Result of an SMTP login test (only with ?smtp=1). */
-  smtpOk?: boolean | null;
   /** Every migration file of this deployment is recorded in the database history. */
   migrationsComplete: boolean;
   missingMigrations: string[];
@@ -87,15 +71,7 @@ export interface HealthReport {
   errors: string[];
 }
 
-export interface Invite {
-  campaignId: string;
-  email: string;
-  role: Role;
-  tokenIds: string[];
-  acceptedAt: string | null;
-}
-
-/** A "Who are you?" profile, linked by the GM to exactly one account. */
+/** A "Who are you?" profile = one login identity. */
 export interface Profile {
   campaignId: string;
   key: string;
@@ -103,10 +79,37 @@ export interface Profile {
   characterName: string;
   role: Role;
   tokenIds: string[];
-  /** Linked email (lower-case) – set by the GM. */
-  email: string | null;
-  /** Linked Auth user – filled on the first verified sign-in. */
-  userId: string | null;
+  /** Stable identity of this profile. */
+  userId: string;
+  /** Deactivated profiles cannot sign in; their sessions are revoked. */
+  active: boolean;
+}
+
+export interface Credential {
+  passwordHash: string;
+  updatedAt: string;
+}
+
+export interface SessionRecord {
+  tokenHash: string;
+  campaignId: string;
+  profileKey: string;
+  userId: string;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+}
+
+export interface LoginAttemptStats {
+  /** Failed attempts for this profile within the window. */
+  profileFailures: number;
+  /** Failed attempts from this IP within the window. */
+  ipFailures: number;
+  /** Failed attempts overall within the window. */
+  globalFailures: number;
+  /** Time of the oldest counted failure for this profile (to compute the wait). */
+  oldestProfileFailure: string | null;
 }
 
 export interface Assignment {
@@ -118,6 +121,13 @@ export interface Assignment {
 export interface StoredState {
   state: GameState;
   version: number;
+}
+
+export interface StoredSheet {
+  data: unknown;
+  version: number;
+  updatedAt: string;
+  updatedBy: string | null;
 }
 
 export interface SnapshotInfo {
@@ -138,46 +148,52 @@ export interface CommandLogEntry {
 }
 
 export interface Repo {
-  /** Verifies a Supabase access token and returns the user, or null if invalid/expired. */
-  userFromToken(token: string): Promise<AuthUser | null>;
-
-  /** Is this email invited to, or a member of, any campaign? */
-  isEmailAuthorized(email: string): Promise<boolean>;
-  /** Makes sure an Auth account with a confirmed email exists (created only for authorized emails). */
-  ensureAuthUser(email: string): Promise<void>;
-  /** Emails a one-time sign-in code generated by Supabase Auth. Never creates accounts for unknown emails. */
-  sendLoginCode(email: string): Promise<SendCodeResult>;
-  loginRequestStats(emailHash: string): Promise<LoginRequestStats>;
-  recordLoginRequest(emailHash: string, outcome: 'accepted' | 'ignored' | 'rate_limited' | 'delivery_failed' | 'quota'): Promise<void>;
-  /** How login emails are delivered, and (optionally) whether the SMTP login works. */
-  emailDelivery(check: boolean): Promise<{ via: 'smtp' | 'supabase'; ok: boolean | null; detail?: string }>;
+  // ---- profiles & credentials
   /** Profiles of one campaign, or – with campaignId null – of all campaigns. */
   profiles(campaignId: string | null): Promise<Profile[]>;
-  updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>): Promise<void>;
-  /** Records presence for a member. */
-  touchMember(campaignId: string, userId: string): Promise<void>;
+  updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>): Promise<void>;
+  credential(campaignId: string, key: string): Promise<Credential | null>;
+  /** null removes the password (profile locked). */
+  setCredential(campaignId: string, key: string, passwordHash: string | null, byUserId: string | null): Promise<void>;
+  /** Marks a valid, unused, unexpired setup code as used and returns its campaign (atomic). */
+  consumeSetupCode(codeHash: string): Promise<string | null>;
+
+  // ---- sessions
+  createSession(s: Omit<SessionRecord, 'revokedAt' | 'lastSeenAt' | 'createdAt'> & { userAgent: string | null }): Promise<void>;
+  session(tokenHash: string): Promise<SessionRecord | null>;
+  touchSession(tokenHash: string, expiresAt: string): Promise<void>;
+  revokeSession(tokenHash: string): Promise<void>;
+  /** Revokes all sessions of a profile, optionally except one. Returns how many were revoked. */
+  revokeProfileSessions(campaignId: string, key: string, exceptHash?: string): Promise<number>;
+  /** Number of active (not revoked, not expired) sessions per profile key. */
+  activeSessionCounts(campaignId: string): Promise<Record<string, number>>;
+
+  // ---- login rate limiting
+  loginAttemptStats(profileKey: string, ipHash: string, sinceIso: string): Promise<LoginAttemptStats>;
+  recordLoginAttempt(profileKey: string, ipHash: string, ok: boolean): Promise<void>;
+
+  // ---- realtime
+  /** Secret broadcast topic of the campaign. */
+  syncTopic(campaignId: string): Promise<string>;
+  /** New secret topic (after revoking someone's access). */
+  rotateSyncTopic(campaignId: string): Promise<void>;
+
+  // ---- deployment
   /** Raw deployment status from the database (server-only function apex_deploy_status). */
   deployStatus(): Promise<DeployStatus>;
-  /** Is the secret key valid for the Auth admin API? */
-  authAdminOk(): Promise<boolean>;
 
+  // ---- campaigns & members
   campaignsById(ids: string[]): Promise<Campaign[]>;
-  membershipsOf(userId: string): Promise<Member[]>;
   members(campaignId: string): Promise<Member[]>;
   upsertMember(m: Member): Promise<void>;
-  removeMember(campaignId: string, userId: string): Promise<void>;
-
-  /** Open (not yet accepted) invitations for an email address (lower-case). */
-  openInvitesFor(email: string): Promise<Invite[]>;
-  invites(campaignId: string): Promise<Invite[]>;
-  upsertInvite(i: Omit<Invite, 'acceptedAt'>): Promise<void>;
-  markInviteAccepted(campaignId: string, email: string, userId: string): Promise<void>;
-  deleteInvite(campaignId: string, email: string): Promise<void>;
+  /** Records presence for a member. */
+  touchMember(campaignId: string, userId: string): Promise<void>;
 
   assignments(campaignId: string): Promise<Assignment[]>;
   /** Replaces all assignments of `tokenId` (one owner per character). null = unassign. */
   assignToken(campaignId: string, tokenId: string, userId: string | null): Promise<void>;
 
+  // ---- game state
   loadState(campaignId: string): Promise<StoredState | null>;
   /** Creates or replaces the state unconditionally (GM initialisation / restore). Returns the new version. */
   replaceState(campaignId: string, state: GameState, userId: string): Promise<number>;
@@ -188,6 +204,12 @@ export interface Repo {
   listSnapshots(campaignId: string, limit: number): Promise<SnapshotInfo[]>;
   loadSnapshot(campaignId: string, id: number): Promise<GameState | null>;
   pruneSnapshots(campaignId: string, keep: number): Promise<void>;
+
+  // ---- character sheets
+  loadSheet(campaignId: string, tokenId: string): Promise<StoredSheet | null>;
+  /** Optimistic write. expectedVersion 0 = create. Returns the new version, or null if someone else wrote first. */
+  saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string): Promise<number | null>;
+  backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string, userId: string): Promise<void>;
 
   logCommand(e: CommandLogEntry): Promise<void>;
 }
