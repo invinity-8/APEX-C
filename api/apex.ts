@@ -66,7 +66,10 @@ async function handle(request: Request): Promise<Response> {
     },
     repo,
   );
-  if (res.status === 200 && url.searchParams.get('op') === 'health') return json(200, { serverConfigured: true, ...deploymentInfo(), ...(res.body as object) });
+  if (res.status === 200 && url.searchParams.get('op') === 'health') {
+    const h = res.body as { errors?: string[] };
+    return json(200, { serverConfigured: true, ok: !h.errors?.length, ...deploymentInfo(), ...(res.body as object) });
+  }
   return json(res.status, res.body);
 }
 

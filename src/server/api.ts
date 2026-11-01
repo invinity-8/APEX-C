@@ -19,7 +19,8 @@ import type { Actor, GameState } from '../game/types.js';
 import { phaseName } from '../game/text.js';
 import { buildPlayerView } from '../game/visibility.js';
 import type { AdminOverview, CampaignPayload, CharacterRef, PlayerPayload, SessionInfo, WireView } from './protocol.js';
-import type { AuthUser, Member, Profile, Repo, Role } from './repo.js';
+import type { AuthUser, HealthReport, Member, Profile, Repo, Role } from './repo.js';
+import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
 import { applyRoster, needsRosterUpdate } from '../game/roster.js';
 import { PLAYER_COMMANDS, isEmail, isId, isInt, isObj, parseCommand } from './validate.js';
 
@@ -58,7 +59,8 @@ const TOUCH_EVERY_MS = 20_000;
 export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
   try {
     // ---- public operations (no session yet) ----
-    if (req.method === 'GET' && req.op === 'health') return ok(await repo.health());
+    if (req.method === 'GET' && req.op === 'health') return ok(await health(repo));
+    await requireCompatibleSchema(repo);
     if (req.method === 'POST' && req.op === 'request-code') return ok(await requestCode(req.body, repo));
     if (req.method === 'GET' && req.op === 'profiles') return ok(await profileStatus(repo));
 
@@ -95,6 +97,66 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
     }
     return { status: 500, body: { error: 'Internal server error. Please try again.' } };
   }
+}
+
+// ---------------------------------------------------------------- deployment health & schema gate
+
+export async function health(repo: Repo): Promise<HealthReport> {
+  const errors: string[] = [];
+  const r: HealthReport = {
+    database: false,
+    authAdmin: false,
+    campaignSeeded: false,
+    profilesTable: false,
+    realtime: false,
+    securityOk: null,
+    schemaVersion: null,
+    requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
+    migrationsComplete: false,
+    missingMigrations: [...EXPECTED_MIGRATIONS],
+    unknownMigrations: [],
+    errors,
+  };
+  try {
+    const d = await repo.deployStatus();
+    r.database = true;
+    r.schemaVersion = d.schemaVersion;
+    r.campaignSeeded = d.campaignSeeded;
+    r.profilesTable = d.profiles === 5;
+    r.realtime = d.realtime;
+    r.securityOk = d.securityProblems === null ? null : d.securityProblems.length === 0;
+    if (d.securityProblems?.length) errors.push(`Security problems: ${d.securityProblems.join('; ')}`);
+    r.missingMigrations = EXPECTED_MIGRATIONS.filter((v) => !d.migrations.includes(v));
+    r.unknownMigrations = d.migrations.filter((v) => !EXPECTED_MIGRATIONS.includes(v));
+    r.migrationsComplete = r.missingMigrations.length === 0;
+    if (!r.migrationsComplete) errors.push(`Database migrations missing: ${r.missingMigrations.join(', ')}`);
+    if (r.unknownMigrations.length) errors.push(`Database has migrations this deployment does not know: ${r.unknownMigrations.join(', ')}`);
+    if ((d.schemaVersion ?? 0) < REQUIRED_SCHEMA_VERSION) errors.push(`Database schema version ${d.schemaVersion} is older than required ${REQUIRED_SCHEMA_VERSION}`);
+    if (!d.campaignSeeded) errors.push('The main campaign is missing.');
+    if (d.profiles !== 5) errors.push(`Expected 5 profiles, found ${d.profiles}.`);
+    if (!d.realtime) errors.push('apex_campaign_heads is not published for Realtime.');
+  } catch (e) {
+    errors.push(`database: ${(e as Error).message}`);
+  }
+  r.authAdmin = await repo.authAdminOk().catch(() => false);
+  if (!r.authAdmin) errors.push('The server key is not accepted by Supabase Auth.');
+  return r;
+}
+
+let schemaCheckedAt = 0;
+/** Refuses campaign requests while the database is older than this code (cached for 60 s). */
+async function requireCompatibleSchema(repo: Repo) {
+  if (Date.now() - schemaCheckedAt < 60_000) return;
+  const d = await repo.deployStatus();
+  if ((d.schemaVersion ?? 0) < REQUIRED_SCHEMA_VERSION) {
+    throw new HttpError(503, 'The campaign database is being updated. Please try again in a few minutes.', 'schema_outdated');
+  }
+  schemaCheckedAt = Date.now();
+}
+
+/** Test helper: forget the cached schema check. */
+export function resetSchemaCache() {
+  schemaCheckedAt = 0;
 }
 
 // ---------------------------------------------------------------- email code login

@@ -9,7 +9,7 @@ import type {
   AuthUser,
   Campaign,
   CommandLogEntry,
-  HealthReport,
+  DeployStatus,
   Invite,
   Member,
   Profile,
@@ -143,31 +143,30 @@ export class SupabaseRepo implements Repo {
     await this.db.from('apex_campaign_members').update({ last_seen_at: new Date().toISOString() }).eq('campaign_id', campaignId).eq('user_id', userId);
   }
 
-  async health(): Promise<HealthReport> {
-    const errors: string[] = [];
-    const r: HealthReport = { database: false, authAdmin: false, campaignSeeded: false, presenceColumn: false, profilesTable: false, errors };
-    const camps = await this.db.from('apex_campaigns').select('id', { count: 'exact', head: true });
-    if (camps.error) errors.push(`database: ${camps.error.message}`);
-    else {
-      r.database = true;
-      r.campaignSeeded = (camps.count ?? 0) > 0;
-      if (!r.campaignSeeded) errors.push('No campaign found – run the seed migration.');
-    }
-    const states = await this.db.from('apex_game_states').select('campaign_id', { count: 'exact', head: true });
-    if (states.error) {
-      r.database = false;
-      errors.push(`game states: ${states.error.message}`);
-    }
-    const presence = await this.db.from('apex_campaign_members').select('last_seen_at').limit(1);
-    r.presenceColumn = !presence.error;
-    if (presence.error) errors.push('Presence migration (20261102000100) not applied yet.');
-    const prof = await this.db.from('apex_profiles').select('profile_key', { count: 'exact', head: true });
-    r.profilesTable = !prof.error && (prof.count ?? 0) > 0;
-    if (!r.profilesTable) errors.push('Profiles migration (20261103000100) not applied yet.');
-    const admin = await this.db.auth.admin.listUsers({ page: 1, perPage: 1 });
-    r.authAdmin = !admin.error;
-    if (admin.error) errors.push(`auth admin: ${admin.error.message}`);
-    return r;
+  async deployStatus(): Promise<DeployStatus> {
+    const { data, error } = await this.db.rpc('apex_deploy_status');
+    if (error) throw new Error(`deploy status: ${error.message}`);
+    const d = data as {
+      schema_version: number | null;
+      migrations: string[];
+      campaign_seeded: boolean;
+      profiles: number;
+      realtime: boolean;
+      security_problems?: string[];
+    };
+    return {
+      schemaVersion: d.schema_version ?? null,
+      migrations: d.migrations ?? [],
+      campaignSeeded: !!d.campaign_seeded,
+      profiles: Number(d.profiles ?? 0),
+      realtime: !!d.realtime,
+      securityProblems: d.security_problems ?? null,
+    };
+  }
+
+  async authAdminOk(): Promise<boolean> {
+    const { error } = await this.db.auth.admin.listUsers({ page: 1, perPage: 1 });
+    return !error;
   }
 
   async campaignsById(ids: string[]): Promise<Campaign[]> {

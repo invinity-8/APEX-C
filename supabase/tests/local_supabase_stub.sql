@@ -17,7 +17,34 @@ grant execute on function auth.uid() to anon, authenticated;
 grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 create publication supabase_realtime;
--- a pre-existing manual apex_access table
-create table public.apex_access (email text, role text);
-create table public.apex_invites (email text, role text);
-insert into public.apex_access values ('extra.player@example.com','player'), ('felixbecker924@gmail.com','gm');
+-- Replica of the PRODUCTION legacy objects from migration 20261101094428
+-- (structure only – the original also inserted three email addresses, omitted here).
+create schema if not exists apex_private;
+create table public.apex_invites (
+ email text primary key,
+ role text not null check (role in ('gm','player')),
+ token_id text,
+ created_at timestamptz not null default now(),
+ constraint normalized_email check (email = lower(trim(email)))
+);
+create table public.apex_access (
+ user_id uuid primary key references auth.users(id) on delete cascade,
+ role text not null check (role in ('gm','player')),
+ token_id text,
+ created_at timestamptz not null default now()
+);
+alter table public.apex_invites enable row level security;
+alter table public.apex_access enable row level security;
+create policy apex_access_read_self on public.apex_access for select to authenticated using (user_id = (select auth.uid()));
+create or replace function apex_private.sync_access_from_invites() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+ insert into public.apex_access(user_id, role, token_id)
+ select new.id, i.role, i.token_id from public.apex_invites i where i.email = lower(trim(new.email))
+ on conflict (user_id) do update set role = excluded.role, token_id = excluded.token_id;
+ return new;
+end;
+$$;
+create trigger apex_auth_user_access after insert or update of email on auth.users
+for each row execute function apex_private.sync_access_from_invites();
+insert into public.apex_invites (email, role) values ('legacy-gm@example.test', 'gm');
