@@ -1,14 +1,14 @@
 import type { ViewModel } from '../game/visibility';
 import { Section } from './ui';
 
-/** Spieleransicht: Was weiß die Gruppe über Rivalen und Orte? */
+/** Spieleransicht: Was weiß die Gruppe über Rivals und Orte? */
 export function IntelPanel({ view, onFocus }: { view: ViewModel; onFocus: (q: number, r: number) => void }) {
   const rivals = view.teams.filter((t) => t.kind === 'rival');
   return (
-    <Section title="Erkenntnisse">
-      <div className="label mb-1">Rivalen</div>
+    <Section title="Intelligence">
+      <div className="label mb-1">Rivals</div>
       {rivals.length === 0 ? (
-        <p className="text-xs text-marble-500">Noch keine anderen Teams entdeckt. Erkunde die Arena!</p>
+        <p className="text-xs text-marble-500">No rival teams discovered yet. Explore the arena!</p>
       ) : (
         <ul className="space-y-1">
           {rivals.map((t) => {
@@ -25,11 +25,11 @@ export function IntelPanel({ view, onFocus }: { view: ViewModel; onFocus: (q: nu
                   <span className="text-marble-50">{t.name}</span>
                   <span className="ml-auto text-[11px]">
                     {t.currentlyVisible ? (
-                      <span className="text-emerald-300">in Sicht</span>
+                      <span className="text-emerald-300">in sight</span>
                     ) : tr ? (
                       <span className="text-blood-400">🔴 verfolgt</span>
                     ) : t.lastSeen ? (
-                      <span className="text-marble-500">zuletzt Tag {t.lastSeen.day}</span>
+                      <span className="text-marble-500">last seen day {t.lastSeen.day}</span>
                     ) : null}
                   </span>
                 </button>
@@ -38,7 +38,7 @@ export function IntelPanel({ view, onFocus }: { view: ViewModel; onFocus: (q: nu
           })}
         </ul>
       )}
-      <div className="label mt-3 mb-1">Bekannte Orte</div>
+      <div className="label mt-3 mb-1">Known sites</div>
       <ul className="space-y-1">
         {view.sites.map((s) => (
           <li key={s.id}>
