@@ -21,14 +21,14 @@ export function GmPanel({ state, run, onSelectToken, showPartyFog, setShowPartyF
   const [tab, setTab] = useState<Tab>('teams');
   return (
     <Section
-      title="Spielleitung"
+      title="Game Master"
       right={
         <Segmented<Tab>
           value={tab}
           onChange={setTab}
           options={[
             { value: 'teams', label: 'Teams' },
-            { value: 'events', label: 'Events & Orte' },
+            { value: 'events', label: 'Events & Sites' },
             { value: 'arena', label: 'Arena' },
           ]}
         />
@@ -58,7 +58,7 @@ function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | '
               <button
                 className="text-sm font-semibold text-marble-50 hover:text-gold-200"
                 onClick={() => tok && onSelectToken(tok.id)}
-                title="Auswählen und auf der Karte zeigen"
+                title="Select and show on map"
               >
                 {team.name}
               </button>
@@ -75,7 +75,7 @@ function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | '
                 options={[
                   { value: 'auto', label: 'Bei Sicht' },
                   { value: 'hidden', label: 'Verborgen' },
-                  { value: 'revealed', label: 'Enthüllt' },
+                  { value: 'revealed', label: 'Revealed' },
                 ]}
               />
               <Segmented<'none' | 'approx' | 'exact'>
@@ -83,18 +83,18 @@ function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | '
                 onChange={(v) => run({ type: 'setTracking', teamId: team.id, mode: v })}
                 options={[
                   { value: 'none', label: 'Kein Tracking' },
-                  { value: 'approx', label: '≈' , hint: 'Ungefähre Position' },
+                  { value: 'approx', label: '≈' , hint: 'Approximate position' },
                   { value: 'exact', label: '◎', hint: 'Genaue Position' },
                 ]}
               />
             </div>
             <div className="mt-1 text-[11px] text-marble-500">
-              Strategie: {STRATEGY_LABEL[team.strategy]} · Aggressivität {team.aggression}/10
+              Strategy: {STRATEGY_LABEL[team.strategy]} · Aggression {team.aggression}/10
             </div>
           </li>
         );
       })}
-      <li className="text-[11px] text-marble-500">Rivalen verschiebst du wie Spielerfiguren: auf der Karte anklicken, dann Zielfeld wählen.</li>
+      <li className="text-[11px] text-marble-500">Move rivals like player characters: select them on the map, then choose a destination.</li>
     </ul>
   );
 }
@@ -112,17 +112,17 @@ function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
             <p className="mt-0.5 text-[11px] leading-relaxed text-marble-300">{ev.description}</p>
             <div className="mt-1.5 flex items-center justify-between">
               <span className={`text-[11px] ${ev.status === 'done' ? 'text-emerald-300' : 'text-amber-300'}`}>
-                {ev.status === 'done' ? '✓ ausgelöst' : '○ ausstehend'}
+                {ev.status === 'done' ? '✓ triggered' : '○ pending'}
               </span>
               <button className="btn btn-ghost" disabled={ev.status === 'done'} onClick={() => run({ type: 'triggerEvent', eventId: ev.id })}>
-                Jetzt auslösen
+                Trigger now
               </button>
             </div>
           </li>
         ))}
       </ul>
       <div>
-        <div className="label mb-1">Orte</div>
+        <div className="label mb-1">Sites</div>
         <ul className="space-y-1">
           {Object.values(state.sites).map((s) => (
             <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
@@ -133,7 +133,7 @@ function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
                 value={s.visibility}
                 onChange={(v) => run({ type: 'setSiteVisibility', siteId: s.id, visibility: v })}
                 options={[
-                  { value: 'public', label: 'Öffentl.', hint: 'Allen bekannt' },
+                  { value: 'public', label: 'Public', hint: 'Known to all' },
                   { value: 'onSight', label: 'Bei Sicht', hint: 'Wird bekannt, sobald die Gruppe ihn sieht' },
                   { value: 'hidden', label: 'Versteckt', hint: 'Nur der GM sieht ihn' },
                 ]}
@@ -153,42 +153,42 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
   return (
     <div className="space-y-3">
       <Toggle
-        label="Sicht der Gruppe auf der Karte einblenden"
+        label="Show party vision on map"
         checked={showPartyFog}
         onChange={() => setShowPartyFog(!showPartyFog)}
         hint="Dunkelt ab, was die Spieler nicht sehen bzw. noch nicht erforscht haben"
       />
       <Stepper
-        label="Arenatag korrigieren"
+        label="Adjust arena day"
         value={state.day}
-        hint="Setzt nur die Zahl – ohne Tageswechsel-Effekte. Für den normalen Ablauf den goldenen Button oben nutzen."
+        hint="Changes only the number, without day-transition effects. Use the golden button above for normal progression."
         onDec={() => run({ type: 'setDay', day: state.day - 1 })}
         onInc={() => run({ type: 'setDay', day: state.day + 1 })}
       />
 
       <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 space-y-2">
-        <div className="label">Schrumpfende Arena</div>
-        <Toggle label="Schrumpfung aktiv" checked={sh.enabled} onChange={() => run({ type: 'setShrink', enabled: !sh.enabled })} />
+        <div className="label">Shrinking Arena</div>
+        <Toggle label="Shrinking enabled" checked={sh.enabled} onChange={() => run({ type: 'setShrink', enabled: !sh.enabled })} />
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-marble-300">Äußere Ringe werden</span>
+          <span className="text-xs text-marble-300">Outer rings become</span>
           <Segmented
             value={sh.mode}
             onChange={(m) => run({ type: 'setShrink', mode: m })}
             options={[
-              { value: 'danger', label: 'gefährlich', hint: 'Betretbar, aber mit Konsequenzen' },
+              { value: 'danger', label: 'dangerous', hint: 'Passable, but dangerous' },
               { value: 'closed', label: 'gesperrt', hint: 'Nicht mehr betretbar' },
             ]}
           />
         </div>
         <p className="text-[11px] leading-relaxed text-marble-500">
           Ab Tag {sh.startDay}, alle {sh.intervalDays} Tage {sh.ringsPerStep} Ring, Warnung {sh.warningDays} Tag vorher. Heute sicher bis Ring{' '}
-          <b className="text-marble-300">{safeRadius(state.config, state.day)}</b>. Werte änderbar in <code>src/data/demo.ts</code>.
+          <b className="text-marble-300">{safeRadius(state.config, state.day)}</b>. Values editable in <code>src/data/demo.ts</code>.
         </p>
       </div>
 
       <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 space-y-2">
-        <div className="label">Neue Arena erzeugen</div>
-        <Stepper label="Kartenradius" value={radius} onDec={() => setRadius(Math.max(4, radius - 1))} onInc={() => setRadius(Math.min(20, radius + 1))} />
+        <div className="label">Generate new arena</div>
+        <Stepper label="Map radius" value={radius} onDec={() => setRadius(Math.max(4, radius - 1))} onInc={() => setRadius(Math.min(20, radius + 1))} />
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-marble-300">Seed</span>
           <div className="flex gap-1">
@@ -198,7 +198,7 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
               onChange={(e) => setSeed(Number(e.target.value) || 0)}
               className="w-24 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-right text-xs tabular-nums"
             />
-            <button className="btn btn-ghost px-2" title="Zufälliger Seed" onClick={() => setSeed(Math.floor(Math.random() * 99999))}>
+            <button className="btn btn-ghost px-2" title="Random seed" onClick={() => setSeed(Math.floor(Math.random() * 99999))}>
               🎲
             </button>
           </div>
@@ -211,7 +211,7 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
             }
           }}
         >
-          Arena erzeugen ({hexCount(radius)} Felder)
+          Generate arena ({hexCount(radius)} Felder)
         </button>
       </div>
     </div>
