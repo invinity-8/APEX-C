@@ -28,7 +28,7 @@ export const STRATEGY_LABEL: Record<TeamStrategy, string> = {
 };
 
 const SITE_TYPE_LABEL = { start: 'Startpunkt', camp: 'Lager', ruin: 'Ruine', shrine: 'Heiligtum', tower: 'Turm', cache: 'Versorgung' };
-const STATUS_LABEL = { intact: 'intakt', looted: 'geplündert', destroyed: 'zerstört', occupied: 'bewohnt' };
+const STATUS_LABEL = { intact: 'intact', looted: 'looted', destroyed: 'destroyed', occupied: 'occupied' };
 
 export function SelectionPanel(props: Props) {
   const { view, selectedTokenId, selectedHex } = props;
@@ -38,8 +38,8 @@ export function SelectionPanel(props: Props) {
     return (
       <Section title="Auswahl">
         <p className="text-xs leading-relaxed text-marble-300">
-          Klicke auf eine <b className="text-marble-50">Figur</b>, um sie auszuwählen – erreichbare Felder leuchten golden. Klicke dann ein Feld, um zu ziehen.
-          Ein Klick auf ein beliebiges Feld zeigt dessen Informationen.
+          Click a <b className="text-marble-50">Character</b>, to select them. Reachable hexes glow gold. Click a hex to move.
+          Ein Klick auf ein beliebiges Hex zeigt dessen Informationen.
         </p>
       </Section>
     );
@@ -64,7 +64,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
 
   return (
     <Section
-      title={token.kind === 'player' ? 'Figur' : 'Rivalenteam'}
+      title={token.kind === 'player' ? 'Character' : 'Rivalenteam'}
       right={
         <button className="btn btn-ghost px-2 py-0.5" onClick={onClear} title="Auswahl aufheben (Esc)">
           ✕
@@ -93,7 +93,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
         <div className="mt-3 space-y-2">
           <div>
             <div className="flex justify-between text-xs">
-              <span className="text-marble-300">Bewegungspunkte</span>
+              <span className="text-marble-300">Movement points</span>
               <span className="tabular-nums text-gold-200">
                 {fmt(d.movePoints)} / {d.maxMovePoints}
               </span>
@@ -103,9 +103,9 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
           {token.kind === 'player' && (
             <>
               <div className="flex justify-between text-xs">
-                <span className="text-marble-300">Sichtweite</span>
+                <span className="text-marble-300">Vision range</span>
                 <span className="text-marble-50">
-                  {d.visionRadius + d.visionBonus} Felder
+                  {d.visionRadius + d.visionBonus} Hexer
                   {d.visionBonus !== 0 && (
                     <span className={d.visionBonus > 0 ? 'text-emerald-300' : 'text-blood-400'}>
                       {' '}
@@ -126,7 +126,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
               </div>
               {d.inventory.length > 0 && (
                 <details className="text-xs">
-                  <summary className="cursor-pointer text-marble-300 hover:text-marble-50">Ausrüstung ({d.inventory.length})</summary>
+                  <summary className="cursor-pointer text-marble-300 hover:text-marble-50">Equipment ({d.inventory.length})</summary>
                   <ul className="mt-1.5 space-y-1">
                     {d.inventory.map((i) => (
                       <li key={i.id} className="rounded-md bg-ink-800 px-2 py-1" title={i.description}>
@@ -150,12 +150,12 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
 
       <p className={`mt-3 rounded-md px-2 py-1.5 text-[11px] ${canMove ? 'bg-gold-400/10 text-gold-200' : 'bg-ink-800 text-marble-500'}`}>
         {placeMode
-          ? '✥ Frei platzieren aktiv: Klicke irgendein Feld.'
+          ? '✥ Frei platzieren aktiv: Klicke irgendein Hex.'
           : canMove
             ? d && d.movePoints <= 0
-              ? 'Keine Bewegungspunkte mehr – warte auf den nächsten Tag.'
-              : 'Klicke ein golden markiertes Feld, um dorthin zu ziehen.'
-            : 'Du kannst diese Figur nicht bewegen.'}
+              ? 'Keine Movement points mehr – warte auf den nächsten Tag.'
+              : 'Klicke ein golden markiertes Hex, um dorthin zu ziehen.'
+            : 'Du kannst diese Character nicht bewegen.'}
       </p>
 
       {/* ---------- GM-Werkzeuge ---------- */}
@@ -165,12 +165,12 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
           <button
             className={`btn w-full ${placeMode ? 'btn-active' : 'btn-ghost'}`}
             onClick={() => setPlaceMode(!placeMode)}
-            title="Figur ohne Bewegungskosten auf ein beliebiges Feld setzen"
+            title="Character ohne Bewegungskosten auf ein beliebiges Hex setzen"
           >
             ✥ {placeMode ? 'Frei platzieren beenden' : 'Frei platzieren'}
           </button>
           <Stepper
-            label="Bewegungspunkte"
+            label="Movement points"
             value={fmt(full.movePoints)}
             onDec={() => run({ type: 'adjustMovePoints', tokenId: full.id, delta: -1 })}
             onInc={() => run({ type: 'adjustMovePoints', tokenId: full.id, delta: 1 })}
@@ -178,14 +178,14 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
           <Stepper
             label="BP pro Tag"
             value={full.maxMovePoints}
-            hint="Startwert für jeden neuen Tag"
+            hint="Starting value for each new day"
             onDec={() => run({ type: 'adjustMaxMovePoints', tokenId: full.id, delta: -1 })}
             onInc={() => run({ type: 'adjustMaxMovePoints', tokenId: full.id, delta: 1 })}
           />
           {full.kind === 'player' && (
             <>
               <Stepper
-                label="Sichtweite (Basis)"
+                label="Vision range (Basis)"
                 value={full.visionRadius}
                 onDec={() => run({ type: 'adjustVisionRadius', tokenId: full.id, delta: -1 })}
                 onInc={() => run({ type: 'adjustVisionRadius', tokenId: full.id, delta: 1 })}
@@ -193,7 +193,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
               <Stepper
                 label="Sichtbonus heute"
                 value={(full.visionBonus > 0 ? '+' : '') + full.visionBonus}
-                hint="Temporär, z. B. Baum oder Turm bestiegen. Verfällt bei Tageswechsel."
+                hint="Temporary, e.g. after climbing a tree or tower. Expires when the day ends."
                 onDec={() => run({ type: 'adjustVisionBonus', tokenId: full.id, delta: -1 })}
                 onInc={() => run({ type: 'adjustVisionBonus', tokenId: full.id, delta: 1 })}
               />
@@ -201,10 +201,10 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
                 label="Teilt Sicht & Wissen mit der Gruppe"
                 checked={full.sharesWithParty}
                 onChange={() => run({ type: 'toggleShare', tokenId: full.id })}
-                hint="Aus: Die anderen Spieler sehen diese Figur und ihre Entdeckungen nicht."
+                hint="Aus: Die anderen Player sehen diese Character und ihre Entdeckungen nicht."
               />
               <div>
-                <div className="mb-1 text-xs text-marble-300">Darf zusätzlich gesteuert werden von:</div>
+                <div className="mb-1 text-xs text-marble-300">May also be controlled by:</div>
                 <div className="flex flex-wrap gap-1">
                   {otherPlayers.map((p) => {
                     const on = full.controllers.includes(p.id);
@@ -233,19 +233,19 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-marble-300">Für Spieler</span>
+        <span className="text-xs text-marble-300">For players</span>
         <Segmented<TeamVisibility>
           value={team.visibility}
           onChange={(v) => run({ type: 'setTeamVisibility', teamId: team.id, visibility: v })}
           options={[
             { value: 'auto', label: 'Bei Sicht', hint: 'Sichtbar, sobald im Sichtfeld der Gruppe' },
             { value: 'hidden', label: 'Verborgen', hint: 'Nie sichtbar (Tarnung, Magie)' },
-            { value: 'revealed', label: 'Enthüllt', hint: 'Immer sichtbar' },
+            { value: 'revealed', label: 'Revealed', hint: 'Always visible' },
           ]}
         />
       </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-marble-300" title="Roter Marker für die Spieler – deckt kein Gelände auf">
+        <span className="text-xs text-marble-300" title="Red marker for players — does not reveal terrain">
           Tracking
         </span>
         <Segmented<'none' | 'approx' | 'exact'>
@@ -253,7 +253,7 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
           onChange={(v) => run({ type: 'setTracking', teamId: team.id, mode: v })}
           options={[
             { value: 'none', label: 'Aus' },
-            { value: 'approx', label: 'Ungefähr', hint: 'Marker mit Unsicherheitsradius 2' },
+            { value: 'approx', label: 'Approximate', hint: 'Marker with uncertainty radius 2' },
             { value: 'exact', label: 'Genau' },
           ]}
         />
@@ -264,7 +264,7 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
         </button>
       )}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-marble-300" title="Wird in einer späteren Phase für automatische Züge genutzt">
+        <span className="text-xs text-marble-300" title="Used by automated turns in a future version">
           Strategie <span className="text-marble-500">(vorbereitet)</span>
         </span>
         <select
@@ -281,10 +281,10 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
       </div>
       <div className="rounded-md bg-ink-800 p-2 text-[11px] leading-relaxed text-marble-300">
         <div>
-          <span className="text-marble-500">Persönlichkeit:</span> {team.personality}
+          <span className="text-marble-500">Personality:</span> {team.personality}
         </div>
         <div>
-          <span className="text-marble-500">Aggressivität:</span> {team.aggression}/10
+          <span className="text-marble-500">Aggression:</span> {team.aggression}/10
         </div>
         <div>
           <span className="text-marble-500">Ziele:</span> {team.goals.join(' · ')}
@@ -307,7 +307,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
   const ring = (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 
   return (
-    <Section title="Feld" right={<span className="text-[11px] tabular-nums text-marble-500">q {q} · r {r} · Ring {ring}</span>}>
+    <Section title="Hex" right={<span className="text-[11px] tabular-nums text-marble-500">q {q} · r {r} · Ring {ring}</span>}>
       <div className="flex items-start gap-3">
         <span
           className="mt-0.5 h-8 w-8 shrink-0 border border-black/50"
@@ -319,12 +319,12 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
             {hex.fog === 'explored' && <span className="ml-1.5 text-[11px] font-normal text-marble-500">(zuletzt gesehen)</span>}
           </div>
           <div className="text-xs text-marble-300">
-            {def ? def.description : 'Niemand aus deiner Gruppe war bisher in Sichtweite dieses Feldes.'}
+            {def ? def.description : 'Niemand aus deiner Gruppe war bisher in Vision range dieses Hexes.'}
           </div>
           {def && (
             <div className="mt-1 flex flex-wrap gap-1">
               <span className={`chip ${def.cost === null ? 'text-blood-400' : ''}`}>{def.cost === null ? '⛔ unpassierbar' : `${fmt(def.cost)} BP`}</span>
-              {def.difficult && <span className="chip text-amber-300">schwieriges Gelände</span>}
+              {def.difficult && <span className="chip text-amber-300">Difficult terrain</span>}
               {hex.zone !== 'safe' && (
                 <span className={`chip ${hex.zone === 'warning' ? 'text-amber-300' : 'text-blood-400'}`}>
                   {hex.zone === 'warning' ? '⚠ bald Todeszone' : hex.zone === 'closed' ? '⛔ gesperrt' : '☠ Todeszone'}
@@ -346,7 +346,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
           <p className="mt-1 text-xs leading-relaxed text-marble-300">{site.description}</p>
           {site.interactions.length > 0 && (
             <div className="mt-1.5 text-[11px]">
-              <span className="text-marble-500">Möglich: </span>
+              <span className="text-marble-500">Available: </span>
               {site.interactions.join(' · ')}
             </div>
           )}
@@ -361,12 +361,12 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
           )}
           {gmState && site.visibility && (
             <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-marble-300">Für Spieler</span>
+              <span className="text-[11px] text-marble-300">For players</span>
               <Segmented<SiteVisibility>
                 value={site.visibility}
                 onChange={(v) => run({ type: 'setSiteVisibility', siteId: site.id, visibility: v })}
                 options={[
-                  { value: 'public', label: 'Öffentlich' },
+                  { value: 'public', label: 'Public' },
                   { value: 'onSight', label: 'Bei Sicht' },
                   { value: 'hidden', label: 'Versteckt' },
                 ]}
@@ -378,7 +378,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
 
       {tokens.length > 0 && (
         <div className="mt-3">
-          <div className="label mb-1">Auf diesem Feld ({tokens.length})</div>
+          <div className="label mb-1">Auf diesem Hex ({tokens.length})</div>
           <ul className="space-y-1">
             {tokens.map((t) => (
               <li key={t.id}>
@@ -388,7 +388,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
                 >
                   <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
                   {t.name}
-                  <span className="ml-auto text-marble-500">{t.kind === 'player' ? 'Spieler' : 'Rivale'}</span>
+                  <span className="ml-auto text-marble-500">{t.kind === 'player' ? 'Player' : 'Rivale'}</span>
                 </button>
               </li>
             ))}
