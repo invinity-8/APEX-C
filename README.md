@@ -61,6 +61,30 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3d. GM events, announcements & navigation (v0.4)
+
+- **Event approval** – events no longer fire on their own. When a scheduled event is due (dawn of its day, or its
+  phase), the server marks it *awaiting* and writes a GM-only log line; nothing on the map changes. The GM gets a
+  centred dialog with a preview of the consequences and **Approve & Trigger / Reject / Postpone (next phase / next
+  day) / Edit**. Only approval applies the effects – exactly once, also when a request is retried (request ids).
+- **Day/night rules** – events are checked whenever time advances. An awaiting event stays awaiting across phase
+  changes until decided; when approved later it applies at that moment. A postponed event becomes due again at the
+  chosen phase. Rejected and triggered events never fire again.
+- **Event Library** (GM sidebar → Events) – pending decisions, available, triggered, rejected/postponed and custom
+  events with search and filters. Manual triggering always shows a preview first and uses the same server command
+  (`decideEvent`) and validation as automatic events. Custom events (movement change, terrain around a hex, reveal a
+  site) are created with `createEvent` and only take effect after approval.
+- **Arena Announcements** (GM sidebar → Announcements) – category (General, Warning, Death, World event, Custom),
+  headline and text, preview, broadcast. Announcements are part of the shared game state, so they reach every
+  player through the normal sync; players who were offline see the newest unacknowledged ones when they return.
+  The overlay is accessible (alert dialog, Acknowledge / Esc / click, auto-hides after 14 s) and has no animation
+  with *prefers-reduced-motion*. Players can re-read them in “Arena announcements”. Approved events with
+  “notify players” create a World-event announcement automatically. Only the GM can broadcast.
+- **GM navigation** – the GM sidebar is a list of collapsible sections (Events, Announcements, Rival teams, Sites,
+  Time/arena/settings, World Management, Players & Access) with search, quick-jump chips, ★ pinning and a badge for
+  events awaiting a decision. Open and pinned sections are remembered per campaign and profile on the device.
+  Collapsed sections are unmounted, so closed panels cost nothing.
+
 ## 3c. Character experience (v0.4)
 
 - **Aurora Builder PDFs** are imported from their real form fields (identity, abilities, saves and skills with proficiency,
