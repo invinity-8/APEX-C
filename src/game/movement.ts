@@ -1,16 +1,17 @@
 /**
- * Bewegungsregeln – komplett unabhängig von der Oberfläche.
- * Wegfindung: Dijkstra über passierbare Felder, Kosten = Gelände des Zielfeldes.
+ * Movement rules – completely independent of the UI.
+ * Path finding: Dijkstra over passable hexes, cost = terrain of the hex being entered.
+ * Uses a binary heap so that maps with ~5,000 hexes stay fast.
  */
 import { equals, hexKey, neighbors, parseKey, type Axial, type HexKey } from './hex';
 import { TERRAIN, type TerrainType } from './terrain';
 
-/** Liefert das (bekannte) Gelände eines Feldes oder undefined, wenn unbekannt/außerhalb. */
+/** Returns the (known) terrain of a hex, or undefined if unknown / outside the arena. */
 export type TerrainLookup = (key: HexKey) => TerrainType | undefined;
-/** Liefert einen Grund, warum ein Feld gesperrt ist, oder null. */
+/** Returns a reason why a hex is blocked, or null. */
 export type BlockCheck = (key: HexKey) => string | null;
 
-/** Kosten, um ein Feld zu betreten. null = nicht betretbar. */
+/** Cost to enter a hex. null = cannot be entered. */
 export function enterCost(terrain: TerrainType | undefined): number | null {
   if (terrain === undefined) return null;
   return TERRAIN[terrain].cost;
@@ -21,50 +22,100 @@ export interface ReachInfo {
   prev: HexKey | null;
 }
 
+/** Minimal binary min-heap keyed by cost. */
+class MinHeap {
+  private items: Array<{ key: HexKey; cost: number }> = [];
+  get size() {
+    return this.items.length;
+  }
+  push(key: HexKey, cost: number) {
+    const a = this.items;
+    a.push({ key, cost });
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (a[p].cost <= a[i].cost) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop(): { key: HexKey; cost: number } | undefined {
+    const a = this.items;
+    if (!a.length) return undefined;
+    const top = a[0];
+    const last = a.pop()!;
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < a.length && a[l].cost < a[m].cost) m = l;
+        if (r < a.length && a[r].cost < a[m].cost) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
 /**
- * Alle Felder, die mit `budget` Bewegungspunkten erreichbar sind (inkl. Start mit Kosten 0).
- * Ohne `budget` (Infinity) ist das eine vollständige Dijkstra-Suche.
+ * Generic Dijkstra over hex keys. `costOf` returns the cost to ENTER a hex, or null if blocked.
+ * Passing `goal` stops early once the goal is settled.
  */
-export function reachable(
-  start: Axial,
-  budget: number,
-  lookup: TerrainLookup,
-  blocked: BlockCheck = () => null,
+export function dijkstra(
+  startKey: HexKey,
+  costOf: (key: HexKey) => number | null,
+  budget = Infinity,
+  goal?: HexKey,
 ): Map<HexKey, ReachInfo> {
-  const startKey = hexKey(start);
   const best = new Map<HexKey, ReachInfo>([[startKey, { cost: 0, prev: null }]]);
   const done = new Set<HexKey>();
-  const frontier: HexKey[] = [startKey];
+  const heap = new MinHeap();
+  heap.push(startKey, 0);
 
-  while (frontier.length) {
-    // Feld mit den geringsten Kosten wählen (bei max. ~500 Feldern völlig ausreichend schnell).
-    let bestIdx = 0;
-    for (let i = 1; i < frontier.length; i++) {
-      if (best.get(frontier[i])!.cost < best.get(frontier[bestIdx])!.cost) bestIdx = i;
-    }
-    const key = frontier.splice(bestIdx, 1)[0];
+  while (heap.size) {
+    const { key, cost: base } = heap.pop()!;
     if (done.has(key)) continue;
+    if (base > best.get(key)!.cost + 1e-9) continue;
     done.add(key);
-    const base = best.get(key)!.cost;
+    if (goal !== undefined && key === goal) break;
 
     for (const n of neighbors(parseKey(key))) {
       const nk = hexKey(n);
       if (done.has(nk)) continue;
-      const c = enterCost(lookup(nk));
-      if (c === null || blocked(nk)) continue;
+      const c = costOf(nk);
+      if (c === null) continue;
       const total = base + c;
       if (total > budget + 1e-9) continue;
       const prev = best.get(nk);
       if (!prev || total < prev.cost - 1e-9) {
         best.set(nk, { cost: total, prev: key });
-        frontier.push(nk);
+        heap.push(nk, total);
       }
     }
   }
   return best;
 }
 
-/** Rekonstruiert den Pfad (ohne Startfeld) aus einer reachable()-Map. */
+/**
+ * All hexes reachable with `budget` movement points (including the start with cost 0).
+ * With budget = Infinity this is a full Dijkstra search.
+ */
+export function reachable(
+  start: Axial,
+  budget: number,
+  lookup: TerrainLookup,
+  blocked: BlockCheck = () => null,
+  goal?: HexKey,
+): Map<HexKey, ReachInfo> {
+  return dijkstra(hexKey(start), (k) => (blocked(k) ? null : enterCost(lookup(k))), budget, goal);
+}
+
+/** Reconstructs the path (without the start hex) from a reachable() map. */
 export function pathTo(map: Map<HexKey, ReachInfo>, goal: HexKey): Axial[] | null {
   if (!map.has(goal)) return null;
   const path: Axial[] = [];
@@ -83,16 +134,12 @@ export interface PathResult {
   cost: number;
 }
 
-/** Günstigster Pfad ohne Bewegungspunkt-Limit. */
-export function findPath(
-  start: Axial,
-  goal: Axial,
-  lookup: TerrainLookup,
-  blocked?: BlockCheck,
-): PathResult | null {
+/** Cheapest path without a movement point limit. */
+export function findPath(start: Axial, goal: Axial, lookup: TerrainLookup, blocked?: BlockCheck): PathResult | null {
   if (equals(start, goal)) return { path: [], cost: 0 };
-  const map = reachable(start, Infinity, lookup, blocked);
-  const path = pathTo(map, hexKey(goal));
+  const goalKey = hexKey(goal);
+  const map = reachable(start, Infinity, lookup, blocked, goalKey);
+  const path = pathTo(map, goalKey);
   if (!path) return null;
-  return { path, cost: map.get(hexKey(goal))!.cost };
+  return { path, cost: map.get(goalKey)!.cost };
 }

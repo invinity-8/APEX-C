@@ -1,18 +1,21 @@
 /**
- * Fog of War, Wissen der Spieler und gefilterte Ansichten.
+ * Fog of War, player knowledge and filtered views.
  *
- * WICHTIG: buildPlayerView() ist die einzige Stelle, an der entschieden wird,
- * was ein Spieler sehen darf. Im Online-Modus (Phase 2) läuft genau diese
- * Funktion auf dem Server – der Browser eines Spielers bekommt nie den GameState.
+ * IMPORTANT: buildPlayerView() is the single place that decides what a player may see.
+ * In online mode it runs on the server – a player's browser never receives the GameState.
+ * Player views contain ONLY explored/visible hexes, so the arena outline, radius and
+ * undiscovered terrain cannot be inferred from the data.
  */
-import { hexKey, hexesInRange, type Axial, type HexKey } from './hex';
+import { DIRECTIONS, add, hexKey, hexesInRange, type Axial, type HexKey } from './hex';
 import type { TerrainType } from './terrain';
 import { zoneStatus, type ZoneStatus } from './zone';
 import type {
   GameState,
+  HexFeature,
   Item,
   Knowledge,
   LogEntry,
+  Phase,
   ShrinkConfig,
   Sighting,
   Site,
@@ -23,12 +26,18 @@ import type {
 
 // ---------------- Grundfunktionen ----------------
 
-export const effectiveVision = (t: Token): number => Math.max(0, t.visionRadius + t.visionBonus);
+/** Vision radius including the temporary bonus and the day/night modifier. */
+export function effectiveVision(t: Token, state?: Pick<GameState, 'phase' | 'config'>): number {
+  const base = Math.max(0, t.visionRadius + t.visionBonus);
+  const rule = state?.config.phases?.[state.phase ?? 'day'];
+  if (!rule || rule.visionModifier === 0) return base;
+  return Math.max(Math.min(base, rule.minVision), base + rule.visionModifier);
+}
 
-/** Felder im Sichtradius einer Figur (noch ohne Sichtlinien – siehe README "Erweiterungen"). */
+/** Hexes within a character's vision (no line of sight yet – see README "Known limitations"). */
 export function visibleFrom(state: GameState, token: Token): Set<HexKey> {
   const result = new Set<HexKey>();
-  for (const h of hexesInRange(token.pos, effectiveVision(token))) {
+  for (const h of hexesInRange(token.pos, effectiveVision(token, state))) {
     const k = hexKey(h);
     if (state.hexes[k]) result.add(k);
   }
@@ -90,11 +99,15 @@ export interface HexView {
   key: HexKey;
   q: number;
   r: number;
-  /** null = unbekannt */
+  /** null = unknown (only used in the GM party-vision overlay; player views omit unknown hexes). */
   terrain: TerrainType | null;
   fog: Fog;
   zone: ZoneStatus;
   siteId?: string;
+  elevation?: number;
+  feature?: HexFeature;
+  /** Bitmask of DIRECTIONS that lead outside the arena (bit i = DIRECTIONS[i]). Only for known hexes. */
+  edges?: number;
 }
 
 export interface TokenDetails {
@@ -147,7 +160,9 @@ export interface ViewModel {
   role: 'gm' | 'player';
   viewerId: string | null;
   day: number;
-  mapRadius: number;
+  phase: Phase;
+  /** Only known to the GM. Players get null so the map size cannot be inferred. */
+  mapRadius: number | null;
   shrink: ShrinkConfig;
   hexes: HexView[];
   hexByKey: Record<HexKey, HexView>;
@@ -156,6 +171,15 @@ export interface ViewModel {
   sites: SiteView[];
   trackers: TrackerView[];
   log: LogEntry[];
+}
+
+/** Which neighbour directions of `h` lie outside the arena? */
+export function edgeMask(state: GameState, h: Axial): number {
+  let mask = 0;
+  DIRECTIONS.forEach((d, i) => {
+    if (!state.hexes[hexKey(add(h, d))]) mask |= 1 << i;
+  });
+  return mask;
 }
 
 const detailsOf = (t: Token): TokenDetails => ({
@@ -191,6 +215,9 @@ export function buildGmView(state: GameState): ViewModel {
     fog: 'visible',
     zone: zoneStatus(state.config, state.day, t),
     siteId: t.siteId,
+    elevation: t.elevation,
+    feature: t.feature,
+    edges: edgeMask(state, t) || undefined,
   }));
   const visibleToParty = new Set<HexKey>();
   for (const t of Object.values(state.tokens)) {
@@ -200,6 +227,7 @@ export function buildGmView(state: GameState): ViewModel {
     role: 'gm',
     viewerId: null,
     day: state.day,
+    phase: state.phase,
     mapRadius: state.config.mapRadius,
     shrink: { ...state.config.shrink },
     hexes,
@@ -238,8 +266,9 @@ function trackersOf(state: GameState): TrackerView[] {
 /**
  * Gefilterte Ansicht für eine Spielerfigur. Enthält ausschließlich Informationen,
  * die diese Figur (bzw. ihre teilende Gruppe) kennen darf.
- * Bewusst NICHT enthalten: Seed, Gelände unerforschter Felder, versteckte Orte,
- * GM-Notizen, Rivalen außer Sicht, Events vor ihrem Eintreten, GM-Logeinträge.
+ * Deliberately NOT included: seed, map radius, unexplored hexes (not even their
+ * coordinates), hidden sites, GM notes, rivals out of sight, events before they
+ * happen, GM-only log entries.
  */
 export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
   const group = groupOf(state, viewerId);
@@ -266,20 +295,26 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     .map(({ gmNotes: _gm, visibility: _v, ...rest }) => ({ ...rest, pos: { ...rest.pos } }));
   const siteIds = new Set(sites.map((s) => s.id));
 
-  const hexes: HexView[] = Object.entries(state.hexes).map(([key, t]) => {
+  const hexes: HexView[] = [];
+  for (const [key, t] of Object.entries(state.hexes)) {
     const isVisible = visible.has(key);
     const remembered = explored[key];
-    const terrain = isVisible ? t.terrain : (remembered ?? null);
-    return {
+    if (!isVisible && !remembered) continue; // unknown hexes are never sent
+    const hv: HexView = {
       key,
       q: t.q,
       r: t.r,
-      terrain,
-      fog: isVisible ? 'visible' : remembered ? 'explored' : 'unexplored',
+      terrain: isVisible ? t.terrain : remembered,
+      fog: isVisible ? 'visible' : 'explored',
       zone: zoneStatus(state.config, state.day, t),
-      siteId: t.siteId && siteIds.has(t.siteId) ? t.siteId : undefined,
     };
-  });
+    if (t.siteId && siteIds.has(t.siteId)) hv.siteId = t.siteId;
+    if (t.elevation !== undefined) hv.elevation = t.elevation;
+    if (t.feature) hv.feature = t.feature;
+    const edges = edgeMask(state, t);
+    if (edges) hv.edges = edges;
+    hexes.push(hv);
+  }
 
   // Figuren: eigene Gruppe vollständig, Rivalen nur aktuell sichtbar bzw. vom GM enthüllt.
   const tokens: TokenView[] = [];
@@ -317,7 +352,8 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     role: 'player',
     viewerId,
     day: state.day,
-    mapRadius: state.config.mapRadius,
+    phase: state.phase,
+    mapRadius: null,
     shrink: { ...state.config.shrink },
     hexes,
     hexByKey: Object.fromEntries(hexes.map((h) => [h.key, h])),

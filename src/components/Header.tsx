@@ -15,7 +15,7 @@ export function Header({ game, onEndDay, notify }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const players = Object.values(state.tokens).filter((t) => t.kind === 'player');
   const safe = safeRadius(state.config, view.day);
-  const shrinking = view.shrink.enabled && safe < view.mapRadius;
+  const shrinking = view.shrink.enabled && safe < state.config.mapRadius;
 
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gold-700/40 bg-ink-900/80 px-4 py-2 backdrop-blur">

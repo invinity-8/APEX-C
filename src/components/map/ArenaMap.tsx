@@ -52,7 +52,7 @@ export function ArenaMap(props: Props) {
 
   // Kartengröße in Pixeln (für "Ganze Arena zeigen")
   const bounds = useMemo(() => {
-    const R = view.mapRadius;
+    const R = view.mapRadius ?? 12;
     return { w: HEX_SIZE * Math.sqrt(3) * (2 * R + 1), h: HEX_SIZE * (3 * R + 2) };
   }, [view.mapRadius]);
 
