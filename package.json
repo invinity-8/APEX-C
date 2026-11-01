@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "dev:mock": "vite --config vite.mock.config.ts",
     "typecheck": "tsc -b",
-    "verify:db": "bash scripts/verify-db-local.sh"
+    "verify:db": "bash scripts/verify-db-local.sh",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -35,5 +36,5 @@
   "engines": {
     "node": ">=20.19"
   },
-  "description": "APEX – Arena of the Eternal Will: secure online D&D campaign platform (GM + players)"
+  "description": "APEX \u2013 Arena of the Eternal Will: secure online D&D campaign platform (GM + players)"
 }

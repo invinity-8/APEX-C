@@ -13,3 +13,7 @@ for pass in 1 2; do
 done
 echo "Migrations applied twice without errors."
 $PSQL -q -v ON_ERROR_STOP=1 -d apex_test < supabase/tests/rls_check.sql
+
+# Post-deploy checks (the same file the GitHub workflow runs against production).
+$PSQL -q -v ON_ERROR_STOP=1 -v require_legacy=1 -d apex_test < supabase/tests/post_deploy_checks.sql
+echo "Post-deploy checks passed."
