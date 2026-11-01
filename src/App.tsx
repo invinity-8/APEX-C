@@ -155,6 +155,22 @@ export default function App({ game }: { game: GameApi }) {
 
   return (
     <div className="flex min-h-full flex-col lg:h-full">
+      {game.demo && (
+        <div role="note" className="bg-arcane-500/25 px-4 py-1 text-center text-[12px] font-medium text-arcane-300">
+          DEMO MODE – this game is stored only in this browser and is NOT shared with other players.
+        </div>
+      )}
+      {game.online?.connection === 'offline' && (
+        <div role="alert" className="bg-blood-600/85 px-4 py-1.5 text-center text-[12px] font-medium text-white">
+          Connection to the APEX server lost{game.online.syncError ? ` – ${game.online.syncError.replace(/\.$/, '')}` : ''}. Reconnecting automatically. Moves cannot be
+          saved until the connection is back.
+        </div>
+      )}
+      {game.online?.connection === 'degraded' && (
+        <div role="status" className="bg-amber-500/20 px-4 py-1 text-center text-[12px] text-amber-200">
+          Live updates are temporarily unavailable – APEX checks for changes every few seconds instead.
+        </div>
+      )}
       <Header
         game={game}
         notify={notify}

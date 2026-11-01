@@ -25,6 +25,22 @@ export interface Member {
   userId: string;
   email: string;
   role: Role;
+  /** Last authenticated API contact (presence). */
+  lastSeenAt?: string | null;
+}
+
+export type SendCodeResult = { ok: true } | { ok: false; reason: 'rate_limited' | 'failed'; detail?: string };
+
+export interface HealthReport {
+  /** Can the server reach the database and read the APEX tables? */
+  database: boolean;
+  /** Is the secret key valid for the Auth admin API? */
+  authAdmin: boolean;
+  /** Does at least one campaign exist (seed migration applied)? */
+  campaignSeeded: boolean;
+  /** Has the presence migration been applied? */
+  presenceColumn: boolean;
+  errors: string[];
 }
 
 export interface Invite {
@@ -66,6 +82,17 @@ export interface CommandLogEntry {
 export interface Repo {
   /** Verifies a Supabase access token and returns the user, or null if invalid/expired. */
   userFromToken(token: string): Promise<AuthUser | null>;
+
+  /** Is this email invited to, or a member of, any campaign? */
+  isEmailAuthorized(email: string): Promise<boolean>;
+  /** Makes sure an Auth account with a confirmed email exists (created only for authorized emails). */
+  ensureAuthUser(email: string): Promise<void>;
+  /** Asks Supabase Auth to email a one-time sign-in code. Never creates accounts. */
+  sendLoginCode(email: string): Promise<SendCodeResult>;
+  /** Records presence for a member. */
+  touchMember(campaignId: string, userId: string): Promise<void>;
+  /** Configuration self-check for the setup page. */
+  health(): Promise<HealthReport>;
 
   campaignsById(ids: string[]): Promise<Campaign[]>;
   membershipsOf(userId: string): Promise<Member[]>;

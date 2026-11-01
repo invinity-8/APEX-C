@@ -55,6 +55,9 @@ export interface MemberInfo {
   email: string;
   role: Role;
   tokenIds: string[];
+  lastSeenAt: string | null;
+  /** Contacted the server within the last ~75 seconds. */
+  online: boolean;
 }
 
 export interface InviteInfo {

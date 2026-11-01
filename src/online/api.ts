@@ -12,17 +12,26 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: 'GET' | 'POST', op: string, query: Record<string, string | undefined> = {}, body?: unknown): Promise<T> {
-  const { data } = await supabase().auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new ApiError(401, 'Please sign in.', 'unauthenticated');
+async function request<T>(
+  method: 'GET' | 'POST',
+  op: string,
+  query: Record<string, string | undefined> = {},
+  body?: unknown,
+  anonymous = false,
+): Promise<T> {
+  let token: string | undefined;
+  if (!anonymous) {
+    const { data } = await supabase().auth.getSession();
+    token = data.session?.access_token;
+    if (!token) throw new ApiError(401, 'Please sign in.', 'unauthenticated');
+  }
   const params = new URLSearchParams({ op });
   for (const [k, v] of Object.entries(query)) if (v) params.set(k, v);
   let res: Response;
   try {
     res = await fetch(`/api/apex?${params}`, {
       method,
-      headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -36,12 +45,17 @@ async function request<T>(method: 'GET' | 'POST', op: string, query: Record<stri
   }
   if (!res.ok) {
     const err = (json ?? {}) as { error?: string; code?: string };
-    throw new ApiError(res.status, err.error ?? `Server error (${res.status}).`, err.code);
+    const fallback =
+      res.status === 404 ? 'The APEX server (/api/apex) was not found on this deployment.' : `The APEX server answered with an error (${res.status}).`;
+    throw new ApiError(res.status, err.error ?? fallback, err.code);
   }
   return json as T;
 }
 
 export const api = {
+  requestCode: (email: string) => request<{ sent: boolean; message: string }>('POST', 'request-code', {}, { email }, true),
+  health: () => request<import('../server/repo').HealthReport>('GET', 'health', {}, undefined, true),
+  ping: (campaign: string) => request<{ version: number }>('GET', 'ping', { campaign }),
   session: () => request<SessionInfo>('GET', 'session'),
   state: (campaign: string, as?: string) => request<CampaignPayload>('GET', 'state', { campaign, as }),
   command: (campaignId: string, command: unknown, as?: string) => request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as }),

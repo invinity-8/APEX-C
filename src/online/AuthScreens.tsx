@@ -3,7 +3,6 @@
  */
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ApexEmblem, Spinner } from '../components/brand';
-import { signupAllowed } from './config';
 
 export { ApexEmblem, Spinner };
 import { supabase } from './supabase';
@@ -11,6 +10,7 @@ import { supabase } from './supabase';
 /** Turns Supabase Auth errors into friendly English messages. */
 export function friendlyAuthError(message: string): string {
   const m = message.toLowerCase();
+  if (m.includes('expired') || m.includes('invalid') || m.includes('otp')) return 'This code is wrong or has expired. Request a new code and use the most recent email.';
   if (m.includes('invalid login credentials')) return 'The email address or password is incorrect.';
   if (m.includes('email not confirmed')) return 'Please confirm your email address first – check your inbox for the confirmation link.';
   if (m.includes('rate limit') || m.includes('too many')) return 'Too many attempts. Please wait a minute and try again.';
@@ -82,126 +82,137 @@ function Message({ kind, children }: { kind: 'error' | 'info'; children: ReactNo
   );
 }
 
-type Mode = 'signin' | 'forgot' | 'signup';
-
+/**
+ * Invite-only login with a one-time email code:
+ *  1. The player enters their email. The APEX server asks Supabase to send a code – but only
+ *     for invited/member addresses (the answer looks the same for everyone).
+ *  2. The player types the 6-digit code; Supabase Auth verifies it (single use, expiring, rate-limited).
+ * No passwords, no public self-registration.
+ */
 export function LoginPage() {
-  const [mode, setMode] = useState<Mode>('signin');
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    setError(null);
-    setInfo(null);
     headingRef.current?.focus();
-  }, [mode]);
+  }, [step]);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
+  const sendCode = async () => {
     setBusy(true);
     setError(null);
     setInfo(null);
-    const auth = supabase().auth;
     try {
-      if (mode === 'signin') {
-        const { error } = await auth.signInWithPassword({ email: email.trim(), password });
-        if (error) setError(friendlyAuthError(error.message));
-      } else if (mode === 'forgot') {
-        const { error } = await auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/` });
-        if (error) setError(friendlyAuthError(error.message));
-        else setInfo('If an account exists for this address, a reset link is on its way. Check your inbox (and spam folder).');
-      } else {
-        const { data, error } = await auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: `${window.location.origin}/` } });
-        if (error) setError(friendlyAuthError(error.message));
-        else if (!data.session) setInfo('Account created. Please confirm your email address via the link we just sent you.');
-      }
-    } catch (err) {
-      setError(friendlyAuthError((err as Error).message));
+      const { api } = await import('./api');
+      await api.requestCode(email.trim());
+      setStep('code');
+      setCode('');
+      setCooldown(60);
+      setInfo(`If ${email.trim()} is invited to APEX, a 6-digit code is on its way. Check your inbox (and spam folder). The code can be used once and expires soon.`);
+    } catch (e) {
+      setError((e as Error).message);
+      if ((e as { code?: string }).code === 'rate_limited') setCooldown(60);
     } finally {
       setBusy(false);
     }
   };
 
-  const title = mode === 'signin' ? 'Enter the Arena' : mode === 'forgot' ? 'Reset your password' : 'Create your account';
+  const verify = async (e: FormEvent) => {
+    e.preventDefault();
+    const token = code.replace(/\D/g, '');
+    if (token.length < 6) return setError('Please enter the complete code from the email.');
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase().auth.verifyOtp({ email: email.trim(), token, type: 'email' });
+    setBusy(false);
+    if (error) setError(friendlyAuthError(error.message));
+    // On success onAuthStateChange (OnlineRoot) opens the campaign.
+  };
+
   return (
     <AuthShell>
-      <form onSubmit={submit} className="space-y-4" noValidate={false} aria-busy={busy}>
-        <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-marble-50 focus:outline-none">
-          {title}
-        </h2>
-        <Field label="Email address" type="email" value={email} onChange={setEmail} autoComplete="email" autoFocus />
-        {mode !== 'forgot' && (
-          <Field
-            label="Password"
-            type="password"
-            value={password}
-            onChange={setPassword}
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-            minLength={mode === 'signup' ? 8 : undefined}
-          />
-        )}
-        {error && <Message kind="error">{error}</Message>}
-        {info && <Message kind="info">{info}</Message>}
-        <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy}>
-          {busy ? <Spinner /> : null}
-          {mode === 'signin' ? 'Sign in' : mode === 'forgot' ? 'Send reset link' : 'Create account'}
-        </button>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          {mode === 'signin' ? (
-            <button type="button" className="text-gold-300 underline-offset-2 hover:underline" onClick={() => setMode('forgot')}>
-              Forgot your password?
+      {step === 'email' ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void sendCode();
+          }}
+          className="space-y-4"
+          aria-busy={busy}
+        >
+          <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-marble-50 focus:outline-none">
+            Enter the Arena
+          </h2>
+          <p className="text-xs leading-relaxed text-marble-300">Enter the email address your Game Master invited. We will email you a one-time code – no password needed.</p>
+          <Field label="Email address" type="email" value={email} onChange={setEmail} autoComplete="email" autoFocus />
+          {error && <Message kind="error">{error}</Message>}
+          <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy || cooldown > 0}>
+            {busy ? <Spinner /> : null}
+            {cooldown > 0 ? `Send code (wait ${cooldown}s)` : 'Send me a code'}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={verify} className="space-y-4" aria-busy={busy}>
+          <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-marble-50 focus:outline-none">
+            Enter your code
+          </h2>
+          {info && <Message kind="info">{info}</Message>}
+          <CodeField value={code} onChange={setCode} />
+          {error && <Message kind="error">{error}</Message>}
+          <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy}>
+            {busy ? <Spinner /> : null} Sign in
+          </button>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <button
+              type="button"
+              className="text-gold-300 underline-offset-2 hover:underline"
+              onClick={() => {
+                setStep('email');
+                setError(null);
+              }}
+            >
+              ← Use a different email
             </button>
-          ) : (
-            <button type="button" className="text-gold-300 underline-offset-2 hover:underline" onClick={() => setMode('signin')}>
-              ← Back to sign in
+            <button type="button" className="text-marble-300 underline-offset-2 hover:underline disabled:opacity-50" disabled={busy || cooldown > 0} onClick={() => void sendCode()}>
+              {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Send a new code'}
             </button>
-          )}
-          {signupAllowed && mode === 'signin' && (
-            <button type="button" className="text-marble-300 underline-offset-2 hover:underline" onClick={() => setMode('signup')}>
-              Invited? Create an account
-            </button>
-          )}
-        </div>
-      </form>
+          </div>
+        </form>
+      )}
     </AuthShell>
   );
 }
 
-/** Shown after a password-recovery or invitation link. */
-export function SetPasswordPage({ onDone, invite }: { onDone: () => void; invite: boolean }) {
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (password.length < 8) return setError('Please use at least 8 characters.');
-    if (password !== confirm) return setError('The two passwords do not match.');
-    setBusy(true);
-    setError(null);
-    const { error } = await supabase().auth.updateUser({ password });
-    setBusy(false);
-    if (error) return setError(friendlyAuthError(error.message));
-    window.history.replaceState(null, '', window.location.pathname);
-    onDone();
-  };
-
+function CodeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const id = useId();
   return (
-    <AuthShell subtitle={invite ? 'Welcome! Choose a password for your account.' : 'Choose a new password for your account.'}>
-      <form onSubmit={submit} className="space-y-4" aria-busy={busy}>
-        <h2 className="font-display text-lg font-bold text-marble-50">Set password</h2>
-        <Field label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" autoFocus minLength={8} />
-        <Field label="Repeat password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" minLength={8} />
-        {error && <Message kind="error">{error}</Message>}
-        <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy}>
-          {busy ? <Spinner /> : null} Save password
-        </button>
-      </form>
-    </AuthShell>
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-marble-300">
+        Code from the email
+      </label>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9]*"
+        autoFocus
+        required
+        placeholder="123456"
+        className="w-full rounded-lg border border-ink-500 bg-ink-900 px-3 py-3 text-center font-mono text-2xl tracking-[0.5em] text-marble-50 placeholder:text-marble-500/40 focus:border-gold-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/40"
+      />
+    </div>
   );
 }
 

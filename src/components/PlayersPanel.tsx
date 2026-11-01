@@ -40,7 +40,12 @@ export function PlayersPanel({ state, online, notify }: Props) {
 
   useEffect(() => {
     void act({ action: 'overview' });
-  }, [act]);
+    // Keep the presence indicators current without spamming notifications.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') online.admin({ action: 'overview' }).then(setData, () => undefined);
+    }, 20_000);
+    return () => clearInterval(id);
+  }, [act, online]);
 
   const players = Object.values(state.tokens).filter((t) => t.kind === 'player');
   const owner = (tokenId: string) => data?.members.find((m) => m.tokenIds.includes(tokenId));
@@ -68,6 +73,11 @@ export function PlayersPanel({ state, online, notify }: Props) {
             {data.members.map((m) => (
               <li key={m.userId} className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 text-xs">
                 <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${m.online ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,.8)]' : 'bg-ink-500'}`}
+                    title={m.online ? 'Online now' : m.lastSeenAt ? `Last seen ${new Date(m.lastSeenAt).toLocaleString('en-GB')}` : 'Has not signed in yet'}
+                    aria-label={m.online ? 'online' : 'offline'}
+                  />
                   <span className="min-w-0 flex-1 truncate text-marble-50" title={m.email}>
                     {m.email}
                   </span>
@@ -89,6 +99,7 @@ export function PlayersPanel({ state, online, notify }: Props) {
                   </button>
                 </div>
                 <div className="mt-1 text-[11px] text-marble-500">
+                  {m.online ? <span className="text-emerald-300">online · </span> : m.lastSeenAt ? `last seen ${timeAgo(m.lastSeenAt)} · ` : 'never signed in · '}
                   {m.tokenIds.length ? `Controls: ${m.tokenIds.map((id) => state.tokens[id]?.name ?? id).join(', ')}` : m.role === 'player' ? 'No character assigned' : 'Game Master'}
                 </div>
               </li>
@@ -115,8 +126,8 @@ export function PlayersPanel({ state, online, notify }: Props) {
           )}
           <InviteForm players={players} onInvite={(email, role, tokenIds) => act({ action: 'invite', email, role, tokenIds }, `Invitation saved for ${email}.`)} />
           <p className="text-[11px] leading-relaxed text-marble-500">
-            Invited people sign in with this email address (create the account in Supabase → Authentication → <i>Invite user</i>, or let them sign up if
-            enabled). Access is granted on their first sign-in with a confirmed email.
+            Invited people open APEX, enter this email address and receive a one-time 6-digit code by email. Nobody else can request a code or join.
+            “Online” means the person’s APEX window contacted the server within the last ~75 seconds.
           </p>
         </div>
       ) : tab === 'characters' ? (
@@ -182,6 +193,13 @@ export function PlayersPanel({ state, online, notify }: Props) {
       )}
     </Section>
   );
+}
+
+function timeAgo(iso: string): string {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (min < 60) return `${Math.max(1, min)} min ago`;
+  const h = Math.round(min / 60);
+  return h < 48 ? `${h} h ago` : new Date(iso).toLocaleDateString('en-GB');
 }
 
 function InviteForm({ players, onInvite }: { players: GameState['tokens'][string][]; onInvite: (email: string, role: 'gm' | 'player', tokenIds: string[]) => Promise<boolean> }) {
