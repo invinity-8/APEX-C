@@ -21,29 +21,22 @@ which verifies the Supabase session and runs the game rules on the server.
 
 ---
 
-## 1. Database migrations (Supabase → SQL Editor)
+## 1. Database migrations (automatic)
 
-The repository contains four idempotent, additive migrations. They are safe to run twice, never delete data and
-do **not** touch the manually created `apex_invites` / `apex_access` tables.
+Migrations are applied by the **Supabase GitHub integration** ("Deploy to production", branch `main`) when a PR is
+merged. Do not paste them into the SQL editor any more – that bypasses the migration history.
+German step-by-step guide: **[MIGRATIONS_DE.md](MIGRATIONS_DE.md)**.
 
-1. Open Supabase → **SQL Editor** → *New query*.
-2. Paste and run `supabase/migrations/20261101000100_apex_online.sql`.
-3. Paste and run `supabase/migrations/20261101000200_apex_seed_main_campaign.sql`
-   (creates the campaign *APEX – Arena of the Eternal Will* and the first three invitations;
-   it also imports rows from `apex_access` if that table has `email` and `role` columns).
-4. Run `supabase/migrations/20261102000100_apex_presence_and_grants.sql` (presence column + explicit server grants).
-   Then `supabase/migrations/20261103000100_apex_profiles.sql` (the five "Who are you?" profiles, no emails).
-   After the first GM sign-in, link Hannah/Jean (later Simon/Jerba) in *Players & Access → Profiles*.
-5. Run `supabase/verify_security.sql` and compare with the expected results in its comments:
-   - RLS enabled on every `apex_` table → 0 rows
-   - client grants → only `SELECT` on `apex_campaign_heads` and `apex_campaign_members` for `authenticated`
-   - realtime publication contains `apex_campaign_heads` → 1 row
-
-> Using the Supabase CLI instead? `supabase db push` applies the same files. The old v0.1 draft was
-> moved to `supabase/drafts/` so it is **never** executed.
-
-Local verification (any machine with PostgreSQL): `npm run verify:db` runs both migrations twice
-against a throw-away database with a Supabase stub and checks the RLS behaviour.
+- `supabase/remote_history.txt` lists versions registered in production. `npm run check:migrations` (and the
+  workflow `.github/workflows/supabase-migrations.yml`) fail when a registered version has no file, a pending
+  migration is older than the newest applied one, or a pending migration contains unreviewed destructive SQL.
+- With the secret `SUPABASE_CI_DB_URL` (read-only role `apex_ci_readonly`), the workflow compares with the live
+  history on every PR and, after each push to `main`, waits for the integration, then runs
+  `supabase/tests/post_deploy_checks.sql` (tables, RLS, grants, policies, trigger, realtime, legacy tables) and the
+  health endpoint (`APEX_URL`).
+- The historical migration `20261101094428_apex_initial_account_allowlist` exists only in the production history and must
+  be restored from `supabase_migrations.schema_migrations.statements` (never re-written by hand).
+- `npm run verify:db` runs all migrations twice plus RLS and post-deploy checks on a local PostgreSQL.
 
 ---
 

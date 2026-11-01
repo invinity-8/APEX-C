@@ -21,8 +21,8 @@ suche nach dem ähnlichsten Begriff.
 | eine Fehlerseite „404“ oder die normale APEX-Seite | Der Server-Teil ist auf dieser Version noch nicht installiert (die neue Version ist noch nicht live). | Teil E2 (nach dem Merge) |
 | `"serverConfigured": false` | In Vercel fehlen `SUPABASE_URL` und/oder `SUPABASE_SECRET_KEY`. | Teil D |
 | `"database": false` | Die Datenbank-Tabellen fehlen oder der Schlüssel ist falsch. | Teil B, dann Teil D |
-| `"presenceColumn": false` | Die dritte Migration fehlt. | Teil B, Schritt 5 |
-| `"profilesTable": false` | Die vierte Migration (Profile) fehlt. | Teil B, Schritt 5 |
+| `"presenceColumn": false` | Die dritte Migration fehlt. | Teil B (MIGRATIONS_DE.md) |
+| `"profilesTable": false` | Die vierte Migration (Profile) fehlt. | Teil B (MIGRATIONS_DE.md) |
 | `"authAdmin": false` | Der geheime Schlüssel ist falsch oder abgelaufen. | Teil D |
 | alles `true`, `"errors": []` | Server und Datenbank sind in Ordnung. | Teil F (Test) |
 
@@ -36,35 +36,21 @@ Fall stattdessen deutlich „APEX is not connected yet“ und startet **kein** l
 
 ---
 
-## Teil B – Datenbank einrichten (Supabase, ca. 10 Minuten)
+## Teil B – Datenbank einrichten (automatisch über GitHub)
 
-Die Skripte löschen **keine** vorhandenen Daten und dürfen auch mehrfach ausgeführt werden.
+**Neu:** Die Datenbank-Änderungen werden **nicht mehr von Hand** in den SQL Editor kopiert. Sie werden automatisch
+eingespielt, sobald ein Pull Request nach `main` gemergt wird – über die Supabase-GitHub-Integration.
+Von Hand eingefügte Skripte tauchen nicht in der Migrations-Historie auf und bringen sie durcheinander.
 
-1. Öffne **https://supabase.com/dashboard** und melde dich an.
-2. Klicke auf das Projekt **APEX MAIN**.
-3. Klicke links auf **SQL Editor** (Symbol mit `>_`).
-4. Klicke auf **New query** (oder „+“).
-5. Führe die drei Dateien **in dieser Reihenfolge** aus. Für jede Datei:
-   1. Öffne die Datei auf GitHub (Repository → Ordner `supabase/migrations`).
-   2. Klicke auf die Datei, dann oben rechts auf **Copy raw file** (Symbol mit zwei Blättern).
-   3. Füge den Text im SQL Editor ein (alten Text vorher löschen).
-   4. Klicke unten rechts auf **Run**.
-   5. Es muss „Success“ erscheinen. Hinweise („NOTICE … skipping“) sind normal.
+➡ **Die vollständige Anleitung steht in [MIGRATIONS_DE.md](MIGRATIONS_DE.md).** Dort ist auch beschrieben, wie die
+fehlende alte Migration `20261101094428_apex_initial_account_allowlist` wiederhergestellt wird.
 
-   | Reihenfolge | Datei |
-   |---|---|
-   | 1 | `20261101000100_apex_online.sql` |
-   | 2 | `20261101000200_apex_seed_main_campaign.sql` |
-   | 3 | `20261102000100_apex_presence_and_grants.sql` |
-   | 4 | `20261103000100_apex_profiles.sql` (die fünf Profile GM, Hannah, Jean, Simon, Jerba – **ohne** E-Mail-Adressen) |
-
-6. Prüfen: Führe auf dieselbe Weise `supabase/verify_security.sql` aus. Erwartet:
-   - erste Tabelle: **keine Zeilen**
-   - zweite Tabelle: genau zwei Zeilen (`apex_campaign_heads` und `apex_campaign_members`, jeweils `authenticated`, `SELECT`)
-   - dritte Tabelle: **eine** Zeile mit `apex_campaign_heads`
-   - Zusätzlich im **Table Editor** → Tabelle **apex_profiles**: fünf Zeilen (gm, hannah, jean, simon, jerba), Spalte `email` leer.
-7. Klicke links auf **Table Editor** → Tabelle **apex_campaign_invites**. Dort müssen die drei eingeladenen
-   E-Mail-Adressen stehen (deine als `gm`, die beiden anderen als `player`).
+Nach dem automatischen Einspielen kannst du zur Kontrolle im **SQL Editor** `supabase/verify_security.sql` ausführen
+(nur lesend). Erwartet:
+- erste Tabelle: **keine Zeilen**
+- zweite Tabelle: genau zwei Zeilen (`apex_campaign_heads` und `apex_campaign_members`, jeweils `authenticated`, `SELECT`)
+- dritte Tabelle: **eine** Zeile mit `apex_campaign_heads`
+- im **Table Editor** → **apex_profiles**: fünf Zeilen (gm, hannah, jean, simon, jerba)
 
 ---
 
@@ -181,7 +167,7 @@ nur in deiner Datenbank.
 **Profil wechseln oder Zugang entziehen:** Bei einem Profil **Unlink** klicken – die bisherige Person kommt sofort
 nicht mehr in dieses Profil. Eine neue Adresse eintragen und **Save** – ab dann gilt nur diese.
 
-> Hinweis: Die ältere Datei `20261101000200_apex_seed_main_campaign.sql` enthält noch die drei ersten E-Mail-Adressen
+> Hinweis: Die ältere Datei `20261101100100_apex_seed_main_campaign.sql` enthält noch die drei ersten E-Mail-Adressen
 > (als Einladungen). Falls dein GitHub-Repository öffentlich ist, solltest du das wissen. Die neuen Profile
 > funktionieren ohne Adressen im Code.
 
