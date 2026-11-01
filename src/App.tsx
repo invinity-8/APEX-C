@@ -156,7 +156,7 @@ export default function App() {
         game={game}
         notify={notify}
         onEndDay={() => {
-          if (run({ type: 'endDay' }).ok) notify(`Tag ${state.day + 1} beginnt.`, 'info');
+          if (run({ type: 'endDay' }).ok) notify(`Day ${state.day + 1} beginnt.`, 'info');
         }}
       />
       <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -222,7 +222,7 @@ export default function App() {
                 game.reset({ radius, seed });
                 setSelectedTokenId(null);
                 setSelectedHex(null);
-                notify(`Neue Arena erzeugt (Radius ${radius}).`, 'info');
+                notify(`New arena erzeugt (Radius ${radius}).`, 'info');
               }}
             />
           ) : (
