@@ -26,14 +26,14 @@ npm run dev            # demo mode at http://localhost:5173
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Development server (demo mode unless `.env.local` configures Supabase) |
-| `npm test` | 70 unit/security tests (Vitest) |
+| `npm test` | 79 unit/security tests (Vitest) |
 | `npm run typecheck` | TypeScript check |
 | `npm run build` | Type check + production bundle in `dist/` |
 | `npm run dev:mock` | Online mode against a **local mock** of Supabase (http://localhost:5174) |
-| `node dev/e2e-online.cjs` | 21 multi-browser end-to-end checks against `dev:mock` (needs Playwright) |
+| `node dev/e2e-online.cjs` | 20 multi-browser acceptance checks against `dev:mock` (needs Playwright) |
 | `npm run verify:db` | Runs the SQL migrations twice + RLS tests on a local PostgreSQL |
 
-Mock accounts for `dev:mock` (password `apex-test-123`): `gm@apex.test`, `player1@apex.test`,
+Mock accounts for `dev:mock` (email-code login; the code is printed in the terminal): `gm@apex.test`, `player1@apex.test`,
 `player2@apex.test`, `stranger@apex.test` (not invited).
 
 To use the real Supabase project locally, copy `.env.example` to `.env.local` and fill in the values
@@ -103,7 +103,7 @@ Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## 5. Deployment & environment variables
 
-Step-by-step: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (migrations, Auth settings, Vercel variables,
+**German click-by-click guide: [`docs/SETUP_DE.md`](docs/SETUP_DE.md).** English reference: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (migrations, Auth settings, Vercel variables,
 preview test checklist, go-live and rollback).
 
 | Variable | Where | Notes |
@@ -112,17 +112,20 @@ preview test checklist, go-live and rollback).
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel (browser) | publishable/anon key – public, protected by RLS |
 | `SUPABASE_URL` | Vercel (server) | same URL |
 | `SUPABASE_SECRET_KEY` | Vercel (server) | secret/service_role key – **never** with a `VITE_` prefix |
-| `VITE_APEX_ALLOW_DEMO` | optional | `true` keeps `/?demo` available when online mode is on |
-| `VITE_APEX_ALLOW_SIGNUP` | optional | `true` shows "Create an account" (access still invite-only) |
+| `VITE_APEX_ALLOW_DEMO` | optional | `true` makes the local demo reachable via `/?demo` (never automatic) |
 
-Without these variables every build stays in demo mode – the current production site keeps working unchanged
-until the online mode is configured.
+Production builds **never** fall back to a local game: without these variables they show the notice
+*“APEX is not connected yet”*. Check a deployment any time at `/api/apex?op=health` (no secrets in the answer).
+
+**Login:** invite-only, passwordless. A player enters their email; if it is invited, Supabase Auth emails a
+single-use 6-digit code (expiring, rate-limited, verified by Supabase). Uninvited addresses get the same neutral
+answer and no email. The GM sees who is online in *Players & Access*.
 
 ---
 
 ## 6. Verified in v0.2
 
-- `npm test`: 70 tests – hex math, deterministic coherent generation (radius 12 and 39), reachability, travel
+- `npm test`: 79 tests – hex math, deterministic coherent generation (radius 12 and 39), reachability, travel
   scale, movement costs incl. rivers, permissions, Fog of War, **no secrets / no map size / no outline in player
   views**, boundary revealed only locally, day/night sequence, MP reset at dawn, night vision, phase events,
   single shrink step per day, save migration, and 19 server security tests (unauthenticated, uninvited,
@@ -131,7 +134,7 @@ until the online mode is configured.
 - `npm run verify:db`: migrations apply twice without errors on PostgreSQL; RLS denies players reading/writing
   game state, invitations, assignments, snapshots and escalating their role; strangers see nothing.
 - `vercel build` (local): the `/api/apex` function bundles and answers correctly (401/400) when executed.
-- `dev:mock` + `dev/e2e-online.cjs`: 21/21 checks across separate browser sessions (login, denial, live sync of
+- `dev:mock` + `dev/e2e-online.cjs`: 20/20 acceptance checks across separate browser sessions (email-code login, denial, live sync of
   moves and phase changes via Realtime, forbidden actions, refresh persistence, sign-out).
 - Visual checks in Chromium: GM full map, player exploration view, night lighting, landmark, login page.
 

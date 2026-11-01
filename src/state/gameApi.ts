@@ -14,7 +14,13 @@ export interface DispatchResult {
   error?: string;
 }
 
-export type Connection = 'live' | 'connecting' | 'offline';
+/**
+ * live      – server reachable and realtime push active
+ * degraded  – server reachable, realtime unavailable → changes are fetched every few seconds
+ * offline   – the server cannot be reached; nothing can be saved
+ * connecting – initial state
+ */
+export type Connection = 'live' | 'degraded' | 'connecting' | 'offline';
 
 export interface DemoControls {
   session: Session;
@@ -32,6 +38,8 @@ export interface OnlineControls {
   activeCharacter: string | null;
   setActiveCharacter: (id: string) => void;
   connection: Connection;
+  /** Human-readable reason of the last failed sync/save, if any. */
+  syncError: string | null;
   version: number;
   lastSync: Date | null;
   refresh: () => void;

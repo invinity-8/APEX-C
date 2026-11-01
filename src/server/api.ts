@@ -50,13 +50,28 @@ class HttpError extends Error {
 
 const ok = (body: unknown): ApiResponse => ({ status: 200, body });
 
+/** A member counts as "online" if the client contacted the server within this window. */
+export const PRESENCE_WINDOW_MS = 75_000;
+const TOUCH_EVERY_MS = 20_000;
+
 export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
   try {
+    // ---- public operations (no session yet) ----
+    if (req.method === 'GET' && req.op === 'health') return ok(await repo.health());
+    if (req.method === 'POST' && req.op === 'request-code') return ok(await requestCode(req.body, repo));
+
     const user = await authenticate(req, repo);
     const memberships = await resolveMemberships(user, repo);
+    await touch(memberships, repo);
     switch (`${req.method} ${req.op}`) {
       case 'GET session':
         return ok(await sessionInfo(user, memberships, repo));
+      case 'GET ping': {
+        // Heartbeat: keeps presence fresh and lets clients detect missed realtime pings.
+        const m = pickMembership(memberships, req.query.campaign);
+        const s = await repo.loadState(m.campaignId);
+        return ok({ version: s?.version ?? 0 });
+      }
       case 'GET state': {
         const m = pickMembership(memberships, req.query.campaign);
         return ok(await campaignPayload(m, repo, req.query.as));
@@ -72,6 +87,36 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
     if (e instanceof HttpError) return { status: e.status, body: { error: e.message, code: e.code } };
     console.error('[apex-api]', e);
     return { status: 500, body: { error: 'Internal server error. Please try again.' } };
+  }
+}
+
+// ---------------------------------------------------------------- email code login
+
+/**
+ * Sends a one-time sign-in code, but only to invited/member addresses. The answer is the same
+ * whether or not the address is authorised, so the endpoint cannot be used to discover who plays.
+ * Codes are generated, rate-limited, expired and verified by Supabase Auth – never by APEX.
+ */
+async function requestCode(body: unknown, repo: Repo) {
+  const generic = { sent: true, message: 'If this email address is invited to APEX, a 6-digit code is on its way.' };
+  if (!isObj(body) || !isEmail(body.email)) throw new HttpError(400, 'Please enter a valid email address.');
+  const email = body.email.trim().toLowerCase();
+  if (!(await repo.isEmailAuthorized(email))) return generic;
+  await repo.ensureAuthUser(email);
+  const res = await repo.sendLoginCode(email);
+  if (!res.ok) {
+    if (res.reason === 'rate_limited') throw new HttpError(429, 'A code was requested very recently. Please wait a minute, then try again.', 'rate_limited');
+    console.error('[apex-api] sending code failed:', res.detail);
+    throw new HttpError(502, 'The code could not be sent right now. Please try again in a minute or contact your Game Master.', 'send_failed');
+  }
+  return generic;
+}
+
+async function touch(memberships: Member[], repo: Repo) {
+  const now = Date.now();
+  for (const m of memberships) {
+    const last = m.lastSeenAt ? Date.parse(m.lastSeenAt) : 0;
+    if (now - last > TOUCH_EVERY_MS) await repo.touchMember(m.campaignId, m.userId).catch(() => undefined);
   }
 }
 
@@ -356,6 +401,8 @@ async function adminOverview(cid: string, repo: Repo): Promise<AdminOverview> {
       email: x.email,
       role: x.role,
       tokenIds: assignments.filter((a) => a.userId === x.userId).map((a) => a.tokenId),
+      lastSeenAt: x.lastSeenAt ?? null,
+      online: !!x.lastSeenAt && Date.now() - Date.parse(x.lastSeenAt) < PRESENCE_WINDOW_MS,
     })),
     invites: invites.map((i) => ({ email: i.email, role: i.role, tokenIds: i.tokenIds, acceptedAt: i.acceptedAt })),
     snapshots,

@@ -190,9 +190,9 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
   );
 }
 
-function ConnectionDot({ state, lastSync, onClick }: { state: 'live' | 'connecting' | 'offline'; lastSync: Date | null; onClick: () => void }) {
-  const label = state === 'live' ? 'Live' : state === 'connecting' ? 'Connecting…' : 'Offline – retrying';
-  const color = state === 'live' ? 'bg-emerald-400' : state === 'connecting' ? 'bg-amber-300' : 'bg-blood-400';
+function ConnectionDot({ state, lastSync, onClick }: { state: 'live' | 'degraded' | 'connecting' | 'offline'; lastSync: Date | null; onClick: () => void }) {
+  const label = state === 'live' ? 'Live' : state === 'degraded' ? 'Synced (polling)' : state === 'connecting' ? 'Connecting…' : 'Offline – retrying';
+  const color = state === 'live' ? 'bg-emerald-400' : state === 'degraded' || state === 'connecting' ? 'bg-amber-300' : 'bg-blood-400';
   return (
     <button
       onClick={onClick}

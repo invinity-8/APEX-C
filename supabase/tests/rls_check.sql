@@ -44,3 +44,9 @@ do $$ begin assert (select count(*) from apex_campaign_heads) = 0, 'stranger see
 rollback;
 
 \echo 'RLS checks passed.'
+
+-- Presence column (migration 20261102000100) exists and is not readable for other members.
+do $$ begin
+  assert exists (select 1 from information_schema.columns where table_name = 'apex_campaign_members' and column_name = 'last_seen_at'), 'last_seen_at missing';
+end $$;
+\echo 'Presence migration checks passed.'

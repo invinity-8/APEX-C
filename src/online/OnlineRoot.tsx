@@ -9,34 +9,38 @@ import { DEFAULT_RADIUS, DEFAULT_SEED, MAX_RADIUS, MIN_RADIUS } from '../data/de
 import { hexCount } from '../game/hex';
 import type { SessionInfo } from '../server/protocol';
 import { api, ApiError } from './api';
-import { LoginPage, MessageScreen, SetPasswordPage, Splash, Spinner } from './AuthScreens';
-import { authLinkType, supabase } from './supabase';
+import { LoginPage, MessageScreen, Splash, Spinner } from './AuthScreens';
+import { supabase } from './supabase';
 import { useOnlineGame } from './useOnlineGame';
 
 export function OnlineRoot() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [setPassword, setSetPassword] = useState<null | 'recovery' | 'invite'>(
-    authLinkType === 'recovery' ? 'recovery' : authLinkType === 'invite' ? 'invite' : null,
-  );
 
   useEffect(() => {
     const auth = supabase().auth;
     void auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = auth.onAuthStateChange((event, s) => {
-      setSession(s);
-      if (event === 'PASSWORD_RECOVERY') setSetPassword('recovery');
-      if (event === 'SIGNED_OUT') setSetPassword(null);
-    });
+    const { data } = auth.onAuthStateChange((_event, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
 
+  /** Always ends the session in this browser, even if the network request fails. */
   const signOut = useCallback(() => {
-    void supabase().auth.signOut();
+    const auth = supabase().auth;
+    void auth
+      .signOut({ scope: 'local' })
+      .catch(() => undefined)
+      .finally(() => {
+        try {
+          for (const k of Object.keys(localStorage)) if (k.startsWith('sb-') && k.endsWith('-auth-token')) localStorage.removeItem(k);
+        } catch {
+          /* ignore */
+        }
+        setSession(null);
+      });
   }, []);
 
   if (session === undefined) return <Splash text="Opening the gates…" />;
   if (!session) return <LoginPage />;
-  if (setPassword) return <SetPasswordPage invite={setPassword === 'invite'} onDone={() => setSetPassword(null)} />;
   return <CampaignLoader key={session.user.id} signOut={signOut} />;
 }
 

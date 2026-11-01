@@ -22,12 +22,28 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+/** Non-secret deployment facts for the setup check (which Git commit is live, which variables are missing). */
+function deploymentInfo() {
+  return {
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    branch: process.env.VERCEL_GIT_COMMIT_REF ?? null,
+    environment: process.env.VERCEL_ENV ?? null,
+    missingServerVariables: [
+      ...(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL ? [] : ['SUPABASE_URL']),
+      ...(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY ? [] : ['SUPABASE_SECRET_KEY']),
+    ],
+  };
+}
+
 async function handle(request: Request): Promise<Response> {
+  const url = new URL(request.url);
   const env = readServerEnv(process.env);
-  if (!env) return json(503, { error: 'Online mode is not configured on the server.', code: 'not_configured' });
+  if (!env) {
+    if (url.searchParams.get('op') === 'health') return json(200, { serverConfigured: false, ...deploymentInfo() });
+    return json(503, { error: 'Online mode is not configured on the server.', code: 'not_configured' });
+  }
   repo ??= new SupabaseRepo(env);
 
-  const url = new URL(request.url);
   const auth = request.headers.get('authorization') ?? '';
   const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : null;
   let body: unknown = null;
@@ -50,6 +66,7 @@ async function handle(request: Request): Promise<Response> {
     },
     repo,
   );
+  if (res.status === 200 && url.searchParams.get('op') === 'health') return json(200, { serverConfigured: true, ...deploymentInfo(), ...(res.body as object) });
   return json(res.status, res.body);
 }
 

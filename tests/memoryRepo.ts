@@ -1,5 +1,5 @@
 import type { GameState } from '../src/game/types';
-import type { Assignment, AuthUser, Campaign, CommandLogEntry, Invite, Member, Repo, SnapshotInfo, StoredState } from '../src/server/repo';
+import type { Assignment, AuthUser, Campaign, CommandLogEntry, HealthReport, Invite, Member, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
 
 /** In-memory Repo with the same contract as SupabaseRepo – used by the security tests. */
 export class MemoryRepo implements Repo {
@@ -14,8 +14,37 @@ export class MemoryRepo implements Repo {
   /** Test hook: runs before the next optimistic write (simulates a concurrent writer). */
   beforeSave: (() => void) | null = null;
 
+  /** Auth accounts by email (simulates Supabase Auth users). */
+  authAccounts = new Map<string, { confirmed: boolean }>();
+  sentCodes: string[] = [];
+  /** Test hook: next sendLoginCode result. */
+  nextSendResult: SendCodeResult | null = null;
+
   async userFromToken(token: string) {
     return this.users.get(token) ?? null;
+  }
+  async isEmailAuthorized(email: string) {
+    return this.inviteList.some((i) => i.email === email && !i.acceptedAt) || this.memberList.some((m) => m.email === email);
+  }
+  async ensureAuthUser(email: string) {
+    this.authAccounts.set(email, { confirmed: true });
+  }
+  async sendLoginCode(email: string): Promise<SendCodeResult> {
+    if (this.nextSendResult) {
+      const r = this.nextSendResult;
+      this.nextSendResult = null;
+      return r;
+    }
+    if (!this.authAccounts.has(email)) return { ok: false, reason: 'failed', detail: 'no such user' };
+    this.sentCodes.push(email);
+    return { ok: true };
+  }
+  async touchMember(campaignId: string, userId: string) {
+    const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
+    if (m) m.lastSeenAt = new Date().toISOString();
+  }
+  async health(): Promise<HealthReport> {
+    return { database: true, authAdmin: true, campaignSeeded: this.campaigns.length > 0, presenceColumn: true, errors: [] };
   }
   async campaignsById(ids: string[]) {
     return this.campaigns.filter((c) => ids.includes(c.id));

@@ -223,3 +223,72 @@ describe('Online API – multiple clients', () => {
     expect(p2.view!.tokens.find((t) => t.id === 'livia')?.details).toBeUndefined();
   });
 });
+
+describe('Online API – email code login', () => {
+  it('sends a code only to invited or member addresses, with an identical answer for everyone', async () => {
+    const invited = await call(null, 'POST', 'request-code', { email: 'P1@Example.com' });
+    const stranger = await call(null, 'POST', 'request-code', { email: 'nobody@example.com' });
+    expect(invited.status).toBe(200);
+    expect(stranger.status).toBe(200);
+    expect(invited.body).toEqual(stranger.body); // no account enumeration
+    expect(repo.sentCodes).toEqual(['p1@example.com']);
+    expect(repo.authAccounts.has('nobody@example.com')).toBe(false); // no self-registration
+  });
+
+  it('existing members (invite already redeemed) can request codes again', async () => {
+    await call('t-p1', 'GET', 'session');
+    await call(null, 'POST', 'request-code', { email: 'p1@example.com' });
+    expect(repo.sentCodes).toContain('p1@example.com');
+  });
+
+  it('an authenticated account without invitation gets no campaign data', async () => {
+    expect((await call('t-stranger', 'GET', 'state')).status).toBe(403);
+    expect((await call('t-stranger', 'GET', 'ping')).status).toBe(403);
+  });
+
+  it('reports rate limiting and sending failures visibly', async () => {
+    repo.nextSendResult = { ok: false, reason: 'rate_limited' };
+    expect((await call(null, 'POST', 'request-code', { email: 'p1@example.com' })).status).toBe(429);
+    repo.nextSendResult = { ok: false, reason: 'failed', detail: 'smtp' };
+    const r = await call(null, 'POST', 'request-code', { email: 'p1@example.com' });
+    expect(r.status).toBe(502);
+    expect(JSON.stringify(r.body)).not.toContain('smtp');
+  });
+
+  it('rejects malformed emails', async () => {
+    expect((await call(null, 'POST', 'request-code', { email: 'not-an-email' })).status).toBe(400);
+  });
+
+  it('the health check is public but reveals no campaign data', async () => {
+    const h = await call(null, 'GET', 'health');
+    expect(h.status).toBe(200);
+    expect(JSON.stringify(h.body)).not.toMatch(/livia|@example/i);
+  });
+});
+
+describe('Online API – presence', () => {
+  it('records presence on API contact and shows it to the GM only', async () => {
+    await call('t-gm', 'GET', 'session');
+    await call('t-p1', 'GET', 'ping');
+    const ov = (await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'overview' })).body as { members: Array<{ email: string; online: boolean }> };
+    expect(ov.members.find((m) => m.email === 'p1@example.com')?.online).toBe(true);
+    expect((await call('t-p1', 'POST', 'admin', { campaignId: CID, action: 'overview' })).status).toBe(403);
+  });
+
+  it('ping returns the current version so clients can detect missed updates', async () => {
+    await call('t-p1', 'GET', 'session');
+    const v1 = (await call('t-p1', 'GET', 'ping')).body as { version: number };
+    await call('t-p1', 'POST', 'command', { campaignId: CID, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 0 } } });
+    const v2 = (await call('t-p1', 'GET', 'ping')).body as { version: number };
+    expect(v2.version).toBe(v1.version + 1);
+  });
+
+  it('a removed player loses access immediately', async () => {
+    await call('t-gm', 'GET', 'session');
+    await call('t-p1', 'GET', 'session');
+    await call('t-gm', 'POST', 'admin', { campaignId: CID, action: 'removeMember', userId: 'u-p1' });
+    expect((await call('t-p1', 'GET', 'state')).status).toBe(403);
+    expect((await call(null, 'POST', 'request-code', { email: 'p1@example.com' })).status).toBe(200);
+    expect(repo.sentCodes).not.toContain('p1@example.com');
+  });
+});

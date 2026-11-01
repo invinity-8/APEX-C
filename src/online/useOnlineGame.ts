@@ -4,8 +4,11 @@
  * Sync strategy
  *  - Supabase Realtime pushes only a tiny version counter (apex_campaign_heads, RLS-protected).
  *  - When the counter is newer than ours, we re-fetch our own filtered view from the server.
- *  - We also refresh on (re)subscribe, when the tab becomes visible, when the network
- *    comes back, and every 45 s as a safety net. Older responses never overwrite newer ones.
+ *  - A heartbeat (/api/apex?op=ping, every 25 s; every 8 s while realtime is down) keeps presence
+ *    fresh and detects missed pings by comparing versions.
+ *  - We also refresh on (re)subscribe, when the tab becomes visible and when the network comes back.
+ *    Older responses never overwrite newer ones.
+ *  - There is no local copy of the campaign: if the server is unreachable the UI says so and nothing is saved.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Command } from '../game/commands';
@@ -28,7 +31,9 @@ export interface OnlineGameResult {
 export function useOnlineGame(campaignId: string, email: string, signOut: () => void): OnlineGameResult {
   const [payload, setPayload] = useState<CampaignPayload | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [connection, setConnection] = useState<Connection>('connecting');
+  const [realtime, setRealtime] = useState<'live' | 'connecting' | 'down'>('connecting');
+  const [apiOk, setApiOk] = useState<boolean | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [activeCharacter, setActiveState] = useState<string | null>(() => {
@@ -51,6 +56,8 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     versionRef.current = p.version;
     setPayload(p);
     setError(null);
+    setApiOk(true);
+    setSyncError(null);
     setLastSync(new Date());
     if (p.role === 'player' && p.activeCharacter && p.activeCharacter !== activeRef.current) {
       activeRef.current = p.activeCharacter;
@@ -69,7 +76,10 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError(0, String(e));
         if (err.status === 401 || err.status === 403) setError(err);
-        else setConnection('offline');
+        else {
+          setApiOk(false);
+          setSyncError(err.message);
+        }
       } finally {
         inflight.current = null;
         if (again.current) {
@@ -102,10 +112,10 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          setConnection('live');
+          setRealtime('live');
           void refresh(); // catch up on anything missed while disconnected
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          setConnection('offline');
+          setRealtime('down'); // supabase-js retries on its own; the heartbeat polls meanwhile
         }
       });
     return () => {
@@ -113,19 +123,48 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     };
   }, [campaignId, refresh]);
 
-  // Safety nets: visibility, network, periodic poll
+  // Heartbeat: presence + missed-update detection + server reachability
+  const beat = useCallback(async () => {
+    try {
+      const { version } = await api.ping(campaignId);
+      setApiOk(true);
+      if (version !== versionRef.current) void refresh(true);
+      else setSyncError(null);
+    } catch (e) {
+      const err = e instanceof ApiError ? e : new ApiError(0, String(e));
+      if (err.status === 401 || err.status === 403) setError(err);
+      else {
+        setApiOk(false);
+        setSyncError(err.message);
+      }
+    }
+  }, [campaignId, refresh]);
+
+  useEffect(() => {
+    const every = realtime === 'live' && apiOk !== false ? 25_000 : 8_000;
+    const id = setInterval(() => document.visibilityState === 'visible' && void beat(), every);
+    return () => clearInterval(id);
+  }, [beat, realtime, apiOk]);
+
+  // Safety nets: tab visible again, network back
   useEffect(() => {
     const onVisible = () => document.visibilityState === 'visible' && void refresh();
     const onOnline = () => void refresh();
+    const onOffline = () => {
+      setApiOk(false);
+      setSyncError('this device is offline');
+    };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
-    const id = setInterval(() => void refresh(), 45_000);
+    window.addEventListener('offline', onOffline);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
-      clearInterval(id);
+      window.removeEventListener('offline', onOffline);
     };
   }, [refresh]);
+
+  const connection: Connection = apiOk === false ? 'offline' : realtime === 'live' && apiOk ? 'live' : apiOk && realtime === 'down' ? 'degraded' : 'connecting';
 
   const setActiveCharacter = useCallback(
     (id: string) => {
@@ -149,6 +188,11 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError(0, String(e));
         if (err.status === 401) setError(err);
+        if (err.status === 0 || err.status >= 500) {
+          setApiOk(false);
+          setSyncError(err.message);
+          return { ok: false, error: `${err.message} Your action was NOT saved.` };
+        }
         if (err.code === 'conflict' || err.status === 409) void refresh(true);
         return { ok: false, error: err.message };
       } finally {
@@ -210,6 +254,7 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
             activeCharacter: payload.role === 'player' ? payload.activeCharacter : null,
             setActiveCharacter,
             connection,
+            syncError,
             version: payload.version,
             lastSync,
             refresh: () => void refresh(true),
