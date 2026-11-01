@@ -26,15 +26,15 @@ npm run dev            # demo mode at http://localhost:5173
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Development server (demo mode unless `.env.local` configures Supabase) |
-| `npm test` | 79 unit/security tests (Vitest) |
+| `npm test` | 91 unit/security tests (Vitest) |
 | `npm run typecheck` | TypeScript check |
 | `npm run build` | Type check + production bundle in `dist/` |
 | `npm run dev:mock` | Online mode against a **local mock** of Supabase (http://localhost:5174) |
-| `node dev/e2e-online.cjs` | 20 multi-browser acceptance checks against `dev:mock` (needs Playwright) |
+| `node dev/e2e-online.cjs` | 24 multi-browser acceptance checks against `dev:mock` (needs Playwright) |
 | `npm run verify:db` | Runs the SQL migrations twice + RLS tests on a local PostgreSQL |
 
-Mock accounts for `dev:mock` (email-code login; the code is printed in the terminal): `gm@apex.test`, `player1@apex.test`,
-`player2@apex.test`, `stranger@apex.test` (not invited).
+Mock accounts for `dev:mock` (email-code login; the code is printed in the terminal): GM profile `gm@apex.test`,
+Hannah `hannah@apex.test`, Jean `jean@apex.test`; `simon@apex.test` (profile not yet linked) and `stranger@apex.test`.
 
 To use the real Supabase project locally, copy `.env.example` to `.env.local` and fill in the values
 (the `/api/apex` function is served by `vercel dev`, not by plain `vite`).
@@ -117,7 +117,9 @@ preview test checklist, go-live and rollback).
 Production builds **never** fall back to a local game: without these variables they show the notice
 *“APEX is not connected yet”*. Check a deployment any time at `/api/apex?op=health` (no secrets in the answer).
 
-**Login:** invite-only, passwordless. A player enters their email; if it is invited, Supabase Auth emails a
+**Entry & login:** *Welcome to APEX* → *Join Campaign* → *Who are you?* (GM, Hannah/Sinna, Jean/Aster, Simon/Elwin,
+Jerba/Javi) → *Continue as …* → email code. Invite-only and passwordless: a code is only sent when the email is linked to
+the chosen profile (the GM links profiles in *Players & Access → Profiles*). Supabase Auth emails a
 single-use 6-digit code (expiring, rate-limited, verified by Supabase). Uninvited addresses get the same neutral
 answer and no email. The GM sees who is online in *Players & Access*.
 

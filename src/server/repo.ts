@@ -40,6 +40,8 @@ export interface HealthReport {
   campaignSeeded: boolean;
   /** Has the presence migration been applied? */
   presenceColumn: boolean;
+  /** Has the profiles migration been applied (and seeded)? */
+  profilesTable: boolean;
   errors: string[];
 }
 
@@ -49,6 +51,20 @@ export interface Invite {
   role: Role;
   tokenIds: string[];
   acceptedAt: string | null;
+}
+
+/** A "Who are you?" profile, linked by the GM to exactly one account. */
+export interface Profile {
+  campaignId: string;
+  key: string;
+  displayName: string;
+  characterName: string;
+  role: Role;
+  tokenIds: string[];
+  /** Linked email (lower-case) – set by the GM. */
+  email: string | null;
+  /** Linked Auth user – filled on the first verified sign-in. */
+  userId: string | null;
 }
 
 export interface Assignment {
@@ -89,6 +105,9 @@ export interface Repo {
   ensureAuthUser(email: string): Promise<void>;
   /** Asks Supabase Auth to email a one-time sign-in code. Never creates accounts. */
   sendLoginCode(email: string): Promise<SendCodeResult>;
+  /** Profiles of one campaign, or – with campaignId null – of all campaigns. */
+  profiles(campaignId: string | null): Promise<Profile[]>;
+  updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>): Promise<void>;
   /** Records presence for a member. */
   touchMember(campaignId: string, userId: string): Promise<void>;
   /** Configuration self-check for the setup page. */

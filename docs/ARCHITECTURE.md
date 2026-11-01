@@ -49,6 +49,18 @@ supabase-js Realtime ◀──────────────── "versio
    Supabase generates, expires, rate-limits and verifies the code – APEX never stores codes.
 4. A verified email alone grants nothing: membership comes only from a GM invitation.
 
+## Profiles ("Who are you?")
+
+- The welcome screen shows five profiles from `src/data/profiles.ts` (display only: names, characters, portraits).
+- Authoritative data lives in `apex_profiles` (migration `20261103000100`): role, character token ids, and the linked
+  account (email set by the GM, `user_id` bound on the first verified sign-in). No emails are in the repository.
+- `request-code` with a profile only sends a code if the email is linked to that profile (GM profile: any GM account).
+  The answer is identical either way.
+- Every `state` / `ping` / `command` request carries the profile; the server answers `403 profile_mismatch` unless the
+  signed-in account is linked to it. A profile can never widen permissions – roles and character assignments still come
+  from `apex_campaign_members` and `apex_character_assignments`, which the GM's profile links keep in sync.
+- `GET op=profiles` (public) returns only `{ key, active }` per profile.
+
 ## Sync & failure handling
 
 - Realtime pings + a heartbeat (`op=ping`, 25 s; 8 s while realtime is down) that also records presence (`last_seen_at`).

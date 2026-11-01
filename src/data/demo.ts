@@ -230,8 +230,8 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
 
   const tokenList: Token[] = [
     base({
-      id: 'livia', name: 'Livia Aurelia', kind: 'player', teamId: 'party', title: 'Will-Weaver',
-      color: '#e9c46a', initials: 'LA', pos: { q: 0, r: 1 },
+      id: 'sinna', name: 'Sinna', kind: 'player', teamId: 'party', title: 'Will-Weaver',
+      color: '#e9c46a', initials: 'SI', pos: { q: 0, r: 1 },
       will: { current: 6, max: 10 },
       inventory: [
         { id: 'i1', name: 'Voluntas Vial', kind: 'will-vessel', description: 'Stores bound willpower.', quantity: 1, willCharge: 3, willCapacity: 5 },
@@ -239,8 +239,8 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
       ],
     }),
     base({
-      id: 'marcus', name: 'Marcus Varro', kind: 'player', teamId: 'party', title: 'Retired Legionary',
-      color: '#6fb1e0', initials: 'MV', pos: { q: 0, r: 1 }, maxMovePoints: 8,
+      id: 'aster', name: 'Aster', kind: 'player', teamId: 'party', title: 'Retired Legionary',
+      color: '#6fb1e0', initials: 'AS', pos: { q: 0, r: 1 }, maxMovePoints: 8,
       will: { current: 2, max: 4 },
       inventory: [
         { id: 'i3', name: 'Scutum', kind: 'armor', description: 'Large legionary shield.', quantity: 1 },
@@ -248,8 +248,8 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
       ],
     }),
     base({
-      id: 'nyx', name: 'Nyx Silvana', kind: 'player', teamId: 'party', title: 'Scout',
-      color: '#7cc98a', initials: 'NS', pos: { q: -1, r: 2 }, visionRadius: 3,
+      id: 'elwin', name: 'Elwin', kind: 'player', teamId: 'party', title: 'Scout',
+      color: '#7cc98a', initials: 'EL', pos: { q: -1, r: 2 }, visionRadius: 3,
       will: { current: 3, max: 5 },
       inventory: [
         { id: 'i5', name: 'Shortbow', kind: 'weapon', description: '20 arrows.', quantity: 1 },
@@ -257,8 +257,8 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
       ],
     }),
     base({
-      id: 'cassius', name: 'Cassius Thorne', kind: 'player', teamId: 'party', title: 'Gladiator-Priest',
-      color: '#ece4d2', initials: 'CT', pos: { q: 0, r: 1 },
+      id: 'javi', name: 'Javi', kind: 'player', teamId: 'party', title: 'Gladiator-Priest',
+      color: '#ece4d2', initials: 'JA', pos: { q: 0, r: 1 },
       will: { current: 4, max: 8 },
       inventory: [
         { id: 'i7', name: 'Net & Trident', kind: 'weapon', description: 'Classic retiarius gear.', quantity: 1 },

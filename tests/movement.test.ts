@@ -7,17 +7,17 @@ import { TERRAIN } from '../src/game/terrain';
 import { flatState, place, setTerrain } from './helpers';
 
 const GM = { role: 'gm' } as const;
-const asLivia = { role: 'player', tokenId: 'livia' } as const;
+const asSinna = { role: 'player', tokenId: 'sinna' } as const;
 
 describe('Movement', () => {
   it('grassland costs 1 MP per hex', () => {
     const s = flatState();
-    const res = executeCommand(s, GM, { type: 'move', tokenId: 'livia', to: { q: 3, r: 0 } });
+    const res = executeCommand(s, GM, { type: 'move', tokenId: 'sinna', to: { q: 3, r: 0 } });
     expect(res.ok).toBe(true);
-    expect(res.state.tokens.livia.pos).toEqual({ q: 3, r: 0 });
-    expect(res.state.tokens.livia.movePoints).toBe(5);
+    expect(res.state.tokens.sinna.pos).toEqual({ q: 3, r: 0 });
+    expect(res.state.tokens.sinna.movePoints).toBe(5);
     // The original state is untouched
-    expect(s.tokens.livia.pos).toEqual({ q: 0, r: 0 });
+    expect(s.tokens.sinna.pos).toEqual({ q: 0, r: 0 });
   });
 
   it('terrain costs are respected (forest 2, mountains 3, road 0.5, river 3)', () => {
@@ -38,7 +38,7 @@ describe('Movement', () => {
   it('lakes are impassable – with a clear explanation', () => {
     const s = flatState();
     setTerrain(s, { q: 1, r: 0 }, 'water');
-    const check = validateMove(s, GM, 'livia', { q: 1, r: 0 });
+    const check = validateMove(s, GM, 'sinna', { q: 1, r: 0 });
     expect(check.ok).toBe(false);
     if (!check.ok) expect(check.reason).toMatch(/Lake is impassable/);
   });
@@ -53,42 +53,42 @@ describe('Movement', () => {
 
   it('not enough movement points → move rejected', () => {
     const s = flatState();
-    s.tokens.livia.movePoints = 2;
-    const res = executeCommand(s, GM, { type: 'move', tokenId: 'livia', to: { q: 3, r: 0 } });
+    s.tokens.sinna.movePoints = 2;
+    const res = executeCommand(s, GM, { type: 'move', tokenId: 'sinna', to: { q: 3, r: 0 } });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Not enough movement points: the path costs 3 MP/);
   });
 
   it('outside the arena is invalid', () => {
     const s = flatState(4);
-    const c = validateMove(s, GM, 'livia', { q: 9, r: 0 });
+    const c = validateMove(s, GM, 'sinna', { q: 9, r: 0 });
     expect(c.ok).toBe(false);
   });
 
   it('players may only move their own character', () => {
     const s = flatState();
-    const res = executeCommand(s, asLivia, { type: 'move', tokenId: 'marcus', to: { q: 1, r: 0 } });
+    const res = executeCommand(s, asSinna, { type: 'move', tokenId: 'aster', to: { q: 1, r: 0 } });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/only characters assigned to you/);
   });
 
   it('players can never move rival tokens', () => {
     const s = flatState();
-    const res = executeCommand(s, asLivia, { type: 'move', tokenId: 'r-ferrata', to: { q: 1, r: 0 } });
+    const res = executeCommand(s, asSinna, { type: 'move', tokenId: 'r-ferrata', to: { q: 1, r: 0 } });
     expect(res.ok).toBe(false);
   });
 
   it('the GM can grant control permissions', () => {
     let s = flatState();
-    s = executeCommand(s, GM, { type: 'toggleController', tokenId: 'marcus', controllerId: 'livia' }).state;
-    const res = executeCommand(s, asLivia, { type: 'move', tokenId: 'marcus', to: { q: 1, r: 0 } });
+    s = executeCommand(s, GM, { type: 'toggleController', tokenId: 'aster', controllerId: 'sinna' }).state;
+    const res = executeCommand(s, asSinna, { type: 'move', tokenId: 'aster', to: { q: 1, r: 0 } });
     expect(res.ok).toBe(true);
   });
 
   it('players cannot travel through unexplored terrain', () => {
     const s = flatState(8);
-    place(s, 'livia', { q: 0, r: 0 });
-    const res = executeCommand(s, asLivia, { type: 'move', tokenId: 'livia', to: { q: 5, r: 0 } });
+    place(s, 'sinna', { q: 0, r: 0 });
+    const res = executeCommand(s, asSinna, { type: 'move', tokenId: 'sinna', to: { q: 5, r: 0 } });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Unexplored/);
   });
@@ -98,12 +98,12 @@ describe('Movement', () => {
     for (const cmd of [
       { type: 'endDay' },
       { type: 'advancePhase' },
-      { type: 'place', tokenId: 'livia', to: { q: 2, r: 0 } },
-      { type: 'adjustMovePoints', tokenId: 'livia', delta: 5 },
+      { type: 'place', tokenId: 'sinna', to: { q: 2, r: 0 } },
+      { type: 'adjustMovePoints', tokenId: 'sinna', delta: 5 },
       { type: 'setTeamVisibility', teamId: 'ferrata', visibility: 'revealed' },
       { type: 'triggerEvent', eventId: 'willstorm' },
     ] as const) {
-      const res = executeCommand(s, asLivia, cmd);
+      const res = executeCommand(s, asSinna, cmd);
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.error).toBe('Only the Game Master can do that.');
     }
@@ -111,10 +111,10 @@ describe('Movement', () => {
 
   it('the GM can place freely (any distance)', () => {
     const s = flatState();
-    const res = executeCommand(s, GM, { type: 'place', tokenId: 'livia', to: { q: -5, r: 2 } });
+    const res = executeCommand(s, GM, { type: 'place', tokenId: 'sinna', to: { q: -5, r: 2 } });
     expect(res.ok).toBe(true);
-    expect(res.state.tokens.livia.pos).toEqual({ q: -5, r: 2 });
-    expect(res.state.tokens.livia.movePoints).toBe(8);
+    expect(res.state.tokens.sinna.pos).toEqual({ q: -5, r: 2 });
+    expect(res.state.tokens.sinna.movePoints).toBe(8);
   });
 
   it('travel scale: crossing the full arena takes about a week or more', () => {

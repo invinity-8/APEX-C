@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { GameState } from '../game/types';
-import type { AdminOverview } from '../server/protocol';
+import type { AdminOverview, ProfileInfo } from '../server/protocol';
 import type { OnlineControls } from '../state/gameApi';
 import { Section, Segmented } from './ui';
 
@@ -14,10 +14,10 @@ interface Props {
   notify: (msg: string, kind?: 'error' | 'info') => void;
 }
 
-type Tab = 'players' | 'characters' | 'backups';
+type Tab = 'profiles' | 'players' | 'characters' | 'backups';
 
 export function PlayersPanel({ state, online, notify }: Props) {
-  const [tab, setTab] = useState<Tab>('players');
+  const [tab, setTab] = useState<Tab>('profiles');
   const [data, setData] = useState<AdminOverview | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -58,6 +58,7 @@ export function PlayersPanel({ state, online, notify }: Props) {
           value={tab}
           onChange={setTab}
           options={[
+            { value: 'profiles', label: 'Profiles' },
             { value: 'players', label: 'Accounts' },
             { value: 'characters', label: 'Characters' },
             { value: 'backups', label: 'Backups' },
@@ -67,6 +68,47 @@ export function PlayersPanel({ state, online, notify }: Props) {
     >
       {!data ? (
         <p className="text-xs text-marble-500">Loading…</p>
+      ) : tab === 'profiles' ? (
+        <div className="space-y-2" aria-busy={busy}>
+          {data.rosterOutdated && (
+            <div role="alert" className="rounded-lg border border-amber-400/50 bg-amber-500/10 p-2 text-[11px] text-amber-200">
+              This arena still uses the old placeholder characters (Livia, Marcus, Nyx, Cassius).
+              <button
+                className="btn btn-ghost mt-1.5 w-full"
+                onClick={async () => {
+                  if (!confirm('Rename Livia→Sinna, Marcus→Aster, Nyx→Elwin, Cassius→Javi? Positions, knowledge and items are kept. A backup is created first.')) return;
+                  try {
+                    await online.admin({ action: 'applyRoster' });
+                    online.refresh();
+                    notify('Characters converted.', 'info');
+                    void act({ action: 'overview' });
+                  } catch (e) {
+                    notify((e as Error).message);
+                  }
+                }}
+              >
+                Convert old characters
+              </button>
+            </div>
+          )}
+          {data.profiles.length === 0 && (
+            <p className="text-xs text-amber-200">No profiles found – run the database migration 20261103000100_apex_profiles.sql (see docs/SETUP_DE.md).</p>
+          )}
+          {data.profiles.map((p) => (
+            <ProfileRow
+              key={p.key}
+              p={p}
+              players={players}
+              missing={p.tokenIds.filter((t) => !state.tokens[t])}
+              onLink={(email) => act({ action: 'linkProfile', profile: p.key, email }, email ? `${p.displayName} linked.` : `${p.displayName} unlinked.`)}
+              onCharacters={(tokenIds) => act({ action: 'setProfileCharacters', profile: p.key, tokenIds }, `${p.displayName}: character updated.`)}
+            />
+          ))}
+          <p className="text-[11px] leading-relaxed text-marble-500">
+            A profile opens only for the linked email address, confirmed with a one-time code. Unlinked player profiles stay inactive. Emails are
+            visible to Game Masters only. The GM profile works for every account with the Game Master role.
+          </p>
+        </div>
       ) : tab === 'players' ? (
         <div className="space-y-3" aria-busy={busy}>
           <ul className="space-y-1.5">
@@ -192,6 +234,80 @@ export function PlayersPanel({ state, online, notify }: Props) {
         </div>
       )}
     </Section>
+  );
+}
+
+function ProfileRow({
+  p,
+  players,
+  missing,
+  onLink,
+  onCharacters,
+}: {
+  p: ProfileInfo;
+  players: GameState['tokens'][string][];
+  missing: string[];
+  onLink: (email: string | null) => Promise<boolean>;
+  onCharacters: (tokenIds: string[]) => Promise<boolean>;
+}) {
+  const [email, setEmail] = useState(p.email ?? '');
+  useEffect(() => setEmail(p.email ?? ''), [p.email]);
+  const gm = p.role === 'gm';
+  const statusText = p.online ? 'online' : p.signedIn ? 'active' : p.active ? 'linked – not signed in yet' : 'not activated';
+  return (
+    <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${p.online ? 'bg-emerald-400' : p.active ? 'bg-gold-400' : 'bg-ink-500'}`} aria-hidden="true" />
+        <span className="font-semibold text-marble-50">{p.displayName}</span>
+        <span className="text-gold-200">{gm ? 'Game Master · all characters' : p.characterName}</span>
+        <span className={`ml-auto text-[10px] ${p.online ? 'text-emerald-300' : p.active ? 'text-marble-300' : 'text-amber-300'}`}>{statusText}</span>
+      </div>
+      {!gm && (
+        <form
+          className="mt-1.5 flex gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onLink(email.trim() || null);
+          }}
+        >
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="email of this player"
+            aria-label={`Email linked to ${p.displayName}`}
+            className="min-w-0 flex-1 rounded-md border border-ink-600 bg-ink-900 px-2 py-1"
+          />
+          <button type="submit" className="btn btn-ghost px-2 py-0.5" disabled={email.trim() === (p.email ?? '')}>
+            Save
+          </button>
+          {p.email && (
+            <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => confirm(`Unlink ${p.displayName}? The profile becomes inactive.`) && void onLink(null)}>
+              Unlink
+            </button>
+          )}
+        </form>
+      )}
+      {!gm && (
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className="text-marble-500">Character</span>
+          <select
+            aria-label={`Character of ${p.displayName}`}
+            className="flex-1 rounded-md border border-ink-600 bg-ink-800 px-2 py-1"
+            value={p.tokenIds[0] ?? ''}
+            onChange={(e) => void onCharacters(e.target.value ? [e.target.value] : [])}
+          >
+            <option value="">— none —</option>
+            {players.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {missing.length > 0 && <div className="mt-1 text-[11px] text-amber-300">Character “{missing.join(', ')}” does not exist in the current arena.</div>}
+    </div>
   );
 }
 

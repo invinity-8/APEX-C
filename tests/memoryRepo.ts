@@ -1,5 +1,5 @@
 import type { GameState } from '../src/game/types';
-import type { Assignment, AuthUser, Campaign, CommandLogEntry, HealthReport, Invite, Member, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
+import type { Assignment, AuthUser, Campaign, CommandLogEntry, HealthReport, Invite, Member, Profile, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
 
 /** In-memory Repo with the same contract as SupabaseRepo – used by the security tests. */
 export class MemoryRepo implements Repo {
@@ -39,12 +39,20 @@ export class MemoryRepo implements Repo {
     this.sentCodes.push(email);
     return { ok: true };
   }
+  profileList: Profile[] = [];
+  async profiles(campaignId: string | null) {
+    return this.profileList.filter((p) => !campaignId || p.campaignId === campaignId).map((p) => ({ ...p, tokenIds: [...p.tokenIds] }));
+  }
+  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>) {
+    const p = this.profileList.find((x) => x.campaignId === campaignId && x.key === key);
+    if (p) Object.assign(p, patch);
+  }
   async touchMember(campaignId: string, userId: string) {
     const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
     if (m) m.lastSeenAt = new Date().toISOString();
   }
   async health(): Promise<HealthReport> {
-    return { database: true, authAdmin: true, campaignSeeded: this.campaigns.length > 0, presenceColumn: true, errors: [] };
+    return { database: true, authAdmin: true, campaignSeeded: this.campaigns.length > 0, presenceColumn: true, profilesTable: this.profileList.length > 0, errors: [] };
   }
   async campaignsById(ids: string[]) {
     return this.campaigns.filter((c) => ids.includes(c.id));

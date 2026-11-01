@@ -11,8 +11,8 @@ describe('Fog of War & visibility', () => {
   it('starting view: radius 2 visible, unexplored hexes are not sent at all', () => {
     const s = flatState(8);
     for (const t of Object.values(s.tokens)) if (t.kind === 'player') t.sharesWithParty = false;
-    place(s, 'livia', { q: 0, r: 0 });
-    const v = buildPlayerView(s, 'livia');
+    place(s, 'sinna', { q: 0, r: 0 });
+    const v = buildPlayerView(s, 'sinna');
     const visible = v.hexes.filter((h) => h.fog === 'visible');
     expect(visible).toHaveLength(19); // 1 + 6 + 12
     expect(v.hexes).toHaveLength(19);
@@ -21,9 +21,9 @@ describe('Fog of War & visibility', () => {
 
   it('explored hexes stay known but are no longer visible', () => {
     let s = flatState(8);
-    s = executeCommand(s, GM, { type: 'move', tokenId: 'livia', to: { q: 4, r: 0 } }).state;
-    for (const t of Object.values(s.tokens)) if (t.id !== 'livia') t.sharesWithParty = false;
-    const v = buildPlayerView(s, 'livia');
+    s = executeCommand(s, GM, { type: 'move', tokenId: 'sinna', to: { q: 4, r: 0 } }).state;
+    for (const t of Object.values(s.tokens)) if (t.id !== 'sinna') t.sharesWithParty = false;
+    const v = buildPlayerView(s, 'sinna');
     expect(v.hexByKey['-1,0'].fog).toBe('explored');
     expect(v.hexByKey['-1,0'].terrain).toBe('plains');
     expect(v.hexByKey['4,0'].fog).toBe('visible');
@@ -31,25 +31,25 @@ describe('Fog of War & visibility', () => {
 
   it('terrain is revealed along the way (not only at the destination)', () => {
     let s = flatState(10);
-    s = executeCommand(s, GM, { type: 'move', tokenId: 'livia', to: { q: 8, r: 0 } }).state;
-    expect(s.knowledge.livia.explored['4,-2']).toBe('plains');
+    s = executeCommand(s, GM, { type: 'move', tokenId: 'sinna', to: { q: 8, r: 0 } }).state;
+    expect(s.knowledge.sinna.explored['4,-2']).toBe('plains');
   });
 
   it('the GM vision bonus increases vision', () => {
     let s = flatState(8);
     for (const t of Object.values(s.tokens)) t.sharesWithParty = false;
-    s = executeCommand(s, GM, { type: 'adjustVisionBonus', tokenId: 'livia', delta: 2 }).state;
-    const v = buildPlayerView(s, 'livia');
+    s = executeCommand(s, GM, { type: 'adjustVisionBonus', tokenId: 'sinna', delta: 2 }).state;
+    const v = buildPlayerView(s, 'sinna');
     expect(v.hexes.filter((h) => h.fog === 'visible')).toHaveLength(61); // radius 4
   });
 
   it('rivals are visible only in sight; afterwards only the last sighting remains', () => {
     let s = flatState(8);
     place(s, 'r-ferrata', { q: 2, r: 0 });
-    let v = buildPlayerView(s, 'livia');
+    let v = buildPlayerView(s, 'sinna');
     expect(v.tokens.some((t) => t.id === 'r-ferrata')).toBe(true);
     s = executeCommand(s, GM, { type: 'place', tokenId: 'r-ferrata', to: { q: 7, r: 0 } }).state;
-    v = buildPlayerView(s, 'livia');
+    v = buildPlayerView(s, 'sinna');
     expect(v.tokens.some((t) => t.id === 'r-ferrata')).toBe(false);
     const team = v.teams.find((t) => t.id === 'ferrata')!;
     expect(team.lastSeen?.pos).toEqual({ q: 2, r: 0 });
@@ -60,7 +60,7 @@ describe('Fog of War & visibility', () => {
     let s = flatState(8);
     s = executeCommand(s, GM, { type: 'setTeamVisibility', teamId: 'vesperia', visibility: 'hidden' }).state;
     place(s, 'r-vesperia', { q: 1, r: 0 });
-    const v = buildPlayerView(s, 'livia');
+    const v = buildPlayerView(s, 'sinna');
     expect(v.tokens.some((t) => t.teamId === 'vesperia')).toBe(false);
     expect(v.teams.some((t) => t.id === 'vesperia')).toBe(false);
   });
@@ -69,7 +69,7 @@ describe('Fog of War & visibility', () => {
     let s = flatState(8);
     place(s, 'r-aquaeductus', { q: -6, r: 0 });
     s = executeCommand(s, GM, { type: 'setTracking', teamId: 'aquaeductus', mode: 'exact' }).state;
-    const v = buildPlayerView(s, 'livia');
+    const v = buildPlayerView(s, 'sinna');
     expect(v.trackers).toHaveLength(1);
     expect(v.trackers[0].pos).toEqual({ q: -6, r: 0 });
     expect(v.hexByKey['-6,0']).toBeUndefined();
@@ -86,7 +86,7 @@ describe('Fog of War & visibility', () => {
 
   it('the player view contains no secret GM data', () => {
     const s = createDemoState();
-    const v = buildPlayerView(s, 'livia');
+    const v = buildPlayerView(s, 'sinna');
     const json = JSON.stringify(v);
     expect(json).not.toContain('Templum Oblitum'); // hidden site
     expect(json).not.toContain('informant'); // GM note
@@ -99,7 +99,7 @@ describe('Fog of War & visibility', () => {
 
   it('the player view does not leak the map size or outline', () => {
     const s = createDemoState();
-    const v = buildPlayerView(s, 'livia');
+    const v = buildPlayerView(s, 'sinna');
     expect(v.mapRadius).toBeNull();
     expect(v.hexes.length).toBeLessThan(40);
     expect(v.hexes.every((h) => h.terrain !== null && h.fog !== 'unexplored')).toBe(true);
@@ -107,15 +107,15 @@ describe('Fog of War & visibility', () => {
     expect(v.hexes.some((h) => h.edges)).toBe(false);
     // Same knowledge on a different map size → identical hex set.
     const small = createDemoState({ radius: 20 });
-    const vs = buildPlayerView(small, 'livia');
+    const vs = buildPlayerView(small, 'sinna');
     expect(vs.hexes.map((h) => h.key).sort()).toEqual(v.hexes.map((h) => h.key).sort());
   });
 
   it('the arena boundary becomes known locally once explored', () => {
     let s = flatState(6);
-    for (const t of Object.values(s.tokens)) if (t.id !== 'livia') t.sharesWithParty = false;
-    s = executeCommand(s, GM, { type: 'place', tokenId: 'livia', to: { q: 5, r: 0 } }).state;
-    const v = buildPlayerView(s, 'livia');
+    for (const t of Object.values(s.tokens)) if (t.id !== 'sinna') t.sharesWithParty = false;
+    s = executeCommand(s, GM, { type: 'place', tokenId: 'sinna', to: { q: 5, r: 0 } }).state;
+    const v = buildPlayerView(s, 'sinna');
     const edge = v.hexByKey[hexKey({ q: 6, r: 0 })];
     expect(edge.edges).toBeGreaterThan(0);
     // Hexes far from the explored edge carry no boundary data
@@ -126,10 +126,10 @@ describe('Fog of War & visibility', () => {
 
   it('characters that do not share are invisible to the party', () => {
     let s = flatState(8);
-    s = executeCommand(s, GM, { type: 'toggleShare', tokenId: 'nyx' }).state;
-    s = executeCommand(s, GM, { type: 'place', tokenId: 'nyx', to: { q: -6, r: 0 } }).state;
-    const v = buildPlayerView(s, 'livia');
-    expect(v.tokens.some((t) => t.id === 'nyx')).toBe(false);
+    s = executeCommand(s, GM, { type: 'toggleShare', tokenId: 'elwin' }).state;
+    s = executeCommand(s, GM, { type: 'place', tokenId: 'elwin', to: { q: -6, r: 0 } }).state;
+    const v = buildPlayerView(s, 'sinna');
+    expect(v.tokens.some((t) => t.id === 'elwin')).toBe(false);
     expect(v.hexByKey['-6,0']).toBeUndefined();
   });
 });
@@ -138,7 +138,7 @@ describe('Map-size secrecy over time', () => {
   it('shrink announcements visible to players never mention ring numbers', () => {
     let s = createDemoState({ radius: 12 });
     for (let i = 0; i < 12; i++) s = executeCommand(s, GM, { type: 'advancePhase' }).state;
-    const v = buildPlayerView(s, 'livia');
+    const v = buildPlayerView(s, 'sinna');
     const shrinkLogs = v.log.filter((e) => e.kind === 'warning');
     expect(shrinkLogs.length).toBeGreaterThan(0);
     for (const e of v.log) expect(e.text).not.toMatch(/ring \d/i);

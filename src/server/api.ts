@@ -19,7 +19,8 @@ import type { Actor, GameState } from '../game/types.js';
 import { phaseName } from '../game/text.js';
 import { buildPlayerView } from '../game/visibility.js';
 import type { AdminOverview, CampaignPayload, CharacterRef, PlayerPayload, SessionInfo, WireView } from './protocol.js';
-import type { AuthUser, Member, Repo, Role } from './repo.js';
+import type { AuthUser, Member, Profile, Repo, Role } from './repo.js';
+import { applyRoster, needsRosterUpdate } from '../game/roster.js';
 import { PLAYER_COMMANDS, isEmail, isId, isInt, isObj, parseCommand } from './validate.js';
 
 export interface ApiRequest {
@@ -59,6 +60,7 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
     // ---- public operations (no session yet) ----
     if (req.method === 'GET' && req.op === 'health') return ok(await repo.health());
     if (req.method === 'POST' && req.op === 'request-code') return ok(await requestCode(req.body, repo));
+    if (req.method === 'GET' && req.op === 'profiles') return ok(await profileStatus(repo));
 
     const user = await authenticate(req, repo);
     const memberships = await resolveMemberships(user, repo);
@@ -69,12 +71,14 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
       case 'GET ping': {
         // Heartbeat: keeps presence fresh and lets clients detect missed realtime pings.
         const m = pickMembership(memberships, req.query.campaign);
+        await checkProfile(user, m, req.query.profile, repo);
         const s = await repo.loadState(m.campaignId);
         return ok({ version: s?.version ?? 0 });
       }
       case 'GET state': {
         const m = pickMembership(memberships, req.query.campaign);
-        return ok(await campaignPayload(m, repo, req.query.as));
+        const profile = await checkProfile(user, m, req.query.profile, repo);
+        return ok(await campaignPayload(m, repo, req.query.as ?? profile?.tokenIds[0]));
       }
       case 'POST command':
         return ok(await runCommand(user, memberships, req.body, repo));
@@ -86,6 +90,9 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
   } catch (e) {
     if (e instanceof HttpError) return { status: e.status, body: { error: e.message, code: e.code } };
     console.error('[apex-api]', e);
+    if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|timeout/i.test(String((e as Error)?.message ?? e))) {
+      return { status: 503, body: { error: 'The campaign database cannot be reached right now. Please try again in a moment.', code: 'db_unreachable' } };
+    }
     return { status: 500, body: { error: 'Internal server error. Please try again.' } };
   }
 }
@@ -98,10 +105,17 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
  * Codes are generated, rate-limited, expired and verified by Supabase Auth – never by APEX.
  */
 async function requestCode(body: unknown, repo: Repo) {
-  const generic = { sent: true, message: 'If this email address is invited to APEX, a 6-digit code is on its way.' };
   if (!isObj(body) || !isEmail(body.email)) throw new HttpError(400, 'Please enter a valid email address.');
   const email = body.email.trim().toLowerCase();
-  if (!(await repo.isEmailAuthorized(email))) return generic;
+  const profileKey = typeof body.profile === 'string' ? body.profile : null;
+  const generic = {
+    sent: true,
+    message: profileKey
+      ? 'If this email address belongs to the selected profile, a 6-digit code is on its way.'
+      : 'If this email address is invited to APEX, a 6-digit code is on its way.',
+  };
+  const authorized = profileKey ? await emailMatchesProfile(email, profileKey, repo) : (await repo.isEmailAuthorized(email)) || (await profileEmailKnown(email, repo));
+  if (!authorized) return generic;
   await repo.ensureAuthUser(email);
   const res = await repo.sendLoginCode(email);
   if (!res.ok) {
@@ -110,6 +124,58 @@ async function requestCode(body: unknown, repo: Repo) {
     throw new HttpError(502, 'The code could not be sent right now. Please try again in a minute or contact your Game Master.', 'send_failed');
   }
   return generic;
+}
+
+// ---------------------------------------------------------------- profiles ("Who are you?")
+
+/** Public: which profiles can currently be used (no names of accounts, no emails). */
+async function profileStatus(repo: Repo) {
+  const all = await repo.profiles(null);
+  const byKey = new Map<string, boolean>();
+  for (const p of all) byKey.set(p.key, (byKey.get(p.key) ?? false) || (await profileActive(p, repo)));
+  return { profiles: [...byKey.entries()].map(([key, active]) => ({ key, active })) };
+}
+
+async function profileActive(p: Profile, repo: Repo): Promise<boolean> {
+  if (p.email || p.userId) return true;
+  if (p.role !== 'gm') return false;
+  const [members, invites] = await Promise.all([repo.members(p.campaignId), repo.invites(p.campaignId)]);
+  return members.some((m) => m.role === 'gm') || invites.some((i) => i.role === 'gm' && !i.acceptedAt);
+}
+
+/** Is `email` the account linked to this profile (GM profile: any Game Master of the campaign)? */
+async function emailMatchesProfile(email: string, key: string, repo: Repo): Promise<boolean> {
+  for (const p of (await repo.profiles(null)).filter((x) => x.key === key)) {
+    if (p.email === email) return true;
+    const members = await repo.members(p.campaignId);
+    if (p.userId && members.some((m) => m.userId === p.userId && m.email === email)) return true;
+    if (p.role === 'gm') {
+      if (members.some((m) => m.role === 'gm' && m.email === email)) return true;
+      if ((await repo.invites(p.campaignId)).some((i) => i.role === 'gm' && !i.acceptedAt && i.email === email)) return true;
+    }
+  }
+  return false;
+}
+
+async function profileEmailKnown(email: string, repo: Repo): Promise<boolean> {
+  return (await repo.profiles(null)).some((p) => p.email === email);
+}
+
+/**
+ * Validates the profile chosen on the welcome screen against the verified account.
+ * A profile never grants anything by itself – it can only narrow down what an account may do.
+ */
+async function checkProfile(user: AuthUser, m: Member, key: string | undefined, repo: Repo): Promise<Profile | null> {
+  if (!key) return null;
+  const p = (await repo.profiles(m.campaignId)).find((x) => x.key === key);
+  const mismatch = new HttpError(403, 'This account is not linked to the profile you selected. Please choose your own profile.', 'profile_mismatch');
+  if (!p) throw mismatch;
+  if (p.role === 'gm') {
+    if (m.role !== 'gm') throw mismatch;
+    return p;
+  }
+  if (p.userId !== user.id && !(p.email && p.email === user.email)) throw mismatch;
+  return p;
 }
 
 async function touch(memberships: Member[], repo: Repo) {
@@ -144,6 +210,23 @@ async function resolveMemberships(user: AuthUser, repo: Repo): Promise<Member[]>
     for (const tokenId of inv.tokenIds) await repo.assignToken(inv.campaignId, tokenId, user.id);
     await repo.markInviteAccepted(inv.campaignId, inv.email, user.id);
     members.push(m);
+  }
+  // Profiles the GM linked to this email: first verified sign-in binds the account.
+  for (const p of (await repo.profiles(null)).filter((x) => x.email === user.email.toLowerCase())) {
+    if (p.userId && p.userId !== user.id) continue;
+    let m = members.find((x) => x.campaignId === p.campaignId);
+    if (!m) {
+      m = { campaignId: p.campaignId, userId: user.id, email: user.email.toLowerCase(), role: p.role };
+      await repo.upsertMember(m);
+      members.push(m);
+    } else if (p.role === 'gm' && m.role !== 'gm') {
+      m.role = 'gm';
+      await repo.upsertMember(m);
+    }
+    if (!p.userId) {
+      await repo.updateProfile(p.campaignId, p.key, { userId: user.id });
+      for (const t of p.tokenIds) await repo.assignToken(p.campaignId, t, user.id);
+    }
   }
   return members;
 }
@@ -222,7 +305,8 @@ async function runCommand(user: AuthUser, memberships: Member[], body: unknown, 
   const parsed = parseCommand(body.command);
   if (!parsed.ok) throw new HttpError(400, parsed.error);
   const cmd = parsed.command;
-  const as = typeof body.as === 'string' ? body.as : undefined;
+  const profile = await checkProfile(user, m, typeof body.profile === 'string' ? body.profile : undefined, repo);
+  const as = typeof body.as === 'string' ? body.as : profile?.tokenIds[0];
 
   if (m.role !== 'gm' && !PLAYER_COMMANDS.has(cmd.type)) {
     await repo.logCommand({ campaignId: m.campaignId, userId: user.id, role: m.role, command: cmd, ok: false, error: 'gm-only' });
@@ -362,6 +446,51 @@ async function runAdmin(user: AuthUser, memberships: Member[], body: unknown, re
       await repo.replaceState(cid, state, user.id);
       return campaignPayload(m, repo);
     }
+    case 'linkProfile': {
+      // Link a profile to an account by email (null = unlink). Emails are only ever shown to the GM.
+      if (typeof body.profile !== 'string') throw new HttpError(400, 'Invalid profile.');
+      const p = (await repo.profiles(cid)).find((x) => x.key === body.profile);
+      if (!p) throw new HttpError(404, 'Profile not found.');
+      const email = body.email === null || body.email === '' ? null : isEmail(body.email) ? body.email.trim().toLowerCase() : undefined;
+      if (email === undefined) throw new HttpError(400, 'Please enter a valid email address.');
+      const others = (await repo.profiles(cid)).filter((x) => x.key !== p.key);
+      if (email && others.some((x) => x.email === email)) throw new HttpError(400, 'This email address is already linked to another profile.');
+      if (p.userId) for (const t of p.tokenIds) await repo.assignToken(cid, t, null);
+      const existing = email ? (await repo.members(cid)).find((x) => x.email === email) : undefined;
+      await repo.updateProfile(cid, p.key, { email, userId: existing?.userId ?? null });
+      if (existing) {
+        if (p.role === 'gm' && existing.role !== 'gm') await repo.upsertMember({ ...existing, role: 'gm' });
+        for (const t of p.tokenIds) await repo.assignToken(cid, t, existing.userId);
+      }
+      return adminOverview(cid, repo);
+    }
+    case 'setProfileCharacters': {
+      if (typeof body.profile !== 'string') throw new HttpError(400, 'Invalid profile.');
+      const p = (await repo.profiles(cid)).find((x) => x.key === body.profile);
+      if (!p || p.role === 'gm') throw new HttpError(400, 'Characters can only be set for player profiles.');
+      const tokenIds = tokenList(body.tokenIds);
+      const stored = await repo.loadState(cid);
+      if (stored && !tokenIds.every((t) => stored.state.tokens[t]?.kind === 'player')) throw new HttpError(400, 'Only player characters can be assigned.');
+      if (p.userId) for (const t of p.tokenIds) await repo.assignToken(cid, t, null);
+      await repo.updateProfile(cid, p.key, { tokenIds });
+      if (p.userId) for (const t of tokenIds) await repo.assignToken(cid, t, p.userId);
+      return adminOverview(cid, repo);
+    }
+    case 'applyRoster': {
+      const stored = await repo.loadState(cid);
+      if (!stored || !needsRosterUpdate(stored.state)) throw new HttpError(400, 'Nothing to convert.');
+      await snapshotCurrent(cid, repo, user.id, 'Before character conversion');
+      await repo.replaceState(cid, applyRoster(stored.state), user.id);
+      // move existing account assignments to the new character ids
+      const map: Record<string, string> = { livia: 'sinna', marcus: 'aster', nyx: 'elwin', cassius: 'javi' };
+      for (const a of await repo.assignments(cid)) {
+        if (map[a.tokenId]) {
+          await repo.assignToken(cid, a.tokenId, null);
+          await repo.assignToken(cid, map[a.tokenId], a.userId);
+        }
+      }
+      return campaignPayload(m, repo);
+    }
     case 'createSnapshot': {
       const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 80) : 'Manual backup';
       await snapshotCurrent(cid, repo, user.id, label);
@@ -389,12 +518,18 @@ async function snapshotCurrent(cid: string, repo: Repo, userId: string, label: s
 }
 
 async function adminOverview(cid: string, repo: Repo): Promise<AdminOverview> {
-  const [members, invites, assignments, snapshots] = await Promise.all([
+  const [members, invites, assignments, snapshots, profiles, stored] = await Promise.all([
     repo.members(cid),
     repo.invites(cid),
     repo.assignments(cid),
     repo.listSnapshots(cid, 20),
+    repo.profiles(cid),
+    repo.loadState(cid),
   ]);
+  const online = (userId: string | null) => {
+    const mm = members.find((x) => x.userId === userId);
+    return !!mm?.lastSeenAt && Date.now() - Date.parse(mm.lastSeenAt) < PRESENCE_WINDOW_MS;
+  };
   return {
     members: members.map((x) => ({
       userId: x.userId,
@@ -406,5 +541,19 @@ async function adminOverview(cid: string, repo: Repo): Promise<AdminOverview> {
     })),
     invites: invites.map((i) => ({ email: i.email, role: i.role, tokenIds: i.tokenIds, acceptedAt: i.acceptedAt })),
     snapshots,
+    profiles: await Promise.all(
+      profiles.map(async (p) => ({
+        key: p.key,
+        displayName: p.displayName,
+        characterName: p.characterName,
+        role: p.role,
+        tokenIds: p.tokenIds,
+        email: p.email ?? members.find((x) => x.userId === p.userId)?.email ?? null,
+        signedIn: !!p.userId || (p.role === 'gm' && members.some((x) => x.role === 'gm')),
+        active: await profileActive(p, repo),
+        online: p.role === 'gm' ? members.some((x) => x.role === 'gm' && online(x.userId)) : online(p.userId),
+      })),
+    ),
+    rosterOutdated: stored ? needsRosterUpdate(stored.state) : false,
   };
 }

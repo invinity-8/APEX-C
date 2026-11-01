@@ -22,9 +22,10 @@ const codes = new Map<string, { code: string; expires: number; used: boolean }>(
 let apiDown = false;
 export const MOCK_USERS = [
   { id: '00000000-0000-4000-8000-000000000001', email: 'gm@apex.test' },
-  { id: '00000000-0000-4000-8000-000000000002', email: 'player1@apex.test' },
-  { id: '00000000-0000-4000-8000-000000000003', email: 'player2@apex.test' },
+  { id: '00000000-0000-4000-8000-000000000002', email: 'hannah@apex.test' },
+  { id: '00000000-0000-4000-8000-000000000003', email: 'jean@apex.test' },
   { id: '00000000-0000-4000-8000-000000000004', email: 'stranger@apex.test' },
+  { id: '00000000-0000-4000-8000-000000000005', email: 'simon@apex.test' },
 ];
 const CAMPAIGN = 'c0000000-0000-4000-8000-000000000001';
 
@@ -79,11 +80,26 @@ export function mockSupabase(): Plugin {
     const r = new MemoryRepo();
     r.campaigns.push({ id: CAMPAIGN, slug: 'main', name: 'APEX – Arena of the Eternal Will' });
     for (const u of MOCK_USERS) r.users.set(`tok-${u.id}`, { id: u.id, email: u.email, emailConfirmed: true });
-    r.inviteList.push(
-      { campaignId: CAMPAIGN, email: 'gm@apex.test', role: 'gm', tokenIds: [], acceptedAt: null },
-      { campaignId: CAMPAIGN, email: 'player1@apex.test', role: 'player', tokenIds: ['livia'], acceptedAt: null },
-      { campaignId: CAMPAIGN, email: 'player2@apex.test', role: 'player', tokenIds: ['marcus'], acceptedAt: null },
-    );
+    r.inviteList.push({ campaignId: CAMPAIGN, email: 'gm@apex.test', role: 'gm', tokenIds: [], acceptedAt: null });
+    // Same profiles as supabase/migrations/20261103000100_apex_profiles.sql; Hannah & Jean linked to TEST
+    // addresses, Simon & Jerba inactive (the GM links them in the E2E test).
+    const prof = (key: string, displayName: string, characterName: string, role: 'gm' | 'player', tokenIds: string[], email: string | null) => ({
+      campaignId: CAMPAIGN,
+      key,
+      displayName,
+      characterName,
+      role,
+      tokenIds,
+      email,
+      userId: null,
+    });
+    r.profileList = [
+      prof('gm', 'GM', 'All characters', 'gm', [], null),
+      prof('hannah', 'Hannah', 'Sinna', 'player', ['sinna'], 'hannah@apex.test'),
+      prof('jean', 'Jean', 'Aster', 'player', ['aster'], 'jean@apex.test'),
+      prof('simon', 'Simon', 'Elwin', 'player', ['elwin'], null),
+      prof('jerba', 'Jerba', 'Javi', 'player', ['javi'], null),
+    ];
     // Realtime: broadcast the head version after every write (like the DB trigger).
     const notify = (campaignId: string) => {
       const v = r.states.get(campaignId)?.version ?? 0;
