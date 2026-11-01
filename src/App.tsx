@@ -305,7 +305,7 @@ export default function App({ game }: { game: GameApi }) {
         </div>
 
         <aside className="w-full space-y-3 overflow-y-auto border-gold-700/30 p-3 lg:w-[380px] lg:border-l xl:w-[400px]">
-          <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} />
+          <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} />
           <SelectionPanel
             view={view}
             gmState={isGm ? state : null}
