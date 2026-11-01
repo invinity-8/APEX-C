@@ -24,7 +24,7 @@ export function PartyPanel({ view, selectedTokenId, onSelect }: Props) {
                 className={`flex w-full items-center gap-2.5 rounded-lg border px-2 py-1.5 text-left transition-colors ${
                   selectedTokenId === t.id ? 'border-gold-400/70 bg-gold-400/10' : 'border-transparent hover:bg-ink-700/60'
                 }`}
-                title={`${t.name} select and show on map`}
+                title={`Select ${t.name} and show on map`}
               >
                 <span
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-ink-950"
@@ -36,7 +36,7 @@ export function PartyPanel({ view, selectedTokenId, onSelect }: Props) {
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-medium text-marble-50">
                       {t.name}
-                      {t.id === view.viewerId && <span className="ml-1 text-[10px] text-gold-300">(du)</span>}
+                      {t.id === view.viewerId && <span className="ml-1 text-[10px] text-gold-300">(you)</span>}
                     </span>
                     <span className={`text-xs tabular-nums ${empty ? 'text-blood-400' : 'text-gold-200'}`}>
                       {fmt(d.movePoints)}/{d.maxMovePoints}

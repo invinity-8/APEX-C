@@ -1,12 +1,13 @@
 /**
- * Arena-Events: wenden ihre Effekte auf den Spielstand an.
- * Neue Effekt-Typen: in types.ts (EventEffect) ergänzen und hier behandeln.
+ * Arena events: apply their effects to the game state.
+ * New effect types: add them to types.ts (EventEffect) and handle them here.
  */
-import { TERRAIN } from './terrain';
-import { addLog } from './log';
-import type { GameState } from './types';
+import { TERRAIN } from './terrain.js';
+import { addLog } from './log.js';
+import { T } from './text.js';
+import type { ArenaEvent, GameState, Phase } from './types.js';
 
-/** Mutiert `state`. Gibt false zurück, wenn das Event nicht (mehr) auslösbar ist. */
+/** Mutates `state`. Returns false if the event cannot be triggered (any more). */
 export function applyEvent(state: GameState, eventId: string): boolean {
   const ev = state.events[eventId];
   if (!ev || ev.status === 'done') return false;
@@ -16,7 +17,7 @@ export function applyEvent(state: GameState, eventId: string): boolean {
       case 'setTerrain':
         for (const key of ev.hexes) {
           const tile = state.hexes[key];
-          // Orte und besetzte Felder bleiben verschont, damit niemand "im Wasser" steht.
+          // Sites and occupied hexes are spared so nobody ends up "inside a lake".
           const occupied = Object.values(state.tokens).some((t) => `${t.pos.q},${t.pos.r}` === key);
           if (tile && !tile.siteId && !occupied) tile.terrain = effect.terrain;
         }
@@ -38,8 +39,20 @@ export function applyEvent(state: GameState, eventId: string): boolean {
   addLog(
     state,
     'event',
-    `⚡ ${ev.name}: ${ev.description}${terrainNote && terrainNote.type === 'setTerrain' ? ` (${ev.hexes.length} Felder → ${TERRAIN[terrainNote.terrain].label})` : ''}`,
+    T.logEvent(
+      ev.name,
+      ev.description,
+      terrainNote && terrainNote.type === 'setTerrain' ? T.eventTerrainNote(ev.hexes.length, TERRAIN[terrainNote.terrain].label) : undefined,
+    ),
     ev.announce ? 'all' : 'gm',
   );
   return true;
+}
+
+/** Does this event fire automatically when `phase` of `day` begins? */
+export function firesAt(ev: ArenaEvent, day: number, phase: Phase): boolean {
+  if (ev.status !== 'pending') return false;
+  if (ev.trigger.type === 'day') return phase === 'day' && ev.trigger.day === day;
+  if (ev.trigger.type === 'phase') return ev.trigger.day === day && ev.trigger.phase === phase;
+  return false;
 }

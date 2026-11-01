@@ -1,38 +1,65 @@
 /**
- * Zentrale Datenstruktur des Spielstands.
- * Alles, was gespeichert, exportiert oder später in Supabase abgelegt wird,
- * ist hier definiert. Der GameState enthält die VOLLE Wahrheit (inkl. Geheimnisse);
- * Spieler bekommen nie den GameState, sondern nur eine gefilterte PlayerView
- * (siehe visibility.ts → buildPlayerView).
+ * Central game state structure.
+ * Everything that is saved, exported or stored in Supabase is defined here.
+ * The GameState contains the FULL truth (including secrets); players never
+ * receive it, only a filtered view (see visibility.ts → buildPlayerView).
  */
-import type { Axial, HexKey } from './hex';
-import type { TerrainType } from './terrain';
+import type { Axial, HexKey } from './hex.js';
+import type { TerrainType } from './terrain.js';
 
-export const STATE_VERSION = 1;
+/** v2: day/night phases, terrain elevation & landmark features. */
+export const STATE_VERSION = 2;
 
-// ---------------- Karte ----------------
+// ---------------- Map ----------------
+
+/** Landmark decoration drawn on top of the terrain. Does not change movement rules. */
+export type HexFeature = 'eagle' | 'plaza' | 'labyrinth';
 
 export interface HexTile {
   q: number;
   r: number;
   terrain: TerrainType;
-  /** Optionaler Ort auf diesem Feld. */
+  /** 0..1 relative height, used for relief shading. */
+  elevation?: number;
+  feature?: HexFeature;
+  /** Optional site on this hex. */
   siteId?: string;
 }
 
+// ---------------- Time ----------------
+
+export type Phase = 'day' | 'night';
+
+export interface PhaseRule {
+  /** Added to every character's vision radius during this phase. */
+  visionModifier: number;
+  /** Vision never drops below this value because of the phase modifier. */
+  minVision: number;
+}
+
+export interface PhaseRules {
+  day: PhaseRule;
+  night: PhaseRule;
+}
+
+export const DEFAULT_PHASE_RULES: PhaseRules = {
+  day: { visionModifier: 0, minVision: 0 },
+  night: { visionModifier: -1, minVision: 1 },
+};
+
 export interface ShrinkConfig {
   enabled: boolean;
-  /** Ab diesem Tag ist der äußerste Ring betroffen. */
+  /** From the dawn of this day on, the outermost ring(s) are affected. */
   startDay: number;
-  /** Alle wie viele Tage ein weiterer Ring betroffen ist. */
+  /** Every how many days another step is applied. */
   intervalDays: number;
-  /** Ringe pro Schrumpfschritt. */
+  /** Rings per shrink step. */
   ringsPerStep: number;
-  /** "danger": betretbar, aber gefährlich. "closed": nicht mehr betretbar. */
+  /** "danger": passable but dangerous. "closed": can no longer be entered. */
   mode: 'danger' | 'closed';
-  /** Wie viele Tage vorher gewarnt wird. */
+  /** How many days in advance players are warned. */
   warningDays: number;
-  /** Freitext für Konsequenzen (z. B. Schaden), wird im Log genannt. */
+  /** Free text describing the consequence (e.g. damage), mentioned in the log. */
   consequence: string;
 }
 
@@ -42,9 +69,10 @@ export interface GameConfig {
   defaultMovePoints: number;
   defaultVisionRadius: number;
   shrink: ShrinkConfig;
+  phases: PhaseRules;
 }
 
-// ---------------- Figuren & Teams ----------------
+// ---------------- Characters & teams ----------------
 
 export type TokenKind = 'player' | 'rival';
 
@@ -137,7 +165,11 @@ export interface Site {
 
 // ---------------- Events ----------------
 
-export type EventTrigger = { type: 'day'; day: number } | { type: 'manual' };
+/**
+ * 'day'   – fires at the dawn of the given day (backwards compatible with v0.1).
+ * 'phase' – fires when the given day/phase begins (e.g. Night 2).
+ */
+export type EventTrigger = { type: 'day'; day: number } | { type: 'phase'; day: number; phase: Phase } | { type: 'manual' };
 
 export type EventEffect =
   | { type: 'setTerrain'; terrain: TerrainType }
@@ -178,6 +210,8 @@ export interface Knowledge {
 export interface LogEntry {
   id: number;
   day: number;
+  /** Phase at the time of the entry (missing in v0.1 saves → treated as 'day'). */
+  phase?: Phase;
   kind: 'day' | 'move' | 'event' | 'system' | 'gm' | 'warning';
   text: string;
   /** 'gm' = nur der Spielleiter sieht diesen Eintrag. */
@@ -190,6 +224,7 @@ export interface GameState {
   version: number;
   config: GameConfig;
   day: number;
+  phase: Phase;
   hexes: Record<HexKey, HexTile>;
   tokens: Record<string, Token>;
   teams: Record<string, Team>;
@@ -200,5 +235,5 @@ export interface GameState {
   nextLogId: number;
 }
 
-/** Wer führt eine Aktion aus? */
+/** Who performs an action? */
 export type Actor = { role: 'gm' } | { role: 'player'; tokenId: string };

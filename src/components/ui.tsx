@@ -26,11 +26,11 @@ export function Stepper({
     <div className="flex items-center justify-between gap-2" title={hint}>
       <span className="text-xs text-marble-300">{label}</span>
       <div className="flex items-center gap-1">
-        <button className="btn btn-ghost h-7 w-7 px-0" onClick={onDec} aria-label={`${label} verringern`}>
+        <button className="btn btn-ghost h-7 w-7 px-0" onClick={onDec} aria-label={`Decrease ${label}`}>
           −
         </button>
         <span className="w-12 text-center text-sm font-semibold tabular-nums text-marble-50">{value}</span>
-        <button className="btn btn-ghost h-7 w-7 px-0" onClick={onInc} aria-label={`${label} erhöhen`}>
+        <button className="btn btn-ghost h-7 w-7 px-0" onClick={onInc} aria-label={`Increase ${label}`}>
           +
         </button>
       </div>
@@ -55,6 +55,7 @@ export function Segmented<T extends string>({
         <button
           key={o.value}
           title={o.hint}
+          aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={`rounded-md px-2 ${size === 'md' ? 'py-1.5 text-xs' : 'py-1 text-[11px]'} font-medium transition-colors ${
             value === o.value ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(212,166,74,.6)]' : 'text-marble-300 hover:text-marble-50'

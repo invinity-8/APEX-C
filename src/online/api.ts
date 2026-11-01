@@ -1,0 +1,49 @@
+/** Small fetch wrapper for /api/apex. Attaches the current Supabase access token. */
+import type { AdminOverview, CampaignPayload, SessionInfo } from '../server/protocol';
+import { supabase } from './supabase';
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+  ) {
+    super(message);
+  }
+}
+
+async function request<T>(method: 'GET' | 'POST', op: string, query: Record<string, string | undefined> = {}, body?: unknown): Promise<T> {
+  const { data } = await supabase().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new ApiError(401, 'Please sign in.', 'unauthenticated');
+  const params = new URLSearchParams({ op });
+  for (const [k, v] of Object.entries(query)) if (v) params.set(k, v);
+  let res: Response;
+  try {
+    res = await fetch(`/api/apex?${params}`, {
+      method,
+      headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(0, 'Cannot reach the APEX server. Check your connection.', 'network');
+  }
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    /* non-JSON error page */
+  }
+  if (!res.ok) {
+    const err = (json ?? {}) as { error?: string; code?: string };
+    throw new ApiError(res.status, err.error ?? `Server error (${res.status}).`, err.code);
+  }
+  return json as T;
+}
+
+export const api = {
+  session: () => request<SessionInfo>('GET', 'session'),
+  state: (campaign: string, as?: string) => request<CampaignPayload>('GET', 'state', { campaign, as }),
+  command: (campaignId: string, command: unknown, as?: string) => request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as }),
+  admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>) => request<T>('POST', 'admin', {}, { campaignId, ...action }),
+};

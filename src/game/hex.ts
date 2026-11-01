@@ -95,3 +95,25 @@ export function hexCorners(cx: number, cy: number, size: number): string {
   }
   return pts.join(' ');
 }
+
+/** Rounds fractional axial coordinates to the nearest hex (cube rounding). */
+export function axialRound(q: number, r: number): Axial {
+  const s = -q - r;
+  let rq = Math.round(q);
+  let rr = Math.round(r);
+  const rs = Math.round(s);
+  const dq = Math.abs(rq - q);
+  const dr = Math.abs(rr - r);
+  const ds = Math.abs(rs - s);
+  if (dq > dr && dq > ds) rq = -rr - rs;
+  else if (dr > ds) rr = -rq - rs;
+  // Avoid "-0" keys.
+  return { q: rq + 0, r: rr + 0 };
+}
+
+/** Inverse of toPixel: which hex contains the pixel (x, y)? */
+export function fromPixel(x: number, y: number, size: number): Axial {
+  const q = ((SQRT3 / 3) * x - (1 / 3) * y) / size;
+  const r = ((2 / 3) * y) / size;
+  return axialRound(q, r);
+}

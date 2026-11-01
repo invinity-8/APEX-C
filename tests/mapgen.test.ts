@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createDemoState } from '../src/data/demo';
+import { DEFAULT_RADIUS, createDemoState } from '../src/data/demo';
 import { floodFill, generateArena } from '../src/game/mapgen';
 import { isPassable } from '../src/game/terrain';
-import { hexKey } from '../src/game/hex';
+import { ORIGIN, distance, hexKey, neighbors } from '../src/game/hex';
 
-describe('Arena-Generierung', () => {
-  it('ist deterministisch (gleicher Seed → gleiche Karte)', () => {
+describe('Arena generation', () => {
+  it('is deterministic (same seed → same map)', () => {
     const a = generateArena({ radius: 12, seed: 42 });
     const b = generateArena({ radius: 12, seed: 42 });
     expect(a).toEqual(b);
@@ -13,27 +13,59 @@ describe('Arena-Generierung', () => {
     expect(c).not.toEqual(a);
   });
 
-  it('enthält alle Geländearten und ein freies Zentrum', () => {
+  it('contains every core terrain type and a walkable centre', () => {
     const tiles = generateArena({ radius: 12, seed: 1337 });
     const types = new Set(Object.values(tiles).map((t) => t.terrain));
     for (const t of ['plains', 'forest', 'mountain', 'water', 'ruins', 'magic', 'road']) expect(types).toContain(t);
     expect(tiles['0,0'].terrain).toBe('plains');
   });
 
-  it('alle passierbaren Felder sind vom Zentrum aus erreichbar', () => {
-    const tiles = generateArena({ radius: 12, seed: 1337 });
-    const reach = floodFill(tiles, '0,0');
-    for (const [k, t] of Object.entries(tiles)) if (isPassable(t.terrain)) expect(reach.has(k)).toBe(true);
+  it('the full arena has rivers, hills and coherent biome regions', () => {
+    const tiles = generateArena({ radius: 39, seed: 1337 });
+    const list = Object.values(tiles);
+    expect(list).toHaveLength(4681);
+    const types = new Set(list.map((t) => t.terrain));
+    for (const t of ['river', 'hills', 'mountain', 'forest', 'water', 'ruins', 'magic', 'road']) expect(types).toContain(t);
+    // Coherence: most hexes share their terrain with the majority of their neighbours.
+    let same = 0;
+    let total = 0;
+    for (const t of list) {
+      for (const n of neighbors(t)) {
+        const nt = tiles[hexKey(n)];
+        if (!nt) continue;
+        total++;
+        if (nt.terrain === t.terrain) same++;
+      }
+    }
+    expect(same / total).toBeGreaterThan(0.6);
   });
 
-  it('Demo-Stand: Orte und Figuren stehen auf passierbaren Feldern', () => {
+  it('every passable hex is reachable from the centre', () => {
+    for (const radius of [12, 39]) {
+      const tiles = generateArena({ radius, seed: 1337 });
+      const reach = floodFill(tiles, '0,0');
+      for (const [k, t] of Object.entries(tiles)) if (isPassable(t.terrain)) expect(reach.has(k)).toBe(true);
+    }
+  });
+
+  it('the centre holds the Aquila Aurea surrounded by the labyrinth', () => {
+    const tiles = generateArena({ radius: 39, seed: 7 });
+    expect(tiles['0,0'].feature).toBe('eagle');
+    const lab = Object.values(tiles).filter((t) => t.feature === 'labyrinth');
+    expect(lab.length).toBeGreaterThan(30);
+    for (const t of lab) expect(distance(t, ORIGIN)).toBeLessThanOrEqual(4);
+  });
+
+  it('demo state: default arena is radius 39 and sites/characters stand on passable hexes', () => {
     const s = createDemoState();
-    expect(Object.keys(s.hexes)).toHaveLength(469);
+    expect(s.config.mapRadius).toBe(DEFAULT_RADIUS);
+    expect(Object.keys(s.hexes)).toHaveLength(4681);
     for (const t of Object.values(s.tokens)) expect(isPassable(s.hexes[hexKey(t.pos)].terrain)).toBe(true);
     for (const site of Object.values(s.sites)) expect(s.hexes[hexKey(site.pos)].siteId).toBe(site.id);
   });
 
-  it('Kartengröße ist konfigurierbar', () => {
+  it('map size is configurable (small maps for testing)', () => {
     expect(Object.keys(createDemoState({ radius: 8 }).hexes)).toHaveLength(217);
+    expect(Object.keys(createDemoState({ radius: 12 }).hexes)).toHaveLength(469);
   });
 });

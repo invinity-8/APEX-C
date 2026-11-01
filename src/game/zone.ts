@@ -1,8 +1,8 @@
 /**
  * Arenaschrumpfung: äußere Ringe werden ab bestimmten Tagen gefährlich oder gesperrt.
  */
-import { ORIGIN, distance, type Axial } from './hex';
-import type { GameConfig, ShrinkConfig } from './types';
+import { ORIGIN, distance, type Axial } from './hex.js';
+import type { GameConfig, ShrinkConfig } from './types.js';
 
 export type ZoneStatus = 'safe' | 'warning' | 'danger' | 'closed';
 

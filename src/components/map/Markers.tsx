@@ -84,7 +84,7 @@ export function LastSeenMarker({ team }: { team: TeamView }) {
       <circle r={HEX_SIZE * 0.42} fill="none" stroke={team.color} strokeWidth={1.5} strokeDasharray="3 3" />
       <text y={4} textAnchor="middle" fontSize={12} fill={team.color}>{team.emblem}</text>
       <text y={HEX_SIZE * 0.75} textAnchor="middle" fontSize={8} fill="#bdb29e" stroke="#000" strokeWidth={2.5} paintOrder="stroke">
-        Tag {team.lastSeen.day}
+        Day {team.lastSeen.day}
       </text>
     </g>
   );
@@ -120,9 +120,11 @@ export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSele
               onSelect(t.id);
             }}
             style={{ cursor: 'pointer' }}
+            role="button"
+            aria-label={`Select ${t.name}`}
             opacity={ghost ? 0.55 : 1}
           >
-            <title>{`${t.name} – ${t.title}${ghost ? ' (für Spieler verborgen)' : ''}`}</title>
+            <title>{`${t.name} – ${t.title}${ghost ? ' (hidden from players)' : ''}`}</title>
             {selected && <circle r={r + 4} fill="none" stroke="#f3dc9a" strokeWidth={2.2} />}
             {t.kind === 'player' ? (
               <>

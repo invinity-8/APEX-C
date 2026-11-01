@@ -5,7 +5,7 @@ import type { TerrainType } from '../src/game/terrain';
 import type { GameState } from '../src/game/types';
 import { emptyKnowledge, refreshAllKnowledge } from '../src/game/visibility';
 
-/** Kleiner, kontrollierter Spielstand: nur Ebene, alle Figuren auf bekannten Positionen. */
+/** Small, controlled game state: grassland only, all characters at the centre. */
 export function flatState(radius = 6): GameState {
   const s = createDemoState({ radius, seed: 1 });
   for (const t of Object.values(s.hexes)) {

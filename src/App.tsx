@@ -10,7 +10,9 @@ import type { Command } from './game/commands';
 import { hexKey, type HexKey } from './game/hex';
 import { explainReach, viewFullReach, viewReach } from './game/viewRules';
 import { visibleFrom, type Fog } from './game/visibility';
-import { useGame } from './state/useGame';
+import type { GameApi } from './state/gameApi';
+import { phaseName } from './game/text';
+import { PlayersPanel } from './components/PlayersPanel';
 
 interface Toast {
   id: number;
@@ -18,10 +20,10 @@ interface Toast {
   kind: 'error' | 'info';
 }
 
-export default function App() {
-  const game = useGame();
-  const { view, state, dispatch } = game;
-  const isGm = view.role === 'gm';
+export default function App({ game }: { game: GameApi }) {
+  const { view, gmState, dispatch } = game;
+  const state = gmState;
+  const isGm = view.role === 'gm' && !!gmState;
 
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedHex, setSelectedHex] = useState<HexKey | null>(null);
@@ -38,22 +40,22 @@ export default function App() {
   }, [toast]);
 
   const run = useCallback(
-    (cmd: Command) => {
-      const res = dispatch(cmd);
-      if (!res.ok) notify(res.error);
+    async (cmd: Command) => {
+      const res = await dispatch(cmd);
+      if (!res.ok) notify(res.error ?? 'The action failed.');
       return res;
     },
     [dispatch, notify],
   );
 
-  // Auswahl zurücksetzen, wenn die Figur in der aktuellen Ansicht nicht (mehr) existiert.
+  // Clear the selection if the character no longer exists in the current view.
   const selectedToken = view.tokens.find((t) => t.id === selectedTokenId) ?? null;
   useEffect(() => {
     if (selectedTokenId && !selectedToken) setSelectedTokenId(null);
     if (!isGm) setPlaceMode(false);
   }, [selectedTokenId, selectedToken, isGm]);
 
-  // Beim Wechsel in die Spieleransicht die eigene Figur auswählen.
+  // When switching to a player perspective, select the own character.
   useEffect(() => {
     if (!isGm && view.viewerId) {
       setSelectedTokenId(view.viewerId);
@@ -72,21 +74,22 @@ export default function App() {
     [canMove, selectedToken, fullReach, view],
   );
 
-  const onHexClick = (key: HexKey) => {
+  const onHexClick = async (key: HexKey) => {
+    if (game.busy) return;
     if (placeMode && selectedToken && isGm) {
       const [q, r] = key.split(',').map(Number);
-      if (run({ type: 'place', tokenId: selectedToken.id, to: { q, r } }).ok) setPlaceMode(false);
+      if ((await run({ type: 'place', tokenId: selectedToken.id, to: { q, r } })).ok) setPlaceMode(false);
       return;
     }
     if (canMove && selectedToken && key !== hexKey(selectedToken.pos)) {
       if (reach?.has(key)) {
         const [q, r] = key.split(',').map(Number);
-        if (run({ type: 'move', tokenId: selectedToken.id, to: { q, r } }).ok) setSelectedHex(null);
+        if ((await run({ type: 'move', tokenId: selectedToken.id, to: { q, r } })).ok) setSelectedHex(null);
         return;
       }
       const why = explain(key);
       setSelectedHex(key);
-      if (why && !why.ok) notify(`${selectedToken.name} kann nicht dorthin: ${why.reason}.`, 'info');
+      if (why && !why.ok) notify(`${selectedToken.name} cannot go there: ${why.reason}.`, 'info');
       return;
     }
     setSelectedHex(key);
@@ -100,12 +103,12 @@ export default function App() {
   const onTokenClick = (id: string) => {
     const t = view.tokens.find((x) => x.id === id);
     if (!t) return;
-    // Mit einer beweglichen Figur auf ein erreichbares Feld mit anderen Figuren klicken = dorthin ziehen.
+    // Clicking a reachable hex that holds other characters moves the selected character there.
     if (canMove && selectedToken && id !== selectedToken.id && reach?.has(hexKey(t.pos)) && !placeMode) {
-      onHexClick(hexKey(t.pos));
+      void onHexClick(hexKey(t.pos));
       return;
     }
-    if (placeMode) return onHexClick(hexKey(t.pos));
+    if (placeMode) return void onHexClick(hexKey(t.pos));
     setSelectedTokenId(id === selectedTokenId ? null : id);
     setSelectedHex(null);
   };
@@ -130,9 +133,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // GM-Overlay: Was sieht/kennt die Gruppe?
+  // GM overlay: what does the party see / know?
   const partyFog = useMemo(() => {
-    if (!isGm || !showPartyFog) return null;
+    if (!isGm || !showPartyFog || !state) return null;
     const vis = new Set<HexKey>();
     const known = new Set<HexKey>();
     for (const t of Object.values(state.tokens)) {
@@ -146,8 +149,8 @@ export default function App() {
   }, [isGm, showPartyFog, state]);
 
   const hiddenTeamIds = useMemo(
-    () => new Set(isGm ? Object.values(state.teams).filter((t) => t.visibility === 'hidden').map((t) => t.id) : []),
-    [isGm, state.teams],
+    () => new Set(isGm && state ? Object.values(state.teams).filter((t) => t.visibility === 'hidden').map((t) => t.id) : []),
+    [isGm, state],
   );
 
   return (
@@ -155,8 +158,9 @@ export default function App() {
       <Header
         game={game}
         notify={notify}
-        onEndDay={() => {
-          if (run({ type: 'endDay' }).ok) notify(`Day ${state.day + 1} beginnt.`, 'info');
+        onAdvancePhase={async () => {
+          const next = view.phase === 'day' ? phaseName('night', view.day) : phaseName('day', view.day + 1);
+          if ((await run({ type: 'advancePhase' })).ok) notify(`${next} begins.`, 'info');
         }}
       />
       <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -178,7 +182,7 @@ export default function App() {
           <ActivityLog log={view.log} isGm={isGm} />
           {!isGm && (
             <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-arcane-500/50 bg-ink-900/90 px-3 py-1 text-[11px] text-arcane-300">
-              Spieleransicht: {view.tokens.find((t) => t.id === view.viewerId)?.name}
+              Playing as {view.tokens.find((t) => t.id === view.viewerId)?.name}
             </div>
           )}
           {toast && (
@@ -211,20 +215,24 @@ export default function App() {
               setPlaceMode(false);
             }}
           />
-          {isGm ? (
-            <GmPanel
-              state={state}
-              run={run}
-              onSelectToken={selectAndFocus}
-              showPartyFog={showPartyFog}
-              setShowPartyFog={setShowPartyFog}
-              onRegenerate={(radius, seed) => {
-                game.reset({ radius, seed });
-                setSelectedTokenId(null);
-                setSelectedHex(null);
-                notify(`New arena erzeugt (Radius ${radius}).`, 'info');
-              }}
-            />
+          {isGm && state ? (
+            <>
+              <GmPanel
+                state={state}
+                run={run}
+                onSelectToken={selectAndFocus}
+                showPartyFog={showPartyFog}
+                setShowPartyFog={setShowPartyFog}
+                onRegenerate={async (radius, seed) => {
+                  const res = await game.regenerate(radius, seed);
+                  if (!res.ok) return notify(res.error ?? 'Could not generate the arena.');
+                  setSelectedTokenId(null);
+                  setSelectedHex(null);
+                  notify(`New arena generated (radius ${radius}).`, 'info');
+                }}
+              />
+              {game.online && <PlayersPanel state={state} online={game.online} notify={notify} />}
+            </>
           ) : (
             <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} />
           )}
