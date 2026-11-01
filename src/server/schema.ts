@@ -1,0 +1,11 @@
+/**
+ * Database compatibility contract between this code and Supabase.
+ *
+ * - REQUIRED_SCHEMA_VERSION must equal the schema_version written by the newest migration.
+ * - EXPECTED_MIGRATIONS lists every file in supabase/migrations (a unit test enforces this).
+ * The server refuses campaign requests when the database is older than the code, and
+ * /api/apex?op=health reports exactly which migrations are missing.
+ */
+export const REQUIRED_SCHEMA_VERSION = 1;
+
+export const EXPECTED_MIGRATIONS: readonly string[] = ['20261101145653', '20261101151000'];

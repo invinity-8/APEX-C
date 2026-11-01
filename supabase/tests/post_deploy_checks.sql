@@ -5,8 +5,7 @@
 -- works with the minimal read-only role apex_ci_readonly (docs/MIGRATIONS_DE.md).
 -- Any failed check raises an error → the workflow fails with a clear message.
 --
--- psql variable require_legacy=1 additionally requires the pre-existing
--- apex_access / apex_invites tables (production).
+-- Target state = migration 20261101145653_apex_baseline (schema version 1).
 -- ============================================================================
 \set ON_ERROR_STOP 1
 
@@ -14,7 +13,7 @@ do $$
 declare
   t text;
   problems text[] := '{}';
-  apex_tables text[] := array['apex_campaigns','apex_campaign_members','apex_campaign_invites','apex_character_assignments',
+  apex_tables text[] := array['apex_schema_info','apex_campaigns','apex_campaign_members','apex_campaign_invites','apex_character_assignments',
     'apex_game_states','apex_campaign_heads','apex_state_snapshots','apex_command_log','apex_profiles'];
 begin
   foreach t in array apex_tables loop
@@ -51,6 +50,21 @@ begin
              and policyname not in ('apex_members_read_own', 'apex_heads_read_member')) then
     problems := problems || 'unexpected additional RLS policies on apex_ tables – review them'::text;
   end if;
+  -- (the schema version itself is verified by /api/apex?op=health, which may read data)
+  if (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'apex_private' and p.proname in ('is_member', 'touch_head')) < 2 then
+    problems := problems || 'helper functions in schema apex_private are missing'::text;
+  end if;
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname = 'public' and p.proname in ('apex_is_member', 'apex_touch_head')) then
+    problems := problems || 'obsolete helper functions are still exposed in schema public'::text;
+  end if;
+  if to_regclass('public.apex_access') is not null or to_regclass('public.apex_invites') is not null then
+    problems := problems || 'legacy tables apex_access / apex_invites still exist'::text;
+  end if;
+  if exists (select 1 from pg_trigger where tgname = 'apex_auth_user_access') then
+    problems := problems || 'legacy trigger apex_auth_user_access on auth.users still exists'::text;
+  end if;
   if not exists (select 1 from pg_trigger where tgname = 'apex_game_states_touch_head') then
     problems := problems || 'trigger apex_game_states_touch_head is missing'::text;
   end if;
@@ -65,12 +79,3 @@ begin
   raise notice 'APEX schema, RLS, grants, policies, trigger and realtime: OK';
 end $$;
 
-\if :{?require_legacy}
-do $$
-begin
-  if to_regclass('public.apex_access') is null or to_regclass('public.apex_invites') is null then
-    raise exception 'APEX post-deploy check FAILED: the pre-existing tables apex_access / apex_invites are missing';
-  end if;
-  raise notice 'pre-existing apex_access and apex_invites: still present';
-end $$;
-\endif

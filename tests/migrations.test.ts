@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { EXPECTED_MIGRATIONS } from '../src/server/schema';
 // @ts-expect-error – plain ESM script without type declarations
 import { checkMigrations, parseVersionList } from '../scripts/check-migrations.mjs';
 
@@ -31,20 +32,16 @@ describe('Supabase migration guard', () => {
     expect(r.errors.length).toBe(2);
   });
 
-  it('the repository migrations are ordered after the production baseline and free of destructive SQL', () => {
+  it('the repository migrations match the production history and the server contract', () => {
     const dir = 'supabase/migrations';
-    const files = readdirSync(dir)
-      .filter((n) => n.endsWith('.sql'))
-      .map((name) => ({ name, sql: readFileSync(`${dir}/${name}`, 'utf8') }));
+    const names = readdirSync(dir).filter((n) => n.endsWith('.sql')).sort();
+    const files = names.map((name) => ({ name, sql: readFileSync(`${dir}/${name}`, 'utf8') }));
     const remote = parseVersionList(readFileSync('supabase/remote_history.txt', 'utf8'));
     const r: Result = checkMigrations(files, remote);
-    // Until the historical allowlist file is restored, exactly one error is expected: the missing file.
-    expect(r.errors.filter((e) => !e.startsWith('MISSING MIGRATION'))).toEqual([]);
-    expect(r.pending).toEqual([
-      '20261101100000_apex_online.sql',
-      '20261101100100_apex_seed_main_campaign.sql',
-      '20261102000100_apex_presence_and_grants.sql',
-      '20261103000100_apex_profiles.sql',
-    ]);
+    expect(r.errors).toEqual([]);
+    // EXPECTED_MIGRATIONS (checked by /api/apex?op=health) must list exactly the migration files.
+    expect(names.map((n) => n.slice(0, 14))).toEqual([...EXPECTED_MIGRATIONS]);
+    // No email addresses in migrations (the repository is public).
+    for (const f of files) expect(f.sql).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
   });
 });

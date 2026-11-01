@@ -1,19 +1,17 @@
 # Guards the automatic database deployment of APEX.
 #
-# The migrations themselves are applied by the existing Supabase GitHub integration
-# ("Deploy to production" on branch main). This workflow makes problems visible:
-#   - every PR touching the database: fails if a migration file is missing, out of order,
-#     or contains unreviewed destructive SQL (compared with the LIVE production history
-#     when the secret SUPABASE_CI_DB_URL is configured)
-#   - every push to main: waits until the integration has applied all migrations, then checks
-#     schema, RLS, grants, policies and the live health endpoint. Fails clearly otherwise.
+# Migrations are applied by the Supabase GitHub integration ("Deploy to production", branch main).
+# This workflow makes every problem visible – without any database credential:
+#   - pull requests: migration files complete, ordered, no unreviewed destructive SQL, tests, build
+#   - push to main:  waits until the live site (Vercel) serves the pushed commit AND the
+#                    database reports all migrations, schema version, profiles, Realtime and
+#                    no RLS/privilege problems (via the public /api/apex?op=health). Fails clearly otherwise.
 #
-# Setup (docs/MIGRATIONS_DE.md): secret SUPABASE_CI_DB_URL (read-only role), variable APEX_URL.
+# Optional repository variable APEX_URL (default https://4pex.online – must not be behind Vercel Authentication).
 name: Supabase migrations
 
 on:
   pull_request:
-    paths: ['supabase/**', 'scripts/check-migrations.mjs', 'scripts/verify-remote.sh', '.github/workflows/supabase-migrations.yml']
   push:
     branches: [main]
   workflow_dispatch:
@@ -34,38 +32,28 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Check against supabase/remote_history.txt
+      - run: npm ci
+      - name: Migration guard
         run: node scripts/check-migrations.mjs
-      - name: Check against the live production history
-        env:
-          DB_URL: ${{ secrets.SUPABASE_CI_DB_URL }}
-          EVENT: ${{ github.event_name }}
-        run: |
-          if [ -z "$DB_URL" ]; then
-            if [ "$EVENT" = "pull_request" ]; then
-              echo "::warning::Secret SUPABASE_CI_DB_URL is not configured – the live production history was not compared (docs/MIGRATIONS_DE.md, Schritt 5)."
-              exit 0
-            fi
-            echo "::error::Secret SUPABASE_CI_DB_URL is not configured – the production database cannot be verified (docs/MIGRATIONS_DE.md, Schritt 5)."
-            exit 1
-          fi
-          psql "$DB_URL" -At -c 'select version from supabase_migrations.schema_migrations order by version' > remote_versions.txt
-          node scripts/check-migrations.mjs --remote remote_versions.txt
+      - name: Tests (incl. migration ↔ server contract)
+        run: npm test
+      - name: Type check and build
+        run: npm run build
 
   verify-production:
     name: Production database deployed and secure
     needs: check
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Wait for the Supabase integration and verify schema, RLS and health
+      - name: Wait for Vercel + Supabase and verify the live deployment
         env:
-          DB_URL: ${{ secrets.SUPABASE_CI_DB_URL }}
           APEX_URL: ${{ vars.APEX_URL }}
+          EXPECTED_COMMIT: ${{ github.sha }}
           WAIT_SECONDS: '900'
-        run: bash scripts/verify-remote.sh
+        run: node scripts/verify-production.mjs

@@ -1,5 +1,5 @@
 import type { GameState } from '../src/game/types';
-import type { Assignment, AuthUser, Campaign, CommandLogEntry, HealthReport, Invite, Member, Profile, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
+import type { Assignment, AuthUser, Campaign, CommandLogEntry, DeployStatus, Invite, Member, Profile, Repo, SendCodeResult, SnapshotInfo, StoredState } from '../src/server/repo';
 
 /** In-memory Repo with the same contract as SupabaseRepo – used by the security tests. */
 export class MemoryRepo implements Repo {
@@ -51,8 +51,20 @@ export class MemoryRepo implements Repo {
     const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
     if (m) m.lastSeenAt = new Date().toISOString();
   }
-  async health(): Promise<HealthReport> {
-    return { database: true, authAdmin: true, campaignSeeded: this.campaigns.length > 0, presenceColumn: true, profilesTable: this.profileList.length > 0, errors: [] };
+  /** Test hook: simulated database deployment status. */
+  deploy: DeployStatus = {
+    schemaVersion: 1,
+    migrations: ['20261101145653', '20261101151000'],
+    campaignSeeded: true,
+    profiles: 5,
+    realtime: true,
+    securityProblems: [],
+  };
+  async deployStatus() {
+    return { ...this.deploy, migrations: [...this.deploy.migrations] };
+  }
+  async authAdminOk() {
+    return true;
   }
   async campaignsById(ids: string[]) {
     return this.campaigns.filter((c) => ids.includes(c.id));

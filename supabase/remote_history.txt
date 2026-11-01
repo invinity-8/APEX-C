@@ -3,7 +3,10 @@
 #
 # Every version listed here MUST have a matching file in supabase/migrations/.
 # scripts/check-migrations.mjs fails the build/PR check otherwise.
-# After a successful deploy, add the newly applied versions here (see docs/MIGRATIONS_DE.md).
+#
+# History: 20261101094428_apex_initial_account_allowlist (legacy allow-list, applied
+# outside Git) was marked "reverted" with `supabase migration repair` and retired by the
+# baseline below. Its original SQL is kept in the database backup schema apex_backup_20261101.
 #
 # version          name
-20261101094428     apex_initial_account_allowlist
+20261101145653     apex_baseline

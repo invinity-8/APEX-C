@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
-import { handleApi, type ApiRequest } from '../src/server/api';
+import { handleApi, resetSchemaCache, type ApiRequest } from '../src/server/api';
 import type { CampaignPayload, GmPayload, PlayerPayload, SessionInfo } from '../src/server/protocol';
 import { MemoryRepo } from './memoryRepo';
 
@@ -416,5 +416,39 @@ describe('Online API – infrastructure failures', () => {
     const r = await call(null, 'POST', 'request-code', { email: 'p1@example.com', profile: 'hannah' });
     expect(r.status).toBe(503);
     expect((r.body as { code: string }).code).toBe('db_unreachable');
+  });
+});
+
+describe('Online API – deployment health and schema contract', () => {
+  it('reports a complete deployment', async () => {
+    const h = (await call(null, 'GET', 'health')).body as { migrationsComplete: boolean; errors: string[]; schemaVersion: number };
+    expect(h.migrationsComplete).toBe(true);
+    expect(h.schemaVersion).toBe(1);
+    expect(h.errors).toEqual([]);
+  });
+
+  it('names missing and unknown migrations instead of claiming success', async () => {
+    repo.deploy = { ...repo.deploy, migrations: ['20261101094428'] };
+    const h = (await call(null, 'GET', 'health')).body as { migrationsComplete: boolean; missingMigrations: string[]; unknownMigrations: string[]; errors: string[] };
+    expect(h.migrationsComplete).toBe(false);
+    expect(h.missingMigrations).toEqual(['20261101145653', '20261101151000']);
+    expect(h.unknownMigrations).toEqual(['20261101094428']);
+    expect(h.errors.length).toBeGreaterThan(0);
+  });
+
+  it('reports database-side security problems', async () => {
+    repo.deploy = { ...repo.deploy, securityProblems: ['RLS off on apex_game_states'] };
+    const h = (await call(null, 'GET', 'health')).body as { securityOk: boolean; errors: string[] };
+    expect(h.securityOk).toBe(false);
+    expect(h.errors.join()).toMatch(/RLS off/);
+  });
+
+  it('refuses campaign requests while the database schema is older than the code', async () => {
+    resetSchemaCache();
+    repo.deploy = { ...repo.deploy, schemaVersion: 0 };
+    const r = await call('t-gm', 'GET', 'state');
+    expect(r.status).toBe(503);
+    expect((r.body as { code: string }).code).toBe('schema_outdated');
+    resetSchemaCache();
   });
 });

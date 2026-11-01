@@ -31,17 +31,38 @@ export interface Member {
 
 export type SendCodeResult = { ok: true } | { ok: false; reason: 'rate_limited' | 'failed'; detail?: string };
 
+export interface DeployStatus {
+  schemaVersion: number | null;
+  /** Versions recorded in supabase_migrations.schema_migrations. */
+  migrations: string[];
+  campaignSeeded: boolean;
+  profiles: number;
+  realtime: boolean;
+  /** RLS/privilege problems found by the database itself (null = check not deployed yet). */
+  securityProblems: string[] | null;
+}
+
 export interface HealthReport {
   /** Can the server reach the database and read the APEX tables? */
   database: boolean;
   /** Is the secret key valid for the Auth admin API? */
   authAdmin: boolean;
-  /** Does at least one campaign exist (seed migration applied)? */
+  /** Does the main campaign exist? */
   campaignSeeded: boolean;
-  /** Has the presence migration been applied? */
-  presenceColumn: boolean;
-  /** Has the profiles migration been applied (and seeded)? */
+  /** Are the five profiles present? */
   profilesTable: boolean;
+  /** Is apex_campaign_heads published for Realtime? */
+  realtime: boolean;
+  /** RLS, privileges and legacy objects verified by the database (null = not checked). */
+  securityOk: boolean | null;
+  /** Schema version found in the database / required by this code. */
+  schemaVersion: number | null;
+  requiredSchemaVersion: number;
+  /** Every migration file of this deployment is recorded in the database history. */
+  migrationsComplete: boolean;
+  missingMigrations: string[];
+  /** Versions in the database history that this deployment does not know (newer DB or drift). */
+  unknownMigrations: string[];
   errors: string[];
 }
 
@@ -110,8 +131,10 @@ export interface Repo {
   updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'email' | 'userId' | 'tokenIds'>>): Promise<void>;
   /** Records presence for a member. */
   touchMember(campaignId: string, userId: string): Promise<void>;
-  /** Configuration self-check for the setup page. */
-  health(): Promise<HealthReport>;
+  /** Raw deployment status from the database (server-only function apex_deploy_status). */
+  deployStatus(): Promise<DeployStatus>;
+  /** Is the secret key valid for the Auth admin API? */
+  authAdminOk(): Promise<boolean>;
 
   campaignsById(ids: string[]): Promise<Campaign[]>;
   membershipsOf(userId: string): Promise<Member[]>;
