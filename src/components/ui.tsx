@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 
 export function Bar({ value, max, color = '#e9c46a', className = '' }: { value: number; max: number; color?: string; className?: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
@@ -68,7 +68,18 @@ export function Segmented<T extends string>({
   );
 }
 
+/** Inside the GM sidebar a Section is already framed by its collapsible header: render it bare. */
+export const BareSections = createContext(false);
+
 export function Section({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
+  const bare = useContext(BareSections);
+  if (bare)
+    return (
+      <div>
+        {right && <div className="mb-2 flex justify-end">{right}</div>}
+        {children}
+      </div>
+    );
   return (
     <section className="panel p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
