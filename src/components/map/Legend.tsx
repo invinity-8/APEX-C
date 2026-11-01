@@ -6,7 +6,7 @@ export function Legend() {
   const [open, setOpen] = useState(false);
   return (
     <div className="absolute top-3 left-3 z-10">
-      <button className={`btn ${open ? 'btn-active' : 'btn-ghost'}`} onClick={() => setOpen(!open)} title="Legende ein-/ausblenden">
+      <button className={`btn ${open ? 'btn-active' : 'btn-ghost'}`} onClick={() => setOpen(!open)} title="Legend ein-/ausblenden">
         <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="currentColor">
           <rect x="2" y="3" width="4" height="4" rx="1" />
           <rect x="2" y="9" width="4" height="4" rx="1" />
@@ -15,7 +15,7 @@ export function Legend() {
           <rect x="2" y="15" width="4" height="2" rx="1" />
           <rect x="8" y="15" width="10" height="2" rx="1" />
         </svg>
-        Legende
+        Legend
       </button>
       {open && (
         <div className="panel mt-2 w-60 p-3 text-xs">
