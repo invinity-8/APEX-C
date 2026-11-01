@@ -18,6 +18,9 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 /** When true, /api/apex answers 503 – simulates a server/database outage. */
 let apiDown = false;
+/** Artificial latency for every /api/apex request (simulates a slow database). */
+let latencyMs = 0;
+let apiRequests = 0;
 const CAMPAIGN = 'c0000000-0000-4000-8000-000000000001';
 export const MOCK_PASSWORDS = { hannah: 'hannah-test-pass', jean: 'jean-test-pass' };
 const SETUP_CODE = 'A1B2-C3D4-E5F6-0718-293A-4B5C';
@@ -94,6 +97,11 @@ export function mockSupabase(): Plugin {
       server.middlewares.use('/__mock', (req, res) => {
         const url = new URL(req.url ?? '/', 'http://x');
         if (url.pathname === '/setup-code') return send(res, 200, { code: SETUP_CODE });
+        if (url.pathname === '/latency') {
+          latencyMs = Math.max(0, Number(url.searchParams.get('ms')) || 0);
+          return send(res, 200, { latencyMs });
+        }
+        if (url.pathname === '/stats') return send(res, 200, { requests: apiRequests });
         if (url.pathname === '/api-down') {
           apiDown = url.searchParams.get('on') === '1';
           return send(res, 200, { apiDown });
@@ -112,6 +120,8 @@ export function mockSupabase(): Plugin {
 
       // ---------- API (real handler, in-memory repo) ----------
       server.middlewares.use('/api/apex', async (req, res) => {
+        apiRequests++;
+        if (latencyMs) await new Promise((r) => setTimeout(r, latencyMs));
         if (apiDown) return send(res, 503, { error: 'Database unavailable (simulated outage).' });
         const r = await getRepo(server);
         const { handleApi } = (await server.ssrLoadModule('/src/server/api.ts')) as typeof import('../src/server/api');
