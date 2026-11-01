@@ -71,6 +71,12 @@ export function mockSupabase(): Plugin {
     const save = r.saveState.bind(r);
     const replace = r.replaceState.bind(r);
     const saveSheet = r.saveSheet.bind(r);
+    const transition = r.worldTransition.bind(r);
+    r.worldTransition = async (...a) => {
+      const res = await transition(...a);
+      if (a[2]) void broadcast(a[0], 'version');
+      return res;
+    };
     r.saveState = async (...a) => {
       const v = await save(...a);
       if (v !== null) void broadcast(a[0], 'version');

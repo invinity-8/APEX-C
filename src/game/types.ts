@@ -234,8 +234,16 @@ export interface LogEntry {
 
 // ---------------- Gesamtzustand ----------------
 
+/** Identity of the active world (APEX 0.3+). Older saves have none. */
+export interface WorldMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface GameState {
   version: number;
+  world?: WorldMeta;
   config: GameConfig;
   day: number;
   phase: Phase;

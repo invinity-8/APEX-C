@@ -163,6 +163,9 @@ export interface TrackerView {
 export interface ViewModel {
   role: 'gm' | 'player';
   viewerId: string | null;
+  /** Active world (null for saves without world metadata). Commands carry it to reject stale actions. */
+  worldId: string | null;
+  worldName: string | null;
   day: number;
   phase: Phase;
   /** Only known to the GM. Players get null so the map size cannot be inferred. */
@@ -231,6 +234,8 @@ export function buildGmView(state: GameState): ViewModel {
   return {
     role: 'gm',
     viewerId: null,
+    worldId: state.world?.id ?? null,
+    worldName: state.world?.name ?? null,
     day: state.day,
     phase: state.phase,
     mapRadius: state.config.mapRadius,
@@ -356,6 +361,8 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
 
   return {
     role: 'player',
+    worldId: state.world?.id ?? null,
+    worldName: state.world?.name ?? null,
     viewerId,
     day: state.day,
     phase: state.phase,

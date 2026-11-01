@@ -61,6 +61,11 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3b. World Management (v0.4)
+
+GM: *Archive World*, *Create New World*, *Reset Current World*, *Restore Archived World* – atomic, idempotent, accounts/passwords/
+character sheets/inventories are kept. Details: [`docs/WORLD_MANAGEMENT.md`](docs/WORLD_MANAGEMENT.md).
+
 ## 3a. New in v0.3
 
 | Area | What changed |

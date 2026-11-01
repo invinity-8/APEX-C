@@ -131,3 +131,34 @@ do $$ declare cid uuid; r jsonb; begin
   delete from apex_command_log where request_id = 'req-unique-1';
 end $$;
 \echo 'Request-efficiency checks passed.'
+
+-- Migration 20261101202637: world archives are server-only; transitions are atomic.
+begin;
+select pg_temp.expect_denied('select * from apex_world_archives', '11111111-1111-1111-1111-111111111111');
+select pg_temp.expect_denied_anon('select * from apex_world_archives');
+select pg_temp.expect_denied('select public.apex_world_transition(gen_random_uuid(), 1, null, ''x'', '''', ''manual'', null)', '11111111-1111-1111-1111-111111111111');
+commit;
+do $$ declare cid uuid; v bigint; r jsonb; n int; begin
+  select id into cid from apex_campaigns where slug = 'main';
+  select version into v from apex_game_states where campaign_id = cid;
+  -- archive only: state and version unchanged, archive holds a copy
+  r := public.apex_world_transition(cid, null, null, 'Manual', 'desc', 'manual', null);
+  assert (r->>'version')::bigint = v, 'archive-only keeps the version';
+  assert (select state from apex_world_archives where id = (r->>'archive_id')::uuid) = (select state from apex_game_states where campaign_id = cid), 'archive is a full copy';
+  -- replace with the correct expected version
+  r := public.apex_world_transition(cid, v, '{"secret":"new world"}'::jsonb, 'Before reset', '', 'before-reset', null);
+  assert (r->>'version')::bigint = v + 1 and (select state->>'secret' from apex_game_states where campaign_id = cid) = 'new world', 'world replaced';
+  assert (select state->>'secret' from apex_world_archives where id = (r->>'archive_id')::uuid) = 'Templum Oblitum', 'old world archived';
+  -- stale expected version: nothing changes, no archive is written
+  select count(*) into n from apex_world_archives;
+  begin
+    perform public.apex_world_transition(cid, v, '{"secret":"stale"}'::jsonb, 'x', '', 'before-reset', null);
+    raise exception 'stale transition accepted';
+  exception when raise_exception then
+    assert sqlerrm = 'apex:version_conflict', sqlerrm;
+  end;
+  assert (select state->>'secret' from apex_game_states where campaign_id = cid) = 'new world', 'failed transition leaves the world intact';
+  assert (select count(*) from apex_world_archives) = n, 'failed transition writes no archive';
+  delete from apex_world_archives;
+end $$;
+\echo 'World archive checks passed.'

@@ -87,8 +87,8 @@ export const api = {
   /** since = version the client already has → the server answers {unchanged:true} instead of the full state. */
   state: (campaign: string, as?: string, since?: number, signal?: AbortSignal) =>
     request<CampaignPayload | UnchangedPayload>('GET', 'state', { campaign, as, since: since ? String(since) : undefined }, undefined, { signal }),
-  command: (campaignId: string, command: unknown, requestId: string, as?: string) =>
-    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId }),
+  command: (campaignId: string, command: unknown, requestId: string, as?: string, worldId?: string | null) =>
+    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId, ...(worldId !== undefined ? { worldId } : {}) }),
   commandStatus: (requestId: string) =>
     request<{ state: 'ok' | 'failed' | 'pending' | 'unknown'; version: number | null; error: string | null }>('GET', 'command-status', { requestId }, undefined, { timeoutMs: 10_000 }),
   admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>, opts?: RequestOptions) =>

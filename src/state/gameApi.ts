@@ -13,6 +13,8 @@ import type { Session } from './storage';
 export interface DispatchResult {
   ok: boolean;
   error?: string;
+  /** Server answer of a successful action (e.g. the archive list after Archive World). */
+  value?: unknown;
 }
 
 /**
@@ -59,6 +61,9 @@ export interface OnlineControls {
   realtimeLive: boolean;
   /** Label of an action whose outcome is still being verified after a lost response. */
   unknownAction: string | null;
+  /** Set when the GM switched the active world (reset, new world, restore) – shown once to everybody. */
+  worldNotice: string | null;
+  clearWorldNotice: () => void;
   /** Human-readable reason of the last failed sync/save, if any. */
   syncError: string | null;
   version: number;

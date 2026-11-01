@@ -170,6 +170,21 @@ Wenn etwas nicht klappt: Teil A wiederholen und die Antwort von `?op=health` not
 
 ---
 
+## Teil H – Welten verwalten (Spielleiter)
+
+Rechts im Bereich **World Management**:
+
+- **Archive World** – speichert eine vollständige Kopie der aktuellen Welt (Name und Beschreibung frei wählbar). Die Welt selbst ändert sich nicht.
+- **Create New World** – Name, Kartenradius, optional ein Seed. Wähle **Keep progress** (Willenskraft bleibt wie sie ist) oder **Fresh start**
+  (Willenskraft wird aufgefüllt). Die aktuelle Welt wird vorher automatisch archiviert.
+- **Reset Current World** – neue Karte mit gleichem Namen. Zur Bestätigung **RESET** eintippen. Die alte Welt wird vorher archiviert.
+- **Restore** (in der Archivliste) – holt eine archivierte Welt zurück. Die aktuelle Welt wird vorher archiviert. Inventare: **Keep current**
+  (empfohlen) oder **Use archived**.
+
+**Bleibt immer erhalten:** Konten, Passwörter, Profile, GM-Rechte, Zuordnung Spieler ↔ Figur, Charakterbögen und Inventare.
+**Neu pro Welt:** Karte, Positionen, erkundete Felder (Fog of War), Tag/Nacht, schrumpfende Arena, Ereignisse.
+Alle Spieler werden automatisch auf die neue Welt umgestellt und bekommen einen Hinweis. Schlägt etwas fehl, bleibt die alte Welt aktiv.
+
 ## Teil G – Neue Spieler später freischalten
 
 1. Als Spielleiter anmelden → **Players & Access** → **Profiles**.

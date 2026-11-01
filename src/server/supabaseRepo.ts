@@ -6,6 +6,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { GameState } from '../game/types.js';
 import type {
+  ArchiveInfo,
+  ArchiveKind,
   Assignment,
   AuthBundle,
   Campaign,
@@ -24,6 +26,7 @@ import type {
   StoredSheet,
   StoredState,
 } from './repo.js';
+import { WorldConflictError } from './repo.js';
 
 /** Every database call is aborted after this many milliseconds – a slow database must never hang a function. */
 export const DB_TIMEOUT_MS = 8000;
@@ -94,6 +97,19 @@ const toProfile = (r: Record<string, unknown>): Profile => ({
   tokenIds: (r.token_ids as string[] | null) ?? [],
   userId: r.user_id as string,
   active: r.active === true,
+});
+const toArchive = (r: Record<string, unknown>): ArchiveInfo => ({
+  id: r.id as string,
+  name: r.name as string,
+  description: (r.description as string) ?? '',
+  kind: r.kind as ArchiveKind,
+  createdAt: r.created_at as string,
+  stateVersion: Number(r.state_version),
+  worldName: (r.world_name as string | null) ?? null,
+  seed: r.seed === null || r.seed === undefined ? null : Number(r.seed),
+  radius: r.radius === null || r.radius === undefined ? null : Number(r.radius),
+  day: r.day === null || r.day === undefined ? null : Number(r.day),
+  phase: (r.phase as string | null) ?? null,
 });
 const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
@@ -462,6 +478,54 @@ export class SupabaseRepo implements Repo {
       'prune snapshots',
     ) as Array<{ id: number }>;
     if (rows.length) check(await this.db.from('apex_state_snapshots').delete().in('id', rows.map((r) => r.id)), 'prune snapshots');
+  }
+
+  // ---------------------------------------------------------------- world management
+
+  async worldTransition(
+    campaignId: string,
+    expectedVersion: number | null,
+    newState: GameState | null,
+    archive: { name: string; description: string; kind: ArchiveKind },
+    userId: string,
+  ): Promise<{ archiveId: string; version: number }> {
+    const { data, error } = await this.db.rpc('apex_world_transition', {
+      p_campaign: campaignId,
+      p_expected_version: expectedVersion,
+      p_new_state: newState,
+      p_archive_name: archive.name,
+      p_archive_description: archive.description,
+      p_archive_kind: archive.kind,
+      p_user: userId,
+    });
+    if (error) {
+      if (/apex:version_conflict/.test(error.message)) throw new WorldConflictError();
+      throw new Error(`world transition: ${error.message}`);
+    }
+    const d = data as { archive_id: string; version: number };
+    return { archiveId: d.archive_id, version: Number(d.version) };
+  }
+
+  async listArchives(campaignId: string): Promise<ArchiveInfo[]> {
+    const rows = check(
+      await this.db
+        .from('apex_world_archives')
+        .select('id, name, description, kind, created_at, state_version, world_name, seed, radius, day, phase')
+        .eq('campaign_id', campaignId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      'list archives',
+    ) as Array<Record<string, unknown>>;
+    return rows.map(toArchive);
+  }
+
+  async loadArchive(campaignId: string, id: string): Promise<(ArchiveInfo & { state: GameState }) | null> {
+    if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+    const row = check(
+      await this.db.from('apex_world_archives').select('*').eq('campaign_id', campaignId).eq('id', id).maybeSingle(),
+      'load archive',
+    ) as Record<string, unknown> | null;
+    return row ? { ...toArchive(row), state: row.state as GameState } : null;
   }
 
   // ---------------------------------------------------------------- character sheets

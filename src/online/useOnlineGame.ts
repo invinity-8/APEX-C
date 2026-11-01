@@ -101,6 +101,9 @@ export function useOnlineGame(
   });
 
   const versionRef = useRef(0);
+  /** Active world id as last received – sent with every command (stale-world protection). */
+  const worldRef = useRef<string | null | undefined>(undefined);
+  const [worldNotice, setWorldNotice] = useState<string | null>(null);
   const activeRef = useRef(activeCharacter);
   activeRef.current = activeCharacter;
   const failuresRef = useRef(0);
@@ -147,6 +150,12 @@ export function useOnlineGame(
       const sameChar = p.role === 'gm' || p.activeCharacter === activeRef.current || !activeRef.current;
       if (!force && sameChar && p.version < versionRef.current) return; // stale response – never overwrite newer state
       versionRef.current = p.version;
+      const wid = p.role === 'gm' ? (p.state?.world?.id ?? null) : (p.view?.worldId ?? null);
+      const wname = p.role === 'gm' ? (p.state?.world?.name ?? null) : (p.view?.worldName ?? null);
+      if (worldRef.current !== undefined && wid !== worldRef.current && (p.role === 'gm' ? p.state : p.view)) {
+        setWorldNotice(`The Game Master switched to the world “${wname ?? 'Unnamed'}”.`);
+      }
+      worldRef.current = wid;
       setPayload(p);
       setError(null);
       markOk();
@@ -336,12 +345,12 @@ export function useOnlineGame(
         try {
           const v = await call(requestId);
           onOk(v);
-          return { ok: true };
+          return { ok: true, value: v };
         } catch (e) {
           const err = e instanceof ApiError ? e : new ApiError(0, String(e));
           if (err.status === 401) setError(err);
           if (!transient(err) && err.code !== 'in_progress') {
-            if (err.code === 'conflict' || err.status === 409) void refresh(true);
+            if (err.code === 'conflict' || err.code === 'world_changed' || err.status === 409) void refresh(true);
             return { ok: false, error: err.message };
           }
           // Response lost or server overloaded: the action may or may not have been saved. Verify, never re-send.
@@ -372,7 +381,7 @@ export function useOnlineGame(
       return perform(
         key,
         ACTION_LABEL[key] ?? 'This action',
-        (requestId) => api.command(campaignId, cmd, requestId, activeRef.current ?? undefined),
+        (requestId) => api.command(campaignId, cmd, requestId, activeRef.current ?? undefined, worldRef.current),
         (p) => accept(p, true),
       );
     },
@@ -385,8 +394,10 @@ export function useOnlineGame(
       perform(
         'world',
         ACTION_LABEL.world,
-        (requestId) => api.admin<CampaignPayload>(campaignId, { ...action, requestId }, { timeoutMs: 45_000 }),
-        (p) => accept(p, true),
+        (requestId) => api.admin<unknown>(campaignId, { ...action, requestId }, { timeoutMs: 45_000 }),
+        (p) => {
+          if (p && typeof p === 'object' && 'role' in p) accept(p as CampaignPayload, true);
+        },
       ),
     [accept, campaignId, perform],
   );
@@ -451,6 +462,8 @@ export function useOnlineGame(
             realtimeLive: realtime === 'live',
             unknownAction: unknownAction?.label ?? null,
             syncError,
+            worldNotice,
+            clearWorldNotice: () => setWorldNotice(null),
             version: payload.version,
             lastSync,
             refresh: refreshForce,
@@ -459,7 +472,7 @@ export function useOnlineGame(
             worldAction,
           }
         : undefined,
-    [worldAction, payload, profileName, changePassword, campaignId, setActiveCharacter, connection, realtime, unknownAction, syncError, lastSync, refreshForce, signOut, adminRaw],
+    [worldNotice, worldAction, payload, profileName, changePassword, campaignId, setActiveCharacter, connection, realtime, unknownAction, syncError, lastSync, refreshForce, signOut, adminRaw],
   );
 
   const gmState = payload?.role === 'gm' ? payload.state : null;

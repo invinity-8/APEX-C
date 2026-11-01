@@ -374,11 +374,13 @@ describe('Filtered state and commands (unchanged multiplayer rules)', () => {
     ]);
   });
 
-  it('the GM can start a new arena and restore a snapshot', async () => {
+  it('a new arena archives the old world first; snapshots can still be restored', async () => {
     const gm = as(await login('gm', 'gm-secret-pass'));
+    await gm.admin({ action: 'createSnapshot', label: 'Manual' });
     await gm.admin({ action: 'initCampaign', radius: 8, seed: 42 });
     expect(repo.states.get(CID)!.state.config.mapRadius).toBe(8);
-    const id = repo.snapshots.find((s) => s.label === 'Before new arena')!.id;
+    expect(repo.archives[0]).toMatchObject({ radius: 12, kind: 'before-create' });
+    const id = repo.snapshots.find((s) => s.label === 'Manual')!.id;
     await gm.admin({ action: 'restoreSnapshot', id });
     expect(repo.states.get(CID)!.state.config.mapRadius).toBe(12);
   });
@@ -543,7 +545,7 @@ describe('Infrastructure and deployment health', () => {
   it('reports a complete deployment without email/SMTP checks', async () => {
     const h = (await call('GET', 'health')).body as { migrationsComplete: boolean; errors: string[]; schemaVersion: number };
     expect(h.migrationsComplete).toBe(true);
-    expect(h.schemaVersion).toBe(3);
+    expect(h.schemaVersion).toBe(4);
     expect(h.errors).toEqual([]);
     expect(JSON.stringify(h)).not.toMatch(/smtp|email/i);
   });
@@ -563,7 +565,7 @@ describe('Infrastructure and deployment health', () => {
   });
 
   it('refuses requests while the database schema is older than the code', async () => {
-    repo.deploy = { ...repo.deploy, schemaVersion: 2 };
+    repo.deploy = { ...repo.deploy, schemaVersion: 3 };
     const r = await call('POST', 'login', { profile: 'hannah', password: 'hannah-pass-1' });
     expect(r.status).toBe(503);
     expect((r.body as { code: string }).code).toBe('schema_outdated');

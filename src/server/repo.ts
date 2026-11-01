@@ -153,6 +153,29 @@ export interface StoredSheet {
   updatedBy: string | null;
 }
 
+export type ArchiveKind = 'manual' | 'before-create' | 'before-reset' | 'before-restore';
+
+export interface ArchiveInfo {
+  id: string;
+  name: string;
+  description: string;
+  kind: ArchiveKind;
+  createdAt: string;
+  stateVersion: number;
+  worldName: string | null;
+  seed: number | null;
+  radius: number | null;
+  day: number | null;
+  phase: string | null;
+}
+
+/** Thrown by worldTransition when the world changed after it was read (nothing was modified). */
+export class WorldConflictError extends Error {
+  constructor() {
+    super('The world was changed in the meantime.');
+  }
+}
+
 export interface SnapshotInfo {
   id: number;
   version: number;
@@ -233,6 +256,21 @@ export interface Repo {
   listSnapshots(campaignId: string, limit: number): Promise<SnapshotInfo[]>;
   loadSnapshot(campaignId: string, id: number): Promise<GameState | null>;
   pruneSnapshots(campaignId: string, keep: number): Promise<void>;
+
+  // ---- world management
+  /**
+   * ONE transaction: lock the state, check expectedVersion (null = no check), archive the current world,
+   * optionally replace it with newState (null = archive only). Throws WorldConflictError on a version mismatch.
+   */
+  worldTransition(
+    campaignId: string,
+    expectedVersion: number | null,
+    newState: GameState | null,
+    archive: { name: string; description: string; kind: ArchiveKind },
+    userId: string,
+  ): Promise<{ archiveId: string; version: number }>;
+  listArchives(campaignId: string): Promise<ArchiveInfo[]>;
+  loadArchive(campaignId: string, id: string): Promise<(ArchiveInfo & { state: GameState }) | null>;
 
   // ---- character sheets
   loadSheet(campaignId: string, tokenId: string): Promise<StoredSheet | null>;

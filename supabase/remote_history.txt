@@ -14,3 +14,5 @@
 20261101160000     apex_login_requests
 20261101173039     apex_password_login_and_sheets
 20261101200504     apex_request_efficiency
+20261101201210     apex_revoke_rls_auto_enable_execute
+20261101202637     apex_world_archives
