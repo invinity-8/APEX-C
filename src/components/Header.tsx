@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
-import type { GameApi } from '../state/gameApi';
+import type { Connection, GameApi } from '../state/gameApi';
 import { downloadState } from '../state/storage';
 import { safeRadius } from '../game/zone';
 import { phaseName } from '../game/text';
@@ -62,10 +62,11 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
         <button
           className="btn btn-gold px-4 py-2 text-sm"
           onClick={onAdvancePhase}
-          disabled={game.busy}
+          disabled={game.pending.includes('phase') || game.pending.includes('world') || game.online?.connection === 'unknown'}
+          aria-busy={game.pending.includes('phase')}
           title={night ? 'Dawn: restores movement points, processes events and the shrinking arena' : 'Nightfall: vision is reduced until dawn'}
         >
-          {night ? '☀' : '🌙'} Begin {next}
+          {game.pending.includes('phase') ? <Spinner /> : night ? '☀' : '🌙'} {game.pending.includes('phase') ? 'Saving…' : `Begin ${next}`}
         </button>
       ) : (
         <span className="chip text-marble-300" title="Only the Game Master advances time">
@@ -116,7 +117,7 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
 
         {online && (
           <div className="flex items-center gap-2 rounded-xl border border-ink-600 bg-ink-850 px-2 py-1">
-            <ConnectionDot state={online.connection} lastSync={online.lastSync} onClick={online.refresh} />
+            <ConnectionDot state={online.connection} realtime={online.realtimeLive} lastSync={online.lastSync} onClick={online.refresh} />
             <span className="chip text-marble-300">{isGm ? '👁 Game Master' : '🛡 Player'}</span>
             {!isGm && online.characters.length > 1 && (
               <select
@@ -262,17 +263,26 @@ function ChangePasswordDialog({ onClose, onSubmit }: { onClose: () => void; onSu
   );
 }
 
-function ConnectionDot({ state, lastSync, onClick }: { state: 'live' | 'degraded' | 'connecting' | 'offline'; lastSync: Date | null; onClick: () => void }) {
-  const label = state === 'live' ? 'Live' : state === 'degraded' ? 'Synced (polling)' : state === 'connecting' ? 'Connecting…' : 'Offline – retrying';
-  const color = state === 'live' ? 'bg-emerald-400' : state === 'degraded' || state === 'connecting' ? 'bg-amber-300' : 'bg-blood-400';
+const CONNECTION_LABEL: Record<Connection, { text: string; color: string }> = {
+  connected: { text: 'Connected', color: 'bg-emerald-400' },
+  syncing: { text: 'Synchronizing…', color: 'bg-sky-300' },
+  pending: { text: 'Saving action…', color: 'bg-gold-300' },
+  reconnecting: { text: 'Reconnecting…', color: 'bg-amber-300' },
+  unavailable: { text: 'Server unavailable', color: 'bg-blood-400' },
+  unknown: { text: 'Action outcome unknown', color: 'bg-amber-400' },
+};
+
+function ConnectionDot({ state, realtime, lastSync, onClick }: { state: Connection; realtime: boolean; lastSync: Date | null; onClick: () => void }) {
+  const { text, color } = CONNECTION_LABEL[state];
   return (
     <button
       onClick={onClick}
       className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] text-marble-300 hover:bg-ink-700"
-      title={`${label}${lastSync ? ` · last update ${lastSync.toLocaleTimeString('en-GB')}` : ''} – click to refresh`}
+      title={`${text}${realtime ? ' · live updates on' : ' · live updates off (polling)'}${lastSync ? ` · last confirmed ${lastSync.toLocaleTimeString('en-GB')}` : ''} – click to refresh`}
+      aria-live="polite"
     >
-      <span className={`h-2 w-2 rounded-full ${color} ${state === 'live' ? 'shadow-[0_0_6px_rgba(52,211,153,.8)]' : ''}`} />
-      {label}
+      <span className={`h-2 w-2 rounded-full ${color} ${state === 'connected' && realtime ? 'shadow-[0_0_6px_rgba(52,211,153,.8)]' : ''}`} />
+      {text}
     </button>
   );
 }

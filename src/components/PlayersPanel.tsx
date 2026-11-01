@@ -3,7 +3,8 @@
  * backups. Passwords are sent once to the server, hashed there (Argon2id) and never shown again.
  * All changes are validated again on the server.
  */
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { needsRosterUpdate } from '../game/roster';
 import type { GameState } from '../game/types';
 import type { AdminOverview, ProfileInfo } from '../server/protocol';
 import type { OnlineControls } from '../state/gameApi';
@@ -22,11 +23,28 @@ export function PlayersPanel({ state, online, notify }: Props) {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // `online.admin` has a stable identity (useOnlineGame), and the effect below depends only on it.
+  // Background refreshes never toggle any busy flag – they only replace `data` (no re-render loop).
+  const admin = online.admin;
+  const loading = useRef(false);
+  const loadOverview = useCallback(async () => {
+    if (loading.current) return; // single-flight
+    loading.current = true;
+    try {
+      setData(await admin({ action: 'overview' }));
+    } catch {
+      /* the connection indicator reports server problems */
+    } finally {
+      loading.current = false;
+    }
+  }, [admin]);
+
   const act = useCallback(
     async (action: Record<string, unknown>, success?: string) => {
+      if (busy) return false;
       setBusy(true);
       try {
-        setData(await online.admin(action));
+        setData(await admin(action));
         if (success) notify(success, 'info');
         return true;
       } catch (e) {
@@ -36,17 +54,15 @@ export function PlayersPanel({ state, online, notify }: Props) {
         setBusy(false);
       }
     },
-    [online, notify],
+    [admin, notify, busy],
   );
 
   useEffect(() => {
-    void act({ action: 'overview' });
-    // Keep the presence indicators current without spamming notifications.
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') online.admin({ action: 'overview' }).then(setData, () => undefined);
-    }, 20_000);
+    void loadOverview();
+    // Presence indicators: refresh every 30 s while the tab is visible (one request at a time).
+    const id = setInterval(() => document.visibilityState === 'visible' && void loadOverview(), 30_000);
     return () => clearInterval(id);
-  }, [act, online]);
+  }, [loadOverview]);
 
   const players = Object.values(state.tokens).filter((t) => t.kind === 'player');
 
@@ -68,21 +84,16 @@ export function PlayersPanel({ state, online, notify }: Props) {
         <p className="text-xs text-marble-500">Loading…</p>
       ) : tab === 'profiles' ? (
         <div className="space-y-2" aria-busy={busy}>
-          {data.rosterOutdated && (
+          {needsRosterUpdate(state) && (
             <div role="alert" className="rounded-lg border border-amber-400/50 bg-amber-500/10 p-2 text-[11px] text-amber-200">
               This arena still uses the old placeholder characters (Livia, Marcus, Nyx, Cassius).
               <button
                 className="btn btn-ghost mt-1.5 w-full"
                 onClick={async () => {
                   if (!confirm('Rename Livia→Sinna, Marcus→Aster, Nyx→Elwin, Cassius→Javi? Positions, knowledge and items are kept. A backup is created first.')) return;
-                  try {
-                    await online.admin({ action: 'applyRoster' });
-                    online.refresh();
-                    notify('Characters converted.', 'info');
-                    void act({ action: 'overview' });
-                  } catch (e) {
-                    notify((e as Error).message);
-                  }
+                  const r = await online.worldAction({ action: 'applyRoster' });
+                  notify(r.ok ? 'Characters converted.' : (r.error ?? 'Conversion failed.'), r.ok ? 'info' : 'error');
+                  void loadOverview();
                 }}
               >
                 Convert old characters
@@ -121,14 +132,9 @@ export function PlayersPanel({ state, online, notify }: Props) {
                   className="btn btn-ghost px-2 py-0.5"
                   onClick={async () => {
                     if (!confirm(`Restore "${s.label}"? The current state is backed up first.`)) return;
-                    try {
-                      await online.admin({ action: 'restoreSnapshot', id: s.id });
-                      online.refresh();
-                      notify('Backup restored.', 'info');
-                      void act({ action: 'overview' });
-                    } catch (e) {
-                      notify((e as Error).message);
-                    }
+                    const r = await online.worldAction({ action: 'restoreSnapshot', id: s.id });
+                    notify(r.ok ? 'Backup restored.' : (r.error ?? 'Restore failed.'), r.ok ? 'info' : 'error');
+                    void loadOverview();
                   }}
                 >
                   Restore

@@ -4,12 +4,12 @@
  * (HttpOnly cookie). The profile shown on the card is only a choice of WHICH password to
  * check: role and characters always come from the server.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import App from '../App';
 import { DEFAULT_RADIUS, DEFAULT_SEED, MAX_RADIUS, MIN_RADIUS } from '../data/demo';
 import { hexCount } from '../game/hex';
 import type { SessionInfo } from '../server/protocol';
-import { api, ApiError } from './api';
+import { api, ApiError, newRequestId } from './api';
 import { LoginPage, MessageScreen, Splash, Spinner } from './AuthScreens';
 import { useOnlineGame } from './useOnlineGame';
 import { profileByKey, type ProfileConfig } from '../data/profiles';
@@ -143,14 +143,27 @@ function InitCampaign({ campaignId, name, onDone, signOut }: { campaignId: strin
   const [seed, setSeed] = useState(DEFAULT_SEED);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One request id per dialog: repeated clicks or a retry after a timeout can never create two worlds.
+  const requestId = useRef(newRequestId());
   const create = async () => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await api.admin(campaignId, { action: 'initCampaign', radius, seed });
+      await api.admin(campaignId, { action: 'initCampaign', radius, seed, requestId: requestId.current }, { timeoutMs: 45_000 });
       onDone();
     } catch (e) {
-      setError((e as Error).message);
+      const err = e instanceof ApiError ? e : new ApiError(0, String(e));
+      if (err.status === 0 || err.status >= 502 || err.code === 'in_progress') {
+        // Response lost: ask whether the world was created before allowing anything else.
+        const s = await api.commandStatus(requestId.current).catch(() => null);
+        if (s?.state === 'ok') return onDone();
+        setError(
+          s?.state === 'pending' || !s
+            ? 'The server has not confirmed yet whether the arena was created. Wait a moment, then press the button again – it will not create a second arena.'
+            : `${err.message} The arena was not created – you can try again.`,
+        );
+      } else setError(err.message);
     } finally {
       setBusy(false);
     }

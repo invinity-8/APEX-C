@@ -70,6 +70,7 @@ export function useDemoGame(): GameApi {
     view,
     gmState: session.role === 'gm' ? state : null,
     busy: false,
+    pending: [],
     dispatch,
     regenerate: async (radius, seed) => {
       clearState();

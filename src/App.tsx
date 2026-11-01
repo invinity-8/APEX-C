@@ -81,7 +81,7 @@ export default function App({ game }: { game: GameApi }) {
   );
 
   const onHexClick = async (key: HexKey) => {
-    if (game.busy) return;
+    if (game.pending.includes('move') || game.pending.includes('world')) return;
     if (placeMode && selectedToken && isGm) {
       const [q, r] = key.split(',').map(Number);
       if ((await run({ type: 'place', tokenId: selectedToken.id, to: { q, r } })).ok) setPlaceMode(false);
@@ -177,13 +177,18 @@ export default function App({ game }: { game: GameApi }) {
           DEMO MODE – this game is stored only in this browser and is NOT shared with other players.
         </div>
       )}
-      {game.online?.connection === 'offline' && (
+      {game.online?.connection === 'unavailable' && (
         <div role="alert" className="bg-blood-600/85 px-4 py-1.5 text-center text-[12px] font-medium text-white">
-          Connection to the APEX server lost{game.online.syncError ? ` – ${game.online.syncError.replace(/\.$/, '')}` : ''}. Reconnecting automatically. Moves cannot be
-          saved until the connection is back.
+          The APEX server is not answering{game.online.syncError ? ` – ${game.online.syncError.replace(/\.$/, '')}` : ''}. APEX retries with growing pauses. Actions
+          cannot be saved until the server is back.
         </div>
       )}
-      {game.online?.connection === 'degraded' && (
+      {game.online?.connection === 'unknown' && (
+        <div role="alert" className="bg-amber-500/25 px-4 py-1.5 text-center text-[12px] font-medium text-amber-100">
+          Checking whether “{game.online.unknownAction}” was saved – please do not repeat it. New actions are paused until the server confirms.
+        </div>
+      )}
+      {game.online && !game.online.realtimeLive && game.online.connection === 'connected' && (
         <div role="status" className="bg-amber-500/20 px-4 py-1 text-center text-[12px] text-amber-200">
           Live updates are temporarily unavailable – APEX checks for changes every few seconds instead.
         </div>
