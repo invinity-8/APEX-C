@@ -254,7 +254,9 @@ function NewWorldDialog({
         <label className="block text-xs">
           Map radius ({MIN_RADIUS}–{MAX_RADIUS})
           <input className={input} type="number" min={MIN_RADIUS} max={MAX_RADIUS} value={radius} onChange={(e) => setRadius(Math.round(Number(e.target.value) || MIN_RADIUS))} />
-          <span className="text-[10px] text-marble-500">{hexCount(Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius))).toLocaleString('en-US')} hexes</span>
+          <span className="text-[10px] text-marble-500">{hexCount(Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius))).toLocaleString('en-US')} hexes
+            {radius > 60 && ' · very large arena: slower first load on older phones'}
+          </span>
         </label>
         <label className="block text-xs">
           Seed (optional)
