@@ -15,8 +15,8 @@ export function ActivityLog({ log, isGm }: { log: LogEntry[]; isGm: boolean }) {
   const entries = log.slice(-60).reverse();
   return (
     <div className="panel absolute bottom-3 left-3 z-10 w-[min(380px,calc(100%-5rem))]">
-      <button className="flex w-full items-center justify-between px-3 py-2" onClick={() => setOpen(!open)} title="Chronik ein-/ausklappen">
-        <span className="panel-title">Chronik der Arena</span>
+      <button className="flex w-full items-center justify-between px-3 py-2" onClick={() => setOpen(!open)} title="Chronicle ein-/ausklappen">
+        <span className="panel-title">Arena Chronicle</span>
         <span className="text-xs text-marble-500">{open ? '▾' : '▸'} {log.length}</span>
       </button>
       {open && (
