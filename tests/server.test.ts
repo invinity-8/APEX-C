@@ -543,7 +543,7 @@ describe('Infrastructure and deployment health', () => {
   it('reports a complete deployment without email/SMTP checks', async () => {
     const h = (await call('GET', 'health')).body as { migrationsComplete: boolean; errors: string[]; schemaVersion: number };
     expect(h.migrationsComplete).toBe(true);
-    expect(h.schemaVersion).toBe(2);
+    expect(h.schemaVersion).toBe(3);
     expect(h.errors).toEqual([]);
     expect(JSON.stringify(h)).not.toMatch(/smtp|email/i);
   });
@@ -563,7 +563,7 @@ describe('Infrastructure and deployment health', () => {
   });
 
   it('refuses requests while the database schema is older than the code', async () => {
-    repo.deploy = { ...repo.deploy, schemaVersion: 1 };
+    repo.deploy = { ...repo.deploy, schemaVersion: 2 };
     const r = await call('POST', 'login', { profile: 'hannah', password: 'hannah-pass-1' });
     expect(r.status).toBe(503);
     expect((r.body as { code: string }).code).toBe('schema_outdated');

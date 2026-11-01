@@ -105,3 +105,29 @@ do $$ declare a text; b text; begin
   delete from apex_setup_codes;
 end $$;
 \echo 'APEX 0.3 credential/session/sheet checks passed.'
+
+-- Migration 20261101200504: apex_authenticate is server-only; request ids are unique per campaign.
+begin;
+select pg_temp.expect_denied('select public.apex_authenticate(repeat(''a'',64))', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied_anon('select public.apex_authenticate(repeat(''a'',64))');
+commit;
+do $$ declare cid uuid; r jsonb; begin
+  select id into cid from apex_campaigns where slug = 'main';
+  assert public.apex_authenticate(repeat('b', 64)) is null, 'unknown session → null';
+  insert into apex_sessions (token_hash, campaign_id, profile_key, user_id, expires_at, last_seen_at)
+    select repeat('c', 64), cid, 'hannah', p.user_id, now() + interval '1 day', now() - interval '5 minutes' from apex_profiles p where p.campaign_id = cid and p.profile_key = 'hannah';
+  r := public.apex_authenticate(repeat('c', 64));
+  assert r->'profile'->>'profile_key' = 'hannah' and (r->>'password_set')::boolean = false and r->'campaign'->>'sync_topic' is not null, 'bundle content';
+  assert (select last_seen_at > now() - interval '1 minute' from apex_sessions where token_hash = repeat('c', 64)), 'presence touched';
+  update apex_sessions set revoked_at = now() where token_hash = repeat('c', 64);
+  assert public.apex_authenticate(repeat('c', 64)) is null, 'revoked → null';
+  delete from apex_sessions where token_hash = repeat('c', 64);
+  insert into apex_command_log (campaign_id, role, command, ok, request_id) values (cid, 'gm', '{}', false, 'req-unique-1');
+  begin
+    insert into apex_command_log (campaign_id, role, command, ok, request_id) values (cid, 'gm', '{}', false, 'req-unique-1');
+    raise exception 'duplicate request id accepted';
+  exception when unique_violation then null;
+  end;
+  delete from apex_command_log where request_id = 'req-unique-1';
+end $$;
+\echo 'Request-efficiency checks passed.'

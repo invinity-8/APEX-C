@@ -93,8 +93,6 @@ const ok = (body: unknown, cookies?: string[]): ApiResponse => ({ status: 200, b
 
 /** A profile counts as "online" if one of its devices contacted the server within this window. */
 export const PRESENCE_WINDOW_MS = 75_000;
-const TOUCH_EVERY_MS = 20_000;
-const SESSION_TOUCH_MS = 10 * 60_000;
 
 /** Login rate limits (failed attempts within the window). */
 export const LOGIN_LIMITS = {
@@ -116,18 +114,26 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
     if (req.method === 'POST' && req.op === 'setup') return await gmSetup(req, repo);
     if (req.method === 'POST' && req.op === 'logout') return await logout(req, repo);
 
+    // One round trip: session + profile + password flag + campaign (and presence touch).
     const user = await authenticate(req, repo);
-    await touchPresence(user, repo);
     switch (`${req.method} ${req.op}`) {
       case 'GET session':
-        return ok(await sessionInfo(user, repo));
+        return ok(sessionInfo(user));
       case 'GET ping': {
-        // Heartbeat: keeps presence fresh and lets clients detect missed realtime pings.
-        const s = await repo.loadState(user.campaignId);
-        return ok({ version: s?.version ?? 0, syncTopic: await repo.syncTopic(user.campaignId) });
+        // Heartbeat: cheap version check (no state transfer); presence was refreshed by authenticate().
+        return ok({ version: (await repo.stateVersion(user.campaignId)) ?? 0, syncTopic: user.syncTopic });
       }
-      case 'GET state':
+      case 'GET state': {
+        // Clients pass the version they already have: nothing is re-downloaded if it did not change.
+        const since = Number(req.query.since);
+        if (Number.isInteger(since) && since > 0) {
+          const v = (await repo.stateVersion(user.campaignId)) ?? 0;
+          if (v === since) return ok({ unchanged: true, version: v });
+        }
         return ok(await campaignPayload(user, repo, req.query.as));
+      }
+      case 'GET command-status':
+        return ok(await commandStatus(user, req.query.requestId, repo));
       case 'POST command':
         return ok(await runCommand(user, req.body, repo));
       case 'POST admin':
@@ -220,9 +226,9 @@ export async function health(repo: Repo): Promise<HealthReport> {
 }
 
 let schemaCheckedAt = 0;
-/** Refuses campaign requests while the database is older than this code (cached for 60 s). */
+/** Refuses campaign requests while the database is older than this code (cached for 10 minutes per instance). */
 async function requireCompatibleSchema(repo: Repo) {
-  if (Date.now() - schemaCheckedAt < 60_000) return;
+  if (Date.now() - schemaCheckedAt < 600_000) return;
   const d = await repo.deployStatus();
   if ((d.schemaVersion ?? 0) < REQUIRED_SCHEMA_VERSION) {
     throw new HttpError(503, 'The campaign database is being updated. Please try again in a few minutes.', 'schema_outdated');
@@ -239,10 +245,10 @@ export function resetSchemaCache() {
 
 /** Public: which profiles can currently sign in (no account data, no hashes). */
 async function profileStatus(repo: Repo): Promise<{ profiles: PublicProfile[] }> {
-  const all = await repo.profiles(null);
+  const [all, dates] = await Promise.all([repo.profiles(null), repo.credentialDates(null)]);
   const out = new Map<string, PublicProfile>();
   for (const p of all) {
-    const pwSet = !!(await repo.credential(p.campaignId, p.key));
+    const pwSet = !!dates[`${p.campaignId}:${p.key}`];
     const prev = out.get(p.key);
     const entry: PublicProfile = { key: p.key, active: (prev?.active ?? false) || (p.active && pwSet) };
     if (p.role === 'gm' && !pwSet) entry.needsSetup = true;
@@ -395,20 +401,13 @@ async function authenticate(req: ApiRequest, repo: Repo): Promise<AuthUser> {
   const token = cookieToken(req);
   if (!looksLikeToken(token)) throw new HttpError(401, 'Please sign in.', 'unauthenticated');
   const hash = await sha256Hex(token);
-  const s = await repo.session(hash);
-  const now = Date.now();
-  if (!s || s.revokedAt || Date.parse(s.expiresAt) <= now || Date.parse(s.createdAt) + SESSION_ABSOLUTE_MS <= now) {
-    throw new HttpError(401, 'Your session has ended. Please sign in again.', 'unauthenticated');
-  }
-  const p = (await repo.profiles(s.campaignId)).find((x) => x.key === s.profileKey);
-  // Profile removed, deactivated, password removed or re-keyed → the session is no longer valid.
-  if (!p || !p.active || p.userId !== s.userId || !(await repo.credential(s.campaignId, s.profileKey))) {
+  const b = await repo.authBundle(hash);
+  if (!b) throw new HttpError(401, 'Your session has ended. Please sign in again.', 'unauthenticated');
+  const { session: s, profile: p } = b;
+  // Profile deactivated, password removed or re-keyed → the session is no longer valid.
+  if (!p.active || p.userId !== s.userId || !b.passwordSet) {
     await repo.revokeSession(hash);
     throw new HttpError(401, 'Your access has been changed by the Game Master. Please sign in again.', 'unauthenticated');
-  }
-  if (now - Date.parse(s.lastSeenAt) > SESSION_TOUCH_MS) {
-    const expires = Math.min(now + SESSION_IDLE_MS, Date.parse(s.createdAt) + SESSION_ABSOLUTE_MS);
-    await repo.touchSession(hash, new Date(expires).toISOString()).catch(() => undefined);
   }
   return {
     id: p.userId,
@@ -418,17 +417,9 @@ async function authenticate(req: ApiRequest, repo: Repo): Promise<AuthUser> {
     role: p.role,
     tokenIds: p.tokenIds,
     sessionHash: hash,
+    campaignName: b.campaign.name,
+    syncTopic: b.campaign.syncTopic,
   };
-}
-
-async function touchPresence(user: AuthUser, repo: Repo) {
-  const m = (await repo.members(user.campaignId)).find((x) => x.userId === user.id);
-  if (!m) {
-    await repo.upsertMember({ campaignId: user.campaignId, userId: user.id, email: null, role: user.role }).catch(() => undefined);
-    return;
-  }
-  const last = m.lastSeenAt ? Date.parse(m.lastSeenAt) : 0;
-  if (Date.now() - last > TOUCH_EVERY_MS) await repo.touchMember(user.campaignId, user.id).catch(() => undefined);
 }
 
 function checkCampaign(user: AuthUser, campaignId: unknown) {
@@ -437,15 +428,11 @@ function checkCampaign(user: AuthUser, campaignId: unknown) {
   }
 }
 
-async function campaignName(campaignId: string, repo: Repo): Promise<string> {
-  return (await repo.campaignsById([campaignId]))[0]?.name ?? 'APEX Campaign';
-}
-
-async function sessionInfo(user: AuthUser, repo: Repo): Promise<SessionInfo> {
+function sessionInfo(user: AuthUser): SessionInfo {
   return {
     user: { id: user.id, profile: user.profileKey, displayName: user.displayName, role: user.role },
-    campaigns: [{ id: user.campaignId, name: await campaignName(user.campaignId, repo), role: user.role }],
-    syncTopic: await repo.syncTopic(user.campaignId),
+    campaigns: [{ id: user.campaignId, name: user.campaignName, role: user.role }],
+    syncTopic: user.syncTopic,
   };
 }
 
@@ -463,7 +450,7 @@ function charactersOf(user: AuthUser, state: GameState | null): CharacterRef[] {
 
 async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?: { state: GameState; version: number } | null): Promise<CampaignPayload> {
   const s = stored === undefined ? await repo.loadState(user.campaignId) : stored;
-  const name = await campaignName(user.campaignId, repo);
+  const name = user.campaignName;
   if (user.role === 'gm') {
     return { role: 'gm', campaignId: user.campaignId, campaignName: name, version: s?.version ?? 0, state: s?.state ?? null };
   }
@@ -485,6 +472,46 @@ async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?:
 
 // ---------------------------------------------------------------- commands
 
+const isRequestId = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(v);
+
+/**
+ * Idempotency for state-changing requests: the client sends a random requestId. The id is reserved
+ * atomically (unique index) before anything is changed, so a repeated request – double click,
+ * lost response, reconnect – is never applied twice. Its outcome can be looked up later.
+ */
+async function withRequestId<T>(
+  user: AuthUser,
+  requestId: unknown,
+  command: unknown,
+  repo: Repo,
+  onDuplicate: () => Promise<T>,
+  run: () => Promise<{ result: T; version: number | null }>,
+): Promise<T> {
+  if (requestId === undefined || requestId === null) return (await run()).result;
+  if (!isRequestId(requestId)) throw new HttpError(400, 'Invalid request id.');
+  const r = await repo.reserveRequest({ campaignId: user.campaignId, userId: user.id, role: user.role, command, requestId });
+  if (r.kind === 'existing') {
+    if (r.state === 'ok') return onDuplicate();
+    if (r.state === 'pending') throw new HttpError(409, 'This action is still being processed.', 'in_progress');
+    throw new HttpError(422, r.error ?? 'This action was rejected.', 'rejected');
+  }
+  try {
+    const { result, version } = await run();
+    await repo.finishRequest(user.campaignId, requestId, true, null, version);
+    return result;
+  } catch (e) {
+    await repo.finishRequest(user.campaignId, requestId, false, e instanceof HttpError ? e.message : 'failed', null).catch(() => undefined);
+    throw e;
+  }
+}
+
+async function commandStatus(user: AuthUser, requestId: unknown, repo: Repo) {
+  if (!isRequestId(requestId)) throw new HttpError(400, 'Invalid request id.');
+  const r = await repo.requestStatus(user.campaignId, requestId);
+  if (!r || r.kind !== 'existing') return { requestId, state: 'unknown' as const, version: null, error: null };
+  return { requestId, state: r.state, version: r.version, error: r.error };
+}
+
 async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<CampaignPayload> {
   if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
   checkCampaign(user, body.campaignId);
@@ -492,44 +519,52 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
   if (!parsed.ok) throw new HttpError(400, parsed.error);
   const cmd = parsed.command;
   const as = typeof body.as === 'string' ? body.as : undefined;
+  const viewAs = as ?? (CHARACTER_COMMANDS.has(cmd.type) ? (cmd as { tokenId: string }).tokenId : undefined);
+  const tracked = isRequestId(body.requestId);
   const log = (ok: boolean, error?: string, version?: number) =>
-    repo.logCommand({ campaignId: user.campaignId, userId: user.id, role: user.role, command: cmd, ok, error, version });
+    tracked ? Promise.resolve() : repo.logCommand({ campaignId: user.campaignId, userId: user.id, role: user.role, command: cmd, ok, error, version });
 
   if (user.role !== 'gm' && cmd.type !== 'move' && !CHARACTER_COMMANDS.has(cmd.type)) {
     await log(false, 'gm-only');
     throw new HttpError(403, 'Only the Game Master can do that.', 'forbidden');
   }
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const stored = await repo.loadState(user.campaignId);
-    if (!stored) throw new HttpError(409, 'The campaign has not been initialised yet.', 'not_initialised');
+  return withRequestId(
+    user,
+    body.requestId,
+    cmd,
+    repo,
+    async () => ({ ...(await campaignPayload(user, repo, viewAs)), duplicate: true }) as CampaignPayload,
+    async () => {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const stored = await repo.loadState(user.campaignId);
+        if (!stored) throw new HttpError(409, 'The campaign has not been initialised yet.', 'not_initialised');
 
-    let actor: Actor;
-    try {
-      actor = actorFor(user, cmd, stored.state);
-    } catch (e) {
-      await log(false, (e as Error).message);
-      throw e;
-    }
-    const res = executeCommand(stored.state, actor, cmd);
-    if (!res.ok) {
-      await log(false, res.error);
-      throw new HttpError(422, res.error, 'rejected');
-    }
-    const version = await repo.saveState(user.campaignId, res.state, stored.version, user.id);
-    if (version === null) continue; // somebody else wrote first → re-validate against the fresh state
+        let actor: Actor;
+        try {
+          actor = actorFor(user, cmd, stored.state);
+        } catch (e) {
+          await log(false, (e as Error).message);
+          throw e;
+        }
+        const res = executeCommand(stored.state, actor, cmd);
+        if (!res.ok) {
+          await log(false, res.error);
+          throw new HttpError(422, res.error, 'rejected');
+        }
+        const version = await repo.saveState(user.campaignId, res.state, stored.version, user.id);
+        if (version === null) continue; // somebody else wrote first → re-validate against the fresh state
 
-    await log(true, undefined, version);
-    if ((cmd.type === 'advancePhase' || cmd.type === 'endDay') && res.state.phase === 'day') {
-      await repo.createSnapshot(user.campaignId, res.state, version, `Dawn of ${phaseName('day', res.state.day)}`, null);
-      await repo.pruneSnapshots(user.campaignId, KEEP_SNAPSHOTS);
-    }
-    return campaignPayload(user, repo, as ?? (CHARACTER_COMMANDS.has(cmd.type) ? (cmd as { tokenId: string }).tokenId : undefined), {
-      state: res.state,
-      version,
-    });
-  }
-  throw new HttpError(409, 'The campaign was changed by someone else at the same time. Please try again.', 'conflict');
+        await log(true, undefined, version);
+        if ((cmd.type === 'advancePhase' || cmd.type === 'endDay') && res.state.phase === 'day') {
+          await repo.createSnapshot(user.campaignId, res.state, version, `Dawn of ${phaseName('day', res.state.day)}`, null);
+          await repo.pruneSnapshots(user.campaignId, KEEP_SNAPSHOTS);
+        }
+        return { result: await campaignPayload(user, repo, viewAs, { state: res.state, version }), version };
+      }
+      throw new HttpError(409, 'The campaign was changed by someone else at the same time. Please try again.', 'conflict');
+    },
+  );
 }
 
 /** Determines the in-game actor. Never trusts anything but the server-side profile. */
@@ -641,10 +676,27 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
 
 // ---------------------------------------------------------------- admin (GM only)
 
+/** Admin actions that replace the world – applied at most once per request id. */
+const WORLD_ACTIONS = new Set(['initCampaign', 'importState', 'applyRoster', 'restoreSnapshot']);
+
 async function runAdmin(user: AuthUser, body: unknown, repo: Repo): Promise<unknown> {
   if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
   if (user.role !== 'gm') throw new HttpError(403, 'Only the Game Master can manage the campaign.', 'forbidden');
   checkCampaign(user, body.campaignId);
+  if (typeof body.action === 'string' && WORLD_ACTIONS.has(body.action) && body.requestId !== undefined) {
+    return withRequestId(
+      user,
+      body.requestId,
+      { type: `admin:${body.action}` },
+      repo,
+      async () => ({ ...(await campaignPayload(user, repo)), duplicate: true }),
+      async () => ({ result: await runAdminAction(user, body, repo), version: await repo.stateVersion(user.campaignId) }),
+    );
+  }
+  return runAdminAction(user, body, repo);
+}
+
+async function runAdminAction(user: AuthUser, body: Record<string, unknown>, repo: Repo): Promise<unknown> {
   const cid = user.campaignId;
   const tokenList = (v: unknown): string[] => {
     if (v === undefined) return [];
@@ -772,36 +824,29 @@ async function snapshotCurrent(cid: string, repo: Repo, userId: string, label: s
 }
 
 async function adminOverview(cid: string, repo: Repo): Promise<AdminOverview> {
-  const [members, snapshots, profiles, stored, sessions] = await Promise.all([
-    repo.members(cid),
+  // 4 queries in parallel – no game state transfer, no per-profile lookups.
+  const [snapshots, profiles, presence, dates] = await Promise.all([
     repo.listSnapshots(cid, 20),
     repo.profiles(cid),
-    repo.loadState(cid),
-    repo.activeSessionCounts(cid),
+    repo.sessionPresence(cid),
+    repo.credentialDates(cid),
   ]);
-  const online = (userId: string) => {
-    const mm = members.find((x) => x.userId === userId);
-    return !!mm?.lastSeenAt && Date.now() - Date.parse(mm.lastSeenAt) < PRESENCE_WINDOW_MS;
-  };
   return {
     snapshots,
-    profiles: await Promise.all(
-      profiles.map(async (p) => {
-        const cred = await repo.credential(cid, p.key);
-        return {
-          key: p.key,
-          displayName: p.displayName,
-          characterName: p.characterName,
-          role: p.role,
-          tokenIds: p.tokenIds,
-          active: p.active,
-          passwordSet: !!cred,
-          passwordUpdatedAt: cred?.updatedAt ?? null,
-          sessions: sessions[p.key] ?? 0,
-          online: (sessions[p.key] ?? 0) > 0 && online(p.userId),
-        };
-      }),
-    ),
-    rosterOutdated: stored ? needsRosterUpdate(stored.state) : false,
+    profiles: profiles.map((p) => {
+      const pr = presence[p.key];
+      return {
+        key: p.key,
+        displayName: p.displayName,
+        characterName: p.characterName,
+        role: p.role,
+        tokenIds: p.tokenIds,
+        active: p.active,
+        passwordSet: !!dates[p.key],
+        passwordUpdatedAt: dates[p.key] ?? null,
+        sessions: pr?.sessions ?? 0,
+        online: !!pr?.lastSeenAt && Date.now() - Date.parse(pr.lastSeenAt) < PRESENCE_WINDOW_MS,
+      };
+    }),
   };
 }

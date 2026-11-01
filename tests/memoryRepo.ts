@@ -1,6 +1,7 @@
 import type { GameState } from '../src/game/types';
 import type {
   Assignment,
+  AuthBundle,
   Campaign,
   CommandLogEntry,
   Credential,
@@ -8,7 +9,9 @@ import type {
   LoginAttemptStats,
   Member,
   Profile,
+  ProfilePresence,
   Repo,
+  RequestReservation,
   SessionRecord,
   SnapshotInfo,
   StoredSheet,
@@ -36,6 +39,26 @@ export class MemoryRepo implements Repo {
   /** Test hook: runs before the next sheet write. */
   beforeSheetSave: (() => void) | null = null;
   now = () => Date.now();
+  /** Number of repository calls (≈ database round trips in production). */
+  calls = 0;
+  /** Request-id reservations (idempotency). */
+  requests = new Map<string, { state: 'pending' | 'ok' | 'failed'; version: number | null; error: string | null }>();
+
+  constructor() {
+    // Count every repository call like a database round trip.
+    return new Proxy(this, {
+      get(target, prop, receiver) {
+        const v = Reflect.get(target, prop, receiver);
+        if (typeof v === 'function' && prop !== 'constructor' && typeof prop === 'string' && !['now', 'beforeSave', 'beforeSheetSave'].includes(prop)) {
+          return (...args: unknown[]) => {
+            target.calls++;
+            return (v as (...a: unknown[]) => unknown).apply(receiver, args);
+          };
+        }
+        return v;
+      },
+    });
+  }
 
   async profiles(campaignId: string | null) {
     return this.profileList.filter((p) => !campaignId || p.campaignId === campaignId).map((p) => ({ ...p, tokenIds: [...p.tokenIds] }));
@@ -47,6 +70,15 @@ export class MemoryRepo implements Repo {
   async credential(campaignId: string, key: string) {
     const c = this.credentials.get(`${campaignId}:${key}`);
     return c ? { ...c } : null;
+  }
+  async credentialDates(campaignId: string | null) {
+    const out: Record<string, string> = {};
+    for (const [k, c] of this.credentials) {
+      const [cid, key] = k.split(':');
+      if (!campaignId) out[k] = c.updatedAt;
+      else if (cid === campaignId) out[key] = c.updatedAt;
+    }
+    return out;
   }
   async setCredential(campaignId: string, key: string, passwordHash: string | null) {
     if (passwordHash === null) this.credentials.delete(`${campaignId}:${key}`);
@@ -75,6 +107,23 @@ export class MemoryRepo implements Repo {
     const s = this.sessions.get(tokenHash);
     return s ? { ...s } : null;
   }
+  async authBundle(tokenHash: string): Promise<AuthBundle | null> {
+    const s = this.sessions.get(tokenHash);
+    const now = this.now();
+    if (!s || s.revokedAt || Date.parse(s.expiresAt) <= now || Date.parse(s.createdAt) + 30 * 86400_000 <= now) return null;
+    const p = this.profileList.find((x) => x.campaignId === s.campaignId && x.key === s.profileKey);
+    const c = this.campaigns.find((x) => x.id === s.campaignId);
+    if (!p || !c) return null;
+    const before = { ...s };
+    if (now - Date.parse(s.lastSeenAt) > 30_000) s.lastSeenAt = new Date(now).toISOString();
+    c.syncTopic ??= `topic-${Math.random().toString(36).slice(2)}`;
+    return {
+      session: before,
+      profile: { ...p, tokenIds: [...p.tokenIds] },
+      passwordSet: this.credentials.has(`${s.campaignId}:${s.profileKey}`),
+      campaign: { name: c.name, syncTopic: `apex-sync-${c.syncTopic}` },
+    };
+  }
   async touchSession(tokenHash: string, expiresAt: string) {
     const s = this.sessions.get(tokenHash);
     if (s) Object.assign(s, { lastSeenAt: new Date(this.now()).toISOString(), expiresAt });
@@ -93,10 +142,13 @@ export class MemoryRepo implements Repo {
     }
     return n;
   }
-  async activeSessionCounts(campaignId: string) {
-    const out: Record<string, number> = {};
+  async sessionPresence(campaignId: string) {
+    const out: Record<string, ProfilePresence> = {};
     for (const s of this.sessions.values()) {
-      if (s.campaignId === campaignId && !s.revokedAt && Date.parse(s.expiresAt) > this.now()) out[s.profileKey] = (out[s.profileKey] ?? 0) + 1;
+      if (s.campaignId !== campaignId || s.revokedAt || Date.parse(s.expiresAt) <= this.now()) continue;
+      const p = (out[s.profileKey] ??= { sessions: 0, lastSeenAt: null });
+      p.sessions++;
+      if (!p.lastSeenAt || s.lastSeenAt > p.lastSeenAt) p.lastSeenAt = s.lastSeenAt;
     }
     return out;
   }
@@ -161,6 +213,9 @@ export class MemoryRepo implements Repo {
     const s = this.states.get(campaignId);
     return s ? { state: structuredClone(s.state), version: s.version } : null;
   }
+  async stateVersion(campaignId: string) {
+    return this.states.get(campaignId)?.version ?? null;
+  }
   async replaceState(campaignId: string, state: GameState) {
     const version = (this.states.get(campaignId)?.version ?? 0) + 1;
     this.states.set(campaignId, { state: structuredClone(state), version });
@@ -212,5 +267,22 @@ export class MemoryRepo implements Repo {
   }
   async logCommand(e: CommandLogEntry) {
     this.log.push(e);
+  }
+  async reserveRequest(e: Omit<CommandLogEntry, 'ok' | 'error' | 'version'> & { requestId: string }): Promise<RequestReservation> {
+    const k = `${e.campaignId}:${e.requestId}`;
+    const cur = this.requests.get(k);
+    if (cur) return { kind: 'existing', ...cur };
+    this.requests.set(k, { state: 'pending', version: null, error: null });
+    this.log.push({ ...e, ok: false, error: 'pending' });
+    return { kind: 'reserved' };
+  }
+  async finishRequest(campaignId: string, requestId: string, ok: boolean, error: string | null, version: number | null) {
+    this.requests.set(`${campaignId}:${requestId}`, { state: ok ? 'ok' : 'failed', version, error });
+    const entry = [...this.log].reverse().find((l) => (l as { requestId?: string }).requestId === requestId);
+    if (entry) Object.assign(entry, { ok, error: error ?? undefined, version: version ?? undefined });
+  }
+  async requestStatus(campaignId: string, requestId: string): Promise<RequestReservation | null> {
+    const cur = this.requests.get(`${campaignId}:${requestId}`);
+    return cur ? { kind: 'existing', ...cur } : null;
   }
 }

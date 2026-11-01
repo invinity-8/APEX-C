@@ -8,7 +8,7 @@
  * Sign-in uses profile + password with HttpOnly session cookies – no email service is needed.
  */
 import { handleApi } from '../src/server/api.js';
-import { SupabaseRepo, readServerEnv } from '../src/server/supabaseRepo.js';
+import { SupabaseRepo, readServerEnv, requestStats, type RequestStats } from '../src/server/supabaseRepo.js';
 
 let repo: SupabaseRepo | null = null;
 
@@ -43,7 +43,28 @@ function clientIp(request: Request): string | null {
   return fwd ? fwd.split(',')[0].trim() : null;
 }
 
+/**
+ * Privacy-safe timing log for every request: operation, status, duration, number of database round trips.
+ * Never logs bodies, cookies, tokens, passwords or campaign data.
+ */
 async function handle(request: Request): Promise<Response> {
+  const stats: RequestStats = { db: 0, dbMs: 0 };
+  const started = Date.now();
+  const op = new URL(request.url).searchParams.get('op') ?? '';
+  let status = 500;
+  try {
+    const res = await requestStats.run(stats, () => handleInner(request));
+    status = res.status;
+    return res;
+  } finally {
+    const ms = Date.now() - started;
+    const line = `[apex-timing] ${request.method} op=${op.replace(/[^\w-]/g, '').slice(0, 24)} status=${status} ms=${ms} db=${stats.db} dbMs=${stats.dbMs}`;
+    if (status >= 500 || ms > 3000) console.warn(line);
+    else console.log(line);
+  }
+}
+
+async function handleInner(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const env = readServerEnv(process.env);
   if (!env) {

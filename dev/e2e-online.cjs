@@ -108,6 +108,18 @@ const waitText = (page, re, timeout = 10000) =>
   await gm.waitForTimeout(1200);
   await gm.screenshot({ path: out + '/e2e-gm-map.png' });
 
+  // ---------- request budget (regression: production request storm 2026-11-01) ----------
+  if (MOCK) {
+    let n = 0;
+    const onReq = (r) => r.url().includes('/api/apex') && n++;
+    gm.on('request', onReq);
+    await fetch(BASE + '/__mock/latency?ms=800'); // slow database
+    await sleep(35_000);
+    await fetch(BASE + '/__mock/latency?ms=0');
+    gm.off('request', onReq);
+    check(`idle GM page stays within the request budget (${n} requests in 35 s with a slow server, max 6)`, n <= 6, `${n} requests`);
+  }
+
   // ---------- wrong password, GM impersonation ----------
   const wrong = await newDevice(b);
   await openProfile(wrong, 'Hannah');

@@ -66,11 +66,21 @@ CharacterPanel ── GET/POST ?op=sheet ▶  own character (GM: all) ───�
 
 ## Sync & failure handling
 
-- Realtime pings + a heartbeat (`op=ping`, 25 s; 8 s while realtime is down) that also records presence (`last_seen_at`)
-  and returns the current sync topic. Sheets are re-fetched on `sheet` pings (or on every heartbeat while realtime is down).
-- Connection states: *Live*, *Synced (polling)*, *Offline – retrying*. Failed saves say “NOT saved”.
-- No local campaign copy exists in online mode; production builds without configuration show a setup notice
-  instead of a demo.
+See also [`INCIDENT_2026-11-01.md`](INCIDENT_2026-11-01.md).
+
+- **Refresh** is single-flight and sends `since=<version>`; the server answers `{unchanged:true}` without loading the state.
+- **Heartbeat** (`op=ping`, version only, 2 DB round trips): every 30 s (12 s without Realtime), one at a time, paused while the tab is
+  hidden or the device is offline; after failures exponential backoff with ±25 % jitter up to 60 s.
+- **Realtime** `version` pings trigger one refresh; `sheet` pings re-load the open sheet. Presence = `apex_sessions.last_seen_at`,
+  refreshed by `apex_authenticate()` at most every 30 s.
+- **Actions** carry a `requestId` (unique per campaign in `apex_command_log`, reserved before the change). A repeated id is never
+  applied twice. After a lost response the client asks `op=command-status` – it never re-sends blindly. Only the conflicting
+  action is pending; background sync never disables buttons.
+- **Connection states:** Connected · Synchronizing · Saving action · Reconnecting · Server unavailable · Action outcome unknown;
+  the Realtime websocket is shown separately (it does not prove the API is healthy).
+- **Server limits:** 8 s timeout per database call, function `maxDuration` 30 s, region `dub1` next to the database.
+  Every request logs `[apex-timing] op status ms db dbMs` (no data, no secrets).
+- No local campaign copy exists in online mode.
 
 ## Files
 

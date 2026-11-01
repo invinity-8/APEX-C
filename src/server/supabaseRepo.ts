@@ -2,10 +2,12 @@
  * Supabase implementation of the Repo. Runs ONLY on the server (Vercel Function)
  * with the secret key, which bypasses RLS. Never import this module from client code.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { GameState } from '../game/types.js';
 import type {
   Assignment,
+  AuthBundle,
   Campaign,
   CommandLogEntry,
   Credential,
@@ -13,13 +15,44 @@ import type {
   LoginAttemptStats,
   Member,
   Profile,
+  ProfilePresence,
   Repo,
+  RequestReservation,
   Role,
   SessionRecord,
   SnapshotInfo,
   StoredSheet,
   StoredState,
 } from './repo.js';
+
+/** Every database call is aborted after this many milliseconds – a slow database must never hang a function. */
+export const DB_TIMEOUT_MS = 8000;
+
+/** Per-request diagnostics (round trips, time spent in the database). No data, no secrets. */
+export interface RequestStats {
+  db: number;
+  dbMs: number;
+}
+export const requestStats = new AsyncLocalStorage<RequestStats>();
+
+/** fetch with a hard timeout and round-trip accounting. */
+const boundedFetch: typeof fetch = async (input, init) => {
+  const stats = requestStats.getStore();
+  const started = Date.now();
+  const timeout = AbortSignal.timeout(DB_TIMEOUT_MS);
+  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+  try {
+    return await fetch(input, { ...init, signal });
+  } catch (e) {
+    if (timeout.aborted) throw new Error(`database timeout after ${DB_TIMEOUT_MS} ms`);
+    throw e;
+  } finally {
+    if (stats) {
+      stats.db++;
+      stats.dbMs += Date.now() - started;
+    }
+  }
+};
 
 export interface ServerEnv {
   url: string;
@@ -52,13 +85,23 @@ type SessionRow = {
 };
 
 const toMember = (r: MemberRow): Member => ({ campaignId: r.campaign_id, userId: r.user_id, email: r.email, role: r.role, lastSeenAt: r.last_seen_at ?? null });
+const toProfile = (r: Record<string, unknown>): Profile => ({
+  campaignId: r.campaign_id as string,
+  key: r.profile_key as string,
+  displayName: r.display_name as string,
+  characterName: r.character_name as string,
+  role: r.role as Role,
+  tokenIds: (r.token_ids as string[] | null) ?? [],
+  userId: r.user_id as string,
+  active: r.active === true,
+});
 const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
 export class SupabaseRepo implements Repo {
   private db: SupabaseClient;
 
   constructor(env: ServerEnv) {
-    const opts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
+    const opts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: boundedFetch } };
     this.db = createClient(env.url, env.secretKey, opts);
   }
 
@@ -71,16 +114,7 @@ export class SupabaseRepo implements Repo {
       if (/apex_profiles|does not exist|schema cache/i.test(error.message)) return [];
       throw new Error(`profiles: ${error.message}`);
     }
-    return (data as Array<Record<string, unknown>>).map((r) => ({
-      campaignId: r.campaign_id as string,
-      key: r.profile_key as string,
-      displayName: r.display_name as string,
-      characterName: r.character_name as string,
-      role: r.role as Role,
-      tokenIds: (r.token_ids as string[] | null) ?? [],
-      userId: r.user_id as string,
-      active: r.active === true,
-    }));
+    return (data as Array<Record<string, unknown>>).map(toProfile);
   }
 
   async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>): Promise<void> {
@@ -98,6 +132,13 @@ export class SupabaseRepo implements Repo {
       'credential',
     ) as { password_hash: string; updated_at: string } | null;
     return row ? { passwordHash: row.password_hash, updatedAt: row.updated_at } : null;
+  }
+
+  async credentialDates(campaignId: string | null): Promise<Record<string, string>> {
+    let q = this.db.from('apex_profile_credentials').select('campaign_id, profile_key, updated_at');
+    if (campaignId) q = q.eq('campaign_id', campaignId);
+    const rows = check(await q, 'credential dates') as Array<{ campaign_id: string; profile_key: string; updated_at: string }>;
+    return Object.fromEntries(rows.map((r) => [campaignId ? r.profile_key : `${r.campaign_id}:${r.profile_key}`, r.updated_at]));
   }
 
   async setCredential(campaignId: string, key: string, passwordHash: string | null, byUserId: string | null): Promise<void> {
@@ -164,6 +205,34 @@ export class SupabaseRepo implements Repo {
       : null;
   }
 
+  async authBundle(tokenHash: string): Promise<AuthBundle | null> {
+    const { data, error } = await this.db.rpc('apex_authenticate', { p_token_hash: tokenHash });
+    if (error) throw new Error(`authenticate: ${error.message}`);
+    const d = data as null | {
+      session: SessionRow;
+      profile: Record<string, unknown> | null;
+      password_set: boolean;
+      campaign: { name: string; sync_topic: string };
+    };
+    if (!d || !d.profile) return null;
+    const r = d.session;
+    return {
+      session: {
+        tokenHash: r.token_hash,
+        campaignId: r.campaign_id,
+        profileKey: r.profile_key,
+        userId: r.user_id,
+        createdAt: r.created_at,
+        lastSeenAt: r.last_seen_at,
+        expiresAt: r.expires_at,
+        revokedAt: r.revoked_at,
+      },
+      profile: toProfile(d.profile),
+      passwordSet: !!d.password_set,
+      campaign: { name: d.campaign.name, syncTopic: `apex-sync-${d.campaign.sync_topic}` },
+    };
+  }
+
   async touchSession(tokenHash: string, expiresAt: string): Promise<void> {
     await this.db.from('apex_sessions').update({ last_seen_at: new Date().toISOString(), expires_at: expiresAt }).eq('token_hash', tokenHash);
   }
@@ -184,13 +253,22 @@ export class SupabaseRepo implements Repo {
     return rows.length;
   }
 
-  async activeSessionCounts(campaignId: string): Promise<Record<string, number>> {
+  async sessionPresence(campaignId: string): Promise<Record<string, ProfilePresence>> {
     const rows = check(
-      await this.db.from('apex_sessions').select('profile_key').eq('campaign_id', campaignId).is('revoked_at', null).gt('expires_at', new Date().toISOString()),
-      'session counts',
-    ) as Array<{ profile_key: string }>;
-    const out: Record<string, number> = {};
-    for (const r of rows) out[r.profile_key] = (out[r.profile_key] ?? 0) + 1;
+      await this.db
+        .from('apex_sessions')
+        .select('profile_key, last_seen_at')
+        .eq('campaign_id', campaignId)
+        .is('revoked_at', null)
+        .gt('expires_at', new Date().toISOString()),
+      'session presence',
+    ) as Array<{ profile_key: string; last_seen_at: string }>;
+    const out: Record<string, ProfilePresence> = {};
+    for (const r of rows) {
+      const p = (out[r.profile_key] ??= { sessions: 0, lastSeenAt: null });
+      p.sessions++;
+      if (!p.lastSeenAt || r.last_seen_at > p.lastSeenAt) p.lastSeenAt = r.last_seen_at;
+    }
     return out;
   }
 
@@ -317,6 +395,13 @@ export class SupabaseRepo implements Repo {
     return row ? { state: row.state, version: Number(row.version) } : null;
   }
 
+  async stateVersion(campaignId: string): Promise<number | null> {
+    const row = check(await this.db.from('apex_game_states').select('version').eq('campaign_id', campaignId).maybeSingle(), 'state version') as {
+      version: number;
+    } | null;
+    return row ? Number(row.version) : null;
+  }
+
   async replaceState(campaignId: string, state: GameState, userId: string): Promise<number> {
     const cur = await this.loadState(campaignId);
     const version = (cur?.version ?? 0) + 1;
@@ -417,6 +502,42 @@ export class SupabaseRepo implements Repo {
       await this.db.from('apex_character_sheet_backups').insert({ campaign_id: campaignId, token_id: tokenId, data, version, reason, created_by: userId }),
       'backup sheet',
     );
+  }
+
+  async reserveRequest(e: Omit<CommandLogEntry, 'ok' | 'error' | 'version'> & { requestId: string }): Promise<RequestReservation> {
+    const { error } = await this.db.from('apex_command_log').insert({
+      campaign_id: e.campaignId,
+      user_id: e.userId,
+      role: e.role,
+      command: e.command,
+      ok: false,
+      error: 'pending',
+      request_id: e.requestId,
+    });
+    if (!error) return { kind: 'reserved' };
+    if ((error as { code?: string }).code !== '23505') throw new Error(`reserve request: ${error.message}`);
+    return (await this.requestStatus(e.campaignId, e.requestId)) ?? { kind: 'existing', state: 'pending', version: null, error: null };
+  }
+
+  async finishRequest(campaignId: string, requestId: string, ok: boolean, error: string | null, version: number | null): Promise<void> {
+    check(
+      await this.db.from('apex_command_log').update({ ok, error, version }).eq('campaign_id', campaignId).eq('request_id', requestId),
+      'finish request',
+    );
+  }
+
+  async requestStatus(campaignId: string, requestId: string): Promise<RequestReservation | null> {
+    const row = check(
+      await this.db.from('apex_command_log').select('ok, error, version').eq('campaign_id', campaignId).eq('request_id', requestId).maybeSingle(),
+      'request status',
+    ) as { ok: boolean; error: string | null; version: number | null } | null;
+    if (!row) return null;
+    return {
+      kind: 'existing',
+      state: row.ok ? 'ok' : row.error === 'pending' ? 'pending' : 'failed',
+      version: row.version === null ? null : Number(row.version),
+      error: row.ok ? null : row.error,
+    };
   }
 
   async logCommand(e: CommandLogEntry): Promise<void> {

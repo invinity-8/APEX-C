@@ -20,6 +20,9 @@ export interface AuthUser {
   tokenIds: string[];
   /** SHA-256 of the session token (used for logout / password change). */
   sessionHash: string;
+  campaignName: string;
+  /** Secret Realtime topic of the campaign. */
+  syncTopic: string;
 }
 
 export interface Campaign {
@@ -101,6 +104,26 @@ export interface SessionRecord {
   revokedAt: string | null;
 }
 
+/** Everything needed to authenticate a request, loaded in ONE database round trip. */
+export interface AuthBundle {
+  session: SessionRecord;
+  profile: Profile;
+  passwordSet: boolean;
+  campaign: { name: string; syncTopic: string };
+}
+
+/** Outcome of an idempotent command reservation. */
+export type RequestReservation =
+  | { kind: 'reserved' }
+  | { kind: 'existing'; state: 'pending' | 'ok' | 'failed'; version: number | null; error: string | null };
+
+export interface ProfilePresence {
+  /** Active (not revoked, not expired) sessions. */
+  sessions: number;
+  /** Most recent API contact of any of these sessions. */
+  lastSeenAt: string | null;
+}
+
 export interface LoginAttemptStats {
   /** Failed attempts for this profile within the window. */
   profileFailures: number;
@@ -153,6 +176,8 @@ export interface Repo {
   profiles(campaignId: string | null): Promise<Profile[]>;
   updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>): Promise<void>;
   credential(campaignId: string, key: string): Promise<Credential | null>;
+  /** Password timestamps of all profiles (one query). campaignId null = all campaigns, keyed "campaign:key". */
+  credentialDates(campaignId: string | null): Promise<Record<string, string>>;
   /** null removes the password (profile locked). */
   setCredential(campaignId: string, key: string, passwordHash: string | null, byUserId: string | null): Promise<void>;
   /** Marks a valid, unused, unexpired setup code as used and returns its campaign (atomic). */
@@ -161,12 +186,14 @@ export interface Repo {
   // ---- sessions
   createSession(s: Omit<SessionRecord, 'revokedAt' | 'lastSeenAt' | 'createdAt'> & { userAgent: string | null }): Promise<void>;
   session(tokenHash: string): Promise<SessionRecord | null>;
+  /** Session + profile + password flag + campaign name/topic in one round trip. */
+  authBundle(tokenHash: string): Promise<AuthBundle | null>;
   touchSession(tokenHash: string, expiresAt: string): Promise<void>;
   revokeSession(tokenHash: string): Promise<void>;
   /** Revokes all sessions of a profile, optionally except one. Returns how many were revoked. */
   revokeProfileSessions(campaignId: string, key: string, exceptHash?: string): Promise<number>;
-  /** Number of active (not revoked, not expired) sessions per profile key. */
-  activeSessionCounts(campaignId: string): Promise<Record<string, number>>;
+  /** Active sessions and last contact per profile key. */
+  sessionPresence(campaignId: string): Promise<Record<string, ProfilePresence>>;
 
   // ---- login rate limiting
   loginAttemptStats(profileKey: string, ipHash: string, sinceIso: string): Promise<LoginAttemptStats>;
@@ -195,6 +222,8 @@ export interface Repo {
 
   // ---- game state
   loadState(campaignId: string): Promise<StoredState | null>;
+  /** Only the version number of the stored state (cheap; no state transfer). null = no state yet. */
+  stateVersion(campaignId: string): Promise<number | null>;
   /** Creates or replaces the state unconditionally (GM initialisation / restore). Returns the new version. */
   replaceState(campaignId: string, state: GameState, userId: string): Promise<number>;
   /** Optimistic write: succeeds only if the stored version still equals `expectedVersion`. */
@@ -212,4 +241,10 @@ export interface Repo {
   backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string, userId: string): Promise<void>;
 
   logCommand(e: CommandLogEntry): Promise<void>;
+  /** Idempotency: reserves a client request id (atomic, unique per campaign) before a state change. */
+  reserveRequest(e: Omit<CommandLogEntry, 'ok' | 'error' | 'version'> & { requestId: string }): Promise<RequestReservation>;
+  /** Records the outcome of a reserved request. */
+  finishRequest(campaignId: string, requestId: string, ok: boolean, error: string | null, version: number | null): Promise<void>;
+  /** Looks up a reserved request (to verify an action whose response was lost). */
+  requestStatus(campaignId: string, requestId: string): Promise<RequestReservation | null>;
 }

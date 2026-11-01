@@ -4,7 +4,7 @@
  * X-APEX-CSRF header that the server requires for state-changing requests.
  */
 import type { CharacterSheet } from '../game/sheet';
-import type { AdminOverview, CampaignPayload, PublicProfile, SessionInfo, SheetPayload } from '../server/protocol';
+import type { AdminOverview, CampaignPayload, PublicProfile, SessionInfo, SheetPayload, UnchangedPayload } from '../server/protocol';
 
 export class ApiError extends Error {
   constructor(
@@ -20,9 +20,29 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: 'GET' | 'POST', op: string, query: Record<string, string | undefined> = {}, body?: unknown): Promise<T> {
+interface RequestOptions {
+  /** Abort after this many milliseconds (default 15 s; state-changing requests 25 s). */
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+/** Random id for state-changing requests (idempotency – the server applies each id at most once). */
+export const newRequestId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID().replace(/-/g, '') : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+
+async function request<T>(
+  method: 'GET' | 'POST',
+  op: string,
+  query: Record<string, string | undefined> = {},
+  body?: unknown,
+  opts: RequestOptions = {},
+): Promise<T> {
   const params = new URLSearchParams({ op });
   for (const [k, v] of Object.entries(query)) if (v) params.set(k, v);
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort('timeout'), opts.timeoutMs ?? (method === 'POST' ? 25_000 : 15_000));
+  const onAbort = () => ctrl.abort('cancelled');
+  opts.signal?.addEventListener('abort', onAbort);
   let res: Response;
   try {
     res = await fetch(`/api/apex?${params}`, {
@@ -30,9 +50,15 @@ async function request<T>(method: 'GET' | 'POST', op: string, query: Record<stri
       credentials: 'same-origin',
       headers: { 'x-apex-csrf': '1', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
     });
   } catch {
+    if (ctrl.signal.reason === 'cancelled') throw new ApiError(0, 'Request cancelled.', 'cancelled');
+    if (ctrl.signal.reason === 'timeout') throw new ApiError(0, 'The APEX server did not answer in time.', 'timeout');
     throw new ApiError(0, 'Cannot reach the APEX server. Check your connection.', 'network');
+  } finally {
+    clearTimeout(timeout);
+    opts.signal?.removeEventListener('abort', onAbort);
   }
   let json: unknown = null;
   try {
@@ -56,11 +82,17 @@ export const api = {
   logout: () => request<{ ok: true }>('POST', 'logout', {}, {}),
   changePassword: (current: string, next: string) => request<{ ok: true }>('POST', 'password', {}, { current, next }),
   health: () => request<import('../server/repo').HealthReport>('GET', 'health'),
-  ping: (campaign: string) => request<{ version: number; syncTopic: string }>('GET', 'ping', { campaign }),
+  ping: (campaign: string, signal?: AbortSignal) => request<{ version: number; syncTopic: string }>('GET', 'ping', { campaign }, undefined, { timeoutMs: 10_000, signal }),
   session: () => request<SessionInfo>('GET', 'session'),
-  state: (campaign: string, as?: string) => request<CampaignPayload>('GET', 'state', { campaign, as }),
-  command: (campaignId: string, command: unknown, as?: string) => request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as }),
-  admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>) => request<T>('POST', 'admin', {}, { campaignId, ...action }),
+  /** since = version the client already has → the server answers {unchanged:true} instead of the full state. */
+  state: (campaign: string, as?: string, since?: number, signal?: AbortSignal) =>
+    request<CampaignPayload | UnchangedPayload>('GET', 'state', { campaign, as, since: since ? String(since) : undefined }, undefined, { signal }),
+  command: (campaignId: string, command: unknown, requestId: string, as?: string) =>
+    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId }),
+  commandStatus: (requestId: string) =>
+    request<{ state: 'ok' | 'failed' | 'pending' | 'unknown'; version: number | null; error: string | null }>('GET', 'command-status', { requestId }, undefined, { timeoutMs: 10_000 }),
+  admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>, opts?: RequestOptions) =>
+    request<T>('POST', 'admin', {}, { campaignId, ...action }, opts),
   sheet: (tokenId: string) => request<SheetPayload>('GET', 'sheet', { token: tokenId }),
   saveSheet: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason: 'edit' | 'import-merge' | 'import-replace' = 'edit') =>
     request<SheetPayload>('POST', 'sheet', {}, { action: 'save', tokenId, sheet, expectedVersion, reason }),

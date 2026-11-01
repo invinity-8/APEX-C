@@ -16,12 +16,14 @@ export interface DispatchResult {
 }
 
 /**
- * live      – server reachable and realtime push active
- * degraded  – server reachable, realtime unavailable → changes are fetched every few seconds
- * offline   – the server cannot be reached; nothing can be saved
- * connecting – initial state
+ * connected    – the command API answered recently (live updates may still be off, see realtimeLive)
+ * syncing      – fetching changes
+ * pending      – an action is being saved
+ * reconnecting – the last request(s) failed; retrying with growing pauses
+ * unavailable  – several consecutive failures; nothing can be saved right now
+ * unknown      – an action may or may not have been saved; APEX is verifying it
  */
-export type Connection = 'live' | 'degraded' | 'connecting' | 'offline';
+export type Connection = 'connected' | 'syncing' | 'pending' | 'reconnecting' | 'unavailable' | 'unknown';
 
 export interface DemoControls {
   session: Session;
@@ -53,6 +55,10 @@ export interface OnlineControls {
   activeCharacter: string | null;
   setActiveCharacter: (id: string) => void;
   connection: Connection;
+  /** The Realtime websocket delivers live pings (does NOT prove the command API is healthy). */
+  realtimeLive: boolean;
+  /** Label of an action whose outcome is still being verified after a lost response. */
+  unknownAction: string | null;
   /** Human-readable reason of the last failed sync/save, if any. */
   syncError: string | null;
   version: number;
@@ -60,6 +66,8 @@ export interface OnlineControls {
   refresh: () => void;
   signOut: () => void;
   admin: (action: Record<string, unknown>) => Promise<AdminOverview>;
+  /** World-replacing GM action (restore, roster conversion …): idempotent request id, verified outcome. */
+  worldAction: (action: Record<string, unknown>) => Promise<DispatchResult>;
 }
 
 export interface GameApi {
@@ -67,7 +75,10 @@ export interface GameApi {
   view: ViewModel;
   /** Full state – only ever set for the Game Master. */
   gmState: GameState | null;
+  /** An action that conflicts with map interaction (move, phase change, world change) is being saved. */
   busy: boolean;
+  /** Keys of actions currently being saved (e.g. 'move', 'phase', 'world'). Background sync never appears here. */
+  pending: string[];
   dispatch: (cmd: Command) => Promise<DispatchResult>;
   /** GM: replace the campaign with a newly generated arena. */
   regenerate: (radius: number, seed: number) => Promise<DispatchResult>;
