@@ -4,7 +4,6 @@
  *   VITE_SUPABASE_URL              – project URL
  *   VITE_SUPABASE_PUBLISHABLE_KEY  – publishable (or legacy anon) key, protected by RLS
  *   VITE_APEX_ALLOW_DEMO           – "true" shows the local demo even when online mode is configured
- *   VITE_APEX_ALLOW_SIGNUP         – "true" shows "Create account" on the login page
  *
  * The Supabase SECRET key must never be given a VITE_ prefix.
  */
@@ -22,8 +21,14 @@ export const onlineConfig: OnlineConfig | null =
 
 /**
  * The local demo never touches the shared campaign, so it cannot bypass authentication.
- * When online mode is configured it is still hidden in production builds unless explicitly allowed.
+ * Production builds NEVER fall back to it silently: without online configuration they show a
+ * setup notice instead. The demo is reachable only in development, or explicitly with
+ * VITE_APEX_ALLOW_DEMO=true and the URL parameter ?demo.
  */
-export const demoAllowed: boolean = !onlineConfig || env.DEV || env.VITE_APEX_ALLOW_DEMO === 'true';
+export const demoAllowed: boolean = env.DEV || env.VITE_APEX_ALLOW_DEMO === 'true';
 
-export const signupAllowed: boolean = env.VITE_APEX_ALLOW_SIGNUP === 'true';
+/** Names of the missing public build variables (for the setup notice). */
+export const missingConfig: string[] = [
+  ...(env.VITE_SUPABASE_URL ? [] : ['VITE_SUPABASE_URL']),
+  ...(env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY ? [] : ['VITE_SUPABASE_PUBLISHABLE_KEY']),
+];

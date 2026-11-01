@@ -1,19 +1,20 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { demoAllowed, onlineConfig } from './online/config';
+import { SetupNotice } from './components/SetupNotice';
+import { demoAllowed, missingConfig, onlineConfig } from './online/config';
 import { useDemoGame } from './state/useGame';
 import './index.css';
 
-// The online client (Supabase SDK, auth screens) is only downloaded when it is used.
+// The online client (Supabase SDK, login screens) is only downloaded when it is used.
 const OnlineRoot = lazy(() => import('./online/OnlineRoot').then((m) => ({ default: m.OnlineRoot })));
 
 /**
- * Mode selection:
- *  - Online mode (default when VITE_SUPABASE_URL + publishable key are configured): login required.
- *  - Demo mode: local-only sandbox. Used when online mode is not configured, or via ?demo
- *    when demo access is allowed (development, or VITE_APEX_ALLOW_DEMO=true).
- *    The demo never reads or writes the shared campaign, so it cannot bypass authentication.
+ * Mode selection – there is NO silent fallback to a local game:
+ *  - /?demo with demo allowed (development, or VITE_APEX_ALLOW_DEMO=true) → local demo, clearly labelled
+ *  - online configuration present → online mode, login required, shared Supabase campaign
+ *  - development without configuration → local demo, clearly labelled
+ *  - production without configuration → setup notice (no game)
  */
 function DemoApp() {
   const game = useDemoGame();
@@ -29,16 +30,15 @@ function Loading() {
 }
 
 const wantsDemo = new URLSearchParams(window.location.search).has('demo');
-const useDemo = !onlineConfig || (wantsDemo && demoAllowed);
+let root;
+if (wantsDemo && demoAllowed) root = <DemoApp />;
+else if (onlineConfig)
+  root = (
+    <Suspense fallback={<Loading />}>
+      <OnlineRoot />
+    </Suspense>
+  );
+else if (import.meta.env.DEV) root = <DemoApp />;
+else root = <SetupNotice missing={missingConfig} />;
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {useDemo ? (
-      <DemoApp />
-    ) : (
-      <Suspense fallback={<Loading />}>
-        <OnlineRoot />
-      </Suspense>
-    )}
-  </StrictMode>,
-);
+createRoot(document.getElementById('root')!).render(<StrictMode>{root}</StrictMode>);
