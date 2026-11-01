@@ -61,3 +61,47 @@ select pg_temp.expect_denied('select * from apex_profiles', '22222222-2222-2222-
 select pg_temp.expect_denied('update apex_profiles set email = ''x@y.z''', '22222222-2222-2222-2222-222222222222');
 commit;
 \echo 'Profile checks passed.'
+
+-- APEX 0.3 (migration 20261101173039): credentials, sessions, setup codes and character sheets
+-- are server-only. Browsers (anon / authenticated) can neither read nor write them.
+create function pg_temp.expect_denied_anon(sql text) returns void language plpgsql as $$
+begin
+  execute 'set local role anon';
+  begin
+    execute sql;
+    raise exception 'NOT DENIED (anon): %', sql;
+  exception when insufficient_privilege then null;
+  end;
+  execute 'reset role';
+end $$;
+begin;
+select pg_temp.expect_denied('select * from apex_profile_credentials', '11111111-1111-1111-1111-111111111111');
+select pg_temp.expect_denied('select * from apex_sessions', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('insert into apex_sessions (token_hash, campaign_id, profile_key, user_id, expires_at) select repeat(''a'',64), id, ''gm'', gen_random_uuid(), now() + interval ''1 day'' from apex_campaigns', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('select * from apex_setup_codes', '11111111-1111-1111-1111-111111111111');
+select pg_temp.expect_denied('select * from apex_character_sheets', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('update apex_character_sheets set data = ''{}''', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('select * from apex_character_sheet_backups', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('select * from apex_login_attempts', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('select sync_topic from apex_campaigns', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('select apex_private.create_gm_setup_code()', '11111111-1111-1111-1111-111111111111');
+select pg_temp.expect_denied_anon('select * from apex_profile_credentials');
+select pg_temp.expect_denied_anon('select * from apex_sessions');
+select pg_temp.expect_denied_anon('select * from apex_character_sheets');
+select pg_temp.expect_denied_anon('select apex_private.create_gm_setup_code()');
+commit;
+do $$ begin
+  assert (select count(*) from apex_profiles where user_id is null) = 0, 'every profile has its own id';
+  assert (select count(*) from apex_profiles where active) = 0, 'profiles stay locked until the GM sets a password';
+  assert (select count(*) from apex_campaigns where sync_topic is null or length(sync_topic) < 64) = 0, 'secret sync topic';
+end $$;
+-- A setup code is single-use: creating a new one invalidates the previous one.
+do $$ declare a text; b text; begin
+  a := apex_private.create_gm_setup_code(1);
+  b := apex_private.create_gm_setup_code(1);
+  assert a <> b and a ~ '^[0-9A-F]{4}(-[0-9A-F]{4}){5}$', 'code format';
+  assert (select count(*) from apex_setup_codes where used_at is null) = 1, 'only the newest code is valid';
+  assert not exists (select 1 from apex_setup_codes where code_hash = a or code_hash = b), 'only hashes are stored';
+  delete from apex_setup_codes;
+end $$;
+\echo 'APEX 0.3 credential/session/sheet checks passed.'
