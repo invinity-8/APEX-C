@@ -1,212 +1,157 @@
-# APEX – Interactive Arena
+# APEX – Arena of the Eternal Will
 
-Webbasierte Spielleiter-Plattform für eine D&D-Kampagne in einer magischen Arena des Römischen Reichs.
-Version **0.1 – Phase 1 (Demo-Harness)**: läuft komplett im Browser, ohne Backend.
+An online Game Master platform for a Dungeons & Dragons campaign set in a magical arena of the Roman Empire.
 
-> ⚠️ **Demo-Modus:** Der Spielstand liegt im `localStorage` deines Browsers. Der Wechsel zwischen
-> Spielleiter- und Spieleransicht ist ein **Testwerkzeug**, kein Schutz – wer am selben Browser sitzt,
-> kann alles sehen. Echter Mehrspieler-Betrieb kommt in Phase 2 (siehe [`docs/SUPABASE.md`](docs/SUPABASE.md)).
+**Version 0.2** adds secure accounts and a shared, server-validated multiplayer campaign (Supabase + a Vercel
+Function), a ten-times larger procedurally generated world, true exploration Fog of War that hides the arena's
+outline, a day/night cycle, a new painted 2.5D map with the golden *Aquila Aurea* and its labyrinth, and a fully
+English interface.
+
+| Mode | When | Security |
+|---|---|---|
+| **Online** | `VITE_SUPABASE_URL` + publishable key configured | Login required. Roles and permissions enforced on the server. Players only receive their filtered view. |
+| **Demo** | no Supabase configuration, or `/?demo` where allowed | Local sandbox in one browser (localStorage). The GM/player switch is a testing tool, not protection. It never touches the shared campaign. |
 
 ---
 
-## 1. Lokal starten
+## 1. Run locally
 
-**Einmalig:** [Node.js](https://nodejs.org) installieren – Version **22 LTS** (oder ≥ 20.19).
-Prüfen im Terminal: `node -v`
+Requires **Node.js 22 LTS** (or ≥ 20.19).
 
 ```bash
-cd apex            # in den Projektordner wechseln
-npm install        # Abhängigkeiten laden (einmalig, ~30 Sekunden)
-npm run dev        # Entwicklungsserver starten
+npm install
+npm run dev            # demo mode at http://localhost:5173
 ```
 
-Dann im Browser öffnen: **http://localhost:5173**
-Beenden mit `Strg + C` im Terminal.
-
-| Befehl | Was er tut |
+| Command | Purpose |
 |---|---|
-| `npm run dev` | Startet die App mit Live-Neuladen beim Bearbeiten |
-| `npm test` | Führt alle automatischen Tests aus |
-| `npm run build` | Prüft Typen und baut die fertige Version nach `dist/` |
-| `npm run preview` | Zeigt die gebaute Version lokal an (http://localhost:4173) |
+| `npm run dev` | Development server (demo mode unless `.env.local` configures Supabase) |
+| `npm test` | 70 unit/security tests (Vitest) |
+| `npm run typecheck` | TypeScript check |
+| `npm run build` | Type check + production bundle in `dist/` |
+| `npm run dev:mock` | Online mode against a **local mock** of Supabase (http://localhost:5174) |
+| `node dev/e2e-online.cjs` | 21 multi-browser end-to-end checks against `dev:mock` (needs Playwright) |
+| `npm run verify:db` | Runs the SQL migrations twice + RLS tests on a local PostgreSQL |
+
+Mock accounts for `dev:mock` (password `apex-test-123`): `gm@apex.test`, `player1@apex.test`,
+`player2@apex.test`, `stranger@apex.test` (not invited).
+
+To use the real Supabase project locally, copy `.env.example` to `.env.local` and fill in the values
+(the `/api/apex` function is served by `vercel dev`, not by plain `vite`).
 
 ---
 
-## 2. Kurzanleitung zum Spielen
+## 2. Playing
 
-1. **Figur wählen:** in der Gruppenliste rechts oder direkt auf der Karte anklicken.
-2. **Ziehen:** Erreichbare Felder sind golden umrandet. Fährst du mit der Maus über ein Feld, siehst du Weg und Kosten. Klick = ziehen.
-   Unerreichbare Ziele werden erklärt (Wasser, zu wenig BP, unerforscht …).
-3. **Tag beenden** (nur Spielleiter, goldener Button oben): Bewegungspunkte werden zurückgesetzt, Events lösen aus, die Arena schrumpft.
-4. **Rolle wechseln:** oben rechts *Spielleiter* ↔ *Spieler* und im Auswahlfeld die Figur, aus deren Sicht du spielst.
-5. **Karte:** Mausrad oder Pinch = Zoom, Ziehen = verschieben, ⬡ = ganze Arena, `Esc` = Auswahl aufheben.
-6. **Speichern** passiert automatisch. ⤓ Export / ⤒ Import sichern den Spielstand als JSON-Datei, ↺ setzt die Demo zurück.
+1. **Select a character** in the party list or on the map. Reachable hexes glow gold; hovering shows the path and its cost.
+2. **Click a gold hex** to move. Unreachable targets are explained (lake, not enough MP, unexplored, closed zone …).
+3. **Time** (GM only, golden button): *Begin Night 1* → *Begin Day 2* → … Movement points return at dawn.
+4. **Map:** mouse wheel / pinch / `+` `−` to zoom, drag or arrow keys to pan, `0` recentres, `Esc` clears the selection.
+5. **Players** see only what their party has discovered. The unknown is an endless dark canvas – no outline, no size.
 
-**Spielleiter-Werkzeuge** (rechts, nur in GM-Ansicht): Bewegungspunkte, BP pro Tag, Sichtweite und
-temporären Sichtbonus (z. B. „Turm bestiegen“) ändern, Figuren **frei platzieren**, Steuerrechte vergeben,
-Wissensteilung ein/aus, Rivalen *verbergen/enthüllen*, **Tracking** (ungefähr/genau), Events auslösen,
-Orte freigeben, Tag korrigieren, Schrumpfung konfigurieren, Gruppensicht einblenden, neue Arena erzeugen.
+**GM tools:** movement points and points per day, vision and temporary vision bonus, free placement, control
+rights, knowledge sharing, rival visibility and tracking (approximate/exact), events, site visibility, clock
+correction, shrinking arena, party-vision overlay, new arena (radius 4–45, seed), JSON export/import.
+Online only: **Players & Access** (invitations, roles, character assignment, backups/restore).
 
 ---
 
-## 3. Architektur in einem Satz
+## 3. Rules and rule changes in v0.2
 
-**Alle Regeln stecken in reinen TypeScript-Funktionen (`src/game/`), die Oberfläche (`src/components/`) zeigt nur
-eine gefilterte Ansicht an und schickt „Commands“ – dadurch lassen sich Regeln leicht ändern und später auf einen Server verlegen.**
+All rules live in `src/game/` and are covered by tests. Changes compared with v0.1:
+
+| Topic | v0.1 | v0.2 | Where |
+|---|---|---|---|
+| Default arena | radius 12, 469 hexes | **radius 39, 4,681 hexes** (configurable 4–45) | `src/data/demo.ts` |
+| Travel scale | crossing ≈ 3 days | crossing ≈ **8 days** at 8 MP/day (test-verified ≥ 6) | unchanged MP & costs |
+| Terrain | 7 types | **+ Hills (2 MP)**, **+ River (3 MP, fordable)**; lakes stay impassable | `src/game/terrain.ts` |
+| Time | days only | **Day N → Night N → Day N+1** at state level | `src/game/day.ts` |
+| Movement reset | each new day | **at dawn only**; unspent points can be used at night | `src/game/day.ts` |
+| Night | – | vision **−1** (minimum 1), configurable per phase | `GameConfig.phases` |
+| Events | trigger on a day | on a day's **dawn** (as before) or on a specific **phase** | `src/game/events.ts` |
+| Shrinking | per day | evaluated **only at dawn** (no double steps); rings per step scale with the radius (3 at radius 39) | `src/game/day.ts` |
+| Shrink announcements | "beyond ring N" | players get no ring numbers (they would reveal the map size); the GM log keeps the details | `src/game/text.ts` |
+| Start | everyone on the centre hex | party starts on the eagle's dais (0,1) / (−1,2) so the landmark stays visible | `src/data/demo.ts` |
+| Units | "BP" | **MP** (movement points) | UI |
+
+Unchanged: grassland 1, road 0.5, forest/ruins/anomaly 2, mountains 3, vision 2 (scout 3), 8 MP per day.
+
+---
+
+## 4. Architecture
 
 ```
 src/
-├─ game/                 ← Spiellogik, ohne React, vollständig getestet
-│  ├─ hex.ts             Axiale Hex-Koordinaten: Nachbarn, Distanz, Ringe, Pixel
-│  ├─ terrain.ts         Geländetypen, Kosten, Farben   ← Regeln hier anpassen
-│  ├─ types.ts           Zentrale GameState-Struktur (Teams, Orte, Events, Inventar, Willenskraft …)
-│  ├─ mapgen.ts          Deterministische Arena-Generierung (Seed)
-│  ├─ movement.ts        Wegfindung (Dijkstra) & erreichbare Felder
-│  ├─ visibility.ts      Fog of War, Wissen, buildPlayerView()/buildGmView()
-│  ├─ zone.ts            Schrumpfende Arena
-│  ├─ day.ts             Tageswechsel
-│  ├─ events.ts          Event-Effekte
-│  ├─ commands.ts        ★ Einzige Stelle, die den Spielstand ändert (inkl. Rechteprüfung)
-│  └─ viewRules.ts       Bewegungsvorschau für die Oberfläche (nur auf Basis der Ansicht)
-├─ data/demo.ts          Demo-Kampagne: Figuren, Teams, Orte, Events, Startwerte
-├─ state/
-│  ├─ useGame.ts         React-Hook: hält Spielstand, führt Commands aus, speichert
-│  └─ storage.ts         localStorage, JSON-Export/-Import
-├─ components/           Oberfläche (Header, Karte, Panels, Log)
-│  └─ map/               SVG-Hex-Karte mit Zoom/Pan, Markern, Token-Stapeln
-tests/                   Vitest: Geometrie, Generierung, Bewegung, Sicht, Tageswechsel
-supabase/migrations/     Datenbank-Entwurf für Phase 2 (noch nicht aktiv)
-docs/                    SUPABASE.md (Online-Konzept), WELT.md (Lore & Willenskraft)
+├─ game/        Pure rules (no React): hex math, terrain, map generator, movement, Fog of War,
+│               day/night, events, shrinking zone, commands, text (all user-facing game strings)
+├─ data/        Demo campaign factory (also used to create the online campaign)
+├─ server/      Online API: auth & roles, command validation, GM admin, Supabase repository
+├─ online/      Login screens, Supabase client, API client, useOnlineGame (realtime sync)
+├─ state/       GameApi interface, local demo backend, local storage
+└─ components/  UI; map/ = layered renderer (Canvas terrain, lights, SVG overlay)
+api/apex.ts     Vercel Function → /api/apex
+supabase/       migrations/ (schema + RLS + seed), tests/ (RLS checks), verify_security.sql
+dev/            Local mock Supabase harness and E2E script (never deployed)
+tests/          Vitest: rules, map generation, visibility/secrecy, day/night, server security
 ```
 
-**Datenfluss:** Klick → `dispatch(command)` → `executeCommand()` prüft Rechte & Regeln → neuer `GameState`
-→ `buildPlayerView()` bzw. `buildGmView()` → `ViewModel` → Komponenten zeichnen.
-Spieler-Komponenten sehen nie den vollen `GameState`, sondern nur ihr `ViewModel`.
-
-**Abhängigkeiten:** nur React, Vite, Tailwind CSS, TypeScript und Vitest. Keine Datenbank, kein Docker, keine kostenpflichtigen Dienste.
-
-### Häufige Anpassungen
-
-| Ich möchte … | Datei |
-|---|---|
-| Bewegungskosten/Geländefarben ändern | `src/game/terrain.ts` |
-| Start-BP, Sichtweite, Schrumpf-Zeitplan ändern | `src/data/demo.ts` → `config` |
-| Figuren, Teams, Orte, Events umbenennen/ergänzen | `src/data/demo.ts` |
-| Landschaft anders mischen | `src/game/mapgen.ts` (Schwellenwerte) oder im GM-Tab *Arena* einen anderen Seed |
-| Neue Spielleiter-Aktion | Command in `src/game/commands.ts` ergänzen, Button in `src/components/` |
-
-> Tipp: Nach Änderungen an `demo.ts` im Spiel auf **↺ Reset** klicken, sonst lädt der alte gespeicherte Stand.
+Data flow (online): click → `POST /api/apex?op=command` → token verified → role from DB → `executeCommand()`
+→ saved with version check → Realtime "version" ping → every client refetches **its own** filtered view.
+Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
-## 4. Tests
+## 5. Deployment & environment variables
 
-```bash
-npm test
-```
+Step-by-step: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (migrations, Auth settings, Vercel variables,
+preview test checklist, go-live and rollback).
 
-37 Tests in 5 Dateien prüfen u. a.: 469 Felder bei Radius 12, Nachbarn/Distanz/Ringe, deterministische Karte,
-Erreichbarkeit aller Felder, Geländekosten und Umwege, unpassierbares Wasser, BP-Limit, Rechte (Spieler nur eigene Figur,
-GM-Befehle gesperrt), keine Bewegung durch unerforschtes Gelände, Fog-of-War-Zustände, Aufklärung entlang des Weges,
-Sichtbonus, letzte Sichtung von Rivalen, verborgene Teams, Tracking ohne Geländeaufdeckung, **keine GM-Geheimnisse
-in der Spieleransicht**, Tageswechsel, Events, Schrumpfzone.
+| Variable | Where | Notes |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Vercel (browser) | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel (browser) | publishable/anon key – public, protected by RLS |
+| `SUPABASE_URL` | Vercel (server) | same URL |
+| `SUPABASE_SECRET_KEY` | Vercel (server) | secret/service_role key – **never** with a `VITE_` prefix |
+| `VITE_APEX_ALLOW_DEMO` | optional | `true` keeps `/?demo` available when online mode is on |
+| `VITE_APEX_ALLOW_SIGNUP` | optional | `true` shows "Create an account" (access still invite-only) |
 
-Zusätzlich wurde die Oberfläche in Chrome durchgeklickt (Auswählen, Ziehen, ungültiges Ziel, Tag beenden,
-Rollenwechsel, Tracking, Event, Gruppensicht, Neuladen, Tablet-Breite 1024 px).
-Nicht automatisiert getestet: echte Touch-Geräte (Pinch-Zoom) und Safari.
-
----
-
-## 5. Auf GitHub und Vercel veröffentlichen
-
-### GitHub (Versionierung)
-
-1. Dein bestehendes Repository ist **https://github.com/invinity-8/APEX-C**. Lade alle Dateien aus dem vorbereiteten ZIP in das Root-Verzeichnis des Repositories hoch (ZIP vorher entpacken).
-2. Alternativ kannst du den Ordner lokal mit Git übertragen:
-
-```bash
-git remote add origin https://github.com/invinity-8/APEX-C.git
-git branch -M main
-git push -u origin main
-```
-
-Spätere Änderungen hochladen:
-
-```bash
-git add .
-git commit -m "Beschreibung der Änderung"
-git push
-```
-
-### Vercel (öffentliche Website, kostenlos)
-
-1. Auf <https://vercel.com> mit dem GitHub-Konto anmelden.
-2. **Add New → Project** → das Repository `APEX-C` importieren.
-3. Vercel erkennt **Vite** automatisch (Build: `npm run build`, Output: `dist`). Einfach **Deploy** klicken.
-4. Nach ~1 Minute bekommst du eine Adresse wie `apex-arena.vercel.app`. Jeder `git push` aktualisiert sie automatisch.
-
-> Achtung: Auch online bleibt v0.1 ein **Demo-Modus** – jeder Besucher hat seinen eigenen, lokalen Spielstand.
-> Ein gemeinsamer Spielstand für deine Gruppe kommt mit Phase 2.
+Without these variables every build stays in demo mode – the current production site keeps working unchanged
+until the online mode is configured.
 
 ---
 
-## 6. Was funktioniert – und was noch nicht
+## 6. Verified in v0.2
 
-### ✅ Funktioniert (Phase 1)
+- `npm test`: 70 tests – hex math, deterministic coherent generation (radius 12 and 39), reachability, travel
+  scale, movement costs incl. rivers, permissions, Fog of War, **no secrets / no map size / no outline in player
+  views**, boundary revealed only locally, day/night sequence, MP reset at dawn, night vision, phase events,
+  single shrink step per day, save migration, and 19 server security tests (unauthenticated, uninvited,
+  unconfirmed email, role from server only, filtered state, foreign characters, GM-only commands, forged fields,
+  malformed commands, concurrent writes, audit log, invitations, reassignment, snapshots).
+- `npm run verify:db`: migrations apply twice without errors on PostgreSQL; RLS denies players reading/writing
+  game state, invitations, assignments, snapshots and escalating their role; strangers see nothing.
+- `vercel build` (local): the `/api/apex` function bundles and answers correctly (401/400) when executed.
+- `dev:mock` + `dev/e2e-online.cjs`: 21/21 checks across separate browser sessions (login, denial, live sync of
+  moves and phase changes via Realtime, forbidden actions, refresh persistence, sign-out).
+- Visual checks in Chromium: GM full map, player exploration view, night lighting, landmark, login page.
 
-- Sechseckige Arena aus 469 Hex-Feldern (Radius 12, im GM-Tab *Arena* zwischen 4 und 20 einstellbar), deterministisch per Seed
-- 7 Geländetypen inkl. verzauberter Straßen (0,5 BP), schwierigem und unpassierbarem Gelände, Legende mit Kosten
-- Zoom (Mausrad, Buttons, Pinch), Verschieben, Hover-Tooltip, Klickauswahl, Feldinformationen
-- 4 Spielerfiguren, 3 Rivalenteams mit Identität, Persönlichkeit, Zielen, Strategie-Feld
-- Mehrere Figuren pro Feld als gruppierter Stapel + Liste im Feld-Panel
-- Bewegung per Klick mit Wegfindung, Wegvorschau, BP-Verbrauch nach Gelände, verständliche Fehlermeldungen
-- Tagessystem: Anzeige, GM-Button, BP-Reset, Log/Chronik
-- Fog of War mit 3 Zuständen, Sichtradius 2 (Späherin 3), GM-Sichtbonus, Aufklärung entlang des Weges,
-  Wissen pro Figur, teilbar mit der Gruppe; erinnertes Gelände bleibt sichtbar
-- Getrennte Teamentdeckung (aktuelle Sicht + „zuletzt gesehen“-Marker), GM kann Teams verbergen/enthüllen
-- Tracking-Marker (ungefähr/genau) ohne Geländeaufdeckung
-- 6 Orte (u. a. neutrales Lager *Castra Neutra*, versteckter Tempel), Sichtbarkeit pro Ort, GM-Notizen
-- 3 Events (2 an Spieltage gebunden, 1 manuell), Schrumpfende Arena mit Warnung und Konsequenztext
-- Rollenwechsel GM/Spieler + Spielerauswahl; Spieler bewegen nur die eigene Figur (GM kann Rechte erteilen)
-- Automatisches Speichern, Wiederherstellen nach Neuladen, Reset, JSON-Export/-Import
-- Datenmodelle für Inventar und Willenskraft (Anzeige im Figuren-Panel)
+## 7. Known limitations
 
-### ⏳ Noch nicht (bewusst)
-
-- **Kein echter Mehrspieler-Modus**, keine Accounts, keine Synchronisation (Phase 2)
-- Keine Sichtlinien (Berge/Wälder blockieren die Sicht noch nicht)
-- Kein Terrain-Editor, kein Editor für Orte/Events (Daten werden in `demo.ts` gepflegt)
-- Strategien der Rivalen werden gespeichert, aber noch nicht automatisch ausgeführt
-- Inventar und Willenskraft werden angezeigt, aber nicht im Spiel verändert
-- Kein Rückgängig-Knopf für Züge (Korrektur über „Frei platzieren“ + BP-Stepper)
-- Drag-and-drop von Figuren (Klick-zum-Ziehen ist robuster und genügt für v0.1)
-
----
-
-## 7. Fünf sinnvolle nächste Erweiterungen
-
-1. **Online-Spielstand mit Supabase** (Phase 2): Magic-Link-Login, Edge Function `apply-command`,
-   gefilterte `player_views` per Realtime – Entwurf liegt in `supabase/` und `docs/SUPABASE.md`.
-2. **Terrain- & Orts-Editor für den GM:** Pinsel-Modus zum Umfärben von Feldern, Orte per Klick anlegen und beschreiben.
-3. **Sichtlinien:** Gebirge blockieren, Wald begrenzt Sicht auf 1, Türme/Berge erhöhen sie automatisch (in `visibility.ts`).
-4. **Rivalen-Automatik:** pro Tag einfache Züge nach Strategie (patrouillieren, Ressourcen suchen, fliehen, verfolgen) –
-   der GM bestätigt die Vorschläge mit einem Klick.
-5. **Voluntas-System spielbar machen:** Willenskraft ausgeben für +BP/+Sicht, Phiolen am *Fons Voluntatis* füllen,
-   Inventar per GM-Dialog bearbeiten, Event-Editor mit eigenen Effekten.
-
----
+- **Not yet tested against the real Supabase project and a Vercel preview** – the build environment used for
+  v0.2 had no network access to Supabase/Vercel. The steps and checklist in `docs/DEPLOYMENT.md` must be run
+  before go-live. The schema was tested on PostgreSQL with a Supabase stub, the client against a protocol mock.
+- No line of sight yet (mountains/forests do not block vision).
+- Rival strategies are stored but not automated; inventory and willpower are displayed but not playable.
+- Tree crowns do not sway (water glints, flickering lights and arcane motes are animated).
+- Performance was measured in headless Chromium without GPU; real laptops should be faster, but a check on the
+  players' actual devices is recommended (especially Safari and touch devices).
+- No rate limiting on `/api/apex` beyond Vercel's defaults; no undo (use backups or free placement).
 
 ## 8. Roadmap
 
-| Phase | Inhalt | Status |
+| Phase | Content | Status |
 |---|---|---|
-| 1 | Demo-Harness: Karte, Bewegung, Tage, Fog, Rollen, Speicherung, Tests | ✅ v0.1 |
-| 2 | Supabase, Auth, sichere Rollen (RLS), Live-Sync, Vercel | 📐 Konzept |
-| 3 | GM-Werkzeuge: Terrain-Editor, Events, Tracking, Camps, Sichtlinien, Schrumpfung | 🔸 teilweise vorbereitet |
-| 4 | Inventar, Ressourcen, Fraktionen, Team-KI, magische Technologie | 🔸 Datenmodelle vorbereitet |
-
-## Fehlerbehebung
-
-- **`npm` nicht gefunden:** Node.js installieren und Terminal neu öffnen.
-- **Leere Seite / alter Stand nach Code-Änderung:** In der App ↺ Reset klicken oder im Browser die Website-Daten löschen.
-- **Port 5173 belegt:** `npm run dev -- --port 3000`.
+| 0.1 | Demo harness: map, movement, days, fog, roles, local saves | ✅ |
+| 0.2 | Accounts, secure multiplayer, large world, true exploration fog, day/night, new visuals | ✅ (pending live verification) |
+| 0.3 | Line of sight, terrain/site/event editors, weather, landmark events | planned |
+| 0.4 | Inventory & Voluntas mechanics, rival automation, factions | data models prepared |
