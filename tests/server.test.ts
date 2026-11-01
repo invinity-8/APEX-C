@@ -208,3 +208,18 @@ describe('Online API – GM administration', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('Online API – multiple clients', () => {
+  it('all clients see the same version after a move; each only gets its permitted view', async () => {
+    for (const t of ['t-gm', 't-p1', 't-p2']) await call(t, 'GET', 'session');
+    const before = ((await call('t-p2', 'GET', 'state')).body as PlayerPayload).version;
+    await call('t-p1', 'POST', 'command', { campaignId: CID, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 0 } } });
+    const gm = (await call('t-gm', 'GET', 'state')).body as GmPayload;
+    const p2 = (await call('t-p2', 'GET', 'state')).body as PlayerPayload;
+    expect(gm.version).toBe(before + 1);
+    expect(p2.version).toBe(before + 1);
+    expect(gm.state!.tokens.livia.pos).toEqual({ q: 1, r: 0 });
+    // Player 2 does not share knowledge with Livia in this setup → Livia's details stay hidden.
+    expect(p2.view!.tokens.find((t) => t.id === 'livia')?.details).toBeUndefined();
+  });
+});

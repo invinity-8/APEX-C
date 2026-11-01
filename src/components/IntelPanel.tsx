@@ -1,7 +1,7 @@
 import type { ViewModel } from '../game/visibility';
 import { Section } from './ui';
 
-/** Spieleransicht: Was weiß die Gruppe über Rivals und Orte? */
+/** Player view: what does the party know about rivals and sites? */
 export function IntelPanel({ view, onFocus }: { view: ViewModel; onFocus: (q: number, r: number) => void }) {
   const rivals = view.teams.filter((t) => t.kind === 'rival');
   return (
@@ -27,7 +27,7 @@ export function IntelPanel({ view, onFocus }: { view: ViewModel; onFocus: (q: nu
                     {t.currentlyVisible ? (
                       <span className="text-emerald-300">in sight</span>
                     ) : tr ? (
-                      <span className="text-blood-400">🔴 verfolgt</span>
+                      <span className="text-blood-400">🔴 tracked</span>
                     ) : t.lastSeen ? (
                       <span className="text-marble-500">last seen day {t.lastSeen.day}</span>
                     ) : null}

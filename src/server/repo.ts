@@ -3,7 +3,7 @@
  * Supabase with the secret (service) key – see supabaseRepo.ts. Tests use an
  * in-memory implementation with exactly the same contract.
  */
-import type { GameState } from '../game/types';
+import type { GameState } from '../game/types.js';
 
 export type Role = 'gm' | 'player';
 

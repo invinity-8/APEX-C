@@ -1,6 +1,7 @@
 import { hexKey, parseKey, type HexKey } from '../game/hex';
 import { TERRAIN } from '../game/terrain';
 import { fmt, type Command } from '../game/commands';
+import { HEX_FEATURE_INFO } from './map/landmark';
 import type { GameState, SiteVisibility, TeamStrategy, TeamVisibility } from '../game/types';
 import type { TokenView, ViewModel } from '../game/visibility';
 import { Bar, Section, Segmented, Stepper, Toggle } from './ui';
@@ -19,15 +20,15 @@ interface Props {
 }
 
 export const STRATEGY_LABEL: Record<TeamStrategy, string> = {
-  manual: 'Manuell',
-  patrol: 'Patrouillieren',
-  forage: 'Ressourcen suchen',
-  flee: 'Fliehen',
-  pursue: 'Verfolgen',
-  rest: 'Ruhen',
+  manual: 'Manual',
+  patrol: 'Patrol',
+  forage: 'Forage for resources',
+  flee: 'Flee',
+  pursue: 'Pursue',
+  rest: 'Rest',
 };
 
-const SITE_TYPE_LABEL = { start: 'Startpunkt', camp: 'Lager', ruin: 'Ruine', shrine: 'Heiligtum', tower: 'Turm', cache: 'Versorgung' };
+const SITE_TYPE_LABEL = { start: 'Landmark', camp: 'Camp', ruin: 'Ruin', shrine: 'Shrine', tower: 'Tower', cache: 'Supply cache' };
 const STATUS_LABEL = { intact: 'intact', looted: 'looted', destroyed: 'destroyed', occupied: 'occupied' };
 
 export function SelectionPanel(props: Props) {
@@ -38,8 +39,8 @@ export function SelectionPanel(props: Props) {
     return (
       <Section title="Selection">
         <p className="text-xs leading-relaxed text-marble-300">
-          Click a <b className="text-marble-50">Character</b>, to select them. Reachable hexes glow gold. Click a hex to move.
-          Ein Klick auf ein beliebiges Hex zeigt dessen Informationen.
+          Click a <b className="text-marble-50">character</b> to select it. Reachable hexes glow gold – click one to move there.
+          Clicking any other hex shows its details.
         </p>
       </Section>
     );
@@ -66,7 +67,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
     <Section
       title={token.kind === 'player' ? 'Character' : 'Rival Team'}
       right={
-        <button className="btn btn-ghost px-2 py-0.5" onClick={onClear} title="Selection aufheben (Esc)">
+        <button className="btn btn-ghost px-2 py-0.5" onClick={onClear} title="Clear selection (Esc)" aria-label="Clear selection">
           ✕
         </button>
       }
@@ -105,12 +106,12 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
               <div className="flex justify-between text-xs">
                 <span className="text-marble-300">Vision range</span>
                 <span className="text-marble-50">
-                  {d.visionRadius + d.visionBonus} Hexer
+                  {d.visionRadius + d.visionBonus} hexes
                   {d.visionBonus !== 0 && (
                     <span className={d.visionBonus > 0 ? 'text-emerald-300' : 'text-blood-400'}>
                       {' '}
                       ({d.visionBonus > 0 ? '+' : ''}
-                      {d.visionBonus} heute)
+                      {d.visionBonus} until dawn)
                     </span>
                   )}
                 </span>
@@ -135,7 +136,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
                         {i.willCapacity !== undefined && (
                           <span className="text-arcane-300">
                             {' '}
-                            · {i.willCharge}/{i.willCapacity} Wille
+                            · {i.willCharge}/{i.willCapacity} will
                           </span>
                         )}
                       </li>
@@ -150,12 +151,12 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
 
       <p className={`mt-3 rounded-md px-2 py-1.5 text-[11px] ${canMove ? 'bg-gold-400/10 text-gold-200' : 'bg-ink-800 text-marble-500'}`}>
         {placeMode
-          ? '✥ Frei platzieren aktiv: Klicke irgendein Hex.'
+          ? '✥ Free placement active: click any hex.'
           : canMove
             ? d && d.movePoints <= 0
               ? 'No movement points left — wait for the next day.'
-              : 'Klicke ein golden markiertes Hex, um dorthin zu ziehen.'
-            : 'Du kannst diese Character nicht bewegen.'}
+              : 'Click a gold-highlighted hex to move there.'
+            : 'You cannot move this character.'}
       </p>
 
       {/* ---------- GM-Werkzeuge ---------- */}
@@ -167,7 +168,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
             onClick={() => setPlaceMode(!placeMode)}
             title="Place character on any hex without movement cost"
           >
-            ✥ {placeMode ? 'Frei platzieren beenden' : 'Frei platzieren'}
+            ✥ {placeMode ? 'End free placement' : 'Free placement'}
           </button>
           <Stepper
             label="Movement points"
@@ -238,8 +239,8 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
           value={team.visibility}
           onChange={(v) => run({ type: 'setTeamVisibility', teamId: team.id, visibility: v })}
           options={[
-            { value: 'auto', label: 'Bei Sicht', hint: 'Sichtbar, sobald im Sichtfeld der Gruppe' },
-            { value: 'hidden', label: 'Verborgen', hint: 'Nie sichtbar (Tarnung, Magie)' },
+            { value: 'auto', label: 'On sight', hint: 'Visible once inside the party’s vision' },
+            { value: 'hidden', label: 'Hidden', hint: 'Never visible (camouflage, magic)' },
             { value: 'revealed', label: 'Revealed', hint: 'Always visible' },
           ]}
         />
@@ -252,20 +253,20 @@ export function RivalControls({ team, run }: { team: NonNullable<GameState['team
           value={team.tracking ? team.tracking.mode : 'none'}
           onChange={(v) => run({ type: 'setTracking', teamId: team.id, mode: v })}
           options={[
-            { value: 'none', label: 'Aus' },
+            { value: 'none', label: 'Off' },
             { value: 'approx', label: 'Approximate', hint: 'Marker with uncertainty radius 2' },
-            { value: 'exact', label: 'Genau' },
+            { value: 'exact', label: 'Exact' },
           ]}
         />
       </div>
       {team.tracking && (
         <button className="btn btn-ghost w-full" onClick={() => run({ type: 'setTracking', teamId: team.id, mode: team.tracking!.mode })}>
-          🔴 Marker auf aktuelle Position aktualisieren (Stand: Tag {team.tracking.day})
+          🔴 Update marker to the current position (set on Day {team.tracking.day})
         </button>
       )}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-marble-300" title="Used by automated turns in a future version">
-          Strategie <span className="text-marble-500">(vorbereitet)</span>
+          Strategy <span className="text-marble-500">(prepared)</span>
         </span>
         <select
           className="rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-xs"
@@ -311,23 +312,24 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
       <div className="flex items-start gap-3">
         <span
           className="mt-0.5 h-8 w-8 shrink-0 border border-black/50"
-          style={{ background: def ? def.fill : '#0c0b0a', clipPath: 'polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)' }}
+          style={{ background: def ? (hex.feature ? '#d6ccb7' : def.fill) : '#0c0b0a', clipPath: 'polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)' }}
         />
         <div className="min-w-0">
           <div className="text-sm font-semibold text-marble-50">
-            {def ? def.label : 'Unerforscht'}
-            {hex.fog === 'explored' && <span className="ml-1.5 text-[11px] font-normal text-marble-500">(zuletzt gesehen)</span>}
+            {def ? (hex.feature ? `Imperial Marble (${def.label} rules)` : def.label) : 'Unexplored'}
+            {hex.fog === 'explored' && <span className="ml-1.5 text-[11px] font-normal text-marble-500">(last seen)</span>}
           </div>
           <div className="text-xs text-marble-300">
-            {def ? def.description : 'Niemand aus deiner Gruppe war bisher in Vision range dieses Hexes.'}
+            {def ? def.description : 'Nobody in your party has been within sight of this hex yet.'}
           </div>
+          {hex.feature && <div className="mt-1 text-xs italic text-gold-200">{HEX_FEATURE_INFO[hex.feature]}</div>}
           {def && (
             <div className="mt-1 flex flex-wrap gap-1">
-              <span className={`chip ${def.cost === null ? 'text-blood-400' : ''}`}>{def.cost === null ? '⛔ unpassierbar' : `${fmt(def.cost)} BP`}</span>
+              <span className={`chip ${def.cost === null ? 'text-blood-400' : ''}`}>{def.cost === null ? '⛔ impassable' : `${fmt(def.cost)} MP`}</span>
               {def.difficult && <span className="chip text-amber-300">Difficult terrain</span>}
               {hex.zone !== 'safe' && (
                 <span className={`chip ${hex.zone === 'warning' ? 'text-amber-300' : 'text-blood-400'}`}>
-                  {hex.zone === 'warning' ? '⚠ bald Todeszone' : hex.zone === 'closed' ? '⛔ gesperrt' : '☠ Todeszone'}
+                  {hex.zone === 'warning' ? '⚠ soon a death zone' : hex.zone === 'closed' ? '⛔ closed' : '☠ death zone'}
                 </span>
               )}
             </div>
@@ -367,8 +369,8 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
                 onChange={(v) => run({ type: 'setSiteVisibility', siteId: site.id, visibility: v })}
                 options={[
                   { value: 'public', label: 'Public' },
-                  { value: 'onSight', label: 'Bei Sicht' },
-                  { value: 'hidden', label: 'Versteckt' },
+                  { value: 'onSight', label: 'On sight' },
+                  { value: 'hidden', label: 'Hidden' },
                 ]}
               />
             </div>
@@ -388,7 +390,7 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
                 >
                   <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
                   {t.name}
-                  <span className="ml-auto text-marble-500">{t.kind === 'player' ? 'Player' : 'Rivale'}</span>
+                  <span className="ml-auto text-marble-500">{t.kind === 'player' ? 'Player' : 'Rival'}</span>
                 </button>
               </li>
             ))}

@@ -1,7 +1,7 @@
 {
   "name": "apex-arena",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,5 +29,5 @@
   "engines": {
     "node": ">=20.19"
   },
-  "description": "APEX – Interactive Arena: D&D-Spielleiterplattform (Demo-Harness)"
+  "description": "APEX – Arena of the Eternal Will: secure online D&D campaign platform (GM + players)"
 }

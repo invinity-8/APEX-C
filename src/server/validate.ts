@@ -3,7 +3,7 @@
  * Anything that does not match the expected shape exactly is rejected before
  * it reaches the game logic.
  */
-import type { Command } from '../game/commands';
+import type { Command } from '../game/commands.js';
 
 type Obj = Record<string, unknown>;
 

@@ -3,11 +3,11 @@
  * The UI uses it to show reachable hexes and explanations without knowing any
  * secret data. The authoritative check is always executeCommand() (on the server).
  */
-import { equals, type HexKey } from './hex';
-import { pathTo, reachable, type ReachInfo } from './movement';
-import { TERRAIN } from './terrain';
-import { T } from './text';
-import type { TokenView, ViewModel } from './visibility';
+import { equals, type HexKey } from './hex.js';
+import { pathTo, reachable, type ReachInfo } from './movement.js';
+import { TERRAIN } from './terrain.js';
+import { T } from './text.js';
+import type { TokenView, ViewModel } from './visibility.js';
 
 export function viewReach(view: ViewModel, token: TokenView): Map<HexKey, ReachInfo> {
   const budget = token.details?.movePoints ?? 0;

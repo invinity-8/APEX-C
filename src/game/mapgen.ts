@@ -12,11 +12,11 @@
  *   6. Ancient roads, routed with a cost-aware path search from the labyrinth gates.
  *   7. Reachability guarantee: every passable hex can be reached from the centre.
  */
-import { DIRECTIONS, ORIGIN, distance, hexKey, hexesInRange, neighbors, scale, toPixel, type Axial, type HexKey } from './hex';
-import { dijkstra, pathTo } from './movement';
-import { hash2, mulberry32, valueNoise } from './rng';
-import { isPassable, type TerrainType } from './terrain';
-import type { HexTile } from './types';
+import { DIRECTIONS, ORIGIN, distance, hexKey, hexesInRange, neighbors, scale, toPixel, type Axial, type HexKey } from './hex.js';
+import { dijkstra, pathTo } from './movement.js';
+import { hash2, mulberry32, valueNoise } from './rng.js';
+import { isPassable, type TerrainType } from './terrain.js';
+import type { HexTile } from './types.js';
 
 export interface MapGenOptions {
   radius: number;

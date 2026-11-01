@@ -2,10 +2,10 @@
  * Wire format shared by the API (server) and the online client.
  * Types only – no runtime code, so the client bundle stays free of server logic.
  */
-import type { Command } from '../game/commands';
-import type { GameState } from '../game/types';
-import type { ViewModel } from '../game/visibility';
-import type { Role, SnapshotInfo } from './repo';
+import type { Command } from '../game/commands.js';
+import type { GameState } from '../game/types.js';
+import type { ViewModel } from '../game/visibility.js';
+import type { Role, SnapshotInfo } from './repo.js';
 
 /** ViewModel without the derived lookup table (rebuilt by the client). */
 export type WireView = Omit<ViewModel, 'hexByKey'>;

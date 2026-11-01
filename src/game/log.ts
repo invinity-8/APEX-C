@@ -1,4 +1,4 @@
-import type { GameState, LogEntry } from './types';
+import type { GameState, LogEntry } from './types.js';
 
 export const MAX_LOG = 300;
 

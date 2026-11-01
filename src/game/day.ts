@@ -11,12 +11,12 @@
  *    so one day can never cause a double shrink step.
  *  - Events can fire at the dawn of a day (trigger 'day') or at a specific phase (trigger 'phase').
  */
-import { applyEvent, firesAt } from './events';
-import { addLog } from './log';
-import { T } from './text';
-import { refreshAllKnowledge } from './visibility';
-import { affectedRings, safeRadius, zoneStatus } from './zone';
-import type { GameState } from './types';
+import { applyEvent, firesAt } from './events.js';
+import { addLog } from './log.js';
+import { T } from './text.js';
+import { refreshAllKnowledge } from './visibility.js';
+import { affectedRings, safeRadius, zoneStatus } from './zone.js';
+import type { GameState } from './types.js';
 
 /** Day phase → night of the same day. Mutates `state`. */
 function beginNight(state: GameState): void {
@@ -43,10 +43,14 @@ function beginDay(state: GameState): void {
     const after = affectedRings(cfg.shrink, state.day);
     const radius = safeRadius(cfg, state.day);
     if (after > before) {
-      addLog(state, 'warning', T.logShrink(radius, cfg.shrink.mode === 'closed'));
+      addLog(state, 'warning', T.logShrink(cfg.shrink.mode === 'closed'));
+      addLog(state, 'gm', T.logShrinkGm(radius), 'gm');
     } else {
       const nextRadius = safeRadius(cfg, state.day + cfg.shrink.warningDays);
-      if (nextRadius < radius) addLog(state, 'warning', T.logShrinkWarning(nextRadius));
+      if (nextRadius < radius) {
+        addLog(state, 'warning', T.logShrinkWarning);
+        addLog(state, 'gm', T.logShrinkWarningGm(nextRadius), 'gm');
+      }
     }
     for (const t of Object.values(state.tokens)) {
       const z = zoneStatus(cfg, state.day, t.pos);

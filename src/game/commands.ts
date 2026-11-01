@@ -8,17 +8,17 @@
  * In online mode the browser only sends commands to the server, which runs
  * exactly this function. Players therefore cannot cheat.
  */
-import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex';
-import { addLog } from './log';
-import { findPath, type BlockCheck, type TerrainLookup } from './movement';
-import { advanceDay, advancePhase } from './day';
-import { applyEvent } from './events';
-import { stringHash } from './rng';
-import { TERRAIN } from './terrain';
-import { T, fmt, phaseName } from './text';
-import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility';
-import { zoneStatus } from './zone';
-import type { Actor, GameState, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types';
+import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js';
+import { addLog } from './log.js';
+import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
+import { advanceDay, advancePhase } from './day.js';
+import { applyEvent } from './events.js';
+import { stringHash } from './rng.js';
+import { TERRAIN } from './terrain.js';
+import { T, fmt, phaseName } from './text.js';
+import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
+import { zoneStatus } from './zone.js';
+import type { Actor, GameState, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
 
 export { fmt };
 

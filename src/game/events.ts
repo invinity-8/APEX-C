@@ -2,10 +2,10 @@
  * Arena events: apply their effects to the game state.
  * New effect types: add them to types.ts (EventEffect) and handle them here.
  */
-import { TERRAIN } from './terrain';
-import { addLog } from './log';
-import { T } from './text';
-import type { ArenaEvent, GameState, Phase } from './types';
+import { TERRAIN } from './terrain.js';
+import { addLog } from './log.js';
+import { T } from './text.js';
+import type { ArenaEvent, GameState, Phase } from './types.js';
 
 /** Mutates `state`. Returns false if the event cannot be triggered (any more). */
 export function applyEvent(state: GameState, eventId: string): boolean {

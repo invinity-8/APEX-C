@@ -3,8 +3,8 @@
  * with the secret key, which bypasses RLS. Never import this module from client code.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { GameState } from '../game/types';
-import type { Assignment, AuthUser, Campaign, CommandLogEntry, Invite, Member, Repo, Role, SnapshotInfo, StoredState } from './repo';
+import type { GameState } from '../game/types.js';
+import type { Assignment, AuthUser, Campaign, CommandLogEntry, Invite, Member, Repo, Role, SnapshotInfo, StoredState } from './repo.js';
 
 export interface ServerEnv {
   url: string;

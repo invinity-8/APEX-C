@@ -70,3 +70,45 @@
   100% { opacity: 0; transform: scale(1.6); }
 }
 @media (prefers-reduced-motion: reduce) { .tracker-pulse { animation: none; } }
+
+/* ---------------------------------------------------------------- APEX 0.2 */
+
+/* Endless, non-informative exploration canvas behind the known world. */
+.explore-bg {
+  background-color: #0b0a0e;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke='%23d4a64a' stroke-opacity='0.045'%3E%3Cpath d='M0 40 Q40 20 80 40 T160 40'/%3E%3Cpath d='M0 120 Q40 100 80 120 T160 120'/%3E%3Ccircle cx='120' cy='80' r='18'/%3E%3Ccircle cx='30' cy='90' r='6'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='0.025'%3E%3Ccircle cx='20' cy='20' r='1'/%3E%3Ccircle cx='97' cy='63' r='1.2'/%3E%3Ccircle cx='140' cy='140' r='0.8'/%3E%3Ccircle cx='60' cy='150' r='1'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 40%, #17141a 0%, #0b0a0e 70%);
+  background-repeat: repeat, no-repeat;
+}
+
+/* Day/night atmosphere overlays (above terrain, below tokens). */
+.atmo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 1.6s ease;
+}
+.atmo-day {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(255, 214, 150, 0.16), transparent 55%),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(10, 6, 2, 0.35) 100%);
+  mix-blend-mode: soft-light;
+}
+.atmo-night {
+  background:
+    radial-gradient(ellipse at 70% 10%, rgba(150, 170, 255, 0.10), transparent 50%),
+    linear-gradient(rgba(38, 44, 110, 0.62), rgba(40, 26, 80, 0.62));
+  mix-blend-mode: multiply;
+}
+@media (prefers-reduced-motion: reduce) {
+  .atmo { transition: none; }
+}
+
+/* Login screen backdrop: marble darkness with a faint golden hex lattice. */
+.auth-bg {
+  background-color: #0b0a0e;
+  background-image:
+    radial-gradient(ellipse at 50% 30%, rgba(212, 166, 74, 0.14), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='90' viewBox='0 0 52 90'%3E%3Cpath d='M26 0 L52 15 L52 45 L26 60 L0 45 L0 15 Z M26 60 L26 90' fill='none' stroke='%23d4a64a' stroke-opacity='0.06'/%3E%3C/svg%3E");
+}

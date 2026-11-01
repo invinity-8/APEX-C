@@ -3,8 +3,8 @@
  * Path finding: Dijkstra over passable hexes, cost = terrain of the hex being entered.
  * Uses a binary heap so that maps with ~5,000 hexes stay fast.
  */
-import { equals, hexKey, neighbors, parseKey, type Axial, type HexKey } from './hex';
-import { TERRAIN, type TerrainType } from './terrain';
+import { equals, hexKey, neighbors, parseKey, type Axial, type HexKey } from './hex.js';
+import { TERRAIN, type TerrainType } from './terrain.js';
 
 /** Returns the (known) terrain of a hex, or undefined if unknown / outside the arena. */
 export type TerrainLookup = (key: HexKey) => TerrainType | undefined;

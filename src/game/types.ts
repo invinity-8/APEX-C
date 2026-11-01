@@ -4,8 +4,8 @@
  * The GameState contains the FULL truth (including secrets); players never
  * receive it, only a filtered view (see visibility.ts → buildPlayerView).
  */
-import type { Axial, HexKey } from './hex';
-import type { TerrainType } from './terrain';
+import type { Axial, HexKey } from './hex.js';
+import type { TerrainType } from './terrain.js';
 
 /** v2: day/night phases, terrain elevation & landmark features. */
 export const STATE_VERSION = 2;

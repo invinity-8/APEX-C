@@ -6,8 +6,8 @@
  *   SUPABASE_URL          – e.g. https://xqkyaqxuoaxadpkcdhch.supabase.co
  *   SUPABASE_SECRET_KEY   – Supabase secret / service_role key (NEVER prefix with VITE_)
  */
-import { handleApi } from '../src/server/api';
-import { SupabaseRepo, readServerEnv } from '../src/server/supabaseRepo';
+import { handleApi } from '../src/server/api.js';
+import { SupabaseRepo, readServerEnv } from '../src/server/supabaseRepo.js';
 
 let repo: SupabaseRepo | null = null;
 

@@ -133,3 +133,15 @@ describe('Fog of War & visibility', () => {
     expect(v.hexByKey['-6,0']).toBeUndefined();
   });
 });
+
+describe('Map-size secrecy over time', () => {
+  it('shrink announcements visible to players never mention ring numbers', () => {
+    let s = createDemoState({ radius: 12 });
+    for (let i = 0; i < 12; i++) s = executeCommand(s, GM, { type: 'advancePhase' }).state;
+    const v = buildPlayerView(s, 'livia');
+    const shrinkLogs = v.log.filter((e) => e.kind === 'warning');
+    expect(shrinkLogs.length).toBeGreaterThan(0);
+    for (const e of v.log) expect(e.text).not.toMatch(/ring \d/i);
+    expect(s.log.some((e) => e.audience === 'gm' && /ring \d/.test(e.text))).toBe(true);
+  });
+});

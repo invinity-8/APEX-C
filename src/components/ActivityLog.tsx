@@ -15,19 +15,22 @@ export function ActivityLog({ log, isGm }: { log: LogEntry[]; isGm: boolean }) {
   const entries = log.slice(-60).reverse();
   return (
     <div className="panel absolute bottom-3 left-3 z-10 w-[min(380px,calc(100%-5rem))]">
-      <button className="flex w-full items-center justify-between px-3 py-2" onClick={() => setOpen(!open)} title="Chronicle ein-/ausklappen">
+      <button className="flex w-full items-center justify-between px-3 py-2" onClick={() => setOpen(!open)} title="Show/hide the chronicle" aria-expanded={open}>
         <span className="panel-title">Arena Chronicle</span>
         <span className="text-xs text-marble-500">{open ? '▾' : '▸'} {log.length}</span>
       </button>
       {open && (
         <ul className="max-h-44 space-y-1 overflow-y-auto px-3 pb-2.5 text-xs">
-          {entries.length === 0 && <li className="text-marble-500">Noch nichts geschehen.</li>}
+          {entries.length === 0 && <li className="text-marble-500">Nothing has happened yet.</li>}
           {entries.map((e) => (
             <li key={e.id} className={`flex gap-2 leading-snug ${KIND_STYLE[e.kind]}`}>
-              <span className="w-8 shrink-0 tabular-nums text-marble-500">T{e.day}</span>
+              <span className="w-9 shrink-0 tabular-nums text-marble-500" title={`${e.phase === 'night' ? 'Night' : 'Day'} ${e.day}`}>
+                {e.phase === 'night' ? '☾' : '☀'}
+                {e.day}
+              </span>
               <span className="flex-1">
                 {e.text}
-                {isGm && e.audience === 'gm' && <span className="ml-1 rounded bg-arcane-500/20 px-1 text-[10px] text-arcane-300">nur GM</span>}
+                {isGm && e.audience === 'gm' && <span className="ml-1 rounded bg-arcane-500/20 px-1 text-[10px] text-arcane-300">GM only</span>}
               </span>
             </li>
           ))}

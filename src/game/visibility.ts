@@ -6,9 +6,9 @@
  * Player views contain ONLY explored/visible hexes, so the arena outline, radius and
  * undiscovered terrain cannot be inferred from the data.
  */
-import { DIRECTIONS, add, hexKey, hexesInRange, type Axial, type HexKey } from './hex';
-import type { TerrainType } from './terrain';
-import { zoneStatus, type ZoneStatus } from './zone';
+import { DIRECTIONS, add, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js';
+import type { TerrainType } from './terrain.js';
+import { zoneStatus, type ZoneStatus } from './zone.js';
 import type {
   GameState,
   HexFeature,
@@ -22,7 +22,7 @@ import type {
   Token,
   TokenKind,
   WillPool,
-} from './types';
+} from './types.js';
 
 // ---------------- Grundfunktionen ----------------
 

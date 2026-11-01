@@ -3,7 +3,7 @@
  * Kept in one place so that the rules stay free of prose and a future
  * localisation only needs to replace this module.
  */
-import type { Phase } from './types';
+import type { Phase } from './types.js';
 
 /** Formats movement points: 1, 0.5, 2.5 … */
 export const fmt = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -59,9 +59,11 @@ export const T = {
   logSitePublic: (site: string) => `📜 A new site becomes known: ${site}.`,
   logDawn: (day: number) => `☀ Day ${day} dawns. All movement points are restored.`,
   logNightfall: (day: number) => `🌙 Night ${day} falls. Vision is reduced until dawn.`,
-  logShrink: (ring: number, closed: boolean) =>
-    `🜂 The arena contracts: everything beyond ring ${ring} is now ${closed ? 'closed' : 'a death zone'}.`,
-  logShrinkWarning: (ring: number) => `⚠ The Gamemakers warn: soon everything beyond ring ${ring} becomes dangerous.`,
+  // Player-facing shrink messages never mention ring numbers (they would reveal the arena size).
+  logShrink: (closed: boolean) => `🜂 The arena contracts: its outer reaches are now ${closed ? 'sealed off' : 'a death zone'}.`,
+  logShrinkWarning: '⚠ The Gamemakers warn: the arena will contract again soon.',
+  logShrinkGm: (ring: number) => `Shrink step: safe within ring ${ring}.`,
+  logShrinkWarningGm: (ring: number) => `Next shrink step: safe within ring ${ring}.`,
   logDeathZone: (name: string, consequence: string) => `☠ ${name} is inside the death zone! ${consequence}`,
   logEvent: (name: string, description: string, terrainNote?: string) => `⚡ ${name}: ${description}${terrainNote ? ` (${terrainNote})` : ''}`,
   eventTerrainNote: (count: number, label: string) => `${count} ${plural(count, 'hex', 'hexes')} → ${label}`,

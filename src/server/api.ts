@@ -12,15 +12,15 @@
  *  - Commands are re-validated by executeCommand() against the latest stored state and
  *    written with optimistic locking (version check) – concurrent writes cannot overwrite each other.
  */
-import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo';
-import { executeCommand, type Command } from '../game/commands';
-import { migrateState } from '../game/migrate';
-import type { Actor, GameState } from '../game/types';
-import { phaseName } from '../game/text';
-import { buildPlayerView } from '../game/visibility';
-import type { AdminOverview, CampaignPayload, CharacterRef, PlayerPayload, SessionInfo, WireView } from './protocol';
-import type { AuthUser, Member, Repo, Role } from './repo';
-import { PLAYER_COMMANDS, isEmail, isId, isInt, isObj, parseCommand } from './validate';
+import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
+import { executeCommand, type Command } from '../game/commands.js';
+import { migrateState } from '../game/migrate.js';
+import type { Actor, GameState } from '../game/types.js';
+import { phaseName } from '../game/text.js';
+import { buildPlayerView } from '../game/visibility.js';
+import type { AdminOverview, CampaignPayload, CharacterRef, PlayerPayload, SessionInfo, WireView } from './protocol.js';
+import type { AuthUser, Member, Repo, Role } from './repo.js';
+import { PLAYER_COMMANDS, isEmail, isId, isInt, isObj, parseCommand } from './validate.js';
 
 export interface ApiRequest {
   method: string;

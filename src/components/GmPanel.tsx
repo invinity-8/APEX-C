@@ -3,6 +3,8 @@ import type { Command } from '../game/commands';
 import type { GameState, SiteVisibility } from '../game/types';
 import { safeRadius } from '../game/zone';
 import { hexCount } from '../game/hex';
+import { MAX_RADIUS, MIN_RADIUS } from '../data/demo';
+import { phaseName } from '../game/text';
 import { Section, Segmented, Stepper, Toggle } from './ui';
 import { STRATEGY_LABEL } from './SelectionPanel';
 
@@ -73,8 +75,8 @@ function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | '
                 value={team.visibility}
                 onChange={(v) => run({ type: 'setTeamVisibility', teamId: team.id, visibility: v })}
                 options={[
-                  { value: 'auto', label: 'Bei Sicht' },
-                  { value: 'hidden', label: 'Verborgen' },
+                  { value: 'auto', label: 'On sight', hint: 'Visible once inside the party’s vision' },
+                  { value: 'hidden', label: 'Hidden', hint: 'Never visible (camouflage, magic)' },
                   { value: 'revealed', label: 'Revealed' },
                 ]}
               />
@@ -82,9 +84,9 @@ function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | '
                 value={team.tracking ? team.tracking.mode : 'none'}
                 onChange={(v) => run({ type: 'setTracking', teamId: team.id, mode: v })}
                 options={[
-                  { value: 'none', label: 'Kein Tracking' },
+                  { value: 'none', label: 'No tracking' },
                   { value: 'approx', label: '≈' , hint: 'Approximate position' },
-                  { value: 'exact', label: '◎', hint: 'Genaue Position' },
+                  { value: 'exact', label: '◎', hint: 'Exact position' },
                 ]}
               />
             </div>
@@ -107,7 +109,7 @@ function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
           <li key={ev.id} className="rounded-lg border border-ink-600 bg-ink-800/60 p-2">
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-sm font-semibold text-marble-50">⚡ {ev.name}</span>
-              <span className="text-[11px] text-marble-500">{ev.trigger.type === 'day' ? `Tag ${ev.trigger.day}` : 'manuell'}</span>
+              <span className="text-[11px] text-marble-500">{ev.trigger.type === 'day' ? `Dawn of Day ${ev.trigger.day}` : ev.trigger.type === 'phase' ? phaseName(ev.trigger.phase, ev.trigger.day) : 'manual'}</span>
             </div>
             <p className="mt-0.5 text-[11px] leading-relaxed text-marble-300">{ev.description}</p>
             <div className="mt-1.5 flex items-center justify-between">
@@ -134,8 +136,8 @@ function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
                 onChange={(v) => run({ type: 'setSiteVisibility', siteId: s.id, visibility: v })}
                 options={[
                   { value: 'public', label: 'Public', hint: 'Known to all' },
-                  { value: 'onSight', label: 'Bei Sicht', hint: 'Wird bekannt, sobald die Gruppe ihn sieht' },
-                  { value: 'hidden', label: 'Versteckt', hint: 'Nur der GM sieht ihn' },
+                  { value: 'onSight', label: 'On sight', hint: 'Becomes known once the party sees it' },
+                  { value: 'hidden', label: 'Hidden', hint: 'Only the GM sees it' },
                 ]}
               />
             </li>
@@ -159,12 +161,16 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
         hint="Dims what players cannot see or have not explored"
       />
       <Stepper
-        label="Adjust arena day"
-        value={state.day}
-        hint="Changes only the number, without day-transition effects. Use the golden button above for normal progression."
-        onDec={() => run({ type: 'setDay', day: state.day - 1 })}
-        onInc={() => run({ type: 'setDay', day: state.day + 1 })}
+        label="Correct arena clock"
+        value={phaseName(state.phase, state.day)}
+        hint="Changes only the clock, without dawn/nightfall effects. Use the golden button above for normal progression."
+        onDec={() => run(state.phase === 'night' ? { type: 'setDay', day: state.day, phase: 'day' } : { type: 'setDay', day: state.day - 1, phase: 'night' })}
+        onInc={() => run(state.phase === 'day' ? { type: 'setDay', day: state.day, phase: 'night' } : { type: 'setDay', day: state.day + 1, phase: 'day' })}
       />
+      <p className="text-[11px] leading-relaxed text-marble-500">
+        Night: vision {state.config.phases.night.visionModifier >= 0 ? '+' : ''}
+        {state.config.phases.night.visionModifier} (minimum {state.config.phases.night.minVision}). Movement points are restored at dawn only.
+      </p>
 
       <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 space-y-2">
         <div className="label">Shrinking Arena</div>
@@ -176,19 +182,20 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
             onChange={(m) => run({ type: 'setShrink', mode: m })}
             options={[
               { value: 'danger', label: 'dangerous', hint: 'Passable, but dangerous' },
-              { value: 'closed', label: 'gesperrt', hint: 'Nicht mehr betretbar' },
+              { value: 'closed', label: 'closed', hint: 'Can no longer be entered' },
             ]}
           />
         </div>
         <p className="text-[11px] leading-relaxed text-marble-500">
-          Ab Tag {sh.startDay}, alle {sh.intervalDays} Tage {sh.ringsPerStep} Ring, Warnung {sh.warningDays} Tag vorher. Heute sicher bis Ring{' '}
-          <b className="text-marble-300">{safeRadius(state.config, state.day)}</b>. Values editable in <code>src/data/demo.ts</code>.
+          From the dawn of Day {sh.startDay}, every {sh.intervalDays} days {sh.ringsPerStep} ring{sh.ringsPerStep === 1 ? '' : 's'}, warning {sh.warningDays} day
+          {sh.warningDays === 1 ? '' : 's'} ahead. Today safe within ring <b className="text-marble-300">{safeRadius(state.config, state.day)}</b> of{' '}
+          {state.config.mapRadius}. Shrinking is evaluated only at dawn. Defaults live in <code>src/data/demo.ts</code>.
         </p>
       </div>
 
       <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 space-y-2">
         <div className="label">Generate new arena</div>
-        <Stepper label="Map radius" value={radius} onDec={() => setRadius(Math.max(4, radius - 1))} onInc={() => setRadius(Math.min(20, radius + 1))} />
+        <Stepper label="Map radius" value={radius} onDec={() => setRadius(Math.max(MIN_RADIUS, radius - 1))} onInc={() => setRadius(Math.min(MAX_RADIUS, radius + 1))} />
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-marble-300">Seed</span>
           <div className="flex gap-1">
@@ -206,12 +213,12 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
         <button
           className="btn btn-ghost w-full hover:border-blood-400/70"
           onClick={() => {
-            if (confirm(`New arena with radius ${radius} (${hexCount(radius)} hexes) und Seed ${seed} erzeugen? Der aktuelle Spielstand wird ersetzt.`)) {
+            if (confirm(`Generate a new arena with radius ${radius} (${hexCount(radius).toLocaleString('en-US')} hexes) and seed ${seed}? The current campaign state will be replaced.`)) {
               onRegenerate(radius, seed);
             }
           }}
         >
-          Generate arena ({hexCount(radius)} hexes)
+          Generate arena ({hexCount(radius).toLocaleString('en-US')} hexes)
         </button>
       </div>
     </div>

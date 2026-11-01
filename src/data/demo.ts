@@ -3,12 +3,12 @@
  * All names and backgrounds are placeholders you can change freely.
  * The online mode uses the same factory to create a new shared campaign.
  */
-import { ORIGIN, distance, hexKey, hexesInRange, type Axial, type HexKey } from '../game/hex';
-import { generateArena } from '../game/mapgen';
-import { T } from '../game/text';
-import { isPassable, type TerrainType } from '../game/terrain';
-import { refreshAllKnowledge, emptyKnowledge } from '../game/visibility';
-import { addLog } from '../game/log';
+import { ORIGIN, distance, hexKey, hexesInRange, type Axial, type HexKey } from '../game/hex.js';
+import { generateArena } from '../game/mapgen.js';
+import { T } from '../game/text.js';
+import { isPassable, type TerrainType } from '../game/terrain.js';
+import { refreshAllKnowledge, emptyKnowledge } from '../game/visibility.js';
+import { addLog } from '../game/log.js';
 import {
   DEFAULT_PHASE_RULES,
   STATE_VERSION,
@@ -19,7 +19,7 @@ import {
   type Site,
   type Team,
   type Token,
-} from '../game/types';
+} from '../game/types.js';
 
 export interface DemoOptions {
   radius?: number;
@@ -231,7 +231,7 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
   const tokenList: Token[] = [
     base({
       id: 'livia', name: 'Livia Aurelia', kind: 'player', teamId: 'party', title: 'Will-Weaver',
-      color: '#e9c46a', initials: 'LA', pos: { q: 0, r: 0 },
+      color: '#e9c46a', initials: 'LA', pos: { q: 0, r: 1 },
       will: { current: 6, max: 10 },
       inventory: [
         { id: 'i1', name: 'Voluntas Vial', kind: 'will-vessel', description: 'Stores bound willpower.', quantity: 1, willCharge: 3, willCapacity: 5 },
@@ -240,7 +240,7 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     }),
     base({
       id: 'marcus', name: 'Marcus Varro', kind: 'player', teamId: 'party', title: 'Retired Legionary',
-      color: '#6fb1e0', initials: 'MV', pos: { q: 0, r: 0 }, maxMovePoints: 8,
+      color: '#6fb1e0', initials: 'MV', pos: { q: 0, r: 1 }, maxMovePoints: 8,
       will: { current: 2, max: 4 },
       inventory: [
         { id: 'i3', name: 'Scutum', kind: 'armor', description: 'Large legionary shield.', quantity: 1 },
@@ -249,7 +249,7 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     }),
     base({
       id: 'nyx', name: 'Nyx Silvana', kind: 'player', teamId: 'party', title: 'Scout',
-      color: '#7cc98a', initials: 'NS', pos: { q: -1, r: 1 }, visionRadius: 3,
+      color: '#7cc98a', initials: 'NS', pos: { q: -1, r: 2 }, visionRadius: 3,
       will: { current: 3, max: 5 },
       inventory: [
         { id: 'i5', name: 'Shortbow', kind: 'weapon', description: '20 arrows.', quantity: 1 },
@@ -258,7 +258,7 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     }),
     base({
       id: 'cassius', name: 'Cassius Thorne', kind: 'player', teamId: 'party', title: 'Gladiator-Priest',
-      color: '#ece4d2', initials: 'CT', pos: { q: 0, r: 0 },
+      color: '#ece4d2', initials: 'CT', pos: { q: 0, r: 1 },
       will: { current: 4, max: 8 },
       inventory: [
         { id: 'i7', name: 'Net & Trident', kind: 'weapon', description: 'Classic retiarius gear.', quantity: 1 },

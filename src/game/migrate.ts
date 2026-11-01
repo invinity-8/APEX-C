@@ -2,7 +2,7 @@
  * Upgrades older save games to the current STATE_VERSION.
  * v1 (APEX 0.1) → v2: adds day/night phase and phase rules.
  */
-import { DEFAULT_PHASE_RULES, STATE_VERSION, type GameState } from './types';
+import { DEFAULT_PHASE_RULES, STATE_VERSION, type GameState } from './types.js';
 
 export function migrateState(raw: unknown): GameState {
   if (!raw || typeof raw !== 'object') throw new Error('Not a valid save file.');
