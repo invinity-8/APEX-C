@@ -36,18 +36,20 @@ integration** ("Deploy to production", branch `main`). Never run schema SQL manu
 
 ---
 
-## 2. Supabase Auth settings (email-code login)
+## 2. Sign-in (profile + password) – no Supabase Auth, no email
 
-- Authentication → Sign In / Providers: **Allow new users to sign up = off**; Email provider on;
-  **Email OTP Length = 6**; **Email OTP Expiration = 600 s**.
-- Authentication → Emails → templates **Magic Link** and **Confirm signup**: include `{{ .Token }}` (this makes Supabase
-  send a numeric code instead of a link). Example body in `SETUP_DE.md`, part C2.
-- Authentication → Emails → **SMTP Settings**: configure a custom SMTP provider. The built-in sender is meant for
-  testing only (very low hourly limit and, to my knowledge, delivery only to project team members).
-- Authentication → URL Configuration: Site URL `https://apex-gray-eta.vercel.app`.
+APEX 0.3 does not use Supabase Auth or any email service. The server verifies profile passwords (Argon2id) and
+issues its own HttpOnly session cookie.
 
-Accounts are created automatically by the server the first time an **invited** address requests a code.
-The role is resolved on the server from `apex_campaign_invites` / `apex_campaign_members`.
+- **First GM password:** Supabase → SQL Editor → `select apex_private.create_gm_setup_code();` → copy the code →
+  APEX → *Join Campaign* → *GM* → *First-time setup*. The code works once and expires after 24 h
+  (`create_gm_setup_code(2)` = 2 h). The same procedure resets a forgotten GM password.
+- **Players:** GM → *Players & Access → Profiles* → *Set password* (initialise) / *Reset password*, *Activate* /
+  *Deactivate*, *Sign out devices*, character selection.
+- **Obsolete settings** (can be cleaned up once 0.3 runs in production): Vercel variables `SMTP_HOST`, `SMTP_PORT`,
+  `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (and `APEX_LOGIN_INTERVAL_SEC` if set); Supabase Auth custom SMTP, OTP
+  e-mail templates, and the Auth email provider. Table `apex_login_requests` and `apex_campaign_invites` are no longer
+  used (kept until the transition is verified). The three accounts in `auth.users` are untouched and unused.
 
 ---
 
@@ -79,8 +81,8 @@ Use three different browsers / private windows.
 |---|---|---|
 | 0 | Open `/api/apex?op=health` | all `true`, `errors: []`, `commit` = PR head |
 | 1 | Open the preview URL signed out | Login page only; `/api/apex?op=state` returns 401 |
-| 2 | Sign in as the GM with the emailed code | “Open the arena” → generate (radius 39) → full map with golden arena wall |
-| 3 | GM → *Players & Access → Characters* | assign Livia to Hannah, Marcus to Jean (example) |
+| 2 | GM: first-time setup with the setup code, then sign in with profile + password | “Open the arena” → generate (radius 39) → full map |
+| 3 | GM → *Players & Access → Profiles* | set passwords for Hannah and Jean; characters Sinna / Aster |
 | 4 | Sign in as Player 1 | only the area around the eagle; no outline, no hidden sites; “Live” indicator green |
 | 5 | Player 1 moves their character | GM and Player 2 see the change within ~1 s without reloading |
 | 6 | Player 1 tries to move Player 2’s character | refused (“only characters assigned to you”) |
@@ -88,8 +90,9 @@ Use three different browsers / private windows.
 | 8 | Reload any browser | same shared state is restored |
 | 9 | GM → *Backups* → create / restore | works; a dawn backup appears after *Begin Day 2* |
 
-The same scenarios run automatically against a local mock: `npm run dev:mock` then
-`node dev/e2e-online.cjs` (20 checks). A mock run does **not** prove the real configuration.
+The same scenarios (plus character sheets, PDF import, inventory, privacy and conflicts) run automatically:
+`npm run dev:mock` then `node dev/e2e-online.cjs` (43 checks). Against a real deployment:
+`APEX_URL=… APEX_GM_PASSWORD=… APEX_HANNAH_PASSWORD=… APEX_JEAN_PASSWORD=… node dev/e2e-online.cjs`.
 
 ---
 
@@ -110,6 +113,8 @@ campaign stays untouched in Supabase (and in the snapshot table).
   (last 60 kept, table `apex_state_snapshots`). GM: *Players & Access → Backups*. The GM can also
   export the full campaign as JSON from the header.
 - **Audit log:** every command attempt (accepted or rejected) is stored in `apex_command_log`.
-- **New players:** GM → *Players & Access → Accounts → Invite a person* (optionally with characters). The person
-  then signs in with an emailed code – no dashboard step needed.
+- **Players:** GM → *Players & Access → Profiles* – set/reset passwords, activate/deactivate, sign out devices,
+  assign characters. Passwords are stored only as Argon2id hashes.
+- **Character sheets:** table `apex_character_sheets`; imports back up the previous sheet in
+  `apex_character_sheet_backups`. Inventories live in the game state and are covered by the state snapshots.
 - **Key rotation:** rotate the secret key in Supabase, update `SUPABASE_SECRET_KEY` in Vercel, redeploy.
