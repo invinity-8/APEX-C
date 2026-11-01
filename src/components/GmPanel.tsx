@@ -15,11 +15,13 @@ interface Props {
   showPartyFog: boolean;
   setShowPartyFog: (v: boolean) => void;
   onRegenerate: (radius: number, seed: number) => void;
+  /** Online: worlds are replaced only through World Management (archive first) – hide the raw generator. */
+  worldManaged?: boolean;
 }
 
 type Tab = 'teams' | 'events' | 'arena';
 
-export function GmPanel({ state, run, onSelectToken, showPartyFog, setShowPartyFog, onRegenerate }: Props) {
+export function GmPanel({ state, run, onSelectToken, showPartyFog, setShowPartyFog, onRegenerate, worldManaged }: Props) {
   const [tab, setTab] = useState<Tab>('teams');
   return (
     <Section
@@ -39,7 +41,7 @@ export function GmPanel({ state, run, onSelectToken, showPartyFog, setShowPartyF
       {tab === 'teams' && <TeamsTab state={state} run={run} onSelectToken={onSelectToken} />}
       {tab === 'events' && <EventsTab state={state} run={run} />}
       {tab === 'arena' && (
-        <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={onRegenerate} />
+        <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={onRegenerate} worldManaged={worldManaged} />
       )}
     </Section>
   );
@@ -148,7 +150,7 @@ function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
   );
 }
 
-function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: Omit<Props, 'onSelectToken'>) {
+function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate, worldManaged }: Omit<Props, 'onSelectToken'>) {
   const [radius, setRadius] = useState(state.config.mapRadius);
   const [seed, setSeed] = useState(state.config.seed);
   const sh = state.config.shrink;
@@ -193,6 +195,11 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
         </p>
       </div>
 
+      {worldManaged ? (
+        <p className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 text-[11px] text-marble-300">
+          New worlds are created in <b className="text-gold-200">World Management</b> (below) – the current world is archived first.
+        </p>
+      ) : (
       <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 space-y-2">
         <div className="label">Generate new arena</div>
         <Stepper label="Map radius" value={radius} onDec={() => setRadius(Math.max(MIN_RADIUS, radius - 1))} onInc={() => setRadius(Math.min(MAX_RADIUS, radius + 1))} />
@@ -221,6 +228,7 @@ function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate }: O
           Generate arena ({hexCount(radius).toLocaleString('en-US')} hexes)
         </button>
       </div>
+      )}
     </div>
   );
 }

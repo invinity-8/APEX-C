@@ -15,6 +15,7 @@ import { phaseName } from './game/text';
 import { PlayersPanel } from './components/PlayersPanel';
 import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
+import { WorldPanel } from './components/WorldPanel';
 
 type View = 'map' | 'character' | 'inventory';
 
@@ -60,6 +61,12 @@ export default function App({ game }: { game: GameApi }) {
     if (selectedTokenId && !selectedToken) setSelectedTokenId(null);
     if (!isGm) setPlaceMode(false);
   }, [selectedTokenId, selectedToken, isGm]);
+
+  // A different world (reset / new world / restore): clear selections that referred to the old map.
+  useEffect(() => {
+    setSelectedHex(null);
+    setPlaceMode(false);
+  }, [view.worldId]);
 
   // When switching to a player perspective, select the own character.
   useEffect(() => {
@@ -175,6 +182,14 @@ export default function App({ game }: { game: GameApi }) {
       {game.demo && (
         <div role="note" className="bg-arcane-500/25 px-4 py-1 text-center text-[12px] font-medium text-arcane-300">
           DEMO MODE – this game is stored only in this browser and is NOT shared with other players.
+        </div>
+      )}
+      {game.online?.worldNotice && (
+        <div role="alert" className="flex items-center justify-center gap-3 bg-gold-400/20 px-4 py-1.5 text-center text-[12px] font-medium text-gold-100">
+          {game.online.worldNotice}
+          <button className="btn btn-ghost px-2 py-0.5 text-[11px]" onClick={game.online.clearWorldNotice}>
+            OK
+          </button>
         </div>
       )}
       {game.online?.connection === 'unavailable' && (
@@ -314,6 +329,7 @@ export default function App({ game }: { game: GameApi }) {
                 onSelectToken={selectAndFocus}
                 showPartyFog={showPartyFog}
                 setShowPartyFog={setShowPartyFog}
+                worldManaged={!!game.online}
                 onRegenerate={async (radius, seed) => {
                   const res = await game.regenerate(radius, seed);
                   if (!res.ok) return notify(res.error ?? 'Could not generate the arena.');
@@ -322,6 +338,7 @@ export default function App({ game }: { game: GameApi }) {
                   notify(`New arena generated (radius ${radius}).`, 'info');
                 }}
               />
+              {game.online && <WorldPanel state={state} online={game.online} notify={notify} pending={game.pending.includes('world')} />}
               {game.online && <PlayersPanel state={state} online={game.online} notify={notify} />}
             </>
           ) : (

@@ -264,6 +264,57 @@ const waitText = (page, re, timeout = 10000) =>
     await gm.screenshot({ path: out + '/e2e-gm-access.png', fullPage: true });
   }
 
+  // ---------- World Management ----------
+  {
+    await gm.getByRole('button', { name: /Map/ }).first().click();
+    const wp = gm.locator('section', { has: gm.getByRole('heading', { name: 'World Management' }) });
+    const hannahWorld = async () => (await apiFetch(hannah, 'state')).body?.view?.worldName;
+    const before = (await apiFetch(gm, 'state')).body.state;
+    // player cannot manage worlds
+    const forbidden = await apiFetch(hannah, 'admin', { action: 'createWorld', name: 'Hack', keepProgress: true, requestId: 'e2e-hack-0001' });
+    check('a player cannot create or reset worlds', forbidden.status === 403);
+    // archive
+    await wp.getByRole('button', { name: /Archive World/ }).click();
+    await gm.getByRole('dialog').getByLabel('Name').fill('E2E checkpoint');
+    await gm.getByRole('dialog').getByRole('button', { name: /Archive World/ }).click();
+    check('the GM archives the world (confirmed by the server)', await waitText(gm, /World archived/));
+    check('the archive appears in the list', await waitText(gm, /E2E checkpoint/));
+    // create new world
+    await wp.getByRole('button', { name: /Create New World/ }).click();
+    await gm.getByRole('dialog').getByLabel('World name').fill('E2E Second World');
+    await gm.getByRole('dialog').getByLabel(/Map radius/).fill('10');
+    await gm.getByRole('dialog').getByRole('button', { name: /Archive and create/ }).click();
+    check('the GM creates a new world', await waitText(gm, /New world “E2E Second World” is active/, 20000));
+    const after = (await apiFetch(gm, 'state')).body.state;
+    check('new map, positions and exploration were initialised', after.config.mapRadius === 10 && after.world.name === 'E2E Second World' && Object.keys(after.knowledge.sinna?.explored ?? {}).length < Object.keys(before.knowledge.sinna?.explored ?? {}).length + 50);
+    check('inventory and character data survived the new world', after.tokens.sinna.inventory.some((i) => i.name.startsWith('Old iron key')));
+    check('the player is switched to the new world and told so', await waitText(hannah, /switched to the world “E2E Second World”/, 30000) && (await hannahWorld()) === 'E2E Second World');
+    const sheetStill = await apiFetch(hannah, 'sheet', null, '&token=sinna');
+    check('character sheet unchanged by the new world', sheetStill.status === 200 && JSON.stringify(sheetStill.body).includes('Sorcerer'));
+    const stale = await apiFetch(hannah, 'command', { worldId: before.world?.id ?? 'old', requestId: 'e2e-stale-001', command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } });
+    check('a command for the replaced world is rejected', stale.status === 409 && stale.body.code === 'world_changed');
+    // restore
+    const restoreBtn = wp.locator('li', { hasText: 'E2E checkpoint' }).getByRole('button', { name: 'Restore' });
+    await restoreBtn.click();
+    await gm.getByRole('dialog').getByRole('button', { name: /Archive current and restore/ }).click();
+    check('the GM restores the archived world', await waitText(gm, /“E2E checkpoint” restored/, 20000));
+    const restored = (await apiFetch(gm, 'state')).body.state;
+    check('the restored world matches the archive', restored.config.seed === before.config.seed && restored.tokens.sinna.pos.q === before.tokens.sinna.pos.q && restored.tokens.sinna.pos.r === before.tokens.sinna.pos.r);
+    check('the player follows the restore', await waitText(hannah, /switched to the world/, 30000));
+    await gm.screenshot({ path: out + '/e2e-world-management.png', fullPage: true });
+    // reset requires typing RESET
+    await wp.getByRole('button', { name: /Reset Current World/ }).click();
+    const resetBtn = gm.getByRole('dialog').getByRole('button', { name: /Archive and reset/ });
+    check('reset needs explicit confirmation', await resetBtn.isDisabled());
+    await gm.getByRole('dialog').getByLabel(/Type/).fill('RESET');
+    await resetBtn.click();
+    check('the GM resets the world (previous world archived)', await waitText(gm, /World reset/, 20000));
+    const list = (await apiFetch(gm, 'admin', { action: 'listArchives' })).body.archives;
+    check('archives: manual + before-create + before-restore + before-reset', ['manual', 'before-create', 'before-restore', 'before-reset'].every((k) => list.some((a) => a.kind === k)));
+    const inspect = MOCK ? await (await fetch(BASE + '/__mock/inspect')).json() : null;
+    check('accounts and passwords unchanged by world changes', !inspect || inspect.credentials.length >= 3);
+  }
+
   // ---------- logout ----------
   await hannah.getByRole('button', { name: 'Sign out' }).click();
   check('logout returns to "Who are you?"', await waitText(hannah, /Who are you\?/));
