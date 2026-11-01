@@ -1,5 +1,6 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import App from './App';
 import { demoAllowed, onlineConfig } from './online/config';
 import { useDemoGame } from './state/useGame';
@@ -40,5 +41,6 @@ createRoot(document.getElementById('root')!).render(
         <OnlineRoot />
       </Suspense>
     )}
+    <SpeedInsights />
   </StrictMode>,
 );
