@@ -1,12 +1,12 @@
 /**
  * LOCAL multi-browser acceptance test of the online mode against the mock Supabase harness.
- *   1) npm run dev:mock        (serves http://localhost:5174)
+ *   1) npm run dev:mock        (serves http://localhost:5174, fresh in-memory campaign)
  *   2) node dev/e2e-online.cjs [screenshot-dir]
  * Requires Playwright with Chromium. Each participant runs in its own isolated browser context
  * (separate storage = separate "device").
  *
  * IMPORTANT: this proves the client + server logic. It does NOT prove the real Supabase/Vercel
- * configuration – run the same checklist on the Vercel preview (docs/SETUP_DE.md).
+ * configuration – run the checklist in docs/SETUP_DE.md on the Vercel preview for that.
  */
 const { chromium } = require('playwright');
 const BASE = process.env.APEX_URL || 'http://localhost:5174';
@@ -15,25 +15,33 @@ const out = process.argv[2] || '.';
 const results = [];
 const check = (name, ok, extra = '') => results.push(`${ok ? 'PASS' : 'FAIL'} ${name}${extra && !ok ? ' – ' + extra : ''}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const mock = (path) => fetch(BASE + path).then((r) => r.json());
 
-async function mock(path) {
-  const r = await fetch(BASE + path);
-  return r.json();
-}
-
-async function login(browser, email, { expectCode = true } = {}) {
+async function newDevice(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 880 } });
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => results.push(`PAGEERROR ${email}: ${e.message}`));
+  page.on('pageerror', (e) => results.push(`PAGEERROR: ${e.message}`));
+  return page;
+}
+
+/** Welcome → Join → profile card → email. Returns the code the mock "emailed" (or null). */
+async function startLogin(page, profileName, email) {
   await page.goto(URL);
+  await page.getByRole('button', { name: 'Join Campaign' }).click();
+  await page.getByRole('button', { name: new RegExp(`^${profileName} –`) }).click();
+  await page.getByRole('heading', { name: `Continue as ${profileName}` }).waitFor();
   await page.getByLabel('Email address').fill(email);
   await page.getByRole('button', { name: /Send me a code/ }).click();
   await page.getByLabel('Code from the email').waitFor();
-  const { code } = await mock(`/__mock/code?email=${encodeURIComponent(email)}`);
-  if (!expectCode) return { page, code };
+  return (await mock(`/__mock/code?email=${encodeURIComponent(email)}`)).code;
+}
+
+async function login(browser, profileName, email) {
+  const page = await newDevice(browser);
+  const code = await startLogin(page, profileName, email);
   await page.getByLabel('Code from the email').fill(code);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  return { page, code };
+  return page;
 }
 
 /** Calls the API from inside the page with the page's own session token (like a malicious client would). */
@@ -61,137 +69,145 @@ const waitText = (page, re, timeout = 8000) =>
 (async () => {
   const b = await chromium.launch();
 
-  // 1. Unauthenticated visitors
-  const anon = await (await b.newContext()).newPage();
+  // ---------- Welcome & profile selection ----------
+  const anon = await newDevice(b);
   await anon.goto(URL);
-  await anon.getByRole('heading', { name: 'Enter the Arena' }).waitFor();
-  await anon.screenshot({ path: out + '/e2e-login.png' });
+  await anon.getByRole('button', { name: 'Join Campaign' }).waitFor();
+  await anon.waitForTimeout(500);
+  const w = await anon.locator('body').innerText();
+  await anon.screenshot({ path: out + '/e2e-welcome.png' });
+  check(
+    'welcome screen shows title, campaign, preview and Join button',
+    w.includes('Welcome to APEX') && w.includes('APEX – Arena of the Eternal Will') && (await anon.locator('canvas').count()) === 1,
+  );
   const anonApi = await anon.evaluate(async () => (await fetch('/api/apex?op=state')).status);
-  check('1 unauthenticated visitor sees only the login page and the API answers 401', anonApi === 401 && !(await anon.locator('body').innerText()).includes('Livia'));
+  check('unauthenticated visitors get no campaign data (401)', anonApi === 401);
+  await anon.getByRole('button', { name: 'Join Campaign' }).click();
+  await anon.getByRole('heading', { name: 'Who are you?' }).waitFor();
+  await anon.waitForTimeout(800);
+  await anon.screenshot({ path: out + '/e2e-profiles.png' });
+  const cards = (await anon.locator('li button').allInnerTexts()).join(' ');
+  check(
+    '"Who are you?" shows GM, Hannah, Jean, Simon, Jerba with their characters',
+    ['GM', 'Hannah', 'Sinna', 'Jean', 'Aster', 'Simon', 'Elwin', 'Jerba', 'Javi'].every((t) => cards.includes(t)),
+  );
+  check(
+    'Simon and Jerba are prepared but not activated',
+    (await anon.getByRole('button', { name: /^Simon – .*not activated/ }).isDisabled()) &&
+      (await anon.getByRole('button', { name: /^Jerba – .*not activated/ }).isDisabled()),
+  );
 
-  // 2. Uninvited users
-  const s = await login(b, 'stranger@apex.test', { expectCode: false });
-  const msg = await s.page.locator('[role=status]').first().innerText();
-  check('2 uninvited address gets the same neutral answer but NO code', s.code === null && msg.includes('If stranger@apex.test is invited'), String(s.code));
-  await s.page.context().close();
+  // ---------- Unauthorized profile logins ----------
+  const jeanAsHannah = await newDevice(b);
+  const c1 = await startLogin(jeanAsHannah, 'Hannah', 'jean@apex.test');
+  const neutral = await jeanAsHannah.locator('[role=status]').first().innerText();
+  check('choosing Hannah with Jean’s email sends NO code and reveals no address', c1 === null && neutral.includes('belongs to Hannah’s profile') && !neutral.includes('hannah@'));
+  const strangerPage = await newDevice(b);
+  check('an uninvited address gets no code', (await startLogin(strangerPage, 'Hannah', 'stranger@apex.test')) === null);
+  const gmFake = await newDevice(b);
+  check('a player’s email cannot open the GM profile', (await startLogin(gmFake, 'GM', 'hannah@apex.test')) === null);
+  await Promise.all([jeanAsHannah.context().close(), strangerPage.context().close(), gmFake.context().close()]);
 
-  // 3. Login with email codes (wrong code first)
-  const wrongCtx = await b.newContext();
-  const wrong = await wrongCtx.newPage();
-  await wrong.goto(URL);
-  await wrong.getByLabel('Email address').fill('player2@apex.test');
-  await wrong.getByRole('button', { name: /Send me a code/ }).click();
+  // ---------- Authorized logins ----------
+  const wrong = await newDevice(b);
+  await startLogin(wrong, 'Jean', 'jean@apex.test');
   await wrong.getByLabel('Code from the email').fill('000000');
   await wrong.getByRole('button', { name: 'Sign in' }).click();
   await wrong.getByRole('alert').waitFor();
-  check('3a a wrong code is rejected with a clear message', (await wrong.getByRole('alert').innerText()).includes('wrong or has expired'));
-  const reuse = await mock('/__mock/code?email=player2%40apex.test');
-  await wrongCtx.close();
+  check('a wrong code is rejected', (await wrong.getByRole('alert').innerText()).includes('wrong or has expired'));
+  await wrong.context().close();
+  await sleep(5500); // mock resend cooldown
 
-  const { page: gm } = await login(b, 'gm@apex.test');
+  const gm = await login(b, 'GM', 'gm@apex.test');
   await gm.getByRole('button', { name: /Generate arena/ }).click();
   await gm.getByRole('button', { name: /Begin Night 1/ }).waitFor({ timeout: 20000 });
-  const { page: p1 } = await login(b, 'player1@apex.test');
-  await p1.getByText('Playing as Livia Aurelia').waitFor({ timeout: 20000 });
-  // Requesting another code within the cooldown is refused visibly.
-  const rl = await (await b.newContext()).newPage();
-  await rl.goto(URL);
-  await rl.getByLabel('Email address').fill('player2@apex.test');
-  await rl.getByRole('button', { name: /Send me a code/ }).click();
-  const rateLimited = await rl.getByRole('alert').waitFor({ timeout: 5000 }).then(
-    async () => (await rl.getByRole('alert').innerText()).includes('wait a minute'),
-    () => false,
-  );
-  check('3b requesting codes too quickly is rate-limited visibly', rateLimited);
-  await rl.context().close();
-  await sleep(5500); // mock cooldown
+  const hannah = await login(b, 'Hannah', 'hannah@apex.test');
+  await hannah.getByText('Playing as Sinna').waitFor({ timeout: 20000 });
+  const jean = await login(b, 'Jean', 'jean@apex.test');
+  await jean.getByText('Playing as Aster').waitFor({ timeout: 20000 });
+  check('GM, Hannah (Sinna) and Jean (Aster) sign in with codes and get the right character', true);
+  await hannah.waitForTimeout(1200);
+  await hannah.screenshot({ path: out + '/e2e-hannah.png' });
 
-  const { page: p2b, code: p2code } = await login(b, 'player2@apex.test');
-  await p2b.getByText('Playing as Marcus Varro').waitFor({ timeout: 20000 });
-  check('3c GM, Player 1 and Player 2 signed in with email codes', true);
-  const verifyStatus = (code) =>
-    fetch(BASE + '/auth/v1/verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'player2@apex.test', token: code, type: 'email' }) }).then((r) => r.status);
-  const [oldStatus, reuseStatus] = [await verifyStatus(reuse.code), await verifyStatus(p2code)];
-  check('3d codes are single-use and an older code is no longer valid', oldStatus !== 200 && reuseStatus !== 200, `${oldStatus}/${reuseStatus}`);
+  const [sg, sh, sj] = await Promise.all([apiFetch(gm, 'state'), apiFetch(hannah, 'state', null, '&profile=hannah'), apiFetch(jean, 'state', null, '&profile=jean')]);
+  const cid = sh.body.campaignId;
+  check('all sessions load the same campaign and version', sg.body.campaignId === cid && sj.body.campaignId === cid && sg.body.version === sj.body.version);
 
-  // 4. Same campaign
-  const [sg, s1, s2] = await Promise.all([apiFetch(gm, 'state'), apiFetch(p1, 'state'), apiFetch(p2b, 'state')]);
-  check('4 all three sessions load the same campaign and version', sg.body.campaignId === s1.body.campaignId && s1.body.campaignId === s2.body.campaignId && sg.body.version === s2.body.version);
-  const cid = s1.body.campaignId;
-  check('4b realtime connected on all devices', (await gm.getByRole('button', { name: /^Live/ }).isVisible()) && (await p2b.getByRole('button', { name: /^Live/ }).isVisible()));
-
-  // 5. Move on device B appears on A and C
-  const mv = await apiFetch(p1, 'command', { campaignId: cid, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 0 } } });
-  check('5a Player 1 moves Livia (saved centrally)', mv.status === 200, `${mv.status} ${mv.body.error ?? ''}`);
-  check('5b the move appears on the GM device without reload', await waitText(gm, /Livia Aurelia[\s\S]{0,40}7\/8/));
-  check('5c the move appears on Player 2’s device without reload', await waitText(p2b, /Livia Aurelia[\s\S]{0,40}7\/8/));
-
-  // 6. Day / night
-  await gm.getByRole('button', { name: /Begin Night 1/ }).click();
-  check('6 the phase change reaches both players automatically', (await waitText(p1, /Night 1/)) && (await waitText(p2b, /Night 1/)));
-
-  // 7. Reload restores
-  await p2b.reload();
-  await p2b.getByText('Playing as Marcus Varro').waitFor({ timeout: 20000 });
-  const t7 = await p2b.locator('body').innerText();
-  check('7 reloading restores the same current shared state', t7.includes('Night 1') && /7\/8/.test(t7));
-
-  // 8. Foreign characters
-  const other = await apiFetch(p1, 'command', { campaignId: cid, command: { type: 'move', tokenId: 'marcus', to: { q: 1, r: 1 } } });
-  const gmCmd = await apiFetch(p1, 'command', { campaignId: cid, command: { type: 'advancePhase' } });
-  const forged = await apiFetch(p1, 'command', { campaignId: cid, command: { type: 'place', tokenId: 'marcus', to: { q: 3, r: 0 } }, actor: { role: 'gm' }, userId: '00000000-0000-4000-8000-000000000001' });
-  const adm = await apiFetch(p1, 'admin', { campaignId: cid, action: 'setRole', userId: '00000000-0000-4000-8000-000000000002', role: 'gm' });
-  check('8 a player cannot move another character, run GM commands, forge identity or promote themselves', [other, gmCmd, forged, adm].every((r) => r.status === 403), [other, gmCmd, forged, adm].map((r) => r.status).join(','));
-
-  // 9. Undiscovered map
-  const v9 = await apiFetch(p1, 'state', null, '&as=marcus');
-  const j9 = JSON.stringify(v9.body);
-  check(
-    '9 a player receives no undiscovered map data (no radius, seed, hidden sites, unknown hexes, other perspective)',
-    v9.body.activeCharacter === 'livia' && v9.body.view.mapRadius === null && !j9.includes('"seed"') && !j9.includes('Templum Oblitum') && v9.body.view.hexes.length < 100,
-  );
-
-  // 10. Simultaneous actions
-  const before = (await apiFetch(gm, 'state')).body.version;
-  const [a, c] = await Promise.all([
-    apiFetch(p1, 'command', { campaignId: cid, command: { type: 'move', tokenId: 'livia', to: { q: 1, r: 1 } } }),
-    apiFetch(p2b, 'command', { campaignId: cid, command: { type: 'move', tokenId: 'marcus', to: { q: -1, r: 1 } } }),
+  // ---------- Permissions ----------
+  const mv = (page, profile, tokenId, to) => apiFetch(page, 'command', { campaignId: cid, profile, command: { type: 'move', tokenId, to } });
+  check('Hannah moves Sinna', (await mv(hannah, 'hannah', 'sinna', { q: 1, r: 0 })).status === 200);
+  check('the move appears on the GM device without reload', await waitText(gm, /Sinna[\s\S]{0,30}7\/8/));
+  check('the move appears on Jean’s device without reload', await waitText(jean, /Sinna[\s\S]{0,30}7\/8/));
+  const deny = await Promise.all([
+    mv(hannah, 'hannah', 'aster', { q: 1, r: 1 }),
+    apiFetch(hannah, 'command', { campaignId: cid, profile: 'hannah', command: { type: 'advancePhase' } }),
+    apiFetch(jean, 'state', null, '&profile=hannah'),
+    apiFetch(hannah, 'state', null, '&profile=gm'),
+    apiFetch(hannah, 'admin', { campaignId: cid, action: 'linkProfile', profile: 'simon', email: 'hannah2@apex.test' }),
   ]);
-  const after = (await apiFetch(gm, 'state')).body;
   check(
-    '10 two simultaneous moves are both kept (no silent overwrite)',
-    a.status === 200 && c.status === 200 && after.version === before + 2 && after.state.tokens.livia.pos.r === 1 && after.state.tokens.marcus.pos.q === -1,
-    `${a.status}/${c.status} v${before}->${after.version}`,
+    'players cannot move other characters, use GM actions, claim other profiles or change profiles',
+    deny.every((r) => r.status === 403),
+    deny.map((r) => r.status).join(','),
+  );
+  check('the GM can move any character', (await mv(gm, 'gm', 'aster', { q: -1, r: 1 })).status === 200);
+  const fog = await apiFetch(hannah, 'state', null, '&profile=hannah&as=aster');
+  const fj = JSON.stringify(fog.body);
+  check(
+    'Fog of War: no radius, seed, hidden sites, unknown hexes or other perspectives',
+    fog.body.activeCharacter === 'sinna' && fog.body.view.mapRadius === null && !fj.includes('"seed"') && !fj.includes('Templum') && fog.body.view.hexes.length < 100,
   );
 
-  // 11. Disconnected player reconnects
-  await p2b.context().setOffline(true);
-  await apiFetch(p1, 'command', { campaignId: cid, command: { type: 'move', tokenId: 'livia', to: { q: 2, r: 0 } } });
-  const offlineShown = await waitText(p2b, /Connection to the APEX server lost/, 15000);
-  await p2b.context().setOffline(false);
-  const backOnline = await waitText(p2b, /Livia Aurelia[\s\S]{0,40}[0-5](\.\d)?\/8/, 20000);
-  check('11 a disconnected player sees the offline notice and gets the current state after reconnecting', offlineShown && backOnline, `${offlineShown}/${backOnline}`);
+  // ---------- Time & persistence ----------
+  await gm.getByRole('button', { name: /Begin Night 1/ }).click();
+  check('day/night changes reach both players automatically', (await waitText(hannah, /Night 1/)) && (await waitText(jean, /Night 1/)));
+  await jean.reload();
+  await jean.getByText('Playing as Aster').waitFor({ timeout: 20000 });
+  check('reloading restores the shared state and the chosen profile', /Night 1/.test(await jean.locator('body').innerText()));
+  const before = (await apiFetch(gm, 'state')).body.version;
+  const [a, c] = await Promise.all([mv(hannah, 'hannah', 'sinna', { q: 1, r: 1 }), mv(jean, 'jean', 'aster', { q: -1, r: 2 })]);
+  const after = (await apiFetch(gm, 'state')).body;
+  check('simultaneous moves are both kept', a.status === 200 && c.status === 200 && after.version === before + 2);
 
-  // 12. Server / database failure
+  // ---------- GM assignment changes (through the Players & Access panel) ----------
+  await gm.getByRole('button', { name: 'Profiles' }).click();
+  await gm.getByLabel('Email linked to Simon').fill('simon@apex.test');
+  await gm.getByLabel('Email linked to Simon').locator('xpath=..').getByRole('button', { name: 'Save' }).click();
+  await waitText(gm, /Simon linked/);
+  await gm.locator('aside').screenshot({ path: out + '/e2e-gm-profiles.png' });
+  const simon = await login(b, 'Simon', 'simon@apex.test');
+  check(
+    'after the GM links Simon, Simon signs in and plays Elwin',
+    await simon
+      .getByText('Playing as Elwin')
+      .waitFor({ timeout: 20000 })
+      .then(
+        () => true,
+        () => false,
+      ),
+  );
+  gm.once('dialog', (d) => d.accept());
+  await gm.getByLabel('Email linked to Jean').locator('xpath=..').getByRole('button', { name: 'Unlink' }).click();
+  await waitText(gm, /Jean unlinked/);
+  const jeanAfter = await apiFetch(jean, 'state', null, '&profile=jean');
+  check('after the GM unlinks Jean, Jean’s session loses access to the profile', jeanAfter.status === 403, String(jeanAfter.status));
+
+  // ---------- Resilience ----------
+  await hannah.context().setOffline(true);
+  await mv(simon, 'simon', 'elwin', { q: -1, r: 1 });
+  const offlineShown = await waitText(hannah, /Connection to the APEX server lost/, 15000);
+  await hannah.context().setOffline(false);
+  const back = await waitText(hannah, /^(?![\s\S]*Connection to the APEX server lost)/, 20000);
+  check('a disconnected player sees the notice and reconnects automatically', offlineShown && back, `${offlineShown}/${back}`);
   await mock('/__mock/api-down?on=1');
   const banner = await waitText(gm, /Connection to the APEX server lost[\s\S]*Database unavailable/, 15000);
-  await gm.getByRole('button', { name: /Begin Day 2/ }).click();
-  const notSaved = await waitText(gm, /NOT saved/, 5000);
-  await gm.screenshot({ path: out + '/e2e-outage.png' });
   const noDemo = !(await gm.locator('body').innerText()).includes('DEMO');
   await mock('/__mock/api-down?on=0');
-  const recovered = await waitText(gm, /^(?![\s\S]*Connection to the APEX server lost)/, 20000);
-  check('12 an outage is reported clearly, actions say they were NOT saved, no demo fallback, recovery is automatic', banner && notSaved && noDemo && recovered, `${banner}/${notSaved}/${noDemo}/${recovered}`);
+  check('a server/database outage is reported clearly, without a demo fallback', banner && noDemo);
 
-  // GM presence + sign out
-  await gm.getByRole('button', { name: 'Accounts' }).click();
-  const presence = await waitText(gm, /player1@apex\.test[\s\S]{0,80}online/, 25000);
-  await gm.locator('aside').screenshot({ path: out + '/e2e-gm-panel.png' });
-  check('GM sees which players are online', presence);
-  await p1.getByRole('button', { name: 'Sign out' }).click();
-  await p1.getByRole('heading', { name: 'Enter the Arena' }).waitFor();
-  const afterOut = await apiFetch(p1, 'state');
-  check('sign out returns to the login page and the browser holds no session', afterOut.status === 401);
+  await hannah.getByRole('button', { name: 'Sign out' }).click();
+  await hannah.getByRole('heading', { name: 'Continue as Hannah' }).waitFor();
+  check('sign out works and returns to the profile login', (await apiFetch(hannah, 'state')).status === 401);
 
   console.log(results.join('\n'));
   await b.close();

@@ -3,6 +3,8 @@
  */
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ApexEmblem, Spinner } from '../components/brand';
+import type { ProfileConfig } from '../data/profiles';
+import { Portrait } from '../entry/Portrait';
 
 export { ApexEmblem, Spinner };
 import { supabase } from './supabase';
@@ -89,7 +91,7 @@ function Message({ kind, children }: { kind: 'error' | 'info'; children: ReactNo
  *  2. The player types the 6-digit code; Supabase Auth verifies it (single use, expiring, rate-limited).
  * No passwords, no public self-registration.
  */
-export function LoginPage() {
+export function LoginPage({ profile, onBack }: { profile: ProfileConfig; onBack: () => void }) {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -114,11 +116,13 @@ export function LoginPage() {
     setInfo(null);
     try {
       const { api } = await import('./api');
-      await api.requestCode(email.trim());
+      await api.requestCode(email.trim(), profile.key);
       setStep('code');
       setCode('');
       setCooldown(60);
-      setInfo(`If ${email.trim()} is invited to APEX, a 6-digit code is on its way. Check your inbox (and spam folder). The code can be used once and expires soon.`);
+      setInfo(
+        `If ${email.trim()} belongs to ${profile.name}’s profile, a 6-digit code is on its way. Check your inbox (and spam folder). The code can be used once and expires soon.`,
+      );
     } catch (e) {
       setError((e as Error).message);
       if ((e as { code?: string }).code === 'rate_limited') setCooldown(60);
@@ -150,19 +154,26 @@ export function LoginPage() {
           className="space-y-4"
           aria-busy={busy}
         >
+          <ProfileHeader profile={profile} />
           <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-marble-50 focus:outline-none">
-            Enter the Arena
+            Continue as {profile.name}
           </h2>
-          <p className="text-xs leading-relaxed text-marble-300">Enter the email address your Game Master invited. We will email you a one-time code – no password needed.</p>
+          <p className="text-xs leading-relaxed text-marble-300">
+            Enter the email address of {profile.name}’s account. We will email you a one-time 6-digit code – no password needed.
+          </p>
           <Field label="Email address" type="email" value={email} onChange={setEmail} autoComplete="email" autoFocus />
           {error && <Message kind="error">{error}</Message>}
           <button type="submit" className="btn btn-gold w-full py-2.5 text-sm" disabled={busy || cooldown > 0}>
             {busy ? <Spinner /> : null}
             {cooldown > 0 ? `Send code (wait ${cooldown}s)` : 'Send me a code'}
           </button>
+          <button type="button" className="block w-full text-center text-xs text-gold-300 underline-offset-2 hover:underline" onClick={onBack}>
+            Not {profile.name}? Choose another profile
+          </button>
         </form>
       ) : (
         <form onSubmit={verify} className="space-y-4" aria-busy={busy}>
+          <ProfileHeader profile={profile} />
           <h2 ref={headingRef} tabIndex={-1} className="font-display text-lg font-bold text-marble-50 focus:outline-none">
             Enter your code
           </h2>
@@ -190,6 +201,18 @@ export function LoginPage() {
         </form>
       )}
     </AuthShell>
+  );
+}
+
+function ProfileHeader({ profile }: { profile: ProfileConfig }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-gold-700/40 bg-ink-900/60 p-2">
+      <Portrait profile={profile} size={48} />
+      <div className="leading-tight">
+        <div className="font-display text-sm font-bold text-marble-50">{profile.name}</div>
+        <div className="text-xs text-gold-200">{profile.role === 'gm' ? 'Game Master · all characters' : `plays ${profile.character}`}</div>
+      </div>
+    </div>
   );
 }
 

@@ -1,6 +1,8 @@
 /**
- * Online mode entry: authentication → campaign membership → shared game.
+ * Online mode entry: Welcome → "Who are you?" → email code → campaign membership → shared game.
  * Nothing campaign-related is rendered before the server has confirmed the user's access.
+ * The chosen profile is only a claim: the server verifies it against the signed-in account
+ * on every request (403 profile_mismatch otherwise).
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
@@ -12,9 +14,17 @@ import { api, ApiError } from './api';
 import { LoginPage, MessageScreen, Splash, Spinner } from './AuthScreens';
 import { supabase } from './supabase';
 import { useOnlineGame } from './useOnlineGame';
+import { profileByKey, type ProfileConfig } from '../data/profiles';
+import { ProfileSelect, WelcomeScreen, loadChosenProfile, saveChosenProfile, useProfileStatus } from '../entry/EntryScreens';
 
 export function OnlineRoot() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [profile, setProfileState] = useState<ProfileConfig | undefined>(() => profileByKey(loadChosenProfile()));
+  const [step, setStep] = useState<'welcome' | 'profiles' | 'login'>(() => (profileByKey(loadChosenProfile()) ? 'login' : 'welcome'));
+  const setProfile = useCallback((p: ProfileConfig | undefined) => {
+    saveChosenProfile(p?.key ?? null);
+    setProfileState(p);
+  }, []);
 
   useEffect(() => {
     const auth = supabase().auth;
@@ -39,12 +49,37 @@ export function OnlineRoot() {
       });
   }, []);
 
+  /** Sign out and go back to "Who are you?" (e.g. after choosing the wrong profile). */
+  const switchProfile = useCallback(() => {
+    setProfile(undefined);
+    setStep('profiles');
+    signOut();
+  }, [setProfile, signOut]);
+
   if (session === undefined) return <Splash text="Opening the gates…" />;
-  if (!session) return <LoginPage />;
-  return <CampaignLoader key={session.user.id} signOut={signOut} />;
+  if (!session || !profile) {
+    if (step === 'welcome' && !session) return <WelcomeScreen onJoin={() => setStep('profiles')} />;
+    if (step === 'login' && profile && !session) return <LoginPage profile={profile} onBack={() => setStep('profiles')} />;
+    return (
+      <ProfileStep
+        signedIn={!!session}
+        onSelect={(p) => {
+          setProfile(p);
+          setStep('login');
+        }}
+        onBack={() => (session ? signOut() : setStep('welcome'))}
+      />
+    );
+  }
+  return <CampaignLoader key={`${session.user.id}:${profile.key}`} signOut={signOut} profile={profile} switchProfile={switchProfile} />;
 }
 
-function CampaignLoader({ signOut }: { signOut: () => void }) {
+function ProfileStep({ signedIn, onSelect, onBack }: { signedIn: boolean; onSelect: (p: ProfileConfig) => void; onBack: () => void }) {
+  const { status, error, loading } = useProfileStatus(true);
+  return <ProfileSelect status={status} statusError={error} loading={loading} onSelect={onSelect} onBack={onBack} backLabel={signedIn ? 'Sign out' : '← Back'} />;
+}
+
+function CampaignLoader({ signOut, profile, switchProfile }: { signOut: () => void; profile: ProfileConfig; switchProfile: () => void }) {
   const [info, setInfo] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [campaignId, setCampaignId] = useState<string | null>(null);
@@ -66,7 +101,7 @@ function CampaignLoader({ signOut }: { signOut: () => void }) {
     };
   }, [attempt]);
 
-  if (error) return <ErrorScreen error={error} signOut={signOut} retry={() => setAttempt((a) => a + 1)} />;
+  if (error) return <ErrorScreen error={error} signOut={signOut} retry={() => setAttempt((a) => a + 1)} switchProfile={switchProfile} />;
   if (!info) return <Splash text="Checking your access…" />;
   if (!info.campaigns.length) {
     return (
@@ -101,13 +136,25 @@ function CampaignLoader({ signOut }: { signOut: () => void }) {
       </MessageScreen>
     );
   }
-  return <OnlineCampaign campaignId={campaignId} email={info.user.email} signOut={signOut} />;
+  return <OnlineCampaign campaignId={campaignId} email={info.user.email} signOut={signOut} profile={profile} switchProfile={switchProfile} />;
 }
 
-function OnlineCampaign({ campaignId, email, signOut }: { campaignId: string; email: string; signOut: () => void }) {
-  const { game, payload, error, loading, refresh } = useOnlineGame(campaignId, email, signOut);
+function OnlineCampaign({
+  campaignId,
+  email,
+  signOut,
+  profile,
+  switchProfile,
+}: {
+  campaignId: string;
+  email: string;
+  signOut: () => void;
+  profile: ProfileConfig;
+  switchProfile: () => void;
+}) {
+  const { game, payload, error, loading, refresh } = useOnlineGame(campaignId, email, signOut, profile.key, profile.tokenIds[0]);
 
-  if (error) return <ErrorScreen error={error} signOut={signOut} retry={refresh} />;
+  if (error) return <ErrorScreen error={error} signOut={signOut} retry={refresh} switchProfile={switchProfile} />;
   if (loading || !payload) return <Splash text="Entering the arena…" />;
   if (game) return <App game={game} />;
 
@@ -195,14 +242,20 @@ function InitCampaign({ campaignId, name, onDone, signOut }: { campaignId: strin
   );
 }
 
-function ErrorScreen({ error, signOut, retry }: { error: ApiError; signOut: () => void; retry: () => void }) {
+function ErrorScreen({ error, signOut, retry, switchProfile }: { error: ApiError; signOut: () => void; retry: () => void; switchProfile?: () => void }) {
   const unauth = error.status === 401;
   const forbidden = error.status === 403;
+  const mismatch = error.code === 'profile_mismatch';
   return (
     <MessageScreen
-      title={unauth ? 'Session expired' : forbidden ? 'Access denied' : 'Something went wrong'}
+      title={mismatch ? 'Wrong profile' : unauth ? 'Session expired' : forbidden ? 'Access denied' : 'Something went wrong'}
       actions={
         <>
+          {switchProfile && (forbidden || unauth) && (
+            <button className="btn btn-gold" onClick={switchProfile}>
+              Choose another profile
+            </button>
+          )}
           {!forbidden && !unauth && (
             <button className="btn btn-gold" onClick={retry}>
               Try again

@@ -53,11 +53,12 @@ async function request<T>(
 }
 
 export const api = {
-  requestCode: (email: string) => request<{ sent: boolean; message: string }>('POST', 'request-code', {}, { email }, true),
+  requestCode: (email: string, profile?: string) => request<{ sent: boolean; message: string }>('POST', 'request-code', {}, { email, profile }, true),
   health: () => request<import('../server/repo').HealthReport>('GET', 'health', {}, undefined, true),
-  ping: (campaign: string) => request<{ version: number }>('GET', 'ping', { campaign }),
+  ping: (campaign: string, profile?: string) => request<{ version: number }>('GET', 'ping', { campaign, profile }),
   session: () => request<SessionInfo>('GET', 'session'),
-  state: (campaign: string, as?: string) => request<CampaignPayload>('GET', 'state', { campaign, as }),
-  command: (campaignId: string, command: unknown, as?: string) => request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as }),
+  state: (campaign: string, as?: string, profile?: string) => request<CampaignPayload>('GET', 'state', { campaign, as, profile }),
+  command: (campaignId: string, command: unknown, as?: string, profile?: string) =>
+    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, profile }),
   admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>) => request<T>('POST', 'admin', {}, { campaignId, ...action }),
 };

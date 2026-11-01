@@ -28,7 +28,12 @@ export interface OnlineGameResult {
   refresh: () => void;
 }
 
-export function useOnlineGame(campaignId: string, email: string, signOut: () => void): OnlineGameResult {
+/**
+ * @param profile key chosen on "Who are you?" – sent with every request; the server rejects it
+ *                unless the signed-in account is linked to that profile.
+ * @param initialCharacter the profile's character, selected first.
+ */
+export function useOnlineGame(campaignId: string, email: string, signOut: () => void, profile?: string, initialCharacter?: string): OnlineGameResult {
   const [payload, setPayload] = useState<CampaignPayload | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [realtime, setRealtime] = useState<'live' | 'connecting' | 'down'>('connecting');
@@ -37,6 +42,7 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
   const [busy, setBusy] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [activeCharacter, setActiveState] = useState<string | null>(() => {
+    if (initialCharacter) return initialCharacter;
     try {
       return localStorage.getItem(ACTIVE_KEY);
     } catch {
@@ -72,7 +78,7 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     }
     const run = (async () => {
       try {
-        accept(await api.state(campaignId, activeRef.current ?? undefined), force);
+        accept(await api.state(campaignId, activeRef.current ?? undefined, profile), force);
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError(0, String(e));
         if (err.status === 401 || err.status === 403) setError(err);
@@ -90,7 +96,7 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     })();
     inflight.current = run;
     return run;
-  }, [accept, campaignId]);
+  }, [accept, campaignId, profile]);
 
   // Initial load
   useEffect(() => {
@@ -121,12 +127,12 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
     return () => {
       void client.removeChannel(channel);
     };
-  }, [campaignId, refresh]);
+  }, [campaignId, refresh, profile]);
 
   // Heartbeat: presence + missed-update detection + server reachability
   const beat = useCallback(async () => {
     try {
-      const { version } = await api.ping(campaignId);
+      const { version } = await api.ping(campaignId, profile);
       setApiOk(true);
       if (version !== versionRef.current) void refresh(true);
       else setSyncError(null);
@@ -204,11 +210,11 @@ export function useOnlineGame(campaignId: string, email: string, signOut: () => 
 
   const dispatch = useCallback(
     async (cmd: Command) => {
-      const r = await run(() => api.command(campaignId, cmd, activeRef.current ?? undefined));
+      const r = await run(() => api.command(campaignId, cmd, activeRef.current ?? undefined, profile));
       if (r.ok) accept(r.value, true);
       return r.ok ? { ok: true } : { ok: false, error: r.error };
     },
-    [accept, campaignId, run],
+    [accept, campaignId, run, profile],
   );
 
   const adminCall = useCallback(

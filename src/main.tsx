@@ -2,7 +2,7 @@ import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import App from './App';
-import { SetupNotice } from './components/SetupNotice';
+import { OfflineEntry } from './entry/OfflineEntry';
 import { demoAllowed, missingConfig, onlineConfig } from './online/config';
 import { useDemoGame } from './state/useGame';
 import './index.css';
@@ -14,8 +14,7 @@ const OnlineRoot = lazy(() => import('./online/OnlineRoot').then((m) => ({ defau
  * Mode selection – there is NO silent fallback to a local game:
  *  - /?demo with demo allowed (development, or VITE_APEX_ALLOW_DEMO=true) → local demo, clearly labelled
  *  - online configuration present → online mode, login required, shared Supabase campaign
- *  - development without configuration → local demo, clearly labelled
- *  - production without configuration → setup notice (no game)
+ *  - no configuration → welcome screen; "Join Campaign" shows a setup error (no game)
  */
 function DemoApp() {
   const game = useDemoGame();
@@ -39,8 +38,7 @@ else if (onlineConfig)
       <OnlineRoot />
     </Suspense>
   );
-else if (import.meta.env.DEV) root = <DemoApp />;
-else root = <SetupNotice missing={missingConfig} />;
+else root = <OfflineEntry missing={missingConfig} />;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
