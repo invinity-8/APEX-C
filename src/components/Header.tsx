@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useId, useRef, useState, type FormEvent } from 'react';
 import type { GameApi } from '../state/gameApi';
 import { downloadState } from '../state/storage';
 import { safeRadius } from '../game/zone';
@@ -15,6 +15,7 @@ interface Props {
 export function Header({ game, onAdvancePhase, notify }: Props) {
   const { view, gmState, demo, online } = game;
   const fileRef = useRef<HTMLInputElement>(null);
+  const [pwOpen, setPwOpen] = useState(false);
   const isGm = view.role === 'gm';
   const night = view.phase === 'night';
   const next = night ? phaseName('day', view.day + 1) : phaseName('night', view.day);
@@ -131,9 +132,12 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
                 ))}
               </select>
             )}
-            <span className="hidden max-w-40 truncate text-[11px] text-marble-500 lg:inline" title={online.email}>
-              {online.email}
+            <span className="hidden max-w-40 truncate text-[11px] text-marble-300 lg:inline" title="Signed-in profile">
+              {online.profileName}
             </span>
+            <button className="btn btn-ghost px-2" onClick={() => setPwOpen(true)} title="Change your password" aria-label="Change your password">
+              🔑
+            </button>
             <button className="btn btn-ghost" onClick={online.signOut}>
               Sign out
             </button>
@@ -186,7 +190,75 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
           </button>
         )}
       </div>
+      {pwOpen && online && (
+        <ChangePasswordDialog
+          onClose={() => setPwOpen(false)}
+          onSubmit={async (current, next) => {
+            const r = await online.changePassword(current, next);
+            if (r.ok) {
+              notify('Password changed. Your other devices have been signed out.', 'info');
+              setPwOpen(false);
+            }
+            return r;
+          }}
+        />
+      )}
     </header>
+  );
+}
+
+function ChangePasswordDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (current: string, next: string) => Promise<{ ok: boolean; error?: string }> }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const id = useId();
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (next !== repeat) return setError('The new passwords do not match.');
+    setBusy(true);
+    const r = await onSubmit(current, next);
+    setBusy(false);
+    if (!r.ok) setError(r.error ?? 'The password could not be changed.');
+  };
+  const field = (label: string, value: string, set: (v: string) => void, auto: string) => (
+    <label className="block text-xs text-marble-300">
+      {label}
+      <input
+        type="password"
+        required
+        autoComplete={auto}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        className="mt-1 w-full rounded-md border border-ink-600 bg-ink-900 px-2 py-1.5 text-sm text-marble-50 focus:border-gold-400 focus:outline-none"
+      />
+    </label>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby={id} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+      <form onSubmit={submit} className="panel w-full max-w-sm space-y-3 p-5">
+        <h2 id={id} className="font-display text-lg font-bold text-gold-200">
+          Change your password
+        </h2>
+        {field('Current password', current, setCurrent, 'current-password')}
+        {field('New password (at least 8 characters)', next, setNext, 'new-password')}
+        {field('Repeat the new password', repeat, setRepeat, 'new-password')}
+        {error && (
+          <p role="alert" className="text-xs text-blood-400">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-gold" disabled={busy}>
+            {busy && <Spinner />} Change password
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

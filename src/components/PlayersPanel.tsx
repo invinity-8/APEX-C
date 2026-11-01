@@ -1,6 +1,7 @@
 /**
- * GM interface (online mode): who may play, which account controls which character,
- * and campaign backups. All changes are validated again on the server.
+ * GM interface (online mode): profiles, passwords, active devices, characters and campaign
+ * backups. Passwords are sent once to the server, hashed there (Argon2id) and never shown again.
+ * All changes are validated again on the server.
  */
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { GameState } from '../game/types';
@@ -14,7 +15,7 @@ interface Props {
   notify: (msg: string, kind?: 'error' | 'info') => void;
 }
 
-type Tab = 'profiles' | 'players' | 'characters' | 'backups';
+type Tab = 'profiles' | 'backups';
 
 export function PlayersPanel({ state, online, notify }: Props) {
   const [tab, setTab] = useState<Tab>('profiles');
@@ -48,7 +49,6 @@ export function PlayersPanel({ state, online, notify }: Props) {
   }, [act, online]);
 
   const players = Object.values(state.tokens).filter((t) => t.kind === 'player');
-  const owner = (tokenId: string) => data?.members.find((m) => m.tokenIds.includes(tokenId));
 
   return (
     <Section
@@ -59,8 +59,6 @@ export function PlayersPanel({ state, online, notify }: Props) {
           onChange={setTab}
           options={[
             { value: 'profiles', label: 'Profiles' },
-            { value: 'players', label: 'Accounts' },
-            { value: 'characters', label: 'Characters' },
             { value: 'backups', label: 'Backups' },
           ]}
         />
@@ -91,113 +89,21 @@ export function PlayersPanel({ state, online, notify }: Props) {
               </button>
             </div>
           )}
-          {data.profiles.length === 0 && (
-            <p className="text-xs text-amber-200">No profiles found – run the database migration 20261103000100_apex_profiles.sql (see docs/SETUP_DE.md).</p>
-          )}
           {data.profiles.map((p) => (
             <ProfileRow
               key={p.key}
               p={p}
+              self={p.key === 'gm'}
               players={players}
               missing={p.tokenIds.filter((t) => !state.tokens[t])}
-              onLink={(email) => act({ action: 'linkProfile', profile: p.key, email }, email ? `${p.displayName} linked.` : `${p.displayName} unlinked.`)}
-              onCharacters={(tokenIds) => act({ action: 'setProfileCharacters', profile: p.key, tokenIds }, `${p.displayName}: character updated.`)}
+              act={act}
             />
           ))}
           <p className="text-[11px] leading-relaxed text-marble-500">
-            A profile opens only for the linked email address, confirmed with a one-time code. Unlinked player profiles stay inactive. Emails are
-            visible to Game Masters only. The GM profile works for every account with the Game Master role.
+            Each profile signs in with its own password – no email needed. Setting or resetting a password signs that profile out on all devices.
+            Profiles without a password stay locked. Passwords are stored only as secure hashes; nobody (not even you) can read them later.
           </p>
         </div>
-      ) : tab === 'players' ? (
-        <div className="space-y-3" aria-busy={busy}>
-          <ul className="space-y-1.5">
-            {data.members.map((m) => (
-              <li key={m.userId} className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${m.online ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,.8)]' : 'bg-ink-500'}`}
-                    title={m.online ? 'Online now' : m.lastSeenAt ? `Last seen ${new Date(m.lastSeenAt).toLocaleString('en-GB')}` : 'Has not signed in yet'}
-                    aria-label={m.online ? 'online' : 'offline'}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-marble-50" title={m.email}>
-                    {m.email}
-                  </span>
-                  <Segmented
-                    value={m.role}
-                    onChange={(role) => act({ action: 'setRole', userId: m.userId, role }, `Role updated for ${m.email}.`)}
-                    options={[
-                      { value: 'player', label: 'Player' },
-                      { value: 'gm', label: 'GM' },
-                    ]}
-                  />
-                  <button
-                    className="btn btn-ghost px-2 py-0.5 hover:border-blood-400/70"
-                    title="Remove access"
-                    aria-label={`Remove ${m.email}`}
-                    onClick={() => confirm(`Remove ${m.email} from the campaign?`) && act({ action: 'removeMember', userId: m.userId }, 'Access removed.')}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="mt-1 text-[11px] text-marble-500">
-                  {m.online ? <span className="text-emerald-300">online · </span> : m.lastSeenAt ? `last seen ${timeAgo(m.lastSeenAt)} · ` : 'never signed in · '}
-                  {m.tokenIds.length ? `Controls: ${m.tokenIds.map((id) => state.tokens[id]?.name ?? id).join(', ')}` : m.role === 'player' ? 'No character assigned' : 'Game Master'}
-                </div>
-              </li>
-            ))}
-          </ul>
-          {data.invites.some((i) => !i.acceptedAt) && (
-            <div>
-              <div className="label mb-1">Pending invitations</div>
-              <ul className="space-y-1">
-                {data.invites
-                  .filter((i) => !i.acceptedAt)
-                  .map((i) => (
-                    <li key={i.email} className="flex items-center gap-2 text-xs">
-                      <span className="min-w-0 flex-1 truncate text-marble-300">{i.email}</span>
-                      <span className="text-marble-500">{i.role === 'gm' ? 'GM' : 'Player'}</span>
-                      {i.tokenIds.length > 0 && <span className="text-marble-500">· {i.tokenIds.map((id) => state.tokens[id]?.name ?? id).join(', ')}</span>}
-                      <button className="btn btn-ghost px-2 py-0.5" onClick={() => act({ action: 'revokeInvite', email: i.email }, 'Invitation revoked.')}>
-                        Revoke
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
-          <InviteForm players={players} onInvite={(email, role, tokenIds) => act({ action: 'invite', email, role, tokenIds }, `Invitation saved for ${email}.`)} />
-          <p className="text-[11px] leading-relaxed text-marble-500">
-            Invited people open APEX, enter this email address and receive a one-time 6-digit code by email. Nobody else can request a code or join.
-            “Online” means the person’s APEX window contacted the server within the last ~75 seconds.
-          </p>
-        </div>
-      ) : tab === 'characters' ? (
-        <ul className="space-y-1.5" aria-busy={busy}>
-          {players.map((t) => (
-            <li key={t.id} className="flex items-center gap-2 text-xs">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: t.color }} />
-              <span className="min-w-0 flex-1 truncate text-marble-50">{t.name}</span>
-              <select
-                aria-label={`Account controlling ${t.name}`}
-                className="max-w-[55%] rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-xs"
-                value={owner(t.id)?.userId ?? ''}
-                onChange={(e) => act({ action: 'assign', tokenId: t.id, userId: e.target.value || null }, `${t.name} reassigned.`)}
-              >
-                <option value="">— unassigned —</option>
-                {data.members.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.email}
-                  </option>
-                ))}
-              </select>
-            </li>
-          ))}
-          <li className="pt-1 text-[11px] leading-relaxed text-marble-500">
-            Characters are game tokens; accounts are people. One account may control several characters. Extra in-game control rights (“may also be
-            controlled by”) are set per character in the selection panel.
-          </li>
-        </ul>
       ) : (
         <div className="space-y-2" aria-busy={busy}>
           <button className="btn btn-ghost w-full" onClick={() => act({ action: 'createSnapshot', label: `Manual backup (${new Date().toLocaleString('en-GB')})` }, 'Backup created.')}>
@@ -239,53 +145,86 @@ export function PlayersPanel({ state, online, notify }: Props) {
 
 function ProfileRow({
   p,
+  self,
   players,
   missing,
-  onLink,
-  onCharacters,
+  act,
 }: {
   p: ProfileInfo;
+  self: boolean;
   players: GameState['tokens'][string][];
   missing: string[];
-  onLink: (email: string | null) => Promise<boolean>;
-  onCharacters: (tokenIds: string[]) => Promise<boolean>;
+  act: (action: Record<string, unknown>, success?: string) => Promise<boolean>;
 }) {
-  const [email, setEmail] = useState(p.email ?? '');
-  useEffect(() => setEmail(p.email ?? ''), [p.email]);
+  const [pw, setPw] = useState('');
+  const [open, setOpen] = useState(false);
   const gm = p.role === 'gm';
-  const statusText = p.online ? 'online' : p.signedIn ? 'active' : p.active ? 'linked – not signed in yet' : 'not activated';
+  const status = !p.passwordSet ? 'Locked – no password' : !p.active ? 'Deactivated' : p.online ? 'Online' : p.sessions ? `Signed in on ${p.sessions} device${p.sessions > 1 ? 's' : ''}` : 'Active';
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (await act({ action: 'setPassword', profile: p.key, password: pw }, `${p.displayName}: password ${p.passwordSet ? 'reset' : 'set'}. Tell ${gm ? 'yourself' : p.displayName} the new password in person.`)) {
+      setPw('');
+      setOpen(false);
+    }
+  };
   return (
-    <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 text-xs">
+    <div className="rounded-lg border border-ink-600 bg-ink-800/60 p-2 text-xs" data-profile={p.key}>
       <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${p.online ? 'bg-emerald-400' : p.active ? 'bg-gold-400' : 'bg-ink-500'}`} aria-hidden="true" />
-        <span className="font-semibold text-marble-50">{p.displayName}</span>
-        <span className="text-gold-200">{gm ? 'Game Master · all characters' : p.characterName}</span>
-        <span className={`ml-auto text-[10px] ${p.online ? 'text-emerald-300' : p.active ? 'text-marble-300' : 'text-amber-300'}`}>{statusText}</span>
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${p.online ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,.8)]' : p.active && p.passwordSet ? 'bg-gold-400/70' : 'bg-ink-500'}`}
+          aria-hidden="true"
+        />
+        <span className="font-display text-sm font-bold text-marble-50">{p.displayName}</span>
+        <span className="text-marble-500">{gm ? 'Game Master' : p.characterName}</span>
+        <span className={`ml-auto chip ${!p.passwordSet || !p.active ? 'text-amber-200' : p.online ? 'text-emerald-300' : 'text-marble-300'}`}>{status}</span>
       </div>
-      {!gm && (
-        <form
-          className="mt-1.5 flex gap-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void onLink(email.trim() || null);
-          }}
-        >
+      {p.passwordUpdatedAt && <div className="mt-1 text-[11px] text-marble-500">Password set {timeAgo(p.passwordUpdatedAt)}</div>}
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        <button className="btn btn-ghost px-2 py-0.5" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          🔑 {p.passwordSet ? 'Reset password' : 'Set password'}
+        </button>
+        {!self && p.passwordSet && (
+          <button
+            className="btn btn-ghost px-2 py-0.5"
+            onClick={() => act({ action: 'setActive', profile: p.key, active: !p.active }, `${p.displayName} ${p.active ? 'deactivated – signed out everywhere' : 'activated'}.`)}
+          >
+            {p.active ? 'Deactivate' : 'Activate'}
+          </button>
+        )}
+        {p.sessions > 0 && (
+          <button
+            className="btn btn-ghost px-2 py-0.5"
+            onClick={() => confirm(`Sign ${p.displayName} out on all devices?`) && act({ action: 'revokeSessions', profile: p.key }, `${p.displayName} signed out everywhere.`)}
+          >
+            Sign out devices
+          </button>
+        )}
+        {!self && p.passwordSet && (
+          <button
+            className="btn btn-ghost px-2 py-0.5 hover:border-blood-400/70"
+            onClick={() => confirm(`Remove ${p.displayName}'s password? The profile is locked until you set a new one.`) && act({ action: 'clearPassword', profile: p.key }, `${p.displayName} locked.`)}
+          >
+            Remove password
+          </button>
+        )}
+      </div>
+      {open && (
+        <form onSubmit={submit} className="mt-1.5 flex gap-1.5">
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="email of this player"
-            aria-label={`Email linked to ${p.displayName}`}
-            className="min-w-0 flex-1 rounded-md border border-ink-600 bg-ink-900 px-2 py-1"
+            type="text"
+            autoComplete="new-password"
+            spellCheck={false}
+            minLength={8}
+            required
+            placeholder="New password (min. 8 characters)"
+            aria-label={`New password for ${p.displayName}`}
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            className="min-w-0 flex-1 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 font-mono text-xs"
           />
-          <button type="submit" className="btn btn-ghost px-2 py-0.5" disabled={email.trim() === (p.email ?? '')}>
+          <button type="submit" className="btn btn-gold px-3 py-1" disabled={pw.length < 8}>
             Save
           </button>
-          {p.email && (
-            <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => confirm(`Unlink ${p.displayName}? The profile becomes inactive.`) && void onLink(null)}>
-              Unlink
-            </button>
-          )}
         </form>
       )}
       {!gm && (
@@ -295,7 +234,9 @@ function ProfileRow({
             aria-label={`Character of ${p.displayName}`}
             className="flex-1 rounded-md border border-ink-600 bg-ink-800 px-2 py-1"
             value={p.tokenIds[0] ?? ''}
-            onChange={(e) => void onCharacters(e.target.value ? [e.target.value] : [])}
+            onChange={(e) =>
+              void act({ action: 'setProfileCharacters', profile: p.key, tokenIds: e.target.value ? [e.target.value] : [] }, `${p.displayName}: character updated.`)
+            }
           >
             <option value="">— none —</option>
             {players.map((t) => (
@@ -316,62 +257,4 @@ function timeAgo(iso: string): string {
   if (min < 60) return `${Math.max(1, min)} min ago`;
   const h = Math.round(min / 60);
   return h < 48 ? `${h} h ago` : new Date(iso).toLocaleDateString('en-GB');
-}
-
-function InviteForm({ players, onInvite }: { players: GameState['tokens'][string][]; onInvite: (email: string, role: 'gm' | 'player', tokenIds: string[]) => Promise<boolean> }) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'gm' | 'player'>('player');
-  const [tokens, setTokens] = useState<string[]>([]);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (await onInvite(email.trim(), role, tokens)) {
-      setEmail('');
-      setTokens([]);
-    }
-  };
-  return (
-    <form onSubmit={submit} className="space-y-2 rounded-lg border border-ink-600 bg-ink-800/60 p-2">
-      <div className="label">Invite a person</div>
-      <div className="flex gap-1.5">
-        <input
-          type="email"
-          required
-          placeholder="email@example.com"
-          aria-label="Email address to invite"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs"
-        />
-        <Segmented
-          value={role}
-          onChange={setRole}
-          options={[
-            { value: 'player', label: 'Player' },
-            { value: 'gm', label: 'GM' },
-          ]}
-        />
-      </div>
-      {role === 'player' && (
-        <div className="flex flex-wrap gap-1">
-          {players.map((p) => {
-            const on = tokens.includes(p.id);
-            return (
-              <button
-                type="button"
-                key={p.id}
-                aria-pressed={on}
-                className={`chip ${on ? 'border-gold-400 text-gold-200' : 'text-marble-500'}`}
-                onClick={() => setTokens(on ? tokens.filter((x) => x !== p.id) : [...tokens, p.id])}
-              >
-                {on ? '✓' : '+'} {p.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <button type="submit" className="btn btn-gold w-full">
-        Save invitation
-      </button>
-    </form>
-  );
 }

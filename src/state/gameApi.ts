@@ -6,7 +6,8 @@
 import type { Command } from '../game/commands';
 import type { GameState } from '../game/types';
 import type { ViewModel } from '../game/visibility';
-import type { AdminOverview, CharacterRef } from '../server/protocol';
+import type { CharacterSheet } from '../game/sheet';
+import type { AdminOverview, CharacterRef, SheetPayload } from '../server/protocol';
 import type { Session } from './storage';
 
 export interface DispatchResult {
@@ -30,8 +31,22 @@ export interface DemoControls {
   reset: () => void;
 }
 
+export type SheetResult = { ok: true; sheet: SheetPayload } | { ok: false; error: string; conflict?: SheetPayload };
+
+/** Character sheets (stored separately from the game state, one per player character). */
+export interface SheetApi {
+  load: (tokenId: string) => Promise<SheetResult>;
+  save: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason?: 'edit' | 'import-merge' | 'import-replace') => Promise<SheetResult>;
+  adjust: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) => Promise<SheetResult>;
+  /** Changes whenever a sheet may have been changed on another device (live ping or poll). */
+  revision: number;
+}
+
 export interface OnlineControls {
-  email: string;
+  /** Display name of the signed-in profile. */
+  profileName: string;
+  /** Change the signed-in profile's own password. */
+  changePassword: (current: string, next: string) => Promise<DispatchResult>;
   campaignId: string;
   campaignName: string;
   characters: CharacterRef[];
@@ -58,6 +73,7 @@ export interface GameApi {
   regenerate: (radius: number, seed: number) => Promise<DispatchResult>;
   /** GM: load a JSON save into the campaign. */
   importState: (text: string) => Promise<DispatchResult>;
+  sheets: SheetApi;
   demo?: DemoControls;
   online?: OnlineControls;
 }
