@@ -19,4 +19,5 @@ alter default privileges in schema public grant all on tables to anon, authentic
 create publication supabase_realtime;
 -- a pre-existing manual apex_access table
 create table public.apex_access (email text, role text);
+create table public.apex_invites (email text, role text);
 insert into public.apex_access values ('extra.player@example.com','player'), ('felixbecker924@gmail.com','gm');

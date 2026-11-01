@@ -1,0 +1,9 @@
+# Migration versions registered in the PRODUCTION database (APEX MAIN),
+# i.e. rows of supabase_migrations.schema_migrations.
+#
+# Every version listed here MUST have a matching file in supabase/migrations/.
+# scripts/check-migrations.mjs fails the build/PR check otherwise.
+# After a successful deploy, add the newly applied versions here (see docs/MIGRATIONS_DE.md).
+#
+# version          name
+20261101094428     apex_initial_account_allowlist

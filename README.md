@@ -106,6 +106,10 @@ Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 **German click-by-click guide: [`docs/SETUP_DE.md`](docs/SETUP_DE.md).** English reference: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** (migrations, Auth settings, Vercel variables,
 preview test checklist, go-live and rollback).
 
+**Database migrations are deployed automatically** by the Supabase GitHub integration when a PR is merged to `main`;
+`.github/workflows/supabase-migrations.yml` blocks missing/out-of-order/destructive migrations and verifies production
+afterwards. German guide: [`docs/MIGRATIONS_DE.md`](docs/MIGRATIONS_DE.md). Local check: `npm run check:migrations`.
+
 | Variable | Where | Notes |
 |---|---|---|
 | `VITE_SUPABASE_URL` | Vercel (browser) | Supabase project URL |
