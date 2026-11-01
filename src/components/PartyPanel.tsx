@@ -12,7 +12,7 @@ export function PartyPanel({ view, selectedTokenId, onSelect }: Props) {
   const party = view.tokens.filter((t) => t.kind === 'player');
   const team = view.teams.find((t) => t.kind === 'party');
   return (
-    <Section title={team ? `${team.emblem} ${team.name}` : 'Gruppe'} right={<span className="text-[11px] text-marble-500">Bewegungspunkte</span>}>
+    <Section title={team ? `${team.emblem} ${team.name}` : 'Party'} right={<span className="text-[11px] text-marble-500">Movement points</span>}>
       <ul className="space-y-1">
         {party.map((t) => {
           const d = t.details!;
