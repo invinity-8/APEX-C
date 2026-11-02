@@ -116,3 +116,63 @@ describe('Aurora PDF import – sinna.pdf', () => {
     expect(_r.length).toBeGreaterThan(50);
   });
 });
+
+/**
+ * Regression (APEX 0.4 bug): an Aurora sheet exported/printed WITHOUT form fields was read as "Text PDF", nothing
+ * was recognised and an empty sheet was saved. sinna-printed.pdf is sinna.pdf with every widget appearance stamped
+ * into the page and the form removed (dev/flatten-pdf.py) – the values exist only as positioned page text.
+ */
+describe('Aurora PDF import – printed sheet without form fields (sinna-printed.pdf)', () => {
+  let pm: MappingResult;
+  let px: Extracted;
+  const pf = (kind: string, label: string) => pm.rows.find((r) => r.kind === kind && r.label === label);
+  beforeAll(async () => {
+    const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfjsLike;
+    px = await extractWithPdfjs(pdfjs, new Uint8Array(readFileSync('tests/fixtures/sinna-printed.pdf')));
+    pm = mapExtraction(px);
+  }, 60_000);
+
+  it('has no form fields but is recognised as an Aurora sheet by layout', () => {
+    expect(Object.keys(px.fields)).toHaveLength(0);
+    expect(pm.format).toMatch(/Aurora Builder character sheet \(printed PDF/);
+  });
+
+  it('identity, attributes, AC, HP and proficiency bonus', () => {
+    expect(pf('detail', 'Character name')?.value).toBe('Sinna');
+    expect(pf('detail', 'Race, class & level')?.value).toBe('Level 1 Kor Druid');
+    for (const [n, v] of [['Strength', '11'], ['Dexterity', '11'], ['Constitution', '12'], ['Intelligence', '9'], ['Wisdom', '18'], ['Charisma', '9']]) expect(pf('attribute', n)?.value).toBe(v);
+    expect(pf('combat', 'Armor Class')?.value).toBe('16');
+    expect(pf('hp', 'Hit points (maximum)')?.value).toBe('9');
+    expect(pf('combat', 'Proficiency bonus')?.value).toBe('+2');
+  });
+
+  it('saves and skills with proficiencies, features without stray values', () => {
+    expect(pf('save', 'Wisdom save')).toMatchObject({ value: '+6', proficient: true });
+    expect(pf('skill', 'Perception (Wis)')).toMatchObject({ value: '+6', proficient: true });
+    expect(pm.rows.filter((r) => r.kind === 'skill')).toHaveLength(18);
+    expect(pm.rows.filter((r) => r.kind === 'save')).toHaveLength(6);
+    expect(pf('feature', 'Brave')?.value).toBe('You have advantage on saving throws against being frightened.');
+  });
+
+  it('prepared spells are distinguished, inventory has Breastplate, Shield and Quarterstaff (once each)', () => {
+    const spells = pm.rows.filter((r) => r.kind === 'spell');
+    expect(spells.filter((s) => s.level! > 0 && s.prepared).map((s) => s.value).sort()).toEqual(['Entangle', 'Faerie Fire', 'Healing Word', 'Speak with Animals', 'Thunderwave']);
+    expect(spells.some((s) => s.value === 'Goodberry' && !s.prepared)).toBe(true);
+    const { sheet, items, problems } = rowsToSheet(pm.rows, { fileName: 'sinna-printed.pdf', format: pm.format });
+    expect(problems).toEqual([]);
+    expect(parseSheet(sheet).ok).toBe(true);
+    expect(sheet.attributes).toHaveLength(6);
+    expect(sheet.hitPoints).toEqual({ current: 9, max: 9, temp: 0 });
+    for (const n of ['Breastplate', 'Shield', 'Quarterstaff']) expect(items.filter((i) => i.name === n)).toHaveLength(1);
+  });
+
+  it('matches the fillable import for all but the spell-slot boxes (not printed as text)', () => {
+    const key = (r: ImportRow) => r.key;
+    const flat = new Map(pm.rows.map((r) => [key(r), r]));
+    const differing = m.rows.filter((r) => {
+      const o = flat.get(key(r));
+      return !o || o.value.replace(/\s+/g, ' ') !== r.value.replace(/\s+/g, ' ') || !!o.prepared !== !!r.prepared || !!o.proficient !== !!r.proficient;
+    });
+    expect(differing.map((r) => r.label)).toEqual(['Spell slots (level 1)']);
+  });
+});

@@ -106,6 +106,9 @@ export function SheetImport({ characterName, current, inventoryNames, onClose, o
     if (step.kind !== 'review') return;
     const built = rowsToSheet(rows, { fileName: step.fileName, format: step.format });
     if (built.problems.length) return setProblems(built.problems);
+    // Never "save" an import that carries no character data (the sheet would only get a file name).
+    if (sheetIsEmpty(built.sheet) && !built.items.length)
+      return setProblems(['Nothing from this PDF is selected for import, so nothing would be saved. Fill in or tick the values to keep, or close the import.']);
     if (hasExisting && !confirmOverwrite && (mode === 'import-replace' || overwrites.length)) {
       return setProblems([mode === 'import-replace' ? 'Please confirm that the current sheet will be replaced (a backup is kept).' : 'Please confirm that the marked values will be overwritten.']);
     }

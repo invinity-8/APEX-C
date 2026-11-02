@@ -11,6 +11,7 @@
  * Pure functions – unit-tested, also against the real Aurora sample (tests/fixtures/sinna.pdf).
  */
 import { SHEET_LIMITS, SHEET_SCHEMA, newEntryId, type CharacterSheet } from '../game/sheet';
+import { reconstructAuroraFields } from './auroraFlat';
 import { isAurora, mapAurora } from './aurora';
 
 export type RowStatus = 'recognized' | 'uncertain' | 'missing' | 'unrecognized';
@@ -59,6 +60,16 @@ export interface ImportRow {
   note?: string;
 }
 
+export interface PositionedText {
+  str: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** The run ends a line (pdf.js hasEOL). */
+  eol?: boolean;
+}
+
 export interface Extracted {
   /** Form field name → value (text fields, choices). */
   fields: Record<string, string>;
@@ -68,6 +79,8 @@ export interface Extracted {
   text: string;
   /** Plain text per page. */
   pageTexts?: string[];
+  /** Text runs with their position on the page (PDF units, origin bottom-left), per page. */
+  positioned?: PositionedText[][];
   pages: number;
 }
 
@@ -354,6 +367,16 @@ export function mapExtraction(x: Extracted): MappingResult {
     const rows = mapAurora(x);
     addMissing(rows);
     return { rows, format: 'Aurora Builder character sheet (form fields)', imageOnly };
+  }
+  // Printed / flattened Aurora sheet: no form fields, but the values sit at the known template positions.
+  const flat = reconstructAuroraFields(x);
+  if (flat) {
+    const fx: Extracted = { ...x, fields: flat.fields, checkboxes: flat.checkboxes, pageTexts: flat.pageTexts, text: flat.pageTexts.join('\n\n') };
+    if (isAurora(fx)) {
+      const rows = mapAurora(fx);
+      addMissing(rows);
+      return { rows, format: 'Aurora Builder character sheet (printed PDF – values read by position)', imageOnly };
+    }
   }
   const rows = mapGeneric(x);
   const formRows = rows.filter((r) => r.kind !== 'raw').length;

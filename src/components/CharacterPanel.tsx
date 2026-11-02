@@ -105,6 +105,12 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
     setSaving(false);
     if (r.ok) {
       setData(r.sheet);
+      // An import is only reported as saved if the stored copy really contains the structured data.
+      const stored = r.sheet.sheet;
+      if (reason !== 'edit' && (stored.attributes.length < sheet.attributes.length || stored.skills.length < sheet.skills.length || stored.spells.length < sheet.spells.length)) {
+        notify('The server stored an incomplete character sheet – please reload and try the import again.');
+        return false;
+      }
       setDraft(null);
       setConflict(null);
       if (!quiet) notify(reason === 'edit' ? 'Character sheet saved.' : 'Imported character sheet saved.', 'info');
