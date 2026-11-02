@@ -15,7 +15,7 @@
  *  - Older responses never overwrite newer ones; there is no local copy of the campaign.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Command } from '../game/commands';
+import { CHARACTER_COMMANDS, type Command } from '../game/commands';
 import { buildGmView, type ViewModel } from '../game/visibility';
 import type { CampaignPayload, SheetPayload, UnchangedPayload } from '../server/protocol';
 import { withLookup, type Connection, type DispatchResult, type GameApi, type OnlineControls, type SheetApi, type SheetResult } from '../state/gameApi';
@@ -52,7 +52,7 @@ export function actionKey(cmd: Command): string {
     case 'setDay':
       return 'phase';
     default:
-      return cmd.type.startsWith('inv') || cmd.type === 'setWill' || cmd.type === 'setAppearance' ? `char:${(cmd as { tokenId: string }).tokenId}` : `gm:${cmd.type}`;
+      return CHARACTER_COMMANDS.has(cmd.type) ? `char:${(cmd as { tokenId: string }).tokenId}` : `gm:${cmd.type}`;
   }
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
 import { CharacterSummary, GmTools, PartyHealth } from './components/PartyWidgets';
+import { EquipmentPanel } from './components/EquipmentPanel';
 import { Workspace, type WidgetDef } from './workspace/Workspace';
 import { defaultLayout, layoutKey } from './workspace/layout';
 import { AnnouncementsPanel, EventsPanel, GmEventModal } from './components/GmEvents';
@@ -247,6 +248,7 @@ export default function App({ game }: { game: GameApi }) {
     const me = view.tokens.find((t) => t.id === view.viewerId) ?? null;
     widgets.push(
       { id: 'my-character', title: 'My Character', icon: '📜', render: () => <CharacterSummary game={game} token={me} /> },
+      { id: 'equipment', title: 'Equipment', icon: '🛡', render: () => (me ? <EquipmentPanel game={game} token={me} run={run} isGm={false} /> : null) },
       { id: 'party', title: 'Party', icon: '⚑', render: () => <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} /> },
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
       { id: 'intel', title: 'Intelligence', icon: '👁', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
@@ -262,7 +264,7 @@ export default function App({ game }: { game: GameApi }) {
             { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'] },
             ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'],
           )
-        : defaultLayout({ right: ['my-character', 'party', 'selection', 'intel', 'notifications'] }, ['notifications'], ['inventory']),
+        : defaultLayout({ right: ['my-character', 'equipment', 'party', 'selection', 'intel', 'notifications'] }, ['equipment', 'notifications'], ['inventory']),
     [role],
   );
 

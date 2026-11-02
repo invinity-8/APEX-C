@@ -7,6 +7,7 @@ import { useState, type FormEvent } from 'react';
 import type { Command } from '../game/commands';
 import { containerOfItem, DEFAULT_CONTAINERS, INVENTORY_LIMITS } from '../game/inventory';
 import { newEntryId } from '../game/sheet';
+import { SLOT_LABEL, equipmentOf, slotOfItem } from '../game/equipment';
 import type { Item } from '../game/types';
 import type { TokenView } from '../game/visibility';
 import type { DispatchResult } from '../state/gameApi';
@@ -182,6 +183,7 @@ function ItemRow({ token, item, containers, run }: { token: TokenView; item: Ite
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity });
   const rev = item.rev ?? 0;
+  const equippedIn = slotOfItem(equipmentOf({ equipment: token.details?.equipment }), item.id);
   const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number; container: string }>) =>
     run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
   const save = async (e: FormEvent) => {
@@ -219,6 +221,11 @@ function ItemRow({ token, item, containers, run }: { token: TokenView; item: Ite
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
             {item.name}
+            {equippedIn && (
+              <span className="ml-1.5 rounded border border-gold-500/50 px-1 text-[10px] uppercase tracking-wider text-gold-300" title="Equipped – see the Equipment tab">
+                equipped · {SLOT_LABEL[equippedIn]}
+              </span>
+            )}
           </div>
           {item.description && <p className="text-xs text-marble-300">{item.description}</p>}
           {item.notes && <p className="text-xs italic text-marble-500">{item.notes}</p>}

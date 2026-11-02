@@ -1,0 +1,341 @@
+/**
+ * Equipment & derived combat statistics (APEX 0.5).
+ *
+ * Ownership: items always live in the character's inventory; equipment slots only REFERENCE item ids, and an item
+ * can be referenced by at most one slot – switching weapon sets or resting never copies an item.
+ * Rules: an item can only be equipped once its equipment properties are defined (kind, armour values, weapon
+ * damage …). APEX never invents mechanics for unknown items; the SRD tables below are offered as one-click
+ * SUGGESTIONS that the player or GM confirms. A GM can lock an item's properties.
+ *
+ * Derived stats are a pure function of (character sheet, token equipment) and come with a step-by-step
+ * explanation. Imported sheet values stay untouched and remain visible as the "imported" baseline.
+ */
+import type { CharacterSheet } from './sheet.js';
+import type { Item, Token } from './types.js';
+
+export type EquipSlot = 'head' | 'chest' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'ring1' | 'ring2' | 'main1' | 'off1' | 'main2' | 'off2';
+export const EQUIP_SLOTS: EquipSlot[] = ['head', 'amulet', 'cloak', 'chest', 'gloves', 'ring1', 'ring2', 'boots', 'main1', 'off1', 'main2', 'off2'];
+export type ItemKind = 'head' | 'armor' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'ring' | 'weapon' | 'shield' | 'focus';
+export const ITEM_KINDS: ItemKind[] = ['weapon', 'shield', 'armor', 'head', 'gloves', 'boots', 'cloak', 'amulet', 'ring', 'focus'];
+export type ArmorType = 'light' | 'medium' | 'heavy';
+export type WeaponProperty = 'finesse' | 'light' | 'heavy' | 'two-handed' | 'versatile' | 'reach' | 'thrown' | 'ranged' | 'loading' | 'ammunition';
+export const WEAPON_PROPERTIES: WeaponProperty[] = ['finesse', 'light', 'heavy', 'two-handed', 'versatile', 'reach', 'thrown', 'ranged', 'loading', 'ammunition'];
+export type Ability = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+
+/** Manually defined equipment properties of an item. */
+export interface ItemEquip {
+  kind: ItemKind;
+  /** Body armour: base AC and type (light = full Dex, medium = Dex max +2, heavy = no Dex). */
+  armorType?: ArmorType;
+  armorBase?: number;
+  /** Flat AC bonus while equipped (shield +2, ring of protection +1, magic armour +1 …). */
+  acBonus?: number;
+  /** Weapons: magic/other attack bonus, damage dice, damage type, properties, proficiency. */
+  attackBonus?: number;
+  damage?: string;
+  damageType?: string;
+  properties?: WeaponProperty[];
+  proficient?: boolean;
+  /** Only the GM may change these properties. */
+  gmLocked?: boolean;
+}
+
+export interface Equipment {
+  slots: Partial<Record<EquipSlot, string>>;
+  activeSet: 1 | 2;
+  /** Resting / Unarmored preset: everything except the kept slots counts as taken off. */
+  resting: boolean;
+  restingKeep: EquipSlot[];
+  /** Unarmored defence ability added to 10 + Dex (e.g. a class feature) – set manually, never guessed. */
+  unarmoredAbility?: Ability | null;
+  /** Other manual AC modifier (spells, features …) with a label. */
+  acOther?: number;
+  acOtherLabel?: string;
+}
+
+export const DEFAULT_RESTING_KEEP: EquipSlot[] = ['amulet', 'ring1', 'ring2', 'cloak'];
+export const emptyEquipment = (): Equipment => ({ slots: {}, activeSet: 1, resting: false, restingKeep: [...DEFAULT_RESTING_KEEP] });
+export const equipmentOf = (t: Pick<Token, 'equipment'>): Equipment => t.equipment ?? emptyEquipment();
+
+export const SLOT_LABEL: Record<EquipSlot, string> = {
+  head: 'Head',
+  chest: 'Armor',
+  gloves: 'Gloves',
+  boots: 'Boots',
+  cloak: 'Cloak',
+  amulet: 'Amulet',
+  ring1: 'Ring',
+  ring2: 'Ring',
+  main1: 'Main hand',
+  off1: 'Off hand',
+  main2: 'Main hand',
+  off2: 'Off hand',
+};
+
+const SLOT_KINDS: Record<EquipSlot, ItemKind[]> = {
+  head: ['head'],
+  chest: ['armor'],
+  gloves: ['gloves'],
+  boots: ['boots'],
+  cloak: ['cloak'],
+  amulet: ['amulet'],
+  ring1: ['ring'],
+  ring2: ['ring'],
+  main1: ['weapon', 'focus'],
+  main2: ['weapon', 'focus'],
+  off1: ['weapon', 'shield', 'focus'],
+  off2: ['weapon', 'shield', 'focus'],
+};
+export const slotAccepts = (slot: EquipSlot, e: ItemEquip | undefined) => !!e && SLOT_KINDS[slot].includes(e.kind);
+export const isTwoHanded = (e: ItemEquip | undefined) => !!e?.properties?.includes('two-handed');
+const offOf = (main: EquipSlot): EquipSlot | null => (main === 'main1' ? 'off1' : main === 'main2' ? 'off2' : null);
+const mainOf = (off: EquipSlot): EquipSlot | null => (off === 'off1' ? 'main1' : off === 'off2' ? 'main2' : null);
+export const setOfSlot = (s: EquipSlot): 1 | 2 | null => (s === 'main1' || s === 'off1' ? 1 : s === 'main2' || s === 'off2' ? 2 : null);
+
+/** Slots that count right now (active weapon set; resting removes everything but the kept slots). */
+export function activeSlots(eq: Equipment): EquipSlot[] {
+  const set = eq.activeSet;
+  return EQUIP_SLOTS.filter((s) => {
+    const ws = setOfSlot(s);
+    if (ws !== null && ws !== set) return false;
+    return !eq.resting || eq.restingKeep.includes(s);
+  });
+}
+
+/** Where an item is equipped (at most one slot). */
+export const slotOfItem = (eq: Equipment, itemId: string): EquipSlot | null => EQUIP_SLOTS.find((s) => eq.slots[s] === itemId) ?? null;
+
+// ---------------------------------------------------------------- rules applied by commands (mutating)
+
+export type EquipError = 'noSuchItem' | 'noEquipProps' | 'wrongSlot' | 'twoHandedOff' | 'gmLocked';
+
+/** Equips an item into a slot; moves it if it was equipped elsewhere (never duplicates). */
+export function equipItem(t: Token, itemId: string, slot: EquipSlot): EquipError | null {
+  const item = t.inventory.find((i) => i.id === itemId);
+  if (!item) return 'noSuchItem';
+  if (!item.equip) return 'noEquipProps';
+  if (!slotAccepts(slot, item.equip)) return 'wrongSlot';
+  const eq = structuredClone(equipmentOf(t));
+  const main = mainOf(slot);
+  if (main && isTwoHanded(item.equip)) return 'twoHandedOff';
+  if (main) {
+    const mainItem = t.inventory.find((i) => i.id === eq.slots[main]);
+    if (isTwoHanded(mainItem?.equip) && eq.slots[main] !== itemId) return 'twoHandedOff';
+  }
+  const from = slotOfItem(eq, itemId);
+  if (from) delete eq.slots[from];
+  eq.slots[slot] = itemId;
+  const off = offOf(slot);
+  if (off && isTwoHanded(item.equip)) delete eq.slots[off]; // a two-handed weapon needs both hands
+  t.equipment = eq;
+  return null;
+}
+
+export function unequipSlot(t: Token, slot: EquipSlot): void {
+  const eq = structuredClone(equipmentOf(t));
+  delete eq.slots[slot];
+  t.equipment = eq;
+}
+
+/** Removes references to items that no longer exist or no longer fit their slot. */
+export function reconcileEquipment(t: Token): void {
+  if (!t.equipment) return;
+  const eq = t.equipment;
+  for (const s of EQUIP_SLOTS) {
+    const id = eq.slots[s];
+    if (!id) continue;
+    const item = t.inventory.find((i) => i.id === id);
+    if (!item || !slotAccepts(s, item.equip)) delete eq.slots[s];
+  }
+  for (const off of ['off1', 'off2'] as EquipSlot[]) {
+    const main = mainOf(off)!;
+    const m = t.inventory.find((i) => i.id === eq.slots[main]);
+    if (eq.slots[off] && isTwoHanded(m?.equip)) delete eq.slots[off];
+  }
+}
+
+// ---------------------------------------------------------------- SRD suggestions (confirmed by a person)
+
+/** D&D 5e SRD 5.1 (CC BY 4.0) armour – offered as suggestions only. */
+export const ARMOR_PRESETS: Record<string, ItemEquip> = {
+  'Padded armor': { kind: 'armor', armorType: 'light', armorBase: 11 },
+  'Leather armor': { kind: 'armor', armorType: 'light', armorBase: 11 },
+  'Studded leather armor': { kind: 'armor', armorType: 'light', armorBase: 12 },
+  'Hide armor': { kind: 'armor', armorType: 'medium', armorBase: 12 },
+  'Chain shirt': { kind: 'armor', armorType: 'medium', armorBase: 13 },
+  'Scale mail': { kind: 'armor', armorType: 'medium', armorBase: 14 },
+  Breastplate: { kind: 'armor', armorType: 'medium', armorBase: 14 },
+  'Half plate': { kind: 'armor', armorType: 'medium', armorBase: 15 },
+  'Ring mail': { kind: 'armor', armorType: 'heavy', armorBase: 14 },
+  'Chain mail': { kind: 'armor', armorType: 'heavy', armorBase: 16 },
+  'Splint armor': { kind: 'armor', armorType: 'heavy', armorBase: 17 },
+  'Plate armor': { kind: 'armor', armorType: 'heavy', armorBase: 18 },
+  Shield: { kind: 'shield', acBonus: 2 },
+};
+
+/** D&D 5e SRD 5.1 weapons (selection) – suggestions only. */
+export const WEAPON_PRESETS: Record<string, ItemEquip> = {
+  Club: { kind: 'weapon', damage: '1d4', damageType: 'bludgeoning', properties: ['light'] },
+  Dagger: { kind: 'weapon', damage: '1d4', damageType: 'piercing', properties: ['finesse', 'light', 'thrown'] },
+  Greatclub: { kind: 'weapon', damage: '1d8', damageType: 'bludgeoning', properties: ['two-handed'] },
+  Handaxe: { kind: 'weapon', damage: '1d6', damageType: 'slashing', properties: ['light', 'thrown'] },
+  Javelin: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['thrown'] },
+  Mace: { kind: 'weapon', damage: '1d6', damageType: 'bludgeoning', properties: [] },
+  Quarterstaff: { kind: 'weapon', damage: '1d6', damageType: 'bludgeoning', properties: ['versatile'] },
+  Sickle: { kind: 'weapon', damage: '1d4', damageType: 'slashing', properties: ['light'] },
+  Spear: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['thrown', 'versatile'] },
+  Shortbow: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['ranged', 'two-handed', 'ammunition'] },
+  'Light crossbow': { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['ranged', 'two-handed', 'loading', 'ammunition'] },
+  Scimitar: { kind: 'weapon', damage: '1d6', damageType: 'slashing', properties: ['finesse', 'light'] },
+  Shortsword: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['finesse', 'light'] },
+  Longsword: { kind: 'weapon', damage: '1d8', damageType: 'slashing', properties: ['versatile'] },
+  Rapier: { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['finesse'] },
+  Warhammer: { kind: 'weapon', damage: '1d8', damageType: 'bludgeoning', properties: ['versatile'] },
+  Battleaxe: { kind: 'weapon', damage: '1d8', damageType: 'slashing', properties: ['versatile'] },
+  Greatsword: { kind: 'weapon', damage: '2d6', damageType: 'slashing', properties: ['heavy', 'two-handed'] },
+  Greataxe: { kind: 'weapon', damage: '1d12', damageType: 'slashing', properties: ['heavy', 'two-handed'] },
+  Longbow: { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['ranged', 'heavy', 'two-handed', 'ammunition'] },
+};
+
+/** Suggestion for an item by its name (exact or "[Breastplate]"-style), or null – never applied automatically. */
+export function suggestEquip(name: string): { preset: string; equip: ItemEquip } | null {
+  const n = name.replace(/[[\]]/g, '').trim().toLowerCase();
+  for (const table of [ARMOR_PRESETS, WEAPON_PRESETS]) {
+    for (const [k, v] of Object.entries(table)) if (n === k.toLowerCase() || n === k.toLowerCase().replace(/ armor$/, '')) return { preset: k, equip: structuredClone(v) };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- derived statistics
+
+export interface CalcStep {
+  label: string;
+  value: number;
+  /** '=' base value, '+' added, 'cap' capped */
+  op: '=' | '+' | 'cap';
+}
+
+export interface DerivedStats {
+  ac: { value: number | null; steps: CalcStep[]; source: 'derived' | 'imported' | 'none'; imported: number | null; note?: string };
+  attacks: Array<{ slot: EquipSlot; name: string; toHit: number | null; damage: string; steps: CalcStep[]; properties: WeaponProperty[] }>;
+  abilityMods: Partial<Record<Ability, number>>;
+  proficiency: number | null;
+  resting: boolean;
+  activeSet: 1 | 2;
+}
+
+const ABILITY_NAMES: Record<Ability, RegExp> = { str: /^str/i, dex: /^dex/i, con: /^con/i, int: /^int/i, wis: /^wis/i, cha: /^cha/i };
+const num = (s: string | undefined): number | null => {
+  const m = /([+-]?\d+)/.exec(s ?? '');
+  return m ? Number(m[1]) : null;
+};
+
+export function abilityMods(sheet: CharacterSheet): Partial<Record<Ability, number>> {
+  const out: Partial<Record<Ability, number>> = {};
+  for (const a of Object.keys(ABILITY_NAMES) as Ability[]) {
+    const attr = sheet.attributes.find((x) => ABILITY_NAMES[a].test(x.name.trim()));
+    if (!attr) continue;
+    const score = num(attr.value);
+    out[a] = score !== null ? Math.floor((score - 10) / 2) : (num(attr.modifier) ?? undefined)!;
+    if (out[a] === undefined) delete out[a];
+  }
+  return out;
+}
+
+export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment'>): DerivedStats {
+  const eq = equipmentOf(token);
+  const mods = abilityMods(sheet);
+  const pb = num(sheet.combat.find((c) => /^proficiency bonus$/i.test(c.label))?.value);
+  const importedAc = num(sheet.combat.find((c) => c.label === 'Armor Class')?.value);
+  const items = new Map(token.inventory.map((i) => [i.id, i]));
+  const worn = activeSlots(eq)
+    .map((s) => ({ slot: s, item: eq.slots[s] ? items.get(eq.slots[s]!) : undefined }))
+    .filter((x): x is { slot: EquipSlot; item: Item } => !!x.item?.equip);
+  const allEquipped = EQUIP_SLOTS.map((s) => (eq.slots[s] ? items.get(eq.slots[s]!) : undefined)).filter((i): i is Item => !!i?.equip);
+  const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther;
+
+  // ---- Armor Class
+  let ac: DerivedStats['ac'];
+  if (!acRelevant) {
+    ac = {
+      value: importedAc,
+      steps: importedAc !== null ? [{ label: 'Imported from the character sheet', value: importedAc, op: '=' }] : [],
+      source: importedAc !== null ? 'imported' : 'none',
+      imported: importedAc,
+      note: eq.resting ? 'Define the properties of worn armour/shields to calculate the resting Armor Class.' : undefined,
+    };
+  } else if (mods.dex === undefined) {
+    ac = { value: importedAc, steps: [], source: importedAc !== null ? 'imported' : 'none', imported: importedAc, note: 'Dexterity is missing on the character sheet – AC cannot be calculated.' };
+  } else {
+    const steps: CalcStep[] = [];
+    const dex = mods.dex;
+    const armor = worn.find((w) => w.slot === 'chest' && w.item.equip!.kind === 'armor')?.item;
+    let value: number;
+    if (armor && armor.equip!.armorBase) {
+      const e = armor.equip!;
+      value = e.armorBase!;
+      steps.push({ label: `${armor.name} (${e.armorType ?? 'light'} armour)`, value, op: '=' });
+      const cap = e.armorType === 'heavy' ? 0 : e.armorType === 'medium' ? 2 : Infinity;
+      const add = Math.min(dex, cap);
+      if (cap !== Infinity && dex > cap) steps.push({ label: `Dexterity modifier ${fmt(dex)}, capped by ${e.armorType} armour`, value: add, op: 'cap' });
+      else if (cap !== 0) steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
+      else steps.push({ label: 'Dexterity does not apply (heavy armour)', value: 0, op: 'cap' });
+      value += add;
+    } else {
+      value = 10 + dex;
+      steps.push({ label: eq.resting ? 'Unarmored (resting): 10' : 'Unarmored: 10', value: 10, op: '=' });
+      steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
+      if (eq.unarmoredAbility && mods[eq.unarmoredAbility] !== undefined) {
+        value += mods[eq.unarmoredAbility]!;
+        steps.push({ label: `Unarmored defence (${eq.unarmoredAbility.toUpperCase()} modifier, set manually)`, value: mods[eq.unarmoredAbility]!, op: '+' });
+      }
+    }
+    for (const w of worn) {
+      const b = w.item.equip!.acBonus;
+      if (!b) continue;
+      if (w.item.equip!.kind === 'shield' && w.slot !== 'off1' && w.slot !== 'off2') continue;
+      value += b;
+      steps.push({ label: `${w.item.name}${w.item.equip!.kind === 'shield' ? ' (shield)' : ''}`, value: b, op: '+' });
+    }
+    if (eq.acOther) {
+      value += eq.acOther;
+      steps.push({ label: eq.acOtherLabel || 'Other modifiers', value: eq.acOther, op: '+' });
+    }
+    ac = { value, steps, source: 'derived', imported: importedAc };
+  }
+
+  // ---- attacks of the active weapon set
+  const attacks: DerivedStats['attacks'] = [];
+  for (const w of worn) {
+    if (w.slot !== 'main1' && w.slot !== 'main2' && w.slot !== 'off1' && w.slot !== 'off2') continue;
+    const e = w.item.equip!;
+    if (e.kind !== 'weapon') continue;
+    const props = e.properties ?? [];
+    const str = mods.str;
+    const dexM = mods.dex;
+    let ability: 'str' | 'dex' = props.includes('ranged') ? 'dex' : 'str';
+    if (props.includes('finesse') && dexM !== undefined && (str === undefined || dexM > str)) ability = 'dex';
+    const m = mods[ability];
+    const steps: CalcStep[] = [];
+    let toHit: number | null = null;
+    if (m !== undefined) {
+      toHit = m;
+      steps.push({ label: `${ability.toUpperCase()} modifier${props.includes('finesse') ? ' (finesse: higher of STR/DEX)' : ''}`, value: m, op: '=' });
+      if (e.proficient !== false && pb !== null) {
+        toHit += pb;
+        steps.push({ label: 'Proficiency bonus', value: pb, op: '+' });
+      }
+      if (e.attackBonus) {
+        toHit += e.attackBonus;
+        steps.push({ label: 'Item bonus', value: e.attackBonus, op: '+' });
+      }
+    }
+    const isOff = w.slot === 'off1' || w.slot === 'off2';
+    const dmgMod = m !== undefined && !(isOff && m > 0) ? m + (e.attackBonus ?? 0) : (e.attackBonus ?? 0);
+    const dmg = e.damage ? `${e.damage}${dmgMod ? (dmgMod > 0 ? `+${dmgMod}` : `${dmgMod}`) : ''}${e.damageType ? ` ${e.damageType}` : ''}` : '—';
+    attacks.push({ slot: w.slot, name: w.item.name, toHit, damage: dmg + (isOff ? ' (off hand)' : ''), steps, properties: props });
+  }
+  return { ac, attacks, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
+}
+
+export const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);

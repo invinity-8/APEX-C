@@ -1,3 +1,4 @@
+import type { Equipment } from './equipment.js';
 /**
  * Fog of War, player knowledge and filtered views.
  *
@@ -125,6 +126,8 @@ export interface TokenDetails {
   /** Private: only the character's own player and the GM receive the inventory. */
   inventory: Item[];
   containers?: InventoryContainer[];
+  /** APEX 0.5: private like the inventory (owner + GM only). */
+  equipment?: Equipment;
 }
 
 export interface TokenView {
@@ -208,6 +211,7 @@ const detailsOf = (t: Token, withInventory = true): TokenDetails => ({
   will: { ...t.will },
   inventory: withInventory ? t.inventory.map((i) => ({ ...i })) : [],
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
+  equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
 });
 
 const tokenView = (t: Token, withDetails: boolean, withInventory = true): TokenView => ({

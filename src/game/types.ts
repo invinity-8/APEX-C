@@ -1,3 +1,4 @@
+import type { Equipment, ItemEquip } from './equipment.js';
 /**
  * Central game state structure.
  * Everything that is saved, exported or stored in Supabase is defined here.
@@ -96,6 +97,8 @@ export interface Item {
   notes?: string;
   /** Revision counter – edits must name the revision they are based on (no silent overwrites). */
   rev?: number;
+  /** APEX 0.5: manually defined equipment properties (see equipment.ts). */
+  equip?: ItemEquip;
 }
 
 /** A place in a character's inventory (Backpack, Pockets … or custom). */
@@ -136,6 +139,8 @@ export interface Token {
   marker?: MarkerStyle;
   /** Portrait in private storage; v changes with every upload (cache busting). Path is never sent to clients. */
   portrait?: { path: string; v: number };
+  /** APEX 0.5: equipped items (references into `inventory`), weapon sets, resting preset. */
+  equipment?: Equipment;
 }
 
 export type TeamVisibility = 'auto' | 'hidden' | 'revealed';
