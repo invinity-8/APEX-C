@@ -139,6 +139,9 @@ export function parseCommand(raw: unknown): ParseResult {
       if (Object.keys(out).length === 2) return bad('nothing to change');
       return { ok: true, command: out as Command };
     }
+    case 'setWalkingSpeed':
+      if (!isId(c.tokenId) || !isInt(c.speedFt, 200) || (c.speedFt as number) < 5) return bad('tokenId/speedFt');
+      return { ok: true, command: { type: 'setWalkingSpeed', tokenId: c.tokenId, speedFt: c.speedFt as number } };
     case 'equipItem':
       if (!isId(c.tokenId) || !isId(c.itemId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/itemId/slot');
       return { ok: true, command: { type: 'equipItem', tokenId: c.tokenId, itemId: c.itemId, slot: c.slot } };

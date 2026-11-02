@@ -139,6 +139,8 @@ export interface Token {
   marker?: MarkerStyle;
   /** Portrait in private storage; v changes with every upload (cache busting). Path is never sent to clients. */
   portrait?: { path: string; v: number };
+  /** APEX 0.5: walking speed in feet the daily movement points are derived from (set by the GM). */
+  speedFt?: number;
   /** APEX 0.5: equipped items (references into `inventory`), weapon sets, resting preset. */
   equipment?: Equipment;
 }

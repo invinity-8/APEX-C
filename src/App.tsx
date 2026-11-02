@@ -3,6 +3,7 @@ import { ActivityLog } from './components/ActivityLog';
 import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
 import { CharacterSummary, GmTools, PartyHealth } from './components/PartyWidgets';
 import { EquipmentPanel } from './components/EquipmentPanel';
+import { VitalsPanel } from './components/ResourceOrbs';
 import { Workspace, type WidgetDef } from './workspace/Workspace';
 import { defaultLayout, layoutKey } from './workspace/layout';
 import { AnnouncementsPanel, EventsPanel, GmEventModal } from './components/GmEvents';
@@ -248,6 +249,7 @@ export default function App({ game }: { game: GameApi }) {
     const me = view.tokens.find((t) => t.id === view.viewerId) ?? null;
     widgets.push(
       { id: 'my-character', title: 'My Character', icon: '📜', render: () => <CharacterSummary game={game} token={me} /> },
+      { id: 'vitals', title: 'Health & Resources', icon: '♥', render: () => (me ? <VitalsPanel game={game} token={me} canEdit /> : null) },
       { id: 'equipment', title: 'Equipment', icon: '🛡', render: () => (me ? <EquipmentPanel game={game} token={me} run={run} isGm={false} /> : null) },
       { id: 'party', title: 'Party', icon: '⚑', render: () => <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} /> },
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
@@ -264,7 +266,7 @@ export default function App({ game }: { game: GameApi }) {
             { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'] },
             ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'],
           )
-        : defaultLayout({ right: ['my-character', 'equipment', 'party', 'selection', 'intel', 'notifications'] }, ['equipment', 'notifications'], ['inventory']),
+        : defaultLayout({ right: ['vitals', 'my-character', 'equipment', 'party', 'selection', 'intel', 'notifications'] }, ['equipment', 'notifications'], ['inventory']),
     [role],
   );
 
@@ -392,6 +394,7 @@ export default function App({ game }: { game: GameApi }) {
               Playing as {view.tokens.find((t) => t.id === view.viewerId)?.name}
             </div>
           )}
+          {!isGm && <MovementPill token={view.tokens.find((t) => t.id === view.viewerId) ?? null} />}
           {toast && (
             <div
               key={toast.id}
@@ -408,6 +411,25 @@ export default function App({ game }: { game: GameApi }) {
           }
         />
       </div>
+    </div>
+  );
+}
+
+/** Players: compact daily-movement indicator at the bottom of the map (the gold reach area stays primary). */
+function MovementPill({ token }: { token: import('./game/visibility').TokenView | null }) {
+  const d = token?.details;
+  if (!d) return null;
+  const pct = d.maxMovePoints ? d.movePoints / d.maxMovePoints : 0;
+  return (
+    <div className="apex-move-pill" role="status" aria-label={`Movement: ${d.movePoints} of ${d.maxMovePoints} points left today`} data-testid="movement-pill">
+      <span className="text-marble-500">Movement</span>
+      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-ink-700">
+        <span className="block h-full rounded-full bg-gold-400 transition-[width] duration-500" style={{ width: `${pct * 100}%` }} />
+      </span>
+      <b className="tabular-nums text-gold-200">
+        {d.movePoints}/{d.maxMovePoints}
+      </b>
+      <span className="text-marble-500">MP{d.speedFt ? ` · ${d.speedFt} ft` : ''}</span>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { movePointsForSpeed } from '../game/resources';
 import { hexKey, parseKey, type HexKey } from '../game/hex';
 import { TERRAIN } from '../game/terrain';
 import { fmt, type Command } from '../game/commands';
@@ -116,15 +118,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
                   )}
                 </span>
               </div>
-              <div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-marble-300" title="Bound willpower (Voluntas)">Willpower</span>
-                  <span className="tabular-nums text-arcane-300">
-                    {d.will.current} / {d.will.max}
-                  </span>
-                </div>
-                <Bar value={d.will.current} max={d.will.max} color="#a77ef0" className="mt-1" />
-              </div>
+              {gmState && <WalkingSpeed token={token} run={run} />}
               {d.inventory.length > 0 && (
                 <details className="text-xs">
                   <summary className="cursor-pointer text-marble-300 hover:text-marble-50">Equipment ({d.inventory.length})</summary>
@@ -398,5 +392,25 @@ function HexCard({ view, gmState, hexK, run, onSelectToken, selectedTokenId }: P
         </div>
       )}
     </Section>
+  );
+}
+
+/** GM: daily movement points from walking speed (8 MP at 30 ft). Never refills the current points. */
+function WalkingSpeed({ token, run }: { token: TokenView; run: (cmd: Command) => void }) {
+  const [ft, setFt] = useState(token.details?.speedFt ?? 30);
+  const mp = movePointsForSpeed(ft);
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs" data-testid="walking-speed">
+      <span className="text-marble-300" title="round(8 × speed / 30), 4–16 MP. Current points never increase – they refill at dawn.">
+        Walking speed
+      </span>
+      <span className="flex items-center gap-1">
+        <input aria-label="Walking speed in feet" type="number" min={5} max={200} step={5} value={ft} onChange={(e) => setFt(Math.max(5, Math.min(200, Math.round(Number(e.target.value) || 30))))} className="w-16 rounded-md border border-ink-600 bg-ink-900 px-1.5 py-0.5 text-right tabular-nums" />
+        <span className="text-marble-500">ft → {mp} MP/day</span>
+        <button className="btn btn-ghost px-2 py-0.5" disabled={token.details?.speedFt === ft && token.details?.maxMovePoints === mp} onClick={() => run({ type: 'setWalkingSpeed', tokenId: token.id, speedFt: ft })}>
+          Apply
+        </button>
+      </span>
+    </div>
   );
 }

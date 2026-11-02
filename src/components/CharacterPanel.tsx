@@ -16,6 +16,7 @@ import type { DispatchResult, GameApi } from '../state/gameApi';
 import { AppearanceEditor } from './AppearanceEditor';
 import { CharacterPortrait } from './CharacterVisuals';
 import { EquipmentPanel } from './EquipmentPanel';
+import { VitalsPanel } from './ResourceOrbs';
 import { InventoryPanel } from './InventoryPanel';
 import { Bar } from './ui';
 
@@ -252,7 +253,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
               </p>
             )}
           </section>
-          <ApexResources token={token} isGm={isGm} run={run} />
+          <ApexResources game={game} token={token} isGm={isGm} run={run} />
         </div>
       )}
 
@@ -368,7 +369,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
 
       {tab === 'resources' && (
         <div className="grid gap-3 lg:grid-cols-3">
-          <ApexResources token={token} isGm={isGm} run={run} />
+          <ApexResources game={game} token={token} isGm={isGm} run={run} />
           <section className="panel space-y-3 p-3 lg:col-span-2">
             <div className="flex items-center justify-between">
               <h3 className="panel-title">Hit points &amp; resources</h3>
@@ -501,28 +502,15 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function ApexResources({ token, isGm, run }: { token: TokenView; isGm: boolean; run: (cmd: Command) => Promise<DispatchResult> }) {
+function ApexResources({ game, token, isGm, run }: { game: GameApi; token: TokenView; isGm: boolean; run: (cmd: Command) => Promise<DispatchResult> }) {
   const details = token.details;
+  const canEditVitals = isGm || !!details;
   return (
     <section className="panel space-y-3 p-3">
-      <h3 className="panel-title">APEX resources</h3>
+      <h3 className="panel-title">Health, resources & movement</h3>
+      <VitalsPanel game={game} token={token} canEdit={canEditVitals} />
       {details ? (
         <>
-          <Resource label="Willpower" current={details.will.current} max={details.will.max} color="#a78bfa" onDelta={(d) => void run({ type: 'setWill', tokenId: token.id, current: details.will.current + d })} />
-          {isGm && (
-            <div className="flex items-center justify-between text-xs text-marble-300">
-              <span>Maximum Will (GM)</span>
-              <span className="flex items-center gap-1">
-                <SmallBtn label="Decrease maximum Will" onClick={() => void run({ type: 'setWill', tokenId: token.id, max: Math.max(0, details.will.max - 1) })}>
-                  −
-                </SmallBtn>
-                <span className="w-8 text-center tabular-nums">{details.will.max}</span>
-                <SmallBtn label="Increase maximum Will" onClick={() => void run({ type: 'setWill', tokenId: token.id, max: details.will.max + 1 })}>
-                  +
-                </SmallBtn>
-              </span>
-            </div>
-          )}
           <Resource
             label="Movement points"
             current={details.movePoints}
@@ -538,6 +526,25 @@ function ApexResources({ token, isGm, run }: { token: TokenView; isGm: boolean; 
               {details.visionBonus ? ` (${details.visionBonus > 0 ? '+' : ''}${details.visionBonus})` : ''} hexes
             </span>
           </div>
+          <details className="rounded-lg border border-ink-700 p-2 text-xs" data-testid="legacy-will">
+            <summary className="cursor-pointer text-marble-500">Legacy: Willpower (APEX 0.1–0.4)</summary>
+            <p className="my-1 text-[11px] text-marble-500">No longer used by any rule. Kept so older worlds, archives and Will vessels stay intact; the GM can still adjust it.</p>
+            <Resource label="Willpower" current={details.will.current} max={details.will.max} color="#a78bfa" onDelta={(d) => void run({ type: 'setWill', tokenId: token.id, current: details.will.current + d })} />
+            {isGm && (
+              <div className="flex items-center justify-between text-xs text-marble-300">
+                <span>Maximum Will (GM)</span>
+                <span className="flex items-center gap-1">
+                  <SmallBtn label="Decrease maximum Will" onClick={() => void run({ type: 'setWill', tokenId: token.id, max: Math.max(0, details.will.max - 1) })}>
+                    −
+                  </SmallBtn>
+                  <span className="w-8 text-center tabular-nums">{details.will.max}</span>
+                  <SmallBtn label="Increase maximum Will" onClick={() => void run({ type: 'setWill', tokenId: token.id, max: details.will.max + 1 })}>
+                    +
+                  </SmallBtn>
+                </span>
+              </div>
+            )}
+          </details>
         </>
       ) : (
         <Empty>Not visible.</Empty>
