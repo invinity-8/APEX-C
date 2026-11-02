@@ -199,6 +199,16 @@ export type EventEffect =
   | { type: 'revealSite'; siteId: string }
   | { type: 'modifyMovePoints'; amount: number };
 
+/**
+ * Event lifecycle (APEX 0.4 – GM approval):
+ *  pending   scheduled, not due yet (or manual-only)
+ *  awaiting  due – prepared by the system, waiting for the GM's decision; NO effect has been applied
+ *  postponed GM postponed it; becomes awaiting again at `postponedTo`
+ *  done      approved and applied exactly once
+ *  rejected  GM rejected it; no effect, never fires again
+ */
+export type EventStatus = 'pending' | 'awaiting' | 'postponed' | 'done' | 'rejected';
+
 export interface ArenaEvent {
   id: string;
   name: string;
@@ -206,9 +216,29 @@ export interface ArenaEvent {
   trigger: EventTrigger;
   hexes: HexKey[];
   effects: EventEffect[];
-  status: 'pending' | 'done';
+  status: EventStatus;
   /** Wird die Ankündigung den Spielern gezeigt? */
   announce: boolean;
+  /** 'auto' = from the campaign setup, 'custom' = created by the GM. */
+  source?: 'auto' | 'custom';
+  /** When the event became due (awaiting). */
+  dueAt?: { day: number; phase: Phase };
+  postponedTo?: { day: number; phase: Phase };
+  /** When the GM approved / rejected it. */
+  decidedAt?: { day: number; phase: Phase; decision: 'approved' | 'rejected' };
+}
+
+export type AnnouncementCategory = 'general' | 'warning' | 'death' | 'world' | 'custom';
+
+/** Arena Announcement – shown as a cinematic overlay on every player's screen. Public by definition. */
+export interface Announcement {
+  id: string;
+  category: AnnouncementCategory;
+  title: string;
+  text: string;
+  createdAt: string;
+  day: number;
+  phase: Phase;
 }
 
 // ---------------- Wissen (Fog of War) ----------------
@@ -264,6 +294,8 @@ export interface GameState {
   knowledge: Record<string, Knowledge>;
   log: LogEntry[];
   nextLogId: number;
+  /** APEX 0.4: Arena Announcements (newest last, bounded). */
+  announcements?: Announcement[];
 }
 
 /** Who performs an action? */

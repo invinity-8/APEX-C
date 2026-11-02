@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
-import { GmPanel } from './components/GmPanel';
+import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
+import { GmSidebar, type GmSection } from './components/GmSidebar';
+import { AnnouncementsPanel, EventsPanel, GmEventModal } from './components/GmEvents';
+import { AnnouncementHistory, AnnouncementOverlay } from './components/AnnouncementOverlay';
 import { Header } from './components/Header';
 import { IntelPanel } from './components/IntelPanel';
 import { PartyPanel } from './components/PartyPanel';
@@ -171,6 +174,43 @@ export default function App({ game }: { game: GameApi }) {
   const sheetTokenId = isGm ? (gmCharacter ?? (selectedToken?.kind === 'player' ? selectedToken.id : playerTokens[0]?.id) ?? null) : view.viewerId;
   const sheetToken = view.tokens.find((t) => t.id === sheetTokenId) ?? null;
 
+  const announceScope = game.online ? `${game.online.campaignId}:${game.online.profileName}` : 'demo';
+  const awaitingCount = state ? Object.values(state.events).filter((e) => e.status === 'awaiting').length : 0;
+  const regenerate = useCallback(
+    async (radius: number, seed: number) => {
+      const res = await game.regenerate(radius, seed);
+      if (!res.ok) return notify(res.error ?? 'Could not generate the arena.');
+      setSelectedTokenId(null);
+      setSelectedHex(null);
+      notify(`New arena generated (radius ${radius}).`, 'info');
+    },
+    [game, notify],
+  );
+  // Sections render lazily (only while open). The array is rebuilt on each render, but every section keeps a
+  // stable key, so open panels keep their component state instead of re-mounting.
+  const gmSections: GmSection[] =
+    isGm && state
+      ? [
+          { id: 'events', title: 'Events', icon: '⚡', keywords: 'approve reject postpone trigger custom library', badge: awaitingCount, render: () => <EventsPanel state={state} run={run} selectedHex={selectedHex} /> },
+          { id: 'announcements', title: 'Announcements', icon: '📣', keywords: 'broadcast message players death warning', render: () => <AnnouncementsPanel state={state} run={run} /> },
+          { id: 'teams', title: 'Rival teams', icon: '⚔', keywords: 'npc rivals visibility strategy', render: () => <TeamsTab state={state} run={run} onSelectToken={selectAndFocus} /> },
+          { id: 'sites', title: 'Sites', icon: '🏛', keywords: 'locations visibility hidden public', render: () => <SitesList state={state} run={run} /> },
+          {
+            id: 'arena',
+            title: 'Time, arena & settings',
+            icon: '⚙',
+            keywords: 'fog vision shrink radius zone seed day night settings',
+            render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} />,
+          },
+          ...(game.online
+            ? [
+                { id: 'world', title: 'World Management', icon: '🌍', keywords: 'archive restore reset new world', render: () => <WorldPanel state={state} online={game.online!} notify={notify} pending={game.pending.includes('world')} /> },
+                { id: 'players', title: 'Players & Access', icon: '👥', keywords: 'password profiles characters login', render: () => <PlayersPanel state={state} online={game.online!} notify={notify} /> },
+              ]
+            : []),
+        ]
+      : [];
+
   const tabs: Array<{ id: View; label: string }> = [
     { id: 'map', label: '🗺 Map' },
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
@@ -208,6 +248,8 @@ export default function App({ game }: { game: GameApi }) {
           Live updates are temporarily unavailable – APEX checks for changes every few seconds instead.
         </div>
       )}
+      <AnnouncementOverlay announcements={view.announcements} scope={announceScope} />
+      {isGm && state && <GmEventModal state={state} run={run} />}
       <Header
         game={game}
         notify={notify}
@@ -322,27 +364,12 @@ export default function App({ game }: { game: GameApi }) {
             }}
           />
           {isGm && state ? (
-            <>
-              <GmPanel
-                state={state}
-                run={run}
-                onSelectToken={selectAndFocus}
-                showPartyFog={showPartyFog}
-                setShowPartyFog={setShowPartyFog}
-                worldManaged={!!game.online}
-                onRegenerate={async (radius, seed) => {
-                  const res = await game.regenerate(radius, seed);
-                  if (!res.ok) return notify(res.error ?? 'Could not generate the arena.');
-                  setSelectedTokenId(null);
-                  setSelectedHex(null);
-                  notify(`New arena generated (radius ${radius}).`, 'info');
-                }}
-              />
-              {game.online && <WorldPanel state={state} online={game.online} notify={notify} pending={game.pending.includes('world')} />}
-              {game.online && <PlayersPanel state={state} online={game.online} notify={notify} />}
-            </>
+            <GmSidebar sections={gmSections} storageKey={announceScope} />
           ) : (
-            <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} />
+            <>
+              <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} />
+              <AnnouncementHistory announcements={view.announcements} />
+            </>
           )}
         </aside>
       </main>
