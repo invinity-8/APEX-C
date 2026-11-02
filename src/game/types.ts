@@ -104,6 +104,10 @@ export interface InventoryContainer {
   name: string;
 }
 
+/** Cosmetic map marker shapes (APEX 0.4). */
+export type MarkerStyle = 'medallion' | 'gem' | 'hexagon' | 'crest';
+export const MARKER_STYLES: readonly MarkerStyle[] = ['medallion', 'gem', 'hexagon', 'crest'];
+
 export interface Token {
   id: string;
   name: string;
@@ -127,6 +131,11 @@ export interface Token {
   inventory: Item[];
   /** APEX 0.3: inventory containers (missing = the default set, see inventory.ts). */
   containers?: InventoryContainer[];
+  /** APEX 0.4 – cosmetic only (never used for permissions or rules). */
+  accent?: string;
+  marker?: MarkerStyle;
+  /** Portrait in private storage; v changes with every upload (cache busting). Path is never sent to clients. */
+  portrait?: { path: string; v: number };
 }
 
 export type TeamVisibility = 'auto' | 'hidden' | 'revealed';

@@ -30,6 +30,7 @@ import { WorldConflictError } from './repo.js';
 
 /** Every database call is aborted after this many milliseconds – a slow database must never hang a function. */
 export const DB_TIMEOUT_MS = 8000;
+export const PORTRAIT_BUCKET = 'apex-portraits';
 
 /** Per-request diagnostics (round trips, time spent in the database). No data, no secrets. */
 export interface RequestStats {
@@ -526,6 +527,23 @@ export class SupabaseRepo implements Repo {
       'load archive',
     ) as Record<string, unknown> | null;
     return row ? { ...toArchive(row), state: row.state as GameState } : null;
+  }
+
+  // ---------------------------------------------------------------- portraits
+
+  async uploadPortrait(path: string, bytes: Uint8Array, contentType: string): Promise<void> {
+    const { error } = await this.db.storage.from(PORTRAIT_BUCKET).upload(path, bytes, { contentType, upsert: false, cacheControl: '3600' });
+    if (error) throw new Error(`portrait upload: ${error.message}`);
+  }
+
+  async portraitUrl(path: string, expiresInSeconds: number): Promise<string | null> {
+    const { data, error } = await this.db.storage.from(PORTRAIT_BUCKET).createSignedUrl(path, expiresInSeconds);
+    if (error) return null;
+    return data.signedUrl;
+  }
+
+  async deletePortrait(path: string): Promise<void> {
+    await this.db.storage.from(PORTRAIT_BUCKET).remove([path]);
   }
 
   // ---------------------------------------------------------------- character sheets

@@ -52,7 +52,7 @@ export function actionKey(cmd: Command): string {
     case 'setDay':
       return 'phase';
     default:
-      return cmd.type.startsWith('inv') || cmd.type === 'setWill' ? `char:${(cmd as { tokenId: string }).tokenId}` : `gm:${cmd.type}`;
+      return cmd.type.startsWith('inv') || cmd.type === 'setWill' || cmd.type === 'setAppearance' ? `char:${(cmd as { tokenId: string }).tokenId}` : `gm:${cmd.type}`;
   }
 }
 
@@ -402,6 +402,19 @@ export function useOnlineGame(
     [accept, campaignId, perform],
   );
 
+  const uploadPortrait = useCallback(
+    async (tokenId: string, dataUrl: string) => {
+      try {
+        await api.uploadPortrait(tokenId, dataUrl);
+        await refresh(true);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    },
+    [refresh],
+  );
+
   const sheetCall = useCallback(async (fn: () => Promise<SheetPayload>): Promise<SheetResult> => {
     try {
       return { ok: true, sheet: await fn() };
@@ -504,10 +517,11 @@ export function useOnlineGame(
               return worldAction({ action: 'importState', state: parsed });
             },
             sheets,
+            uploadPortrait,
             online,
           }
         : null,
-    [payload, view, online, gmState, busy, pending, dispatch, worldAction, sheets],
+    [payload, view, online, gmState, busy, pending, dispatch, worldAction, sheets, uploadPortrait],
   );
 
   return { game, payload, error, loading: !payload && !error, refresh: refreshForce };

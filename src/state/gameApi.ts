@@ -90,6 +90,8 @@ export interface GameApi {
   /** GM: load a JSON save into the campaign. */
   importState: (text: string) => Promise<DispatchResult>;
   sheets: SheetApi;
+  /** Online only: upload a cropped portrait (data URL) for a character. */
+  uploadPortrait?: (tokenId: string, dataUrl: string) => Promise<DispatchResult>;
   demo?: DemoControls;
   online?: OnlineControls;
 }

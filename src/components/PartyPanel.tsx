@@ -1,14 +1,17 @@
 import type { ViewModel } from '../game/visibility';
 import { fmt } from '../game/commands';
 import { Bar, Section } from './ui';
+import { CharacterPortrait } from './CharacterVisuals';
 
 interface Props {
   view: ViewModel;
   selectedTokenId: string | null;
   onSelect: (id: string) => void;
+  /** Online: portraits can be loaded. */
+  online?: boolean;
 }
 
-export function PartyPanel({ view, selectedTokenId, onSelect }: Props) {
+export function PartyPanel({ view, selectedTokenId, onSelect, online = false }: Props) {
   const party = view.tokens.filter((t) => t.kind === 'player');
   const team = view.teams.find((t) => t.kind === 'party');
   return (
@@ -26,17 +29,15 @@ export function PartyPanel({ view, selectedTokenId, onSelect }: Props) {
                 }`}
                 title={`Select ${t.name} and show on map`}
               >
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-ink-950"
-                  style={{ background: t.color, boxShadow: t.id === view.viewerId ? '0 0 0 2px #f3dc9a' : undefined }}
-                >
-                  {t.initials}
-                </span>
+                <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online={online} color={t.color} accent={t.id === view.viewerId ? '#f3dc9a' : t.accent} initials={t.initials} name={t.name} size={30} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-medium text-marble-50">
                       {t.name}
                       {t.id === view.viewerId && <span className="ml-1 text-[10px] text-gold-300">(you)</span>}
+                      <span className="ml-1 text-[10px] font-normal" style={{ color: t.accent ?? '#8a7a66' }}>
+                        {t.title}
+                      </span>
                     </span>
                     <span className={`text-xs tabular-nums ${empty ? 'text-blood-400' : 'text-gold-200'}`}>
                       {fmt(d.movePoints)}/{d.maxMovePoints}

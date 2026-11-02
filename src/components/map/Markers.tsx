@@ -1,3 +1,4 @@
+import { MarkerShape } from '../CharacterVisuals';
 import type { ReactNode } from 'react';
 import type { Site } from '../../game/types';
 import type { SiteView, TeamView, TokenView, TrackerView } from '../../game/visibility';
@@ -128,7 +129,7 @@ export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSele
             {selected && <circle r={r + 4} fill="none" stroke="#f3dc9a" strokeWidth={2.2} />}
             {t.kind === 'player' ? (
               <>
-                <circle r={r} fill={t.color} stroke={isViewer ? '#f3dc9a' : '#0f0d0c'} strokeWidth={isViewer ? 2.4 : 1.6} filter="url(#token-shadow)" />
+                <MarkerShape style={t.marker} r={r} color={t.color} accent={t.accent} highlight={isViewer} filter="url(#token-shadow)" />
                 <text y={r * 0.36} textAnchor="middle" fontSize={r * 0.95} fontWeight={700} fill="#14110d" fontFamily="Inter, sans-serif">
                   {t.initials}
                 </text>

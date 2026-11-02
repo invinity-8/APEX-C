@@ -15,11 +15,13 @@ interface Props {
   token: TokenView;
   run: (cmd: Command) => Promise<DispatchResult>;
   busy: boolean;
+  /** Inside the character dashboard (no outer page padding). */
+  embedded?: boolean;
 }
 
 const input = 'rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50 focus:border-gold-400 focus:outline-none';
 
-export function InventoryPanel({ token, run, busy }: Props) {
+export function InventoryPanel({ token, run, busy, embedded }: Props) {
   const details = token.details;
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
   const items = details?.inventory ?? [];
@@ -46,7 +48,7 @@ export function InventoryPanel({ token, run, busy }: Props) {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Inventory of ${token.name}`}>
+    <div className={embedded ? 'space-y-3' : 'mx-auto max-w-5xl space-y-3 p-3'} aria-label={`Inventory of ${token.name}`}>
       <section className="panel p-3">
         <h2 className="font-display text-2xl font-black text-gold-200">Inventory – {token.name}</h2>
         <form onSubmit={add} className="mt-2 flex flex-wrap items-end gap-2">

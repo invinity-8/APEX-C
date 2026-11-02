@@ -103,6 +103,13 @@ export function mockSupabase(): Plugin {
       server.middlewares.use('/__mock', (req, res) => {
         const url = new URL(req.url ?? '/', 'http://x');
         if (url.pathname === '/setup-code') return send(res, 200, { code: SETUP_CODE });
+        if (url.pathname === '/portrait') {
+          const p = repo?.portraits.get(String(url.searchParams.get('path')));
+          if (!p) return send(res, 404, {});
+          res.statusCode = 200;
+          res.setHeader('content-type', p.contentType);
+          return res.end(Buffer.from(p.bytes));
+        }
         if (url.pathname === '/latency') {
           latencyMs = Math.max(0, Number(url.searchParams.get('ms')) || 0);
           return send(res, 200, { latencyMs });
@@ -152,6 +159,11 @@ export function mockSupabase(): Plugin {
           },
           r,
         );
+        if (out.status === 302 && out.headers?.location) {
+          res.statusCode = 302;
+          for (const [k, v] of Object.entries(out.headers)) res.setHeader(k, v);
+          return res.end();
+        }
         send(res, out.status, out.body, out.cookies);
       });
 

@@ -96,6 +96,9 @@ async function handleInner(request: Request): Promise<Response> {
     },
     repo,
   );
+  if (res.status === 302 && res.headers?.location) {
+    return new Response(null, { status: 302, headers: { 'cache-control': 'no-store', ...res.headers } });
+  }
   if (res.status === 200 && url.searchParams.get('op') === 'health') {
     const h = res.body as { errors?: string[] };
     return json(200, { serverConfigured: true, ok: !h.errors?.length, ...deploymentInfo(), ...(res.body as object) });

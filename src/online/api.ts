@@ -93,6 +93,8 @@ export const api = {
     request<{ state: 'ok' | 'failed' | 'pending' | 'unknown'; version: number | null; error: string | null }>('GET', 'command-status', { requestId }, undefined, { timeoutMs: 10_000 }),
   admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>, opts?: RequestOptions) =>
     request<T>('POST', 'admin', {}, { campaignId, ...action }, opts),
+  uploadPortrait: (tokenId: string, image: string) =>
+    request<{ tokenId: string; portraitV: number; version: number }>('POST', 'portrait', {}, { tokenId, image }, { timeoutMs: 30_000 }),
   sheet: (tokenId: string) => request<SheetPayload>('GET', 'sheet', { token: tokenId }),
   saveSheet: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason: 'edit' | 'import-merge' | 'import-replace' = 'edit') =>
     request<SheetPayload>('POST', 'sheet', {}, { action: 'save', tokenId, sheet, expectedVersion, reason }),
