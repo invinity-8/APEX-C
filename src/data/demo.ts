@@ -29,7 +29,7 @@ export interface DemoOptions {
 /** v0.2: ten times the area of v0.1 (radius 12 → 39, 469 → 4,681 hexes). */
 export const DEFAULT_RADIUS = 39;
 export const MIN_RADIUS = 4;
-export const MAX_RADIUS = 45;
+export const MAX_RADIUS = 78;
 export const DEFAULT_SEED = 1337;
 /** Site positions below were designed for radius 12 and are scaled to the chosen size. */
 const DESIGN_RADIUS = 12;

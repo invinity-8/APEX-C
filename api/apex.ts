@@ -76,7 +76,7 @@ async function handleInner(request: Request): Promise<Response> {
   let body: unknown = null;
   if (request.method === 'POST') {
     const text = await request.text();
-    if (text.length > 3_000_000) return json(413, { error: 'Request too large.' });
+    if (text.length > 4_200_000) return json(413, { error: 'Request too large.' });
     try {
       body = text ? JSON.parse(text) : null;
     } catch {

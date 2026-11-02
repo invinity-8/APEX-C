@@ -55,7 +55,7 @@ To use the real Supabase project locally, copy `.env.example` to `.env.local` an
 
 **GM tools:** movement points and points per day, vision and temporary vision bonus, free placement, control
 rights, knowledge sharing, rival visibility and tracking (approximate/exact), events, site visibility, clock
-correction, shrinking arena, party-vision overlay, new arena (radius 4–45, seed), JSON export/import.
+correction, shrinking arena, party-vision overlay, new arena (radius 4–78, seed), JSON export/import.
 Online only: **Players & Access** (passwords, activation, signed-in devices, character assignment, backups/restore),
 **Character sheets** and **Inventory** of every character.
 
@@ -97,7 +97,7 @@ All rules live in `src/game/` and are covered by tests. Changes compared with v0
 
 | Topic | v0.1 | v0.2 | Where |
 |---|---|---|---|
-| Default arena | radius 12, 469 hexes | **radius 39, 4,681 hexes** (configurable 4–45) | `src/data/demo.ts` |
+| Default arena | radius 12, 469 hexes | **radius 39, 4,681 hexes** (configurable 4–78; see “Arena size” below) | `src/data/demo.ts` |
 | Travel scale | crossing ≈ 3 days | crossing ≈ **8 days** at 8 MP/day (test-verified ≥ 6) | unchanged MP & costs |
 | Terrain | 7 types | **+ Hills (2 MP)**, **+ River (3 MP, fordable)**; lakes stay impassable | `src/game/terrain.ts` |
 | Time | days only | **Day N → Night N → Day N+1** at state level | `src/game/day.ts` |

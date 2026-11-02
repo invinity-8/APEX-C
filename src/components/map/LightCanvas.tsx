@@ -126,6 +126,8 @@ export function LightCanvas({ view, tf, size, reducedMotion }: { view: ViewModel
       const y1 = (size.h - tf.y) / tf.k + pad;
       for (const l of lights) {
         if (l.x < x0 || l.x > x1 || l.y < y0 || l.y > y1) continue;
+        // Zoomed far out (large arenas): a glow smaller than ~1.5 px is invisible – skip the draw call.
+        if (l.r * k < 1.5) continue;
         let a = l.day + (l.night - l.day) * n;
         if (a <= 0.01) continue;
         if (l.flicker && !reducedMotion) a *= 1 - l.flicker * 0.5 + l.flicker * 0.5 * Math.sin(sec * (3 + l.seed * 5) + l.seed * 40) * Math.sin(sec * 7.3 + l.seed * 13);

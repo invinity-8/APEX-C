@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_RADIUS, createDemoState } from '../src/data/demo';
+import { DEFAULT_RADIUS, MAX_RADIUS, createDemoState } from '../src/data/demo';
+import { buildPlayerView } from '../src/game/visibility';
 import { floodFill, generateArena } from '../src/game/mapgen';
 import { isPassable } from '../src/game/terrain';
 import { ORIGIN, distance, hexKey, neighbors } from '../src/game/hex';
@@ -68,4 +69,21 @@ describe('Arena generation', () => {
     expect(Object.keys(createDemoState({ radius: 8 }).hexes)).toHaveLength(217);
     expect(Object.keys(createDemoState({ radius: 12 }).hexes)).toHaveLength(469);
   });
+
+  it('maximum arena radius 78: valid, reachable, sites placed, default unchanged, clamped above', () => {
+    expect(MAX_RADIUS).toBe(78);
+    expect(DEFAULT_RADIUS).toBe(39);
+    const s = createDemoState({ radius: 78, seed: 1337 });
+    expect(Object.keys(s.hexes)).toHaveLength(18487);
+    const reach = floodFill(s.hexes, '0,0');
+    for (const [k, t] of Object.entries(s.hexes)) if (isPassable(t.terrain)) expect(reach.has(k)).toBe(true);
+    for (const t of Object.values(s.tokens)) expect(isPassable(s.hexes[hexKey(t.pos)].terrain)).toBe(true);
+    for (const site of Object.values(s.sites)) expect(s.hexes[hexKey(site.pos)].siteId).toBe(site.id);
+    // the shrinking zone scales with the radius
+    expect(s.config.shrink.ringsPerStep).toBeGreaterThanOrEqual(6);
+    // payload budgets (Vercel response limit is 4.5 MB): full state well below, fresh player view tiny
+    expect(JSON.stringify(s).length).toBeLessThan(1_500_000);
+    expect(JSON.stringify(buildPlayerView(s, 'sinna')).length).toBeLessThan(100_000);
+    expect(createDemoState({ radius: 200 }).config.mapRadius).toBe(78);
+  }, 30_000);
 });
