@@ -118,6 +118,7 @@ export interface HexView {
 export interface TokenDetails {
   movePoints: number;
   maxMovePoints: number;
+  speedFt?: number;
   visionRadius: number;
   visionBonus: number;
   controllers: string[];
@@ -204,6 +205,7 @@ export function edgeMask(state: GameState, h: Axial): number {
 const detailsOf = (t: Token, withInventory = true): TokenDetails => ({
   movePoints: t.movePoints,
   maxMovePoints: t.maxMovePoints,
+  ...(t.speedFt ? { speedFt: t.speedFt } : {}),
   visionRadius: t.visionRadius,
   visionBonus: t.visionBonus,
   controllers: [...t.controllers],

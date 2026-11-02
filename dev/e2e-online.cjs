@@ -245,10 +245,11 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.getByRole('button', { name: 'Decrease Hit points' }).click();
   check('a player can change a resource manually (HP 9 → 8)', await waitText(hannah, /8\s*\/\s*9/));
   const willBefore = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.will.current;
+  await hannah.getByTestId('legacy-will').locator('summary').click(); // 0.5: Willpower is a collapsed legacy value
   await hannah.getByRole('button', { name: 'Decrease Willpower' }).click();
   await sleep(800);
   const willAfter = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.will.current;
-  check('Willpower comes from the game state and can be spent', willAfter === willBefore - 1);
+  check('legacy Willpower is still stored in the game state and adjustable (compatibility)', willAfter === willBefore - 1);
 
   // ---------- appearance ----------
   await hannah.getByRole('tab', { name: 'Appearance' }).click();
@@ -331,6 +332,46 @@ const waitText = (page, re, timeout = 10000) =>
     await hannah.screenshot({ path: out + '/e2e-equipment.png', fullPage: true });
     const forged = await apiFetch(jean, 'command', { campaignId: cid, requestId: 'e2e-equip-forge', command: { type: 'unequipSlot', tokenId: 'sinna', slot: 'chest' } });
     check('another player cannot change Sinna’s equipment', forged.status === 403);
+  }
+
+  // ---------- Health & resource orbs, movement (APEX 0.5) ----------
+  {
+    const cid = beforeJean.body.campaignId;
+    const sheet = async () => (await apiFetch(hannah, 'sheet', null, '&token=sinna')).body.sheet;
+    await hannah.getByRole('button', { name: /Map/ }).first().click();
+    const vit = hannah.locator('[data-widget="vitals"]');
+    check('players get a Health & Resources widget at the top of the right dock', (await hannah.locator('[data-dock="right"] > [data-widget]').first().getAttribute('data-widget')) === 'vitals');
+    check('health orb shows current / max HP from the sheet (8 / 9)', /8\s*\/\s*9/.test(await vit.getByTestId('orb-health').innerText()));
+    check('the main orb shows weighted spell slots (2 / 2)', /2\s*\/\s*2/.test(await vit.getByTestId('orb-resource').innerText()));
+    await vit.getByRole('button', { name: 'Spend a level 1 slot' }).click();
+    await hannah.waitForTimeout(600);
+    const sl = (await sheet()).resources.find((r) => r.name === 'Spell slots (level 1)');
+    check('spending a spell slot updates the stored count and the orb (1 / 2)', sl.current === 1 && /1\s*\/\s*2/.test(await vit.getByTestId('orb-resource').innerText()) && /L1\s*1\/2/.test(await vit.innerText()));
+    await vit.getByRole('button', { name: /Configure orb resources/ }).click();
+    await vit.getByRole('button', { name: '+ Wild Shape' }).click();
+    await vit.getByLabel('Maximum').fill('2');
+    await vit.getByRole('button', { name: 'Add', exact: true }).click();
+    await hannah.waitForTimeout(600);
+    const ws = (await sheet()).resources.find((r) => r.name === 'Wild Shape');
+    check('a class-suggested resource is added only with the player’s maximum', ws && ws.max === 2 && ws.current === 2);
+    await vit.getByLabel('Second resource', { exact: true }).selectOption({ label: 'Wild Shape' });
+    await vit.getByRole('button', { name: 'Save orb configuration' }).click();
+    await hannah.waitForTimeout(600);
+    check('split orb: spell slots + Wild Shape, each with its own quantity', /Spell slots/i.test(await vit.getByTestId('orb-resource').innerText()) && /Wild Shape/i.test(await vit.getByTestId('orb-resource').innerText()));
+    await hannah.reload();
+    await waitText(hannah, /Playing as Sinna/, 20000);
+    check('resource configuration and counts persist after reload', /Wild Shape/i.test(await hannah.locator('[data-widget="vitals"]').getByTestId('orb-resource').innerText()) && (await sheet()).orbs?.secondary?.type === 'resource');
+    await hannah.screenshot({ path: out + '/e2e-orbs.png' });
+    // movement
+    check('players see the compact movement indicator on the map', /\d+\/8/.test(await hannah.getByTestId('movement-pill').innerText()));
+    check('Willpower is no longer shown prominently in the selection panel', !/Willpower/.test(await hannah.locator('[data-widget="selection"]').innerText()));
+    const before = (await apiFetch(gm, 'state')).body.state.tokens.sinna;
+    const forgedSpeed = await apiFetch(hannah, 'command', { campaignId: cid, requestId: 'e2e-speed-forge', command: { type: 'setWalkingSpeed', tokenId: 'sinna', speedFt: 120 } });
+    check('players cannot change their own walking speed / movement points', forgedSpeed.status === 403);
+    await apiFetch(gm, 'command', { campaignId: cid, requestId: 'e2e-speed-35', command: { type: 'setWalkingSpeed', tokenId: 'sinna', speedFt: 35 } });
+    const after = (await apiFetch(gm, 'state')).body.state.tokens.sinna;
+    check('GM applies walking speed 35 ft → 9 MP/day without refilling current points', after.maxMovePoints === 9 && after.movePoints === Math.min(before.movePoints, 9));
+    check('the movement indicator follows (…/9 MP · 35 ft)', await waitText(hannah, /\/9\s*MP · 35 ft/, 30000));
   }
 
   const jeanReadsSheet = await apiFetch(jean, 'sheet', null, '&token=sinna');

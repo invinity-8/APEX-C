@@ -61,6 +61,27 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3g. Health & resource orbs, movement (v0.5)
+
+- **Health orb:** the sheet's current / max HP (server-authoritative, atomic −1/+1 via the sheet `adjust` action).
+- **Main resource orb:** configurable per character (stored in the sheet as `orbs`): weighted **spell slots** or any
+  sheet resource; an optional **second resource splits the orb** (e.g. Spell Slots + Wild Shape). The numbers are
+  always printed; the liquid only illustrates them. Default when nothing is configured: spell slots if present,
+  otherwise the first non-currency resource.
+- **Weighted spell slots:** a level-N slot weighs N. Orb fill = Σ(N × remaining) / Σ(N × maximum). The per-level
+  counts stay visible and editable (−/+ per level, atomic on the server).
+- **Class suggestions** (Druid → Wild Shape, Cleric/Paladin → Channel Divinity, Sorcerer → Sorcery Points, Monk →
+  Ki/Focus, Fighter → Superiority Dice, Bard → Bardic Inspiration, Barbarian → Rage, Warlock → Pact Magic Slots)
+  only pre-fill a name; the player enters the maximum. Nothing is created automatically.
+- **Willpower (legacy):** no rule uses it any more. It is no longer shown in the selection panel or as an orb; it
+  stays in the game state (archives, old worlds, Will vessels) and is reachable in Character → Resources under
+  "Legacy: Willpower". No data was migrated or deleted.
+- **Movement:** daily movement points = round(8 × walking speed / 30), clamped 4–16
+  (20 ft → 5 · 25 → 7 · **30 → 8** · 35 → 9 · 40 → 11 · 50 → 13 · 60+ → 16). The GM applies a speed
+  (`setWalkingSpeed`, Selection panel); it changes only the **maximum** – current points never increase, so editing
+  the speed cannot refill movement; points are restored at dawn as before. All movement checks stay on the server.
+  Players see a compact movement indicator at the bottom of the map; the gold reach area remains the main display.
+
 ## 3f. Equipment & derived statistics (v0.5)
 
 - **Paper doll** (Character → Equipment, or the player's Equipment widget): Head, Amulet, Cloak, Armor, Gloves,

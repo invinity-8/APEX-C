@@ -12,6 +12,7 @@ import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js'
 import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
 import { advanceDay, advancePhase } from './day.js';
+import { movePointsForSpeed } from './resources.js';
 import { emptyEquipment, equipItem, reconcileEquipment, unequipSlot, type Ability, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
 import { addAnnouncement, applyEvent, eventEligible, postponeEvent, rejectEvent } from './events.js';
 import { stringHash } from './rng.js';
@@ -61,6 +62,7 @@ export type Command =
   | { type: 'invAddContainer'; tokenId: string; containerId: string; name: string }
   | { type: 'invRenameContainer'; tokenId: string; containerId: string; name: string }
   | { type: 'invRemoveContainer'; tokenId: string; containerId: string }
+  | { type: 'setWalkingSpeed'; tokenId: string; speedFt: number }
   // APEX 0.5 – equipment (items stay in the inventory; slots only reference them)
   | { type: 'equipItem'; tokenId: string; itemId: string; slot: EquipSlot }
   | { type: 'unequipSlot'; tokenId: string; slot: EquipSlot }
@@ -211,6 +213,17 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
     case 'advancePhase':
       advancePhase(state);
       break;
+    case 'setWalkingSpeed': {
+      // Daily movement from walking speed (resources.ts). Changing the speed adjusts the MAXIMUM only: the
+      // current points never go up (no refill by editing the speed) – they are restored at dawn as always.
+      const t = state.tokens[cmd.tokenId];
+      if (!t) return fail(prev, T.noSuchToken);
+      t.speedFt = clamp(Math.round(cmd.speedFt), 5, 200);
+      t.maxMovePoints = movePointsForSpeed(t.speedFt);
+      t.movePoints = Math.min(t.movePoints, t.maxMovePoints);
+      addLog(state, 'gm', `${t.name}: walking speed ${t.speedFt} ft → ${t.maxMovePoints} movement points per day.`, 'gm');
+      break;
+    }
     case 'setDay':
       // Correction tool: changes only the clock, without dawn/nightfall effects.
       state.day = clamp(Math.round(cmd.day), 1, 999);

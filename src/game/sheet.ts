@@ -86,8 +86,18 @@ export interface SheetSource {
   format?: string;
 }
 
+/** APEX 0.5 resource orb: weighted spell slots, or one of the sheet's resources. */
+export type OrbSource = { type: 'spellSlots' } | { type: 'resource'; resourceId: string };
+export interface OrbConfig {
+  primary: OrbSource | null;
+  /** Optional second resource → the orb is split in two halves. */
+  secondary: OrbSource | null;
+}
+
 export interface CharacterSheet {
   schema: typeof SHEET_SCHEMA;
+  /** APEX 0.5: which resources the main orb shows (missing = automatic choice). */
+  orbs?: OrbConfig;
   /** Optional – not every system uses hit points. */
   hitPoints: HitPoints | null;
   /** Identity: class & level, background, alignment … */
@@ -240,6 +250,24 @@ export function parseSheet(raw: unknown): SheetParse {
   const notes = raw.notes === undefined ? '' : str(raw.notes, L.notes);
   if (notes === null) return bad('notes');
 
+  let orbs: OrbConfig | undefined;
+  if (raw.orbs !== undefined) {
+    const o = raw.orbs;
+    const one = (v: unknown): OrbSource | null | 'bad' =>
+      v === null || v === undefined
+        ? null
+        : isObj(v) && v.type === 'spellSlots'
+          ? { type: 'spellSlots' }
+          : isObj(v) && v.type === 'resource' && typeof v.resourceId === 'string' && ID_RE.test(v.resourceId)
+            ? { type: 'resource', resourceId: v.resourceId }
+            : 'bad';
+    if (!isObj(o)) return bad('orbs');
+    const primary = one(o.primary);
+    const secondary = one(o.secondary);
+    if (primary === 'bad' || secondary === 'bad') return bad('orbs');
+    orbs = { primary, secondary };
+  }
+
   const src = isObj(raw.source) ? raw.source : {};
   const source: SheetSource = { kind: src.kind === 'pdf' ? 'pdf' : 'manual' };
   const fileName = str(src.fileName, 200);
@@ -259,6 +287,7 @@ export function parseSheet(raw: unknown): SheetParse {
       attributes: attributes as SheetStat[],
       combat: combat as SheetEntry[],
       saves: saves as SheetSkill[],
+      ...(orbs ? { orbs } : {}),
       skills: skills as SheetSkill[],
       attacks: attacks as SheetAttack[],
       resources: resources as SheetResource[],
@@ -296,6 +325,7 @@ export function mergeSheets(existing: CharacterSheet, imported: CharacterSheet):
       : existing.notes;
   return {
     schema: SHEET_SCHEMA,
+    ...(existing.orbs ? { orbs: existing.orbs } : {}), // the player's orb choice survives an import-merge
     hitPoints: imported.hitPoints ?? existing.hitPoints,
     details: mergeList(existing.details, imported.details, (x) => x.label),
     appearance: mergeList(existing.appearance, imported.appearance, (x) => x.label),
