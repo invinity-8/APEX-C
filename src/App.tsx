@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
-import { GmSidebar, type GmSection } from './components/GmSidebar';
+import { CharacterSummary, GmTools, PartyHealth } from './components/PartyWidgets';
+import { Workspace, type WidgetDef } from './workspace/Workspace';
+import { defaultLayout, layoutKey } from './workspace/layout';
 import { AnnouncementsPanel, EventsPanel, GmEventModal } from './components/GmEvents';
 import { AnnouncementHistory, AnnouncementOverlay } from './components/AnnouncementOverlay';
 import { Header } from './components/Header';
@@ -186,30 +188,83 @@ export default function App({ game }: { game: GameApi }) {
     },
     [game, notify],
   );
-  // Sections render lazily (only while open). The array is rebuilt on each render, but every section keeps a
-  // stable key, so open panels keep their component state instead of re-mounting.
-  const gmSections: GmSection[] =
-    isGm && state
-      ? [
-          { id: 'events', title: 'Events', icon: '⚡', keywords: 'approve reject postpone trigger custom library', badge: awaitingCount, render: () => <EventsPanel state={state} run={run} selectedHex={selectedHex} /> },
-          { id: 'announcements', title: 'Announcements', icon: '📣', keywords: 'broadcast message players death warning', render: () => <AnnouncementsPanel state={state} run={run} /> },
-          { id: 'teams', title: 'Rival teams', icon: '⚔', keywords: 'npc rivals visibility strategy', render: () => <TeamsTab state={state} run={run} onSelectToken={selectAndFocus} /> },
-          { id: 'sites', title: 'Sites', icon: '🏛', keywords: 'locations visibility hidden public', render: () => <SitesList state={state} run={run} /> },
-          {
-            id: 'arena',
-            title: 'Time, arena & settings',
-            icon: '⚙',
-            keywords: 'fog vision shrink radius zone seed day night settings',
-            render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} />,
-          },
-          ...(game.online
-            ? [
-                { id: 'world', title: 'World Management', icon: '🌍', keywords: 'archive restore reset new world', render: () => <WorldPanel state={state} online={game.online!} notify={notify} pending={game.pending.includes('world')} /> },
-                { id: 'players', title: 'Players & Access', icon: '👥', keywords: 'password profiles characters login', render: () => <PlayersPanel state={state} online={game.online!} notify={notify} /> },
-              ]
-            : []),
-        ]
-      : [];
+  const selectionPanel = (
+    <SelectionPanel
+      view={view}
+      gmState={isGm ? state : null}
+      selectedTokenId={selectedTokenId}
+      selectedHex={selectedHex}
+      placeMode={placeMode}
+      setPlaceMode={setPlaceMode}
+      run={run}
+      onSelectToken={selectAndFocus}
+      onClear={() => {
+        setSelectedTokenId(null);
+        setSelectedHex(null);
+        setPlaceMode(false);
+      }}
+    />
+  );
+  const advancePhase = useCallback(async () => {
+    const next = view.phase === 'day' ? phaseName('night', view.day) : phaseName('day', view.day + 1);
+    if ((await run({ type: 'advancePhase' })).ok) notify(`${next} begins.`, 'info');
+  }, [run, notify, view.phase, view.day]);
+
+  // Workspace widgets (APEX 0.5). The set is decided by the SERVER-provided role and data: a player's client
+  // never builds GM widget definitions (and never receives GM data), so a stored layout cannot unlock them.
+  // Widgets render lazily (only while expanded); stable ids keep open widgets mounted.
+  const widgets: WidgetDef[] = [];
+  if (isGm && state) {
+    widgets.push(
+      {
+        id: 'gm-tools',
+        title: 'GM Tools',
+        icon: '⚜',
+        render: () => <GmTools state={state} view={view} onAdvance={() => void advancePhase()} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} busy={game.pending.includes('phase') || game.pending.includes('world')} />,
+      },
+      { id: 'party-health', title: 'Party Health', icon: '♥', render: () => <PartyHealth game={game} view={view} onSelect={selectAndFocus} selectedTokenId={selectedTokenId} /> },
+      { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
+      { id: 'events', title: 'Events', icon: '⚡', badge: awaitingCount, render: () => <EventsPanel state={state} run={run} selectedHex={selectedHex} /> },
+      { id: 'announcements', title: 'Announcements', icon: '📣', render: () => <AnnouncementsPanel state={state} run={run} /> },
+      { id: 'character-summary', title: 'Character Summary', icon: '📜', render: () => <CharacterSummary game={game} token={selectedToken?.kind === 'player' ? selectedToken : (playerTokens[0] ?? null)} /> },
+      { id: 'teams', title: 'Rival Teams', icon: '⚔', render: () => <TeamsTab state={state} run={run} onSelectToken={selectAndFocus} /> },
+      { id: 'sites', title: 'Sites', icon: '🏛', render: () => <SitesList state={state} run={run} /> },
+      {
+        id: 'settings',
+        title: 'Time, Arena & Settings',
+        icon: '⚙',
+        render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} />,
+      },
+    );
+    if (game.online) {
+      const online = game.online;
+      widgets.push(
+        { id: 'world', title: 'World Management', icon: '🌍', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
+        { id: 'players', title: 'Players & Access', icon: '👥', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
+      );
+    }
+  } else {
+    const me = view.tokens.find((t) => t.id === view.viewerId) ?? null;
+    widgets.push(
+      { id: 'my-character', title: 'My Character', icon: '📜', render: () => <CharacterSummary game={game} token={me} /> },
+      { id: 'party', title: 'Party', icon: '⚑', render: () => <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} /> },
+      { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
+      { id: 'intel', title: 'Intelligence', icon: '👁', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
+      { id: 'notifications', title: 'Notifications', icon: '📣', render: () => <AnnouncementHistory announcements={view.announcements} open /> },
+      { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} embedded /> : null) },
+    );
+  }
+  const role = isGm ? 'gm' : 'player';
+  const defaults = useMemo(
+    () =>
+      role === 'gm'
+        ? defaultLayout(
+            { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'] },
+            ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'],
+          )
+        : defaultLayout({ right: ['my-character', 'party', 'selection', 'intel', 'notifications'] }, ['notifications'], ['inventory']),
+    [role],
+  );
 
   const tabs: Array<{ id: View; label: string }> = [
     { id: 'map', label: '🗺 Map' },
@@ -253,10 +308,7 @@ export default function App({ game }: { game: GameApi }) {
       <Header
         game={game}
         notify={notify}
-        onAdvancePhase={async () => {
-          const next = view.phase === 'day' ? phaseName('night', view.day) : phaseName('day', view.day + 1);
-          if ((await run({ type: 'advancePhase' })).ok) notify(`${next} begins.`, 'info');
-        }}
+        onAdvancePhase={() => void advancePhase()}
       />
       <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Player navigation">
         {tabs.map((t) => (
@@ -311,8 +363,13 @@ export default function App({ game }: { game: GameApi }) {
           )}
         </div>
       )}
-      <main className={`min-h-0 flex-1 flex-col lg:flex-row ${screen === 'map' ? 'flex' : 'hidden'}`}>
-        <div className="relative h-[65vh] min-h-[420px] flex-1 lg:h-auto">
+      <div className={`min-h-0 flex-1 ${screen === 'map' ? 'flex' : 'hidden'}`}>
+        <Workspace
+          widgets={widgets}
+          defaults={defaults}
+          storageKey={layoutKey(announceScope, role)}
+          center={
+        <>
           <ArenaMap
             mapRef={mapRef}
             view={view}
@@ -344,35 +401,11 @@ export default function App({ game }: { game: GameApi }) {
               {toast.text}
             </div>
           )}
-        </div>
+        </>
 
-        <aside className="w-full space-y-3 overflow-y-auto border-gold-700/30 p-3 lg:w-[380px] lg:border-l xl:w-[400px]">
-          <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} />
-          <SelectionPanel
-            view={view}
-            gmState={isGm ? state : null}
-            selectedTokenId={selectedTokenId}
-            selectedHex={selectedHex}
-            placeMode={placeMode}
-            setPlaceMode={setPlaceMode}
-            run={run}
-            onSelectToken={selectAndFocus}
-            onClear={() => {
-              setSelectedTokenId(null);
-              setSelectedHex(null);
-              setPlaceMode(false);
-            }}
-          />
-          {isGm && state ? (
-            <GmSidebar sections={gmSections} storageKey={announceScope} />
-          ) : (
-            <>
-              <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} />
-              <AnnouncementHistory announcements={view.announcements} />
-            </>
-          )}
-        </aside>
-      </main>
+          }
+        />
+      </div>
     </div>
   );
 }

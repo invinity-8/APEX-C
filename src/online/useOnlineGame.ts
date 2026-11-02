@@ -431,6 +431,7 @@ export function useOnlineGame(
       load: (tokenId) => sheetCall(() => api.sheet(tokenId)),
       save: (tokenId, sheet, expectedVersion, reason) => sheetCall(() => api.saveSheet(tokenId, sheet, expectedVersion, reason)),
       adjust: (tokenId, target, delta, resourceId) => sheetCall(() => api.adjustSheet(tokenId, target, delta, resourceId)),
+      party: () => api.party().then((r) => r.members, () => []),
     }),
     [sheetCall, sheetRevision],
   );

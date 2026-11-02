@@ -52,6 +52,7 @@ import type {
   PublicProfile,
   SessionInfo,
   SheetPayload,
+  PartyVital,
   WireView,
 } from './protocol.js';
 import { WorldConflictError, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
@@ -152,6 +153,8 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
         return await portraitRedirect(user, req.query.token, repo);
       case 'GET sheet':
         return ok(await getSheet(user, req.query.token, repo));
+      case 'GET party':
+        return ok(await partyVitals(user, repo));
       case 'POST sheet':
         return ok(await runSheet(user, req.body, repo));
       default:
@@ -671,6 +674,24 @@ function sheetAccess(user: AuthUser, tokenId: unknown, state: GameState | null):
     throw new HttpError(403, 'You can only open your own character sheet.', 'forbidden');
   }
   return tokenId;
+}
+
+/**
+ * Party Health (APEX 0.5): current / max HP of the player characters in ONE request (two DB queries).
+ * The GM receives every player character; a player only their own character(s) – no hidden data leaks.
+ */
+async function partyVitals(user: AuthUser, repo: Repo): Promise<{ members: PartyVital[] }> {
+  const state = (await repo.loadState(user.campaignId))?.state ?? null;
+  if (!state) return { members: [] };
+  const vitals = await repo.loadSheetVitals(user.campaignId);
+  const members = Object.values(state.tokens)
+    .filter((t) => t.kind === 'player' && (user.role === 'gm' || user.tokenIds.includes(t.id)))
+    .map((t) => {
+      const hp = vitals[t.id] as { current?: unknown; max?: unknown; temp?: unknown } | null | undefined;
+      const valid = hp && Number.isFinite(hp.current) && Number.isFinite(hp.max);
+      return { tokenId: t.id, hp: valid ? { current: Number(hp.current), max: Number(hp.max), temp: Number(hp.temp) || 0 } : null };
+    });
+  return { members };
 }
 
 async function getSheet(user: AuthUser, tokenId: unknown, repo: Repo): Promise<SheetPayload> {

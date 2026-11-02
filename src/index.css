@@ -238,3 +238,40 @@
 .apex-version-details a { color: var(--apex-highlight); text-decoration: underline; }
 .apex-version-warn { margin-top: 8px; color: #f3c6c4; background: rgba(142, 47, 47, .35); border-radius: 6px; padding: 6px; }
 @media (max-width: 640px) { .apex-version-line2 { display: none; } }
+
+/* ---------------------------------------------------------------- APEX 0.5 modular workspace */
+.ws-root { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.ws-center { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
+.ws-map { position: relative; height: 65vh; min-height: 420px; }
+.ws-dock { display: flex; flex-direction: column; gap: 10px; padding: 10px; position: relative; }
+.ws-dock-bottom { flex-direction: column; }
+.ws-widget { overflow: visible; }
+.ws-body { padding: 10px 12px; }
+.ws-handle { cursor: default; user-select: none; }
+.ws-icon { display: inline-flex; height: 22px; width: 22px; align-items: center; justify-content: center; border-radius: 6px; color: var(--apex-text-muted); }
+.ws-icon:hover { background: var(--apex-hover); color: var(--apex-highlight); }
+.ws-menu { position: absolute; z-index: 30; top: 100%; right: 0; min-width: 210px; margin-top: 4px; padding: 4px; border-radius: 10px;
+  border: 1px solid var(--apex-border-strong); background: #15181b; box-shadow: 0 14px 30px -10px rgba(0,0,0,.85); }
+.ws-menu-item { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 6px; font-size: 12px; color: var(--apex-text); }
+.ws-menu-item:hover:not(:disabled) { background: var(--apex-hover); color: var(--apex-highlight); }
+.ws-menu-item:disabled { opacity: .35; }
+.ws-widget-menu { position: absolute; top: 12px; right: 12px; z-index: 20; }
+.ws-drop-line { height: 3px; border-radius: 2px; background: var(--apex-gold); box-shadow: 0 0 8px var(--apex-gold); }
+.ws-dock-bottom .ws-drop-line { height: auto; width: 3px; }
+.ws-drop-empty { border: 1px dashed var(--apex-border-strong); border-radius: 10px; padding: 18px 10px; text-align: center; font-size: 11px; color: var(--apex-text-muted); }
+.ws-dock-dragging { outline: 1px dashed rgba(192,155,88,.35); outline-offset: -4px; border-radius: 12px; }
+.ws-resize { display: none; }
+@media (min-width: 1024px) {
+  .ws-root { flex-direction: row; height: 100%; }
+  .ws-map { flex: 1; height: auto; min-height: 0; }
+  .ws-dock-left, .ws-dock-right { width: var(--dock-size); flex: none; overflow-y: auto; }
+  .ws-dock-right { border-left: 1px solid rgba(192,155,88,.22); }
+  .ws-dock-left { border-right: 1px solid rgba(192,155,88,.22); }
+  .ws-dock-bottom { height: var(--dock-size); flex: none; flex-direction: row; overflow-x: auto; border-top: 1px solid rgba(192,155,88,.22); }
+  .ws-dock-bottom > .ws-widget { width: 340px; flex: none; overflow-y: auto; }
+  .ws-resize { display: block; position: absolute; z-index: 5; background: transparent; }
+  .ws-resize:hover, .ws-resize:focus-visible { background: rgba(192,155,88,.35); }
+  .ws-resize-left { top: 0; bottom: 0; right: -3px; width: 6px; cursor: col-resize; }
+  .ws-resize-right { top: 0; bottom: 0; left: -3px; width: 6px; cursor: col-resize; }
+  .ws-resize-bottom { left: 0; right: 0; top: -3px; height: 6px; cursor: row-resize; }
+}

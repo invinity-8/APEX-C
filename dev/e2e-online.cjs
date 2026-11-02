@@ -66,7 +66,7 @@ const apiFetch = (page, op, body, query = '') =>
   );
 
 const openGm = async (page, id) => {
-  const head = page.locator(`[data-gm-section="${id}"] button[aria-expanded]`);
+  const head = page.locator(`[data-widget="${id}"] .ws-handle > button[aria-expanded]`);
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
 };
 
@@ -187,7 +187,7 @@ const waitText = (page, re, timeout = 10000) =>
   check('player state contains no hidden map data', !/"seed"|gmNotes|"mapRadius":\d/.test(leak));
 
   // ---------- character sheet + PDF import (real Aurora sample) ----------
-  await hannah.getByRole('button', { name: /Character$/ }).click();
+  await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
   await hannah.getByRole('button', { name: /Import Character Sheet/ }).click();
   await hannah.getByLabel('Choose a PDF file').setInputFiles(path.join(FIX, 'not-a-pdf.pdf'));
   check('non-PDF files are rejected by content', await waitText(hannah, /This is not a PDF file/));
@@ -212,7 +212,7 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.getByRole('button', { name: /Save character sheet/ }).click();
   check('imported sheet is saved', await waitText(hannah, /Imported character sheet saved|Level 1 Kor Druid/, 15000));
   await hannah.reload();
-  await hannah.getByRole('button', { name: /Character$/ }).click();
+  await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
   await hannah.getByRole('tab', { name: 'Overview' }).click();
   check('imported data persists after refreshing (overview: build, HP 9/9, 5 prepared)', (await waitText(hannah, /Level 1 Kor Druid/, 15000)) && (await waitText(hannah, /9 \/ 9/)) && (await waitText(hannah, /5 prepared/)));
   await hannah.screenshot({ path: out + '/e2e-character.png', fullPage: true });
@@ -233,7 +233,7 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.getByLabel('Score').first().fill('12');
   await hannah.getByRole('button', { name: 'Save changes' }).click();
   await hannah.reload();
-  await hannah.getByRole('button', { name: /Character$/ }).click();
+  await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
   await hannah.getByRole('tab', { name: 'Attributes & Skills' }).click();
   const strNow = (await apiFetch(hannah, 'sheet', null, '&token=sinna')).body.sheet.attributes[0];
   check('manual edit persists after refresh (Strength 11 → 12)', strNow.name === 'Strength' && strNow.value === '12');
@@ -271,7 +271,7 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.screenshot({ path: out + '/e2e-appearance.png', fullPage: true });
   // ---------- top-level inventory still works ----------
   // ---------- inventory ----------
-  await hannah.getByRole('button', { name: /Inventory/ }).click();
+  await hannah.getByRole('button', { name: '🎒 Inventory', exact: true }).click();
   check('equipment from the PDF was added to the inventory (no duplicates)', (await waitText(hannah, /Breastplate/)) && (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.inventory.filter((i) => i.name === 'Breastplate').length === 1);
   await hannah.getByPlaceholder(/Old iron key/).fill('Old iron key, wrapped in red cloth');
   await hannah.getByRole('button', { name: '+ Add' }).click();
@@ -300,10 +300,10 @@ const waitText = (page, re, timeout = 10000) =>
   await gm.getByLabel('Notes').fill('GM note: owes the Gamemakers a favour.');
   await gm.getByRole('button', { name: 'Save changes' }).click();
   check('the GM edits the sheet', await waitText(gm, /owes the Gamemakers/));
-  await hannah.getByRole('button', { name: /Character$/ }).click();
+  await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
   await hannah.getByRole('tab', { name: 'Notes' }).click();
   check('GM edit reaches Hannah’s device (live/poll)', await waitText(hannah, /owes the Gamemakers/, 30000));
-  await gm.getByRole('button', { name: /Inventory/ }).click();
+  await gm.getByRole('button', { name: '🎒 Inventory', exact: true }).click();
   check('the GM sees Hannah’s inventory', await waitText(gm, /Old iron key/));
   await gm.screenshot({ path: out + '/e2e-gm-inventory.png', fullPage: true });
 
@@ -395,6 +395,53 @@ const waitText = (page, re, timeout = 10000) =>
     await gm.screenshot({ path: out + '/e2e-gm-events.png', fullPage: true });
   }
 
+  // ---------- Modular workspace (APEX 0.5) ----------
+  {
+    await gm.getByRole('button', { name: /Map/ }).first().click();
+    const order = (dock) => gm.locator(`[data-dock="${dock}"] > [data-widget]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-widget')));
+    check('GM Tools is at the top of the right dock by default', (await order('right'))[0] === 'gm-tools');
+    check('Party Health replaces the movement-points party list for the GM', (await gm.locator('[data-widget="party-health"]').count()) === 1 && (await gm.locator('[data-widget="party"]').count()) === 0);
+    check('Party Health shows Sinna’s current / max HP', await gm.locator('[data-party-member="sinna"]').innerText().then((t) => /8 \/ 9 HP/.test(t), () => false));
+    const menu = async (id, item) => {
+      await gm.locator(`[data-widget="${id}"] [aria-haspopup=menu]`).click();
+      await gm.getByRole('menuitem', { name: item }).click();
+    };
+    await menu('party-health', 'Move to left dock');
+    check('a widget moves to the left dock (keyboard-accessible menu)', (await order('left')).includes('party-health') && !(await order('right')).includes('party-health'));
+    await menu('selection', /Move down/);
+    const r1 = await order('right');
+    check('widgets reorder within a dock', r1.indexOf('selection') > r1.indexOf('events'));
+    await gm.locator('[data-widget="events"] .ws-handle > button[aria-expanded]').click();
+    check('a widget collapses (body unmounted)', (await gm.locator('[data-widget="events"] .ws-body').count()) === 0);
+    await gm.getByRole('button', { name: 'Hide Sites' }).click();
+    check('a widget can be hidden', (await gm.locator('[data-widget="sites"]').count()) === 0);
+    // drag & drop: GM Tools → bottom of the left dock
+    const src = gm.locator('[data-widget="gm-tools"] .ws-handle');
+    const dst = gm.locator('[data-dock="left"]');
+    await src.dragTo(dst, { targetPosition: { x: 40, y: 300 } });
+    check('drag and drop moves a widget between docks', (await order('left')).includes('gm-tools'));
+    await gm.waitForTimeout(600); // debounced local save
+    await gm.reload();
+    await waitText(gm, /Game Master/, 20000);
+    check('the layout persists across reloads', (await order('left')).includes('party-health') && (await gm.locator('[data-widget="sites"]').count()) === 0);
+    await gm.getByRole('button', { name: /☰ Widgets/ }).click();
+    await gm.getByRole('menuitem', { name: /Sites/ }).click();
+    check('a hidden widget is restored from the Widgets menu', (await gm.locator('[data-widget="sites"]').count()) === 1);
+    await gm.getByRole('button', { name: /☰ Widgets/ }).click();
+    await gm.getByRole('menuitem', { name: /Reset workspace/ }).click();
+    check('Reset workspace restores the default layout', (await order('right'))[0] === 'gm-tools' && (await order('left')).length === 0);
+    await gm.screenshot({ path: out + '/e2e-workspace-gm.png' });
+    // players: GM widgets cannot be unlocked through the stored layout
+    await hannah.evaluate(() => {
+      for (const k of Object.keys(localStorage)) if (k.startsWith('apex.workspace.v1.player.')) localStorage.setItem(k, JSON.stringify({ v: 1, docks: { left: ['world', 'players', 'events'], right: ['gm-tools', 'my-character'], bottom: [] }, hidden: [], collapsed: [] }));
+    });
+    await hannah.reload();
+    await waitText(hannah, /Playing as Sinna/, 20000);
+    const hw = await hannah.locator('[data-widget]').evaluateAll((els) => els.map((e) => e.getAttribute('data-widget')));
+    check('players cannot reach GM widgets, even with a forged stored layout', hw.includes('my-character') && !hw.some((w) => ['world', 'players', 'events', 'gm-tools', 'party-health'].includes(w)));
+    await hannah.screenshot({ path: out + '/e2e-workspace-player.png' });
+  }
+
   // ---------- GM password management ----------
   if (MOCK) {
     await gm.getByRole('button', { name: /Map/ }).click();
@@ -419,7 +466,7 @@ const waitText = (page, re, timeout = 10000) =>
   {
     await gm.getByRole('button', { name: /Map/ }).first().click();
     await openGm(gm, 'world');
-    const wp = gm.locator('[data-gm-section="world"]');
+    const wp = gm.locator('[data-widget="world"]');
     const hannahWorld = async () => (await apiFetch(hannah, 'state')).body?.view?.worldName;
     const before = (await apiFetch(gm, 'state')).body.state;
     // player cannot manage worlds
