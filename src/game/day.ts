@@ -9,9 +9,10 @@
  *  - Night applies the configured vision modifier (default −1, minimum 1).
  *  - The shrinking arena is evaluated only at dawn, based on the day number,
  *    so one day can never cause a double shrink step.
- *  - Events can fire at the dawn of a day (trigger 'day') or at a specific phase (trigger 'phase').
+ *  - Events become due at the dawn of a day (trigger 'day') or at a specific phase (trigger 'phase').
+ *    Due events wait for the GM's approval (see events.ts) – no effect is applied automatically.
  */
-import { applyEvent, firesAt } from './events.js';
+import { markDueEvents } from './events.js';
 import { addLog } from './log.js';
 import { T } from './text.js';
 import { refreshAllKnowledge } from './visibility.js';
@@ -64,10 +65,9 @@ function beginDay(state: GameState): void {
   refreshAllKnowledge(state);
 }
 
+/** Due events are only PREPARED (awaiting GM approval) – never applied automatically. */
 function fireEvents(state: GameState): void {
-  for (const ev of Object.values(state.events)) {
-    if (firesAt(ev, state.day, state.phase)) applyEvent(state, ev.id);
-  }
+  markDueEvents(state);
 }
 
 /** Advances exactly one phase. Mutates `state` (call on a copy). */

@@ -58,26 +58,57 @@ describe('Day & night cycle', () => {
     expect(s.tokens.elwin.visionBonus).toBe(0);
   });
 
-  it('day-bound events fire automatically at dawn', () => {
+  it('day-bound events become due at dawn but wait for GM approval (no effect before)', () => {
     let s = createDemoState({ radius: 12 });
     const floodKey = s.events.flood.hexes[0];
-    expect(s.hexes[floodKey].terrain).not.toBe('water');
+    const terrainBefore = s.hexes[floodKey].terrain;
+    expect(terrainBefore).not.toBe('water');
     s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Night 1
     expect(s.events.flood.status).toBe('pending');
     s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Day 2
+    expect(s.events.flood.status).toBe('awaiting');
+    expect(s.events.flood.dueAt).toEqual({ day: 2, phase: 'day' });
+    expect(s.hexes[floodKey].terrain).toBe(terrainBefore); // NOT applied
+    expect(buildPlayerView(s, 'sinna').log.some((l) => /Aqueduct/.test(l.text))).toBe(false); // players learn nothing yet
+    // the GM approves → applied exactly once
+    s = executeCommand(s, GM, { type: 'decideEvent', eventId: 'flood', decision: 'approve' }).state;
     expect(s.events.flood.status).toBe('done');
     expect(s.hexes[floodKey].terrain).toBe('water');
+    expect(executeCommand(s, GM, { type: 'decideEvent', eventId: 'flood', decision: 'approve' }).ok).toBe(false);
+    // the next dawn event is again only prepared
     s = executeCommand(s, GM, { type: 'endDay' }).state; // Day 3
-    expect(s.sites['donum-imperatoris'].visibility).toBe('public');
-    expect(buildPlayerView(s, 'sinna').sites.some((x) => x.id === 'donum-imperatoris')).toBe(true);
+    expect(s.events.reveal?.status ?? Object.values(s.events).find((e) => e.effects.some((x) => x.type === 'revealSite'))?.status).toBe('awaiting');
+    expect(s.sites['donum-imperatoris'].visibility).not.toBe('public');
   });
 
-  it('phase-bound events fire when that phase begins', () => {
+  it('phase-bound events become due when that phase begins; rejected events never apply', () => {
     let s = flatState();
     s.events.willstorm.trigger = { type: 'phase', day: 1, phase: 'night' };
     s = executeCommand(s, GM, { type: 'advancePhase' }).state;
-    expect(s.events.willstorm.status).toBe('done');
-    expect(s.tokens.sinna.movePoints).toBe(6);
+    expect(s.events.willstorm.status).toBe('awaiting');
+    expect(s.tokens.sinna.movePoints).toBe(8);
+    s = executeCommand(s, GM, { type: 'decideEvent', eventId: 'willstorm', decision: 'reject' }).state;
+    expect(s.events.willstorm.status).toBe('rejected');
+    expect(s.tokens.sinna.movePoints).toBe(8);
+    expect(executeCommand(s, GM, { type: 'triggerEvent', eventId: 'willstorm' }).ok).toBe(false);
+    // advancing time does not regenerate it
+    s = executeCommand(s, GM, { type: 'advancePhase' }).state;
+    expect(s.events.willstorm.status).toBe('rejected');
+  });
+
+  it('postponed events become due again at the next phase; awaiting events survive phase changes', () => {
+    let s = flatState();
+    s.events.willstorm.trigger = { type: 'phase', day: 1, phase: 'night' };
+    s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Night 1 – awaiting
+    s = executeCommand(s, GM, { type: 'decideEvent', eventId: 'willstorm', decision: 'postpone', postpone: 'nextPhase' }).state;
+    expect(s.events.willstorm).toMatchObject({ status: 'postponed', postponedTo: { day: 2, phase: 'day' } });
+    s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Day 2
+    expect(s.events.willstorm.status).toBe('awaiting');
+    s = executeCommand(s, GM, { type: 'advancePhase' }).state; // Night 2 – still awaiting, not applied, not duplicated
+    expect(s.events.willstorm.status).toBe('awaiting');
+    expect(s.log.filter((l) => /Event due: “Willstorm|Event due/.test(l.text) && /willstorm/i.test(l.text)).length).toBeLessThanOrEqual(2);
+    s = executeCommand(s, GM, { type: 'decideEvent', eventId: 'willstorm', decision: 'approve', edits: { name: 'Storm of Wills' } }).state;
+    expect(s.events.willstorm).toMatchObject({ status: 'done', name: 'Storm of Wills' });
   });
 
   it('manual events can be triggered exactly once', () => {

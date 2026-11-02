@@ -24,6 +24,7 @@ import type {
   WillPool,
   InventoryContainer,
   MarkerStyle,
+  Announcement,
 } from './types.js';
 import { containersOf } from './inventory.js';
 
@@ -184,6 +185,8 @@ export interface ViewModel {
   sites: SiteView[];
   trackers: TrackerView[];
   log: LogEntry[];
+  /** Arena Announcements (public by definition; the newest 20). */
+  announcements: Announcement[];
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -266,6 +269,7 @@ export function buildGmView(state: GameState): ViewModel {
     sites: Object.values(state.sites).map((s) => ({ ...s })),
     trackers: trackersOf(state),
     log: state.log.slice(),
+    announcements: (state.announcements ?? []).slice(-20),
   };
 }
 
@@ -384,5 +388,6 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     sites,
     trackers: trackersOf(state),
     log: state.log.filter((e) => e.audience === 'all'),
+    announcements: (state.announcements ?? []).slice(-20),
   };
 }

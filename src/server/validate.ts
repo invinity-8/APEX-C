@@ -6,6 +6,7 @@
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { MARKER_STYLES } from '../game/types.js';
+import { TERRAIN_ORDER } from '../game/terrain.js';
 
 type Obj = Record<string, unknown>;
 
@@ -61,6 +62,36 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'triggerEvent':
       if (!isId(c.eventId)) return bad('eventId');
       return { ok: true, command: { type: 'triggerEvent', eventId: c.eventId } };
+    case 'decideEvent': {
+      if (!isId(c.eventId) || !oneOf(c.decision, ['approve', 'reject', 'postpone'] as const)) return bad('eventId/decision');
+      if (c.postpone !== undefined && !oneOf(c.postpone, ['nextPhase', 'nextDay'] as const)) return bad('postpone');
+      const cmd: Record<string, unknown> = { type: 'decideEvent', eventId: c.eventId, decision: c.decision };
+      if (c.postpone !== undefined) cmd.postpone = c.postpone;
+      if (c.edits !== undefined) {
+        if (!isObj(c.edits)) return bad('edits');
+        const e = c.edits;
+        if ((e.name !== undefined && !isText(e.name, 80)) || (e.description !== undefined && !isText(e.description, 1000)) || (e.announce !== undefined && typeof e.announce !== 'boolean')) return bad('edits');
+        cmd.edits = { ...(e.name !== undefined ? { name: e.name } : {}), ...(e.description !== undefined ? { description: e.description } : {}), ...(e.announce !== undefined ? { announce: e.announce } : {}) };
+      }
+      return { ok: true, command: cmd as Command };
+    }
+    case 'createEvent': {
+      if (!isId(c.eventId) || !isText(c.name, 80) || !isText(c.description, 1000) || typeof c.announce !== 'boolean') return bad('event');
+      if (!Array.isArray(c.hexes) || c.hexes.length > 400 || !c.hexes.every((k) => typeof k === 'string' && /^-?\d{1,3},-?\d{1,3}$/.test(k))) return bad('hexes');
+      if (!Array.isArray(c.effects) || !c.effects.length || c.effects.length > 5) return bad('effects');
+      const effects: unknown[] = [];
+      for (const e of c.effects) {
+        if (!isObj(e)) return bad('effect');
+        if (e.type === 'setTerrain' && oneOf(e.terrain, TERRAIN_ORDER)) effects.push({ type: 'setTerrain', terrain: e.terrain });
+        else if (e.type === 'revealSite' && isId(e.siteId)) effects.push({ type: 'revealSite', siteId: e.siteId });
+        else if (e.type === 'modifyMovePoints' && isInt(e.amount, 20)) effects.push({ type: 'modifyMovePoints', amount: e.amount });
+        else return bad('effect');
+      }
+      return { ok: true, command: { type: 'createEvent', eventId: c.eventId, name: c.name, description: c.description, hexes: c.hexes as string[], effects, announce: c.announce } as Command };
+    }
+    case 'announce':
+      if (!oneOf(c.category, ['general', 'warning', 'death', 'world', 'custom'] as const) || !isText(c.title, 80) || !c.title.trim() || !isText(c.text, 500)) return bad('announcement');
+      return { ok: true, command: { type: 'announce', category: c.category, title: c.title, text: c.text } };
     case 'setShrink': {
       if (c.enabled !== undefined && typeof c.enabled !== 'boolean') return bad('enabled');
       if (c.mode !== undefined && !oneOf(c.mode, ['danger', 'closed'] as const)) return bad('mode');

@@ -196,6 +196,19 @@ Alle Spieler werden automatisch auf die neue Welt umgestellt und bekommen einen 
 - **Appearance**: Porträt hochladen (zoomen und verschieben), Titel unter dem Namen, Haupt- und Akzentfarbe sowie Marker-Form wählen.
   Das ist rein kosmetisch und gibt keinerlei Rechte.
 
+## Teil J – Ereignisse und Ansagen (Spielleiter)
+
+1. Wird ein geplantes Ereignis fällig (z. B. „Morgen von Tag 2“), passiert **noch nichts**. Beim Spielleiter öffnet
+   sich ein Fenster in der Bildmitte mit Vorschau: **Approve & Trigger** (auslösen), **Reject** (verwerfen),
+   **Postpone** (auf die nächste Phase oder den nächsten Tag verschieben) oder **Edit** (Name/Text ändern).
+2. „Decide later“ schließt das Fenster nur; das Ereignis wartet in der Seitenleiste unter **Events** (gelbe Zahl).
+3. Unter **Events** gibt es auch alle anderen Ereignisse (Suche, Filter) und „Create custom event“ für eigene
+   Ereignisse. Auch diese werden erst nach „Approve & Trigger“ wirksam.
+4. Unter **Announcements** schreibt der Spielleiter eine Ansage (Kategorie, Überschrift, Text), prüft sie mit
+   **Preview** und sendet sie mit **Broadcast to all players**. Sie erscheint groß in der Mitte jedes Spieler-
+   bildschirms – auch bei Spielern, die gerade offline sind, sobald sie wieder online kommen.
+5. Die Seitenleiste merkt sich, welche Bereiche offen sind; mit ☆ lassen sich Bereiche oben anheften.
+
 ## Teil G – Neue Spieler später freischalten
 
 1. Als Spielleiter anmelden → **Players & Access** → **Profiles**.

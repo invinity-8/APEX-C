@@ -2,9 +2,10 @@
  * PDF extraction core, independent of how pdf.js is loaded – the browser (extract.ts) and the
  * Node regression tests (tests/aurora.test.ts with the real sinna.pdf) run exactly this code.
  */
-import type { Extracted } from './map';
+import type { Extracted, PositionedText } from './map';
 
 const MAX_PAGES = 30;
+const MAX_ITEMS_PER_PAGE = 5000;
 
 /** Minimal surface of pdf.js that we use (keeps this module free of a hard pdf.js import). */
 export interface PdfjsLike {
@@ -60,6 +61,7 @@ export async function extractWithPdfjs(pdfjs: PdfjsLike, bytes: Uint8Array): Pro
 
     const pages = Math.min(doc.numPages, MAX_PAGES);
     const pageTexts: string[] = [];
+    const positioned: PositionedText[][] = [];
     for (let p = 1; p <= pages; p++) {
       const page = await doc.getPage(p);
       try {
@@ -71,9 +73,14 @@ export async function extractWithPdfjs(pdfjs: PdfjsLike, bytes: Uint8Array): Pro
       }
       const tc = await page.getTextContent();
       const lines: string[] = [];
+      const placed: PositionedText[] = [];
       let line = '';
-      for (const item of tc.items as Array<{ str?: string; hasEOL?: boolean }>) {
+      for (const item of tc.items as Array<{ str?: string; hasEOL?: boolean; transform?: number[]; width?: number; height?: number }>) {
         if (typeof item.str !== 'string') continue;
+        // Position of every text run (page coordinates) – lets printed / flattened Aurora sheets be read by layout.
+        if (!item.str.trim() && item.hasEOL && placed.length) placed[placed.length - 1].eol = true;
+        else if (item.str.trim() && Array.isArray(item.transform) && placed.length < MAX_ITEMS_PER_PAGE)
+          placed.push({ str: item.str, x: item.transform[4], y: item.transform[5], w: item.width ?? 0, h: item.height || Math.abs(item.transform[3]) || 8, eol: !!item.hasEOL });
         line += item.str;
         if (item.hasEOL) {
           lines.push(line);
@@ -81,10 +88,11 @@ export async function extractWithPdfjs(pdfjs: PdfjsLike, bytes: Uint8Array): Pro
         } else line += ' ';
       }
       if (line.trim()) lines.push(line);
+      positioned.push(placed);
       pageTexts.push(lines.map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n').slice(0, 60_000));
     }
     const text = pageTexts.join('\n\n').replace(/\n{3,}/g, '\n\n').slice(0, 200_000);
-    return { fields, checkboxes, text, pageTexts, pages: doc.numPages };
+    return { fields, checkboxes, text, pageTexts, positioned, pages: doc.numPages };
   } finally {
     void task.destroy();
   }
