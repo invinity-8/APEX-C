@@ -2,7 +2,7 @@
  * Health & resource orbs (APEX 0.5) – original APEX artwork: a glass sphere in a bronze-and-gold ring with a
  * slowly rising/falling liquid. Health is Centurion-red, the main resource deep imperial blue, a second
  * resource splits the orb into two halves. The numbers are always shown as text; the fill only illustrates
- * them. Fill changes animate over 600 ms; the surface sway is off with prefers-reduced-motion (CSS).
+ * them. Only value changes animate (600 ms; none with prefers-reduced-motion) – no endless animation (measured cost).
  */
 import { useCallback, useEffect, useId, useState } from 'react';
 import { effectiveOrbs, orbValue, spellSlotLevels, suggestedResources, walkingSpeed, movePointsForSpeed, type OrbValue } from '../game/resources';

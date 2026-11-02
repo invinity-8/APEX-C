@@ -396,7 +396,7 @@ type InventoryCommand = Extract<Command, { type: 'invAddItem' | 'invUpdateItem' 
  * inventories are private to the owner and the GM).
  */
 function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult {
-  const state: GameState = structuredClone(prev);
+  const state = cloneOneToken(prev, cmd.tokenId);
   const t = state.tokens[cmd.tokenId];
   materializeInventory(t);
   const containers = t.containers!;
@@ -494,7 +494,7 @@ const EQUIP_ERROR: Record<EquipError, string> = {
 
 /** Equipment changes: private to the owner and the GM (no log, no knowledge refresh). */
 function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand): CommandResult {
-  const state: GameState = structuredClone(prev);
+  const state = cloneOneToken(prev, cmd.tokenId);
   const t = state.tokens[cmd.tokenId];
   if (t.kind !== 'player') return fail(prev, T.noSuchToken);
   const eq = () => (t.equipment ??= emptyEquipment());
@@ -536,4 +536,13 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
     }
   }
   return { ok: true, state };
+}
+
+/**
+ * Character-only commands touch exactly one token: copy that token deeply and share everything else (hexes,
+ * knowledge …) with the previous state. Safe because every command clones before it mutates; it turns a
+ * ~27 ms full-state clone on a radius-78 world into well under a millisecond.
+ */
+function cloneOneToken(prev: GameState, tokenId: string): GameState {
+  return { ...prev, tokens: { ...prev.tokens, [tokenId]: structuredClone(prev.tokens[tokenId]) } };
 }

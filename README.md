@@ -61,6 +61,23 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3h. Visual evolution & Spline assets (v0.5)
+
+- **Spline scene "APEX Imperial Asset Kit"** (original, built procedurally in the owner's Spline account):
+  Aquila Aurea monument on a stepped labyrinth plinth, ring of weathered columns (two broken), aqueduct arches,
+  Centurion-red banners with gold bars, meadow, trees, rocks and fallen column drums. Exported as
+  `public/assets/spline/aquila-aurea.splinecode` (128 KB, served from our origin) plus an 8 KB WebP poster.
+- **Welcome hero:** the poster shows immediately; the Spline runtime (lazy chunk, ~950 KB–1.4 MB transferred)
+  loads only on capable devices (no reduced motion, no Save-Data, ≥ 4 threads / ≥ 4 GB, WebGL) when the hero is
+  visible, and is disposed when leaving the welcome screen. The game never depends on Spline.
+- **Map atmosphere** (`AtmosphereCanvas`): world-anchored drifting fog banks, warm day / cool night tint and a
+  vignette, as a pointer-transparent overlay – hex geometry, pointer mapping, movement, fog of war and visibility
+  are untouched; the classic renderer is unchanged underneath. ≤ 12 gradients/frame, 24 fps cap, paused when the
+  tab is hidden, one static frame under reduced motion; switchable in Legend → Atmosphere (personal setting).
+- **Performance work:** character commands (inventory/equipment) clone only the affected character instead of the
+  whole world (radius 78: ~27 ms → < 0.1 ms per command); the resource orbs no longer run an endless animation.
+  Benchmarks: `docs/design/VISUAL_BENCHMARK.md`.
+
 ## 3g. Health & resource orbs, movement (v0.5)
 
 - **Health orb:** the sheet's current / max HP (server-authoritative, atomic −1/+1 via the sheet `adjust` action).

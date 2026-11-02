@@ -21,6 +21,7 @@ import { HEX_SIZE, boundaryPath, center } from './geometry';
 import { HEX_FEATURE_INFO } from './landmark';
 import { Legend } from './Legend';
 import { LightCanvas, usePrefersReducedMotion } from './LightCanvas';
+import { AtmosphereCanvas } from './AtmosphereCanvas';
 import { MapDefs } from './MapDefs';
 import { LastSeenMarker, SiteMarker, TokenStack, TrackerMarker } from './Markers';
 import { TerrainCanvas, type Transform } from './TerrainCanvas';
@@ -58,6 +59,22 @@ export function ArenaMap(props: Props) {
   const drag = useRef<{ x: number; y: number; moved: boolean; pointers: Map<number, { x: number; y: number }>; pinch?: number } | null>(null);
   const suppressClick = useRef(false);
   const reducedMotion = usePrefersReducedMotion();
+  // APEX 0.5 atmosphere overlay – a personal display preference (localStorage only)
+  const [atmosphere, setAtmosphereState] = useState(() => {
+    try {
+      return localStorage.getItem('apex.map.atmosphere') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const setAtmosphere = (on: boolean) => {
+    setAtmosphereState(on);
+    try {
+      localStorage.setItem('apex.map.atmosphere', on ? 'on' : 'off');
+    } catch {
+      /* ignore */
+    }
+  };
   const isGm = view.role === 'gm';
 
   // Bounding box of what this viewer knows (GM: the whole arena; players: explored area only).
@@ -302,6 +319,7 @@ export function ArenaMap(props: Props) {
       <div className={`atmo atmo-night ${night ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" />
 
       <LightCanvas view={view} tf={tf} size={size} reducedMotion={reducedMotion} />
+      <AtmosphereCanvas phase={view.phase} tf={tf} size={size} reducedMotion={reducedMotion} enabled={atmosphere} />
 
       <svg width={size.w} height={size.h} className="absolute inset-0 block">
         <MapDefs />
@@ -400,7 +418,7 @@ export function ArenaMap(props: Props) {
         </div>
       )}
 
-      <Legend />
+      <Legend atmosphere={atmosphere} setAtmosphere={setAtmosphere} />
 
       <div className="absolute right-3 bottom-3 z-10 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
         <button className="btn btn-ghost h-9 w-9 text-base" title="Zoom in (+)" aria-label="Zoom in" onClick={() => zoomAt(1.25, size.w / 2, size.h / 2)}>
