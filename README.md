@@ -61,6 +61,24 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3e. Modular workspace (v0.5)
+
+- **Regions:** left dock · map (centre) · right dock · optional bottom dock (under the map). On phones and tablets
+  the docks stack below the map.
+- **Widgets** can be dragged by their header (⠿) between docks and reordered, or moved with the keyboard via the
+  widget menu (⋯: move up/down, move to left/right/bottom dock, collapse, hide). Docks are resizable (drag the
+  edge or focus it and use the arrow keys). **☰ Widgets** on the map restores hidden widgets and resets the layout.
+  Hiding or collapsing a widget never deletes game data; collapsed/hidden widgets are unmounted.
+- **GM default:** GM Tools (top of the right dock) · Party Health · Selection · Events · Announcements, then
+  Character Summary, Rival Teams, Sites, Time/Arena/Settings, World Management, Players & Access (collapsed).
+  **Player default:** My Character · Party · Selection · Intelligence · Notifications (Inventory available).
+- **Security:** the widget set is built from the server-provided role and data. A player's client never gets GM
+  widget definitions or GM data, so editing the stored layout cannot reveal them (tested).
+- **Persistence:** per device, profile and role in `localStorage` (`apex.workspace.v1.<role>.<campaign>:<profile>`),
+  written 400 ms after the last change. No Supabase request, no Realtime broadcast for any layout change.
+- **Party Health:** one request (`GET op=party`, GM: all player characters, player: own) on load and whenever a
+  sheet changes (existing sheet ping) – no polling.
+
 ## 3d. GM events, announcements & navigation (v0.4)
 
 - **Event approval** – events no longer fire on their own. When a scheduled event is due (dawn of its day, or its

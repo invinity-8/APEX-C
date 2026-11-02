@@ -556,6 +556,14 @@ export class SupabaseRepo implements Repo {
     return r ? { data: r.data, version: Number(r.version), updatedAt: r.updated_at, updatedBy: r.updated_by } : null;
   }
 
+  async loadSheetVitals(campaignId: string): Promise<Record<string, unknown>> {
+    const rows = check(
+      await this.db.from('apex_character_sheets').select('token_id, hp:data->hitPoints').eq('campaign_id', campaignId),
+      'load sheet vitals',
+    ) as Array<{ token_id: string; hp: unknown }>;
+    return Object.fromEntries(rows.map((r) => [r.token_id, r.hp]));
+  }
+
   async saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string): Promise<number | null> {
     const now = new Date().toISOString();
     if (expectedVersion === 0) {

@@ -133,6 +133,10 @@ function useDemoSheets(state: GameState): SheetApi {
   };
   return {
     revision,
+    party: async () =>
+      Object.values(state.tokens)
+        .filter((t) => t.kind === 'player')
+        .map((t) => ({ tokenId: t.id, hp: payload(t.id).sheet.hitPoints ?? null })),
     load: async (tokenId) => ({ ok: true, sheet: payload(tokenId) }),
     save: async (tokenId, sheet, expectedVersion) => {
       const parsed = parseSheet(sheet);

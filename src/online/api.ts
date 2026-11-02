@@ -4,7 +4,7 @@
  * X-APEX-CSRF header that the server requires for state-changing requests.
  */
 import type { CharacterSheet } from '../game/sheet';
-import type { AdminOverview, CampaignPayload, PublicProfile, SessionInfo, SheetPayload, UnchangedPayload } from '../server/protocol';
+import type { AdminOverview, CampaignPayload, PublicProfile, SessionInfo, SheetPayload, UnchangedPayload, PartyVital } from '../server/protocol';
 
 export class ApiError extends Error {
   constructor(
@@ -96,6 +96,7 @@ export const api = {
   uploadPortrait: (tokenId: string, image: string) =>
     request<{ tokenId: string; portraitV: number; version: number }>('POST', 'portrait', {}, { tokenId, image }, { timeoutMs: 30_000 }),
   sheet: (tokenId: string) => request<SheetPayload>('GET', 'sheet', { token: tokenId }),
+  party: () => request<{ members: PartyVital[] }>('GET', 'party'),
   saveSheet: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason: 'edit' | 'import-merge' | 'import-replace' = 'edit') =>
     request<SheetPayload>('POST', 'sheet', {}, { action: 'save', tokenId, sheet, expectedVersion, reason }),
   adjustSheet: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) =>

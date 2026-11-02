@@ -120,3 +120,9 @@ export interface ApiError {
   error: string;
   code?: string;
 }
+
+/** Party Health entry (GET op=party). */
+export interface PartyVital {
+  tokenId: string;
+  hp: { current: number; max: number; temp: number } | null;
+}

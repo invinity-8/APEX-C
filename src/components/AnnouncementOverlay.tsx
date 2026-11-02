@@ -6,7 +6,8 @@
  *  - auto-fades after 14 s, dismiss with the button, Esc or a click; queued if several arrive,
  *  - honours prefers-reduced-motion (no animation) and never contains GM-only information.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { BareSections } from './ui';
 import type { Announcement, AnnouncementCategory } from '../game/types';
 
 export const CATEGORY_STYLE: Record<AnnouncementCategory, { label: string; color: string; glow: string; icon: string }> = {
@@ -114,21 +115,26 @@ export function AnnouncementCard({ a, remaining = 0, onDismiss, preview = false 
 }
 
 /** Player-side history of the recent Arena Announcements (missed ones can be re-read here). */
-export function AnnouncementHistory({ announcements }: { announcements: Announcement[] }) {
-  if (!announcements.length) return null;
+export function AnnouncementHistory({ announcements, open = false }: { announcements: Announcement[]; open?: boolean }) {
+  const bare = useContext(BareSections);
+  if (!announcements.length) return bare ? <p className="text-xs text-marble-500">No announcements yet.</p> : null;
   const list = announcements.slice().reverse();
+  const items = (
+    <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto text-xs">
+      {list.map((a) => (
+        <li key={a.id} className="rounded border border-ink-700 px-2 py-1">
+          <span style={{ color: CATEGORY_STYLE[a.category].color }}>{CATEGORY_STYLE[a.category].icon}</span> <b className="text-marble-50">{a.title}</b>
+          <span className="text-marble-500"> · {a.phase === 'day' ? 'Day' : 'Night'} {a.day}</span>
+          {a.text && <div className="text-marble-300">{a.text}</div>}
+        </li>
+      ))}
+    </ul>
+  );
+  if (bare) return <div data-testid="announcement-history">{items}</div>;
   return (
-    <details className="panel p-3" data-testid="announcement-history">
+    <details className="panel p-3" data-testid="announcement-history" open={open}>
       <summary className="panel-title cursor-pointer">📣 Arena announcements ({list.length})</summary>
-      <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto text-xs">
-        {list.map((a) => (
-          <li key={a.id} className="rounded border border-ink-700 px-2 py-1">
-            <span style={{ color: CATEGORY_STYLE[a.category].color }}>{CATEGORY_STYLE[a.category].icon}</span> <b className="text-marble-50">{a.title}</b>
-            <span className="text-marble-500"> · {a.phase === 'day' ? 'Day' : 'Night'} {a.day}</span>
-            {a.text && <div className="text-marble-300">{a.text}</div>}
-          </li>
-        ))}
-      </ul>
+      {items}
     </details>
   );
 }

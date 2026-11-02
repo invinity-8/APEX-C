@@ -44,6 +44,8 @@ export interface SheetApi {
   adjust: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) => Promise<SheetResult>;
   /** Changes whenever a sheet may have been changed on another device (live ping or poll). */
   revision: number;
+  /** HP of the visible party in one request (GM: all player characters, player: own). */
+  party: () => Promise<Array<{ tokenId: string; hp: { current: number; max: number; temp: number } | null }>>;
 }
 
 export interface OnlineControls {
