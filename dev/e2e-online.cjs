@@ -65,6 +65,11 @@ const apiFetch = (page, op, body, query = '') =>
     [op, body, query],
   );
 
+const openGm = async (page, id) => {
+  const head = page.locator(`[data-gm-section="${id}"] button[aria-expanded]`);
+  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
+};
+
 const waitText = (page, re, timeout = 10000) =>
   page.waitForFunction(([src, flags]) => new RegExp(src, flags).test(document.body.innerText), [re.source, re.flags], { timeout }).then(
     () => true,
@@ -141,7 +146,7 @@ const waitText = (page, re, timeout = 10000) =>
   // ---------- players ----------
   const hannah = await login(b, 'Hannah', PW.hannah);
   check('Hannah signs in and plays Sinna', await waitText(hannah, /Playing as Sinna/, 20000));
-  const jean = await login(b, 'Jean', PW.jean);
+  let jean = await login(b, 'Jean', PW.jean);
   check('Jean signs in and plays Aster', await waitText(jean, /Playing as Aster/, 20000));
   const cookies = await hannah.context().cookies();
   const sc = cookies.find((c) => c.name.includes('apex_session'));
@@ -300,9 +305,72 @@ const waitText = (page, re, timeout = 10000) =>
   const e2 = await apiFetch(hannah, 'command', { campaignId: beforeJean.body.campaignId, command: { type: 'invUpdateItem', tokenId: 'sinna', itemId: inv.id, rev: inv.rev, quantity: 5 } });
   check('simultaneous item edits cannot silently overwrite each other', e1.status === 200 && e2.status === 422);
 
+  // ---------- Events (GM approval) & Arena Announcements ----------
+  {
+    const cid = beforeJean.body.campaignId;
+    await gm.getByRole('button', { name: /Map/ }).first().click();
+    await hannah.getByRole('button', { name: /Map/ }).first().click();
+    const st0 = (await apiFetch(gm, 'state')).body.state;
+    const hexesBefore = JSON.stringify(st0.hexes);
+    await apiFetch(gm, 'command', { campaignId: cid, requestId: 'e2e-adv-0001', command: { type: 'advancePhase' } });
+    await apiFetch(gm, 'command', { campaignId: cid, requestId: 'e2e-adv-0002', command: { type: 'advancePhase' } });
+    const st1 = (await apiFetch(gm, 'state')).body.state;
+    const due = Object.values(st1.events).find((e) => e.status === 'awaiting');
+    check('a due event becomes "awaiting" and changes nothing yet', !!due && JSON.stringify(st1.hexes) === hexesBefore);
+    const modal = gm.getByRole('dialog', { name: due ? due.name : 'x' });
+    check('the GM gets a centred approval dialog', await modal.waitFor({ timeout: 20000 }).then(() => true, () => false));
+    check('the dialog previews the consequences', await waitText(gm, /If approved/i));
+    const hView = JSON.stringify((await apiFetch(hannah, 'state')).body.view);
+    check('players see nothing of the pending event', !hView.includes(due.name) && !hView.includes('awaiting'));
+    const forged = await apiFetch(hannah, 'command', { campaignId: cid, requestId: 'e2e-forge-01', command: { type: 'decideEvent', eventId: due.id, decision: 'approve' } });
+    check('a player cannot approve events', forged.status === 403);
+    await modal.getByRole('button', { name: /Approve & Trigger/ }).click();
+    const st2 = await gm.waitForFunction(
+      async (id) => {
+        const r = await fetch('/api/apex?op=state', { headers: { 'x-apex-csrf': '1' } });
+        const j = await r.json();
+        return j.state.events[id].status === 'done';
+      },
+      due.id,
+      { timeout: 15000 },
+    ).then(() => true, () => false);
+    check('approval applies the event once (server-confirmed)', st2);
+    check('players see the world-event announcement', await hannah.getByRole('alertdialog').filter({ hasText: due.name }).waitFor({ timeout: 30000 }).then(() => true, () => false));
+    await hannah.keyboard.press('Escape');
+    await gm.keyboard.press('Escape');
+    // manual announcement with preview
+    await openGm(gm, 'announcements');
+    await gm.getByLabel('Announcement category').selectOption('death');
+    await gm.getByLabel('Announcement headline').fill('A TRIBUTE HAS FALLEN');
+    await gm.getByLabel('Announcement text').fill('The cannon sounds once over the arena.');
+    await gm.getByRole('button', { name: 'Preview' }).click();
+    check('the GM previews an announcement before broadcasting', await gm.getByRole('alertdialog').filter({ hasText: /Preview/ }).isVisible());
+    await gm.getByRole('button', { name: 'Close preview' }).click();
+    const jeanHadIt = JSON.stringify((await apiFetch(jean, 'state')).body.view).includes('cannon sounds');
+    const jeanCtx = jean.context();
+    await jean.close(); // Jean's device goes offline (same browser profile comes back later)
+    await gm.getByRole('button', { name: /Broadcast to all players/ }).click();
+    check('the announcement appears on the player screen', await hannah.getByRole('alertdialog').filter({ hasText: 'A TRIBUTE HAS FALLEN' }).waitFor({ timeout: 30000 }).then(() => true, () => false));
+    await hannah.screenshot({ path: out + '/e2e-announcement.png' });
+    await hannah.getByRole('button', { name: 'Acknowledge' }).click();
+    check('the announcement can be dismissed', await hannah.getByRole('alertdialog').count().then((n) => n === 0));
+    jean = await jeanCtx.newPage();
+    await jean.goto(url('/'));
+    check('a player who was offline sees it after reconnecting', !jeanHadIt && (await jean.getByRole('alertdialog').filter({ hasText: 'A TRIBUTE HAS FALLEN' }).waitFor({ timeout: 30000 }).then(() => true, () => false)));
+    await jean.keyboard.press('Escape');
+    await hannah.reload();
+    await waitText(hannah, /Playing as Sinna/, 20000);
+    check('an acknowledged announcement does not reappear after reload', (await hannah.getByRole('alertdialog').count()) === 0);
+    const bad = await apiFetch(hannah, 'command', { campaignId: cid, requestId: 'e2e-ann-forge', command: { type: 'announce', category: 'general', title: 'FAKE', text: '' } });
+    check('players cannot broadcast announcements', bad.status === 403);
+    await gm.keyboard.press('Escape');
+    await gm.screenshot({ path: out + '/e2e-gm-events.png', fullPage: true });
+  }
+
   // ---------- GM password management ----------
   if (MOCK) {
     await gm.getByRole('button', { name: /Map/ }).click();
+    await openGm(gm, 'players');
     const simonRow = gm.locator('[data-profile="simon"]');
     await simonRow.getByRole('button', { name: /Set password/ }).click();
     await gm.getByLabel('New password for Simon').fill('simon-first-pass');
@@ -322,7 +390,8 @@ const waitText = (page, re, timeout = 10000) =>
   // ---------- World Management ----------
   {
     await gm.getByRole('button', { name: /Map/ }).first().click();
-    const wp = gm.locator('section', { has: gm.getByRole('heading', { name: 'World Management' }) });
+    await openGm(gm, 'world');
+    const wp = gm.locator('[data-gm-section="world"]');
     const hannahWorld = async () => (await apiFetch(hannah, 'state')).body?.view?.worldName;
     const before = (await apiFetch(gm, 'state')).body.state;
     // player cannot manage worlds

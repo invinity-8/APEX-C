@@ -12,13 +12,13 @@ import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js'
 import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
 import { advanceDay, advancePhase } from './day.js';
-import { applyEvent } from './events.js';
+import { addAnnouncement, applyEvent, eventEligible, postponeEvent, rejectEvent } from './events.js';
 import { stringHash } from './rng.js';
 import { TERRAIN } from './terrain.js';
 import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
-import type { Actor, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
+import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
 import { INVENTORY_LIMITS, materializeInventory } from './inventory.js';
 
 export { fmt };
@@ -41,6 +41,16 @@ export type Command =
   | { type: 'setSiteVisibility'; siteId: string; visibility: SiteVisibility }
   | { type: 'triggerEvent'; eventId: string }
   | { type: 'setShrink'; enabled?: boolean; mode?: 'danger' | 'closed' }
+  // ---- APEX 0.4: GM event approval & announcements
+  | {
+      type: 'decideEvent';
+      eventId: string;
+      decision: 'approve' | 'reject' | 'postpone';
+      postpone?: 'nextPhase' | 'nextDay';
+      edits?: { name?: string; description?: string; announce?: boolean };
+    }
+  | { type: 'createEvent'; eventId: string; name: string; description: string; hexes: string[]; effects: EventEffect[]; announce: boolean }
+  | { type: 'announce'; category: AnnouncementCategory; title: string; text: string }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
   | { type: 'setWill'; tokenId: string; current?: number; max?: number }
   | { type: 'setAppearance'; tokenId: string; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
@@ -281,9 +291,46 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       break;
     }
     case 'triggerEvent':
+      // Manual trigger = GM approval of an eligible event (same validation as an automatic event).
       if (!state.events[cmd.eventId]) return fail(prev, T.noSuchEvent);
-      if (!applyEvent(state, cmd.eventId)) return fail(prev, T.eventDone);
+      if (!applyEvent(state, cmd.eventId)) return fail(prev, T.eventNotEligible);
       break;
+    case 'decideEvent': {
+      const ev = state.events[cmd.eventId];
+      if (!ev) return fail(prev, T.noSuchEvent);
+      if (!eventEligible(ev)) return fail(prev, T.eventNotEligible);
+      if (cmd.edits) {
+        if (cmd.edits.name !== undefined && cmd.edits.name.trim()) ev.name = cmd.edits.name.trim().slice(0, 80);
+        if (cmd.edits.description !== undefined) ev.description = cmd.edits.description.trim().slice(0, 1000);
+        if (cmd.edits.announce !== undefined) ev.announce = cmd.edits.announce;
+      }
+      const ok =
+        cmd.decision === 'approve' ? applyEvent(state, ev.id) : cmd.decision === 'reject' ? rejectEvent(state, ev.id) : postponeEvent(state, ev.id, cmd.postpone ?? 'nextPhase');
+      if (!ok) return fail(prev, T.eventNotEligible);
+      break;
+    }
+    case 'createEvent': {
+      if (state.events[cmd.eventId]) return fail(prev, T.eventExists);
+      const hexes = [...new Set(cmd.hexes)].filter((k) => state.hexes[k]);
+      for (const e of cmd.effects) if (e.type === 'revealSite' && !state.sites[e.siteId]) return fail(prev, T.noSuchSite);
+      state.events[cmd.eventId] = {
+        id: cmd.eventId,
+        name: cmd.name.trim().slice(0, 80) || 'Custom event',
+        description: cmd.description.trim().slice(0, 1000),
+        trigger: { type: 'manual' },
+        hexes,
+        effects: cmd.effects,
+        status: 'pending',
+        announce: cmd.announce,
+        source: 'custom',
+      };
+      addLog(state, 'gm', T.logEventCreated(state.events[cmd.eventId].name), 'gm');
+      break;
+    }
+    case 'announce':
+      addAnnouncement(state, { category: cmd.category, title: cmd.title, text: cmd.text });
+      addLog(state, 'event', `📣 ${cmd.title.trim().slice(0, 80)}${cmd.text.trim() ? ` – ${cmd.text.trim().slice(0, 200)}` : ''}`);
+      return { ok: true, state };
     case 'setShrink':
       if (cmd.enabled !== undefined) state.config.shrink.enabled = cmd.enabled;
       if (cmd.mode !== undefined) state.config.shrink.mode = cmd.mode;

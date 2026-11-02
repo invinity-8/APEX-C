@@ -112,3 +112,29 @@
     radial-gradient(ellipse at 50% 30%, rgba(212, 166, 74, 0.14), transparent 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='90' viewBox='0 0 52 90'%3E%3Cpath d='M26 0 L52 15 L52 45 L26 60 L0 45 L0 15 Z M26 60 L26 90' fill='none' stroke='%23d4a64a' stroke-opacity='0.06'/%3E%3C/svg%3E");
 }
+
+/* ---------- Arena Announcements (APEX 0.4) ---------- */
+.apex-announce-backdrop {
+  background: radial-gradient(ellipse at center, rgba(8, 6, 4, 0.55) 0%, rgba(8, 6, 4, 0.82) 70%);
+  animation: apex-announce-fade 0.6s ease-out both;
+}
+.apex-announce-card {
+  padding: 2.5rem 1.5rem;
+  filter: drop-shadow(0 0 28px var(--announce-glow));
+}
+.apex-announce-title {
+  text-shadow: 0 0 18px var(--announce-glow), 0 0 42px var(--announce-glow);
+  animation: apex-announce-rise 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes apex-announce-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes apex-announce-rise {
+  from { opacity: 0; letter-spacing: 0.5em; transform: translateY(12px) scale(1.04); filter: blur(4px); }
+  to { opacity: 1; letter-spacing: 0.12em; transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .apex-announce-backdrop,
+  .apex-announce-title { animation: none; }
+}

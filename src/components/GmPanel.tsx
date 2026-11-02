@@ -5,7 +5,7 @@ import { safeRadius } from '../game/zone';
 import { hexCount } from '../game/hex';
 import { MAX_RADIUS, MIN_RADIUS } from '../data/demo';
 import { phaseName } from '../game/text';
-import { Section, Segmented, Stepper, Toggle } from './ui';
+import { Segmented, Stepper, Toggle } from './ui';
 import { STRATEGY_LABEL } from './SelectionPanel';
 
 interface Props {
@@ -19,35 +19,7 @@ interface Props {
   worldManaged?: boolean;
 }
 
-type Tab = 'teams' | 'events' | 'arena';
-
-export function GmPanel({ state, run, onSelectToken, showPartyFog, setShowPartyFog, onRegenerate, worldManaged }: Props) {
-  const [tab, setTab] = useState<Tab>('teams');
-  return (
-    <Section
-      title="Game Master"
-      right={
-        <Segmented<Tab>
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'teams', label: 'Teams' },
-            { value: 'events', label: 'Events & Sites' },
-            { value: 'arena', label: 'Arena' },
-          ]}
-        />
-      }
-    >
-      {tab === 'teams' && <TeamsTab state={state} run={run} onSelectToken={onSelectToken} />}
-      {tab === 'events' && <EventsTab state={state} run={run} />}
-      {tab === 'arena' && (
-        <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={onRegenerate} worldManaged={worldManaged} />
-      )}
-    </Section>
-  );
-}
-
-function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | 'onSelectToken'>) {
+export function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | 'onSelectToken'>) {
   const rivals = Object.values(state.teams).filter((t) => t.kind === 'rival');
   return (
     <ul className="space-y-2">
@@ -103,28 +75,9 @@ function TeamsTab({ state, run, onSelectToken }: Pick<Props, 'state' | 'run' | '
   );
 }
 
-function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
+export function SitesList({ state, run }: Pick<Props, 'state' | 'run'>) {
   return (
     <div className="space-y-3">
-      <ul className="space-y-1.5">
-        {Object.values(state.events).map((ev) => (
-          <li key={ev.id} className="rounded-lg border border-ink-600 bg-ink-800/60 p-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm font-semibold text-marble-50">⚡ {ev.name}</span>
-              <span className="text-[11px] text-marble-500">{ev.trigger.type === 'day' ? `Dawn of Day ${ev.trigger.day}` : ev.trigger.type === 'phase' ? phaseName(ev.trigger.phase, ev.trigger.day) : 'manual'}</span>
-            </div>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-marble-300">{ev.description}</p>
-            <div className="mt-1.5 flex items-center justify-between">
-              <span className={`text-[11px] ${ev.status === 'done' ? 'text-emerald-300' : 'text-amber-300'}`}>
-                {ev.status === 'done' ? '✓ triggered' : '○ pending'}
-              </span>
-              <button className="btn btn-ghost" disabled={ev.status === 'done'} onClick={() => run({ type: 'triggerEvent', eventId: ev.id })}>
-                Trigger now
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
       <div>
         <div className="label mb-1">Sites</div>
         <ul className="space-y-1">
@@ -150,7 +103,7 @@ function EventsTab({ state, run }: Pick<Props, 'state' | 'run'>) {
   );
 }
 
-function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate, worldManaged }: Omit<Props, 'onSelectToken'>) {
+export function ArenaTab({ state, run, showPartyFog, setShowPartyFog, onRegenerate, worldManaged }: Omit<Props, 'onSelectToken'>) {
   const [radius, setRadius] = useState(state.config.mapRadius);
   const [seed, setSeed] = useState(state.config.seed);
   const sh = state.config.shrink;

@@ -56,7 +56,7 @@ export function actionKey(cmd: Command): string {
   }
 }
 
-const ACTION_LABEL: Record<string, string> = { move: 'Move', phase: 'Time change', world: 'World change' };
+const ACTION_LABEL: Record<string, string> = { move: 'Move', phase: 'Time change', world: 'World change', 'gm:decideEvent': 'Event decision', 'gm:createEvent': 'Custom event', 'gm:announce': 'Announcement' };
 const isUnchanged = (p: CampaignPayload | UnchangedPayload): p is UnchangedPayload => 'unchanged' in p && p.unchanged === true;
 const transient = (e: ApiError) => e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
