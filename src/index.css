@@ -275,3 +275,20 @@
   .ws-resize-right { top: 0; bottom: 0; left: -3px; width: 6px; cursor: col-resize; }
   .ws-resize-bottom { left: 0; right: 0; top: -3px; height: 6px; cursor: row-resize; }
 }
+
+/* ---------------------------------------------------------------- APEX 0.5 paper doll */
+.apex-doll { display: grid; grid-template-columns: 1fr 96px 1fr; gap: 8px; align-items: stretch; }
+.apex-doll-col { display: flex; flex-direction: column; gap: 6px; }
+.apex-doll-figure { display: flex; align-items: center; justify-content: center; padding: 4px 0; filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
+.apex-slot { display: flex; width: 100%; min-height: 48px; flex-direction: column; justify-content: center; gap: 1px; padding: 5px 8px; text-align: left;
+  border-radius: 8px; border: 1px solid rgba(140,128,106,.35); background: linear-gradient(180deg, rgba(34,39,43,.9), rgba(21,24,27,.9));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.5), inset 0 8px 14px -10px rgba(192,155,88,.25); transition: border-color var(--apex-motion-fast) ease, box-shadow var(--apex-motion-fast) ease; }
+.apex-slot:hover { border-color: var(--apex-border-strong); }
+.apex-slot-filled { border-color: rgba(192,155,88,.6); box-shadow: inset 0 0 0 1px rgba(0,0,0,.5), 0 0 10px -4px rgba(192,155,88,.6); }
+.apex-slot-inactive { opacity: .55; }
+.apex-slot-over { border-color: var(--apex-highlight); box-shadow: 0 0 0 2px rgba(214,184,120,.5); }
+.apex-slot-compact { min-height: 40px; }
+.apex-slot-label { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--apex-text-muted); }
+.apex-slot-item { font-size: 12px; color: var(--apex-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apex-slot-meta { font-size: 10px; color: var(--apex-highlight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 420px) { .apex-doll { grid-template-columns: 1fr 64px 1fr; } }

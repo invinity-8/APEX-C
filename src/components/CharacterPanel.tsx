@@ -15,17 +15,19 @@ import type { SheetPayload } from '../server/protocol';
 import type { DispatchResult, GameApi } from '../state/gameApi';
 import { AppearanceEditor } from './AppearanceEditor';
 import { CharacterPortrait } from './CharacterVisuals';
+import { EquipmentPanel } from './EquipmentPanel';
 import { InventoryPanel } from './InventoryPanel';
 import { Bar } from './ui';
 
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
 
-type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'inventory' | 'appearance' | 'notes';
+type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'equipment' | 'inventory' | 'appearance' | 'notes';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
   { id: 'abilities', label: 'Abilities & Spells' },
   { id: 'resources', label: 'Resources' },
+  { id: 'equipment', label: 'Equipment' },
   { id: 'inventory', label: 'Inventory' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
@@ -145,7 +147,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const set = (patch: Partial<CharacterSheet>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const changedElsewhere = editing && data && data.version !== baseVersion;
   const build = sheet.details.find((d) => /race, class|class & level|^class$/i.test(d.label))?.value;
-  const canEditSheet = tab !== 'inventory' && tab !== 'appearance';
+  const canEditSheet = tab !== 'inventory' && tab !== 'appearance' && tab !== 'equipment';
 
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Character sheet of ${token.name}`}>
@@ -410,6 +412,11 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
         </div>
       )}
 
+      {tab === 'equipment' && (
+        <section className="panel p-3">
+          <EquipmentPanel game={game} token={token} run={run} isGm={isGm} />
+        </section>
+      )}
       {tab === 'inventory' && <InventoryPanel token={token} run={run} busy={game.busy} embedded />}
 
       {tab === 'appearance' && (

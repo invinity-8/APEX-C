@@ -10,6 +10,8 @@ import { TERRAIN_ORDER } from '../game/terrain.js';
 
 type Obj = Record<string, unknown>;
 
+import { EQUIP_SLOTS, ITEM_KINDS, WEAPON_PROPERTIES, type EquipSlot, type ItemEquip, type WeaponProperty } from '../game/equipment.js';
+
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64 && /^[\w.-]+$/.test(v);
 const isInt = (v: unknown, lim = 1000): v is number => typeof v === 'number' && Number.isInteger(v) && Math.abs(v) <= lim;
@@ -137,6 +139,45 @@ export function parseCommand(raw: unknown): ParseResult {
       if (Object.keys(out).length === 2) return bad('nothing to change');
       return { ok: true, command: out as Command };
     }
+    case 'equipItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/itemId/slot');
+      return { ok: true, command: { type: 'equipItem', tokenId: c.tokenId, itemId: c.itemId, slot: c.slot } };
+    case 'unequipSlot':
+      if (!isId(c.tokenId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/slot');
+      return { ok: true, command: { type: 'unequipSlot', tokenId: c.tokenId, slot: c.slot } };
+    case 'setWeaponSet':
+      if (!isId(c.tokenId) || (c.set !== 1 && c.set !== 2)) return bad('tokenId/set');
+      return { ok: true, command: { type: 'setWeaponSet', tokenId: c.tokenId, set: c.set } };
+    case 'setResting': {
+      if (!isId(c.tokenId) || typeof c.resting !== 'boolean') return bad('tokenId/resting');
+      if (c.keep !== undefined && (!Array.isArray(c.keep) || c.keep.length > EQUIP_SLOTS.length || !c.keep.every((k) => oneOf(k, EQUIP_SLOTS)))) return bad('keep');
+      return { ok: true, command: { type: 'setResting', tokenId: c.tokenId, resting: c.resting, ...(c.keep ? { keep: c.keep as EquipSlot[] } : {}) } };
+    }
+    case 'setItemEquip': {
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000)) return bad('tokenId/itemId/rev');
+      if (c.gmLocked !== undefined && typeof c.gmLocked !== 'boolean') return bad('gmLocked');
+      if (c.equip === null) return { ok: true, command: { type: 'setItemEquip', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, equip: null } };
+      const e = parseItemEquip(c.equip);
+      if (!e) return bad('equip');
+      return { ok: true, command: { type: 'setItemEquip', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, equip: e, ...(c.gmLocked !== undefined ? { gmLocked: c.gmLocked } : {}) } };
+    }
+    case 'setEquipConfig': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      const out: Record<string, unknown> = { type: 'setEquipConfig', tokenId: c.tokenId };
+      if (c.unarmoredAbility !== undefined) {
+        if (c.unarmoredAbility !== null && !oneOf(c.unarmoredAbility, ABILITIES)) return bad('unarmoredAbility');
+        out.unarmoredAbility = c.unarmoredAbility;
+      }
+      if (c.acOther !== undefined) {
+        if (!isInt(c.acOther, 20)) return bad('acOther');
+        out.acOther = c.acOther;
+      }
+      if (c.acOtherLabel !== undefined) {
+        if (!isText(c.acOtherLabel, 60)) return bad('acOtherLabel');
+        out.acOtherLabel = c.acOtherLabel;
+      }
+      return { ok: true, command: out as Command };
+    }
     case 'invAddItem':
     case 'invUpdateItem': {
       if (!isId(c.tokenId) || !isId(c.itemId)) return bad('tokenId/itemId');
@@ -186,3 +227,43 @@ export function parseCommand(raw: unknown): ParseResult {
 export const PLAYER_COMMANDS: ReadonlySet<Command['type']> = new Set(['move', ...CHARACTER_COMMANDS]);
 
 export { isId, isObj, isInt };
+
+const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+
+/** Strict validation of manually defined equipment properties (no unknown keys, bounded values). */
+export function parseItemEquip(v: unknown): ItemEquip | null {
+  if (!isObj(v) || !oneOf(v.kind, ITEM_KINDS)) return null;
+  const out: ItemEquip = { kind: v.kind };
+  const allowedKeys = new Set(['kind', 'armorType', 'armorBase', 'acBonus', 'attackBonus', 'damage', 'damageType', 'properties', 'proficient', 'gmLocked']);
+  if (Object.keys(v).some((k) => !allowedKeys.has(k))) return null;
+  if (v.armorType !== undefined) {
+    if (!oneOf(v.armorType, ['light', 'medium', 'heavy'] as const)) return null;
+    out.armorType = v.armorType;
+  }
+  if (v.armorBase !== undefined) {
+    if (!isInt(v.armorBase, 30) || (v.armorBase as number) < 0) return null;
+    out.armorBase = v.armorBase as number;
+  }
+  for (const k of ['acBonus', 'attackBonus'] as const) {
+    if (v[k] === undefined) continue;
+    if (!isInt(v[k], 10)) return null;
+    out[k] = v[k] as number;
+  }
+  if (v.damage !== undefined) {
+    if (typeof v.damage !== 'string' || !/^(\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?|\d{1,2})$/i.test(v.damage.trim())) return null;
+    out.damage = v.damage.trim().toLowerCase();
+  }
+  if (v.damageType !== undefined) {
+    if (!isText(v.damageType, 30)) return null;
+    out.damageType = v.damageType.trim();
+  }
+  if (v.properties !== undefined) {
+    if (!Array.isArray(v.properties) || v.properties.length > 10 || !v.properties.every((p) => oneOf(p, WEAPON_PROPERTIES))) return null;
+    out.properties = [...new Set(v.properties as WeaponProperty[])];
+  }
+  if (v.proficient !== undefined) {
+    if (typeof v.proficient !== 'boolean') return null;
+    out.proficient = v.proficient;
+  }
+  return out;
+}

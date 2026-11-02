@@ -61,6 +61,26 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ---
 
+## 3f. Equipment & derived statistics (v0.5)
+
+- **Paper doll** (Character → Equipment, or the player's Equipment widget): Head, Amulet, Cloak, Armor, Gloves,
+  2 Rings, Boots, and **two weapon sets** (main/off hand). Drag a carried item onto a slot, or click a slot and
+  choose (keyboard/touch). Items stay in the inventory; slots only reference them, one slot per item – switching
+  sets or resting never duplicates anything. Inventory rows show an "equipped · slot" badge.
+- **Item properties are defined manually** (kind, armour type/base AC, AC bonus, damage dice/type, weapon
+  properties, proficiency, item bonus). Items without properties cannot be equipped. D&D 5e SRD 5.1 values are
+  offered as one-click *suggestions* by name ("Use SRD Breastplate"); nothing is applied automatically. The GM can
+  lock an item's properties.
+- **Resting / Unarmored preset:** everything except the kept slots (default amulet, rings, cloak) counts as taken
+  off; turning it off restores the previous setup. It does not heal or grant rest benefits.
+- **Derived stats** (`deriveStats`, pure + unit-tested), each with its steps: AC = armour base + DEX (light full,
+  medium max +2, heavy none) or 10 + DEX (+ manually chosen unarmored-defence ability) + shield (only in the off
+  hand of the active set) + item AC bonuses + a labelled manual modifier. Attacks of the active set: STR (DEX for
+  ranged, higher of STR/DEX for finesse) + proficiency (+ item bonus); off-hand damage without a positive ability
+  modifier. Without defined armour the imported sheet AC is shown; imported values on the sheet are never changed.
+- **Server:** commands `equipItem`, `unequipSlot`, `setWeaponSet`, `setResting`, `setItemEquip`, `setEquipConfig`
+  (own character or GM, strict validation); equipment is private like the inventory.
+
 ## 3e. Modular workspace (v0.5)
 
 - **Regions:** left dock · map (centre) · right dock · optional bottom dock (under the map). On phones and tablets

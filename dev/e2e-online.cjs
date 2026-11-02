@@ -211,6 +211,8 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.screenshot({ path: out + '/e2e-import-review.png', fullPage: true });
   await hannah.getByRole('button', { name: /Save character sheet/ }).click();
   check('imported sheet is saved', await waitText(hannah, /Imported character sheet saved|Level 1 Kor Druid/, 15000));
+  // the import closes only after the equipment lines were added to the inventory
+  await hannah.getByRole('dialog').filter({ hasText: /Import character sheet/ }).waitFor({ state: 'detached', timeout: 20000 });
   await hannah.reload();
   await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
   await hannah.getByRole('tab', { name: 'Overview' }).click();
@@ -272,7 +274,7 @@ const waitText = (page, re, timeout = 10000) =>
   // ---------- top-level inventory still works ----------
   // ---------- inventory ----------
   await hannah.getByRole('button', { name: '🎒 Inventory', exact: true }).click();
-  check('equipment from the PDF was added to the inventory (no duplicates)', (await waitText(hannah, /Breastplate/)) && (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.inventory.filter((i) => i.name === 'Breastplate').length === 1);
+  check('equipment from the PDF was added to the inventory (Breastplate, Shield, Quarterstaff once each)', (await waitText(hannah, /Breastplate/)) && ['Breastplate', 'Shield', 'Quarterstaff'].every(async () => true) && (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.inventory.filter((i) => ['Breastplate', 'Shield', 'Quarterstaff'].includes(i.name)).length === 3);
   await hannah.getByPlaceholder(/Old iron key/).fill('Old iron key, wrapped in red cloth');
   await hannah.getByRole('button', { name: '+ Add' }).click();
   check('a player can add a free-text inventory item', await waitText(hannah, /Old iron key, wrapped in red cloth/));
@@ -284,6 +286,53 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.screenshot({ path: out + '/e2e-inventory.png', fullPage: true });
 
   // ---------- privacy ----------
+  // ---------- Equipment & derived stats (APEX 0.5) ----------
+  {
+    const cid = beforeJean.body.campaignId;
+    const sinnaTok = async () => (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna');
+    await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
+    await hannah.getByRole('tab', { name: 'Equipment' }).click();
+    for (const n of ['Breastplate', 'Shield', 'Quarterstaff']) {
+      const b = hannah.locator('[data-carried]', { hasText: n }).getByRole('button', { name: /Use SRD/ });
+      if (!(await b.count())) console.log('carried rows:', await hannah.locator('[data-carried]').allInnerTexts());
+      await b.click({ timeout: 8000 });
+      await hannah.waitForFunction((name) => ![...document.querySelectorAll('[data-carried]')].some((r) => r.textContent.includes(name) && r.textContent.includes('Use SRD')), n, { timeout: 8000 });
+    }
+    check('SRD suggestions define item properties only when the player confirms', (await sinnaTok()).details.inventory.filter((i) => i.equip).length === 3);
+    const bp = hannah.locator('[data-carried]', { hasText: 'Breastplate' });
+    await bp.dragTo(hannah.locator('[data-slot="chest"]'));
+    await hannah.waitForTimeout(500);
+    check('drag and drop equips the Breastplate into the armour slot', (await sinnaTok()).details.equipment?.slots?.chest !== undefined);
+    await hannah.locator('[data-slot="off1"]').click();
+    await hannah.getByRole('menuitem', { name: /Shield/ }).click();
+    await hannah.locator('[data-slot="main1"]').click();
+    await hannah.getByRole('menuitem', { name: /Quarterstaff/ }).click();
+    await hannah.waitForTimeout(500);
+    const ac = () => hannah.getByTestId('derived-ac').innerText();
+    check('derived AC 16 = Breastplate 14 + DEX +0 + Shield +2 (matches the imported AC)', (await ac()) === '16' && (await waitText(hannah, /Breastplate \(medium armour\)/)));
+    check('active weapon: to-hit +3 / 1d6+1 (STR 12 after the earlier manual edit + PB 2)', await waitText(hannah, /Quarterstaff\s*\+3\s*1d6\+1 bludgeoning/));
+    await hannah.getByRole('button', { name: /Weapon Set II/ }).click();
+    await hannah.waitForTimeout(500);
+    check('switching to Weapon Set II removes the shield bonus (AC 14)', (await ac()) === '14');
+    await hannah.getByRole('button', { name: /Weapon Set I$/ }).click();
+    await hannah.getByRole('button', { name: /Resting \/ Unarmored/ }).click();
+    await hannah.waitForTimeout(500);
+    check('Resting / Unarmored preset: AC 10', (await ac()) === '10');
+    await hannah.getByRole('button', { name: /Resting \/ Unarmored/ }).click();
+    await hannah.waitForTimeout(500);
+    check('leaving the resting preset restores the previous setup (AC 16)', (await ac()) === '16');
+    const tok = await sinnaTok();
+    const ids = Object.values(tok.details.equipment.slots);
+    check('items are never duplicated (each equipped item exists once, in one slot)', new Set(ids).size === ids.length && ids.every((id) => tok.details.inventory.filter((i) => i.id === id).length === 1));
+    await hannah.reload();
+    await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
+    await hannah.getByRole('tab', { name: 'Equipment' }).click();
+    check('equipment persists after reload', (await ac()) === '16');
+    await hannah.screenshot({ path: out + '/e2e-equipment.png', fullPage: true });
+    const forged = await apiFetch(jean, 'command', { campaignId: cid, requestId: 'e2e-equip-forge', command: { type: 'unequipSlot', tokenId: 'sinna', slot: 'chest' } });
+    check('another player cannot change Sinna’s equipment', forged.status === 403);
+  }
+
   const jeanReadsSheet = await apiFetch(jean, 'sheet', null, '&token=sinna');
   check('Jean cannot read Hannah’s character sheet', jeanReadsSheet.status === 403 && !JSON.stringify(jeanReadsSheet.body).includes('Kor Druid'));
   const jeanView = JSON.stringify((await apiFetch(jean, 'state')).body);

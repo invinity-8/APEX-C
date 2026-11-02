@@ -12,6 +12,7 @@ import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js'
 import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
 import { advanceDay, advancePhase } from './day.js';
+import { emptyEquipment, equipItem, reconcileEquipment, unequipSlot, type Ability, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
 import { addAnnouncement, applyEvent, eventEligible, postponeEvent, rejectEvent } from './events.js';
 import { stringHash } from './rng.js';
 import { TERRAIN } from './terrain.js';
@@ -59,7 +60,14 @@ export type Command =
   | { type: 'invRemoveItem'; tokenId: string; itemId: string; rev: number }
   | { type: 'invAddContainer'; tokenId: string; containerId: string; name: string }
   | { type: 'invRenameContainer'; tokenId: string; containerId: string; name: string }
-  | { type: 'invRemoveContainer'; tokenId: string; containerId: string };
+  | { type: 'invRemoveContainer'; tokenId: string; containerId: string }
+  // APEX 0.5 – equipment (items stay in the inventory; slots only reference them)
+  | { type: 'equipItem'; tokenId: string; itemId: string; slot: EquipSlot }
+  | { type: 'unequipSlot'; tokenId: string; slot: EquipSlot }
+  | { type: 'setWeaponSet'; tokenId: string; set: 1 | 2 }
+  | { type: 'setResting'; tokenId: string; resting: boolean; keep?: EquipSlot[] }
+  | { type: 'setItemEquip'; tokenId: string; itemId: string; rev: number; equip: ItemEquip | null; gmLocked?: boolean }
+  | { type: 'setEquipConfig'; tokenId: string; unarmoredAbility?: Ability | null; acOther?: number; acOtherLabel?: string };
 
 /** Commands a player may send for their OWN character (besides 'move'). */
 export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
@@ -71,6 +79,12 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'invAddContainer',
   'invRenameContainer',
   'invRemoveContainer',
+  'equipItem',
+  'unequipSlot',
+  'setWeaponSet',
+  'setResting',
+  'setItemEquip',
+  'setEquipConfig',
 ]);
 
 /** May the actor edit this character's sheet resources and inventory? GM: all; player: only their own character. */
@@ -160,6 +174,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
     return fail(prev, prev.tokens[(cmd as { tokenId: string }).tokenId] ? T.notYourCharacter : T.noSuchToken);
   }
   if (cmd.type.startsWith('inv')) return executeInventory(prev, cmd as InventoryCommand);
+  if (EQUIPMENT_COMMANDS.has(cmd.type)) return executeEquipment(prev, actor, cmd as EquipmentCommand);
 
   const state: GameState = structuredClone(prev);
 
@@ -421,6 +436,7 @@ function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult
       const item = findItem(cmd.itemId, cmd.rev);
       if (typeof item === 'string') return fail(prev, item);
       t.inventory = t.inventory.filter((i) => i !== item);
+      reconcileEquipment(t); // a removed item can no longer be equipped anywhere
       break;
     }
     case 'invAddContainer': {
@@ -444,6 +460,65 @@ function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult
       if (t.inventory.some((i) => i.container === cmd.containerId)) return fail(prev, T.containerNotEmpty);
       if (containers.length <= 1) return fail(prev, T.lastContainer);
       t.containers = containers.filter((c) => c.id !== cmd.containerId);
+      break;
+    }
+  }
+  return { ok: true, state };
+}
+
+// ---------------------------------------------------------------- APEX 0.5 equipment
+
+const EQUIPMENT_COMMANDS: ReadonlySet<Command['type']> = new Set(['equipItem', 'unequipSlot', 'setWeaponSet', 'setResting', 'setItemEquip', 'setEquipConfig']);
+type EquipmentCommand = Extract<Command, { type: 'equipItem' | 'unequipSlot' | 'setWeaponSet' | 'setResting' | 'setItemEquip' | 'setEquipConfig' }>;
+
+const EQUIP_ERROR: Record<EquipError, string> = {
+  noSuchItem: 'This item is no longer in the inventory.',
+  noEquipProps: 'Define the item’s equipment properties first (kind, armour or weapon values).',
+  wrongSlot: 'This item does not fit that equipment slot.',
+  twoHandedOff: 'A two-handed weapon needs both hands – the off hand stays empty.',
+  gmLocked: 'The Game Master has locked this item’s properties.',
+};
+
+/** Equipment changes: private to the owner and the GM (no log, no knowledge refresh). */
+function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand): CommandResult {
+  const state: GameState = structuredClone(prev);
+  const t = state.tokens[cmd.tokenId];
+  if (t.kind !== 'player') return fail(prev, T.noSuchToken);
+  const eq = () => (t.equipment ??= emptyEquipment());
+  switch (cmd.type) {
+    case 'equipItem': {
+      const err = equipItem(t, cmd.itemId, cmd.slot);
+      if (err) return fail(prev, EQUIP_ERROR[err]);
+      break;
+    }
+    case 'unequipSlot':
+      unequipSlot(t, cmd.slot);
+      break;
+    case 'setWeaponSet':
+      eq().activeSet = cmd.set;
+      break;
+    case 'setResting':
+      // Only changes which equipment counts – never heals or grants rest benefits.
+      eq().resting = cmd.resting;
+      if (cmd.keep) eq().restingKeep = [...new Set(cmd.keep)];
+      break;
+    case 'setItemEquip': {
+      const item = t.inventory.find((i) => i.id === cmd.itemId);
+      if (!item) return fail(prev, T.itemGone);
+      if ((item.rev ?? 0) !== cmd.rev) return fail(prev, T.itemChanged(item.name));
+      const locked = !!item.equip?.gmLocked;
+      if (locked && actor.role !== 'gm') return fail(prev, EQUIP_ERROR.gmLocked);
+      if (cmd.equip === null) delete item.equip;
+      else item.equip = { ...cmd.equip, gmLocked: actor.role === 'gm' ? !!cmd.gmLocked : locked };
+      item.rev = (item.rev ?? 0) + 1;
+      reconcileEquipment(t); // a changed kind may no longer fit its slot
+      break;
+    }
+    case 'setEquipConfig': {
+      const e = eq();
+      if (cmd.unarmoredAbility !== undefined) e.unarmoredAbility = cmd.unarmoredAbility;
+      if (cmd.acOther !== undefined) e.acOther = cmd.acOther;
+      if (cmd.acOtherLabel !== undefined) e.acOtherLabel = cmd.acOtherLabel.trim().slice(0, 60) || undefined;
       break;
     }
   }
