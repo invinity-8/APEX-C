@@ -9,7 +9,7 @@ export function Portrait({ profile, size = 88 }: { profile: ProfileConfig; size?
       <defs>
         <radialGradient id={`${id}-bg`} cx="50%" cy="38%" r="65%">
           <stop offset="0" stopColor={profile.color} stopOpacity="0.55" />
-          <stop offset="1" stopColor="#0f0d0c" />
+          <stop offset="1" stopColor="#15181b" />
         </radialGradient>
         <linearGradient id={`${id}-gold`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#f6dd94" />

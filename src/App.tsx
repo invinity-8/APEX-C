@@ -265,7 +265,7 @@ export default function App({ game }: { game: GameApi }) {
             onClick={() => setScreen(t.id)}
             aria-current={screen === t.id ? 'page' : undefined}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              screen === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(212,166,74,.6)]' : 'text-marble-300 hover:bg-ink-800 hover:text-marble-50'
+              screen === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:bg-ink-800 hover:text-marble-50'
             }`}
           >
             {t.label}

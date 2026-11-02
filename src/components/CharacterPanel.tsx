@@ -194,7 +194,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm transition-colors ${tab === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(212,166,74,.6)]' : 'text-marble-300 hover:bg-ink-800'}`}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm transition-colors ${tab === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:bg-ink-800'}`}
           >
             {t.label}
           </button>
@@ -520,7 +520,7 @@ function ApexResources({ token, isGm, run }: { token: TokenView; isGm: boolean; 
             label="Movement points"
             current={details.movePoints}
             max={details.maxMovePoints}
-            color="#e9c46a"
+            color="#d6b878"
             onDelta={isGm ? (d) => void run({ type: 'adjustMovePoints', tokenId: token.id, delta: d }) : undefined}
             hint={isGm ? undefined : 'Spent by moving on the map, restored at dawn.'}
           />

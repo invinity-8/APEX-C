@@ -7,7 +7,7 @@ import { HEX_SIZE, center, stackLayout } from './geometry';
 const SITE_ICON: Record<Site['type'], ReactNode> = {
   start: (
     <g>
-      <path d="M0,-9 L7,0 L0,9 L-7,0 Z" fill="#e9c46a" stroke="#4a3510" strokeWidth={1} />
+      <path d="M0,-9 L7,0 L0,9 L-7,0 Z" fill="#d6b878" stroke="#4a3510" strokeWidth={1} />
       <rect x={-1.5} y={-5} width={3} height={10} fill="#5a4214" />
     </g>
   ),
@@ -41,7 +41,7 @@ const SITE_ICON: Record<Site['type'], ReactNode> = {
     <g>
       <rect x={-7} y={-4} width={14} height={10} rx={1.5} fill="#c9973c" stroke="#3c2a0e" strokeWidth={1} />
       <path d="M-7,0 h14" stroke="#3c2a0e" strokeWidth={1} />
-      <rect x={-1.5} y={-1.5} width={3} height={3} fill="#f3dc9a" />
+      <rect x={-1.5} y={-1.5} width={3} height={3} fill="#e8d4a6" />
     </g>
   ),
 };
@@ -51,7 +51,7 @@ export function SiteMarker({ site, gm }: { site: SiteView; gm: boolean }) {
   const hidden = gm && site.visibility === 'hidden';
   return (
     <g transform={`translate(${c.x},${c.y - HEX_SIZE * 0.42})`} pointerEvents="none" opacity={hidden ? 0.75 : 1}>
-      <circle r={11} fill="#0f0d0c" stroke={hidden ? '#c4a6ff' : '#d4a64a'} strokeWidth={1.4} strokeDasharray={hidden ? '3 2' : undefined} />
+      <circle r={11} fill="#15181b" stroke={hidden ? '#c4a6ff' : '#c09b58'} strokeWidth={1.4} strokeDasharray={hidden ? '3 2' : undefined} />
       <g transform="scale(0.85)">{SITE_ICON[site.type]}</g>
     </g>
   );
@@ -126,7 +126,7 @@ export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSele
             opacity={ghost ? 0.55 : 1}
           >
             <title>{`${t.name} – ${t.title}${ghost ? ' (hidden from players)' : ''}`}</title>
-            {selected && <circle r={r + 4} fill="none" stroke="#f3dc9a" strokeWidth={2.2} />}
+            {selected && <circle r={r + 4} fill="none" stroke="#e8d4a6" strokeWidth={2.2} />}
             {t.kind === 'player' ? (
               <>
                 <MarkerShape style={t.marker} r={r} color={t.color} accent={t.accent} highlight={isViewer} filter="url(#token-shadow)" />
@@ -154,8 +154,8 @@ export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSele
       })}
       {extra > 0 && (
         <g transform={`translate(${c.x + offsets[3].x},${c.y + offsets[3].y})`} pointerEvents="none">
-          <circle r={r} fill="#26221d" stroke="#d4a64a" strokeWidth={1.4} />
-          <text y={r * 0.36} textAnchor="middle" fontSize={r * 0.9} fontWeight={700} fill="#f3dc9a">+{extra}</text>
+          <circle r={r} fill="#26221d" stroke="#c09b58" strokeWidth={1.4} />
+          <text y={r * 0.36} textAnchor="middle" fontSize={r * 0.9} fontWeight={700} fill="#e8d4a6">+{extra}</text>
         </g>
       )}
     </g>

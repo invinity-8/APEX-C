@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Announcement, AnnouncementCategory } from '../game/types';
 
 export const CATEGORY_STYLE: Record<AnnouncementCategory, { label: string; color: string; glow: string; icon: string }> = {
-  general: { label: 'Announcement', color: '#f3dc9a', glow: 'rgba(233,196,106,.55)', icon: '✦' },
+  general: { label: 'Announcement', color: '#e8d4a6', glow: 'rgba(233,196,106,.55)', icon: '✦' },
   warning: { label: 'Warning', color: '#ffb35c', glow: 'rgba(255,150,60,.55)', icon: '⚠' },
   death: { label: 'A tribute has fallen', color: '#ff6b6b', glow: 'rgba(200,40,40,.6)', icon: '☩' },
   world: { label: 'World event', color: '#a6c8ff', glow: 'rgba(120,160,255,.55)', icon: '⚡' },

@@ -39,7 +39,7 @@ export function WelcomeScreen({ onJoin }: { onJoin: () => void }) {
   return (
     <Shell>
       <div className="flex flex-col items-center text-center">
-        <ApexEmblem className="h-16 w-16 drop-shadow-[0_0_24px_rgba(212,166,74,.5)]" />
+        <ApexEmblem className="h-16 w-16 drop-shadow-[0_0_24px_rgba(192,155,88,.5)]" />
         <h1 className="mt-4 font-display text-4xl font-black tracking-[0.08em] text-gold-300 sm:text-5xl">Welcome to APEX</h1>
         <p className="mt-2 font-display text-lg tracking-[0.12em] text-gold-200/90 sm:text-xl">APEX – Arena of the Eternal Will</p>
       </div>
@@ -135,7 +135,7 @@ export function ProfileSelect({
                 className={`group flex h-full w-full flex-col items-center rounded-2xl border p-4 text-center transition-all ${
                   inactive
                     ? 'cursor-not-allowed border-ink-600 bg-ink-850/60 opacity-50'
-                    : 'border-gold-700/50 bg-ink-850/90 hover:-translate-y-1 hover:border-gold-400 hover:shadow-[0_10px_30px_-10px_rgba(212,166,74,.6)] focus-visible:border-gold-400 focus-visible:outline-none'
+                    : 'border-gold-700/50 bg-ink-850/90 hover:-translate-y-1 hover:border-gold-400 hover:shadow-[0_10px_30px_-10px_rgba(192,155,88,.6)] focus-visible:border-gold-400 focus-visible:outline-none'
                 }`}
                 aria-label={`${p.name} – ${p.role === 'gm' ? 'Game Master' : `plays ${p.character}`}${inactive ? ' – not activated yet' : ''}`}
               >

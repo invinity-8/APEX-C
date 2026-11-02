@@ -11,7 +11,7 @@ import type { DispatchResult, GameApi } from '../state/gameApi';
 import { CharacterPortrait, MARKER_LABEL, MarkerPreview } from './CharacterVisuals';
 import { Spinner } from './brand';
 
-const PALETTE = ['#e9c46a', '#d4a64a', '#c0392b', '#a3262b', '#6fb1e0', '#3d6fa6', '#7cc98a', '#3a7d44', '#a78bfa', '#6b4fa0', '#ece4d2', '#8a7a66'];
+const PALETTE = ['#d6b878', '#c09b58', '#c0392b', '#a3262b', '#6fb1e0', '#3d6fa6', '#7cc98a', '#3a7d44', '#a78bfa', '#6b4fa0', '#ece4d2', '#8a7a66'];
 const OUT = 512; // exported portrait size (px)
 const VIEW = 220; // crop preview size (px)
 
@@ -25,16 +25,16 @@ interface Props {
 export function AppearanceEditor({ game, token, run, notify }: Props) {
   const [title, setTitle] = useState(token.title);
   const [color, setColor] = useState(token.color);
-  const [accent, setAccent] = useState(token.accent ?? '#d4a64a');
+  const [accent, setAccent] = useState(token.accent ?? '#c09b58');
   const [marker, setMarker] = useState<MarkerStyle>(token.marker ?? 'medallion');
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     setTitle(token.title);
     setColor(token.color);
-    setAccent(token.accent ?? '#d4a64a');
+    setAccent(token.accent ?? '#c09b58');
     setMarker(token.marker ?? 'medallion');
   }, [token.id, token.title, token.color, token.accent, token.marker]);
-  const dirty = title !== token.title || color !== token.color || accent !== (token.accent ?? '#d4a64a') || marker !== (token.marker ?? 'medallion');
+  const dirty = title !== token.title || color !== token.color || accent !== (token.accent ?? '#c09b58') || marker !== (token.marker ?? 'medallion');
 
   const save = async () => {
     setSaving(true);
@@ -103,7 +103,7 @@ export function AppearanceEditor({ game, token, run, notify }: Props) {
             onClick={() => {
               setTitle(token.title);
               setColor(token.color);
-              setAccent(token.accent ?? '#d4a64a');
+              setAccent(token.accent ?? '#c09b58');
               setMarker(token.marker ?? 'medallion');
             }}
           >

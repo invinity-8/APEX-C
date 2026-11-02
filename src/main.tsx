@@ -5,6 +5,7 @@ import App from './App';
 import { OfflineEntry } from './entry/OfflineEntry';
 import { demoAllowed, missingConfig, onlineConfig } from './online/config';
 import { useDemoGame } from './state/useGame';
+import { VersionBadge } from './components/VersionBadge';
 import './index.css';
 
 // The online client (Supabase SDK, login screens) is only downloaded when it is used.
@@ -43,6 +44,7 @@ else root = <OfflineEntry missing={missingConfig} />;
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {root}
+    <VersionBadge />
     <SpeedInsights />
   </StrictMode>,
 );

@@ -15,7 +15,7 @@ export function AuthShell({ children, subtitle }: { children: ReactNode; subtitl
     <main className="auth-bg flex min-h-full items-center justify-center px-4 py-10">
       <div className="w-full max-w-[400px]">
         <div className="mb-7 flex flex-col items-center text-center">
-          <ApexEmblem className="h-20 w-20 drop-shadow-[0_0_24px_rgba(212,166,74,.45)]" />
+          <ApexEmblem className="h-20 w-20 drop-shadow-[0_0_24px_rgba(192,155,88,.45)]" />
           <h1 className="mt-3 font-display text-4xl font-black tracking-[0.35em] text-gold-300">APEX</h1>
           <p className="mt-1 text-[11px] uppercase tracking-[0.3em] text-marble-500">Arena of the Eternal Will</p>
           {subtitle && <p className="mt-4 text-sm text-marble-300">{subtitle}</p>}
@@ -259,7 +259,7 @@ function ProfileHeader({ profile }: { profile: ProfileConfig }) {
 export function Splash({ text }: { text: string }) {
   return (
     <main className="auth-bg flex min-h-full flex-col items-center justify-center gap-4" aria-busy="true">
-      <ApexEmblem className="h-16 w-16 animate-pulse drop-shadow-[0_0_20px_rgba(212,166,74,.4)]" />
+      <ApexEmblem className="h-16 w-16 animate-pulse drop-shadow-[0_0_20px_rgba(192,155,88,.4)]" />
       <p className="flex items-center gap-2 text-sm text-marble-300" role="status">
         <Spinner /> {text}
       </p>
