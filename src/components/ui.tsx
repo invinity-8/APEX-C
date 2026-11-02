@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
-export function Bar({ value, max, color = '#e9c46a', className = '' }: { value: number; max: number; color?: string; className?: string }) {
+export function Bar({ value, max, color = '#d6b878', className = '' }: { value: number; max: number; color?: string; className?: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
     <div className={`h-1.5 w-full overflow-hidden rounded-full bg-ink-700 ${className}`}>
@@ -58,7 +58,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={`rounded-md px-2 ${size === 'md' ? 'py-1.5 text-xs' : 'py-1 text-[11px]'} font-medium transition-colors ${
-            value === o.value ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(212,166,74,.6)]' : 'text-marble-300 hover:text-marble-50'
+            value === o.value ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:text-marble-50'
           }`}
         >
           {o.label}
@@ -98,6 +98,38 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
       <span className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors ${checked ? 'border-gold-400 bg-gold-400/30' : 'border-ink-500 bg-ink-800'}`}>
         <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full transition-all ${checked ? 'left-[18px] bg-gold-200' : 'left-0.5 bg-marble-500'}`} />
       </span>
+    </button>
+  );
+}
+
+/** Panel template (APEX 0.5 design system): stone slab with a carved widget header. */
+export function Panel({ title, actions, children, className = '', bodyClassName = 'p-3' }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
+  return (
+    <section className={`panel ${className}`}>
+      {(title || actions) && (
+        <div className="widget-header">
+          {title && <h2 className="panel-title flex-1 truncate">{title}</h2>}
+          {actions}
+        </div>
+      )}
+      <div className={bodyClassName}>{children}</div>
+    </section>
+  );
+}
+
+/** Small square icon button used in widget headers. */
+export function IconButton({ label, onClick, children, pressed, disabled }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[12px] text-marble-500 transition-colors hover:bg-ink-700 hover:text-gold-200 disabled:opacity-30"
+    >
+      {children}
     </button>
   );
 }

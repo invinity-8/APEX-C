@@ -82,6 +82,18 @@ const waitText = (page, re, timeout = 10000) =>
   // ---------- Welcome & profiles ----------
   const anon = await newDevice(b);
   await anon.goto(url('/'));
+  // ---------- version badge (APEX 0.5) ----------
+  {
+    const badge = anon.getByTestId('version-badge');
+    check('version badge is visible on the welcome screen', await badge.isVisible() && /APEX v\d+\.\d+\.\d+/.test(await badge.innerText()));
+    await anon.waitForFunction(() => document.querySelector('[data-testid=version-badge]')?.getAttribute('data-api-commit') !== null, null, { timeout: 5000 }).catch(() => {});
+    const api = await apiFetch(anon, 'version');
+    const front = await badge.getAttribute('data-commit');
+    check('frontend and API build metadata agree (same commit, no mismatch flag)', api.status === 200 && (api.body.commit ?? '') === (front ?? '') && (await badge.getAttribute('data-mismatch')) === '0', JSON.stringify(api.body));
+    await badge.getByRole('button').click();
+    check('version details expand (environment, commit, API)', await anon.getByRole('dialog', { name: 'Deployment details' }).isVisible());
+    await badge.getByRole('button').click();
+  }
   await anon.getByRole('button', { name: 'Join Campaign' }).click();
   await anon.getByRole('heading', { name: 'Who are you?' }).waitFor();
   await anon.waitForTimeout(800);

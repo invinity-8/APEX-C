@@ -1,32 +1,99 @@
 @import "tailwindcss";
 
 @theme {
+  /* APEX 0.5 – Imperial Reforged design tokens (docs/design/APEX_VISUAL_STYLE_GUIDE.md).
+     Mandatory palette: Obsidian #22272B · Forest Green #405B49 · Weathered Stone #8C806A ·
+     Imperial Gold #C09B58 · Centurion Red #8E2F2F. The historic scale names (ink, marble, gold, blood)
+     are kept so every screen inherits the palette; new code should prefer the semantic --apex-* tokens. */
   --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
-  --color-ink-950: #08070a;
-  --color-ink-900: #0f0d0c;
-  --color-ink-850: #151210;
-  --color-ink-800: #1b1815;
-  --color-ink-700: #26221d;
-  --color-ink-600: #342f28;
-  --color-ink-500: #4a433a;
+  /* Obsidian – surfaces (800 is the canonical Obsidian) */
+  --color-ink-950: #0f1113;
+  --color-ink-900: #15181b;
+  --color-ink-850: #1b1f22;
+  --color-ink-800: #22272b;
+  --color-ink-700: #2c3237;
+  --color-ink-600: #3a4147;
+  --color-ink-500: #4e565d;
 
-  --color-marble-50: #f6f1e7;
-  --color-marble-100: #e9e1d1;
-  --color-marble-300: #bdb29e;
-  --color-marble-500: #8c826f;
+  /* Weathered Stone – text on dark (500 is the canonical Stone) */
+  --color-marble-50: #f3eee3;
+  --color-marble-100: #e3dccd;
+  --color-marble-300: #bcb29e;
+  --color-marble-500: #8c806a;
+  --color-stone-400: #a39782;
+  --color-stone-500: #8c806a;
+  --color-stone-700: #5b5345;
 
-  --color-gold-200: #f3dc9a;
-  --color-gold-300: #e9c46a;
-  --color-gold-400: #d4a64a;
-  --color-gold-500: #b08532;
-  --color-gold-700: #6e5220;
+  /* Imperial Gold (400 is the canonical Gold) */
+  --color-gold-200: #e8d4a6;
+  --color-gold-300: #d6b878;
+  --color-gold-400: #c09b58;
+  --color-gold-500: #a2803f;
+  --color-gold-700: #5f4b26;
 
-  --color-arcane-300: #c4a6ff;
-  --color-arcane-500: #8b5cf6;
-  --color-blood-400: #e5484d;
-  --color-blood-600: #a3262b;
+  /* Centurion Red (600 is the canonical Red) – banners, textiles, critical accents only */
+  --color-blood-400: #c0504c;
+  --color-blood-600: #8e2f2f;
+  --color-blood-800: #5a1d1d;
+
+  /* Forest Green (500 is the canonical Forest) – nature, success, stamina */
+  --color-forest-300: #8fae96;
+  --color-forest-400: #5d7d66;
+  --color-forest-500: #405b49;
+  --color-forest-700: #2b3d31;
+
+  /* Controlled magic – rare, geometric */
+  --color-arcane-300: #b9a8e3;
+  --color-arcane-500: #7a63c2;
+}
+
+/* Semantic tokens – use these in new code; the scales above are their building blocks. */
+:root {
+  --apex-obsidian: #22272b;
+  --apex-forest: #405b49;
+  --apex-stone: #8c806a;
+  --apex-gold: #c09b58;
+  --apex-red: #8e2f2f;
+
+  --apex-bg: #0f1113;
+  --apex-surface: rgba(27, 31, 34, 0.92);
+  --apex-surface-raised: #22272b;
+  --apex-surface-sunken: #15181b;
+  --apex-border: rgba(192, 155, 88, 0.28);
+  --apex-border-strong: rgba(192, 155, 88, 0.6);
+  --apex-text: #e3dccd;
+  --apex-text-strong: #f3eee3;
+  --apex-text-muted: #8c806a;
+  --apex-highlight: #d6b878;
+  --apex-alert: #c0504c;
+  --apex-alert-surface: rgba(142, 47, 47, 0.85);
+  --apex-warning: #d6a548;
+  --apex-success: #5d7d66;
+  --apex-selection: rgba(192, 155, 88, 0.35);
+  --apex-health: #a83a36;
+  --apex-health-deep: #5a1d1d;
+  --apex-resource: #4f6fae;
+  --apex-resource-deep: #1f2d4f;
+  --apex-stamina: #5d7d66;
+  --apex-disabled: rgba(140, 128, 106, 0.4);
+  --apex-focus: #d6b878;
+  --apex-hover: rgba(192, 155, 88, 0.12);
+  --apex-light-day: rgba(255, 228, 170, 0.10);
+  --apex-light-night: rgba(70, 90, 140, 0.18);
+
+  --apex-radius-sm: 6px;
+  --apex-radius: 10px;
+  --apex-radius-lg: 14px;
+  --apex-space-1: 4px;
+  --apex-space-2: 8px;
+  --apex-space-3: 12px;
+  --apex-space-4: 16px;
+  --apex-ease: cubic-bezier(.2, .7, .2, 1);
+  --apex-motion-fast: 120ms;
+  --apex-motion: 220ms;
+  --apex-motion-slow: 600ms;
 }
 
 @layer base {
@@ -34,17 +101,23 @@
   body {
     @apply bg-ink-950 text-marble-100 font-sans antialiased;
     background-image:
-      radial-gradient(ellipse at 50% -20%, rgba(212, 166, 74, 0.10), transparent 60%),
-      radial-gradient(ellipse at 100% 100%, rgba(139, 92, 246, 0.07), transparent 50%);
+      radial-gradient(ellipse at 50% -20%, rgba(192, 155, 88, 0.10), transparent 60%),
+      radial-gradient(ellipse at 0% 100%, rgba(64, 91, 73, 0.10), transparent 55%),
+      radial-gradient(ellipse at 100% 100%, rgba(142, 47, 47, 0.06), transparent 50%);
   }
-  ::selection { background: rgba(212, 166, 74, 0.35); }
-  * { scrollbar-width: thin; scrollbar-color: #4a433a transparent; }
+  ::selection { background: var(--apex-selection); }
+  * { scrollbar-width: thin; scrollbar-color: #4e565d transparent; }
+  :focus-visible { outline: 2px solid var(--apex-focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
 }
 
 @layer components {
   .panel {
     @apply rounded-xl border border-gold-700/40 bg-ink-850/90 backdrop-blur-sm;
-    box-shadow: inset 0 1px 0 rgba(243, 220, 154, 0.06), 0 10px 30px -12px rgba(0, 0, 0, 0.7);
+    /* stone slab: faint top light, carved inner edge, deep drop shadow */
+    box-shadow: inset 0 1px 0 rgba(232, 212, 166, 0.06), inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 10px 30px -12px rgba(0, 0, 0, 0.75);
   }
   .panel-title {
     @apply font-display text-[11px] font-bold uppercase tracking-[0.2em] text-gold-400;
@@ -56,10 +129,14 @@
   .btn-ghost { @apply border-ink-600 bg-ink-800 text-marble-100 hover:border-gold-500/70 hover:bg-ink-700; }
   .btn-gold {
     @apply border-gold-300/60 text-ink-950 font-semibold hover:brightness-110;
-    background: linear-gradient(180deg, #f0d27e, #c9973c);
-    box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 6px 18px -6px rgba(212,166,74,.6);
+    background: linear-gradient(180deg, #dcbf85, #a2803f);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,240,200,.35), 0 6px 18px -6px rgba(192,155,88,.55);
   }
   .btn-active { @apply border-gold-400 bg-gold-400/15 text-gold-200; }
+  .btn-danger { @apply border-blood-600 bg-blood-800/60 text-marble-50 hover:bg-blood-600; }
+  /* Widget/panel header template: carved title, optional actions on the right. */
+  .widget-header { @apply flex items-center gap-2 border-b border-gold-700/30 px-3 py-2; }
+  .imperial-rule { height: 1px; background: linear-gradient(90deg, transparent, var(--apex-gold), transparent); opacity: .45; }
   .chip { @apply inline-flex items-center gap-1 rounded-full border border-ink-600 bg-ink-800 px-2 py-0.5 text-[11px]; }
   .label { @apply text-[11px] uppercase tracking-wider text-marble-500; }
 }
@@ -109,7 +186,7 @@
 .auth-bg {
   background-color: #0b0a0e;
   background-image:
-    radial-gradient(ellipse at 50% 30%, rgba(212, 166, 74, 0.14), transparent 60%),
+    radial-gradient(ellipse at 50% 30%, rgba(192,155,88, 0.14), transparent 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='90' viewBox='0 0 52 90'%3E%3Cpath d='M26 0 L52 15 L52 45 L26 60 L0 45 L0 15 Z M26 60 L26 90' fill='none' stroke='%23d4a64a' stroke-opacity='0.06'/%3E%3C/svg%3E");
 }
 
@@ -138,3 +215,26 @@
   .apex-announce-backdrop,
   .apex-announce-title { animation: none; }
 }
+
+
+/* ---------------------------------------------------------------- APEX 0.5 version badge */
+.apex-version { position: fixed; right: 8px; bottom: 8px; z-index: 45; font-size: 10px; line-height: 1.25; pointer-events: none; }
+.apex-version-button {
+  pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  padding: 3px 7px; border-radius: 6px; border: 1px solid rgba(192, 155, 88, 0.22);
+  background: rgba(15, 17, 19, 0.72); color: var(--apex-text-muted); backdrop-filter: blur(3px);
+  opacity: .72; transition: opacity var(--apex-motion-fast) ease;
+}
+.apex-version-button:hover, .apex-version-button:focus-visible, .apex-version-button[aria-expanded="true"] { opacity: 1; }
+.apex-version-line1 { color: var(--apex-highlight); font-weight: 600; letter-spacing: .02em; display: inline-flex; align-items: center; gap: 5px; }
+.apex-version-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--apex-alert); box-shadow: 0 0 6px var(--apex-alert); }
+.apex-version-details {
+  pointer-events: auto; margin-bottom: 6px; width: min(300px, calc(100vw - 16px)); padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--apex-border-strong); background: rgba(21, 24, 27, 0.97);
+  color: var(--apex-text); font-size: 11px; box-shadow: 0 12px 30px -10px rgba(0,0,0,.8);
+}
+.apex-version-details dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+.apex-version-details dt { color: var(--apex-text-muted); }
+.apex-version-details a { color: var(--apex-highlight); text-decoration: underline; }
+.apex-version-warn { margin-top: 8px; color: #f3c6c4; background: rgba(142, 47, 47, .35); border-radius: 6px; padding: 6px; }
+@media (max-width: 640px) { .apex-version-line2 { display: none; } }

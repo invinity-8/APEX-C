@@ -27,7 +27,7 @@ export function markerPath(style: MarkerStyle, r: number): string | null {
 
 /** SVG marker body (centred on 0,0). */
 export function MarkerShape({ style = 'medallion', r, color, accent, highlight, filter }: { style?: MarkerStyle; r: number; color: string; accent?: string; highlight?: boolean; filter?: string }) {
-  const stroke = highlight ? '#f3dc9a' : (accent ?? '#0f0d0c');
+  const stroke = highlight ? '#e8d4a6' : (accent ?? '#15181b');
   const sw = highlight ? 2.4 : accent ? 2 : 1.6;
   const d = markerPath(style, r);
   return d ? <path d={d} fill={color} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" filter={filter} /> : <circle r={r} fill={color} stroke={stroke} strokeWidth={sw} filter={filter} />;
@@ -80,12 +80,12 @@ export function CharacterPortrait({
       height={size}
       onError={() => setBroken(true)}
       className="shrink-0 rounded-full object-cover"
-      style={{ width: size, height: size, boxShadow: `0 0 0 2px ${ring}, 0 0 0 4px #0f0d0c` }}
+      style={{ width: size, height: size, boxShadow: `0 0 0 2px ${ring}, 0 0 0 4px #15181b` }}
     />
   ) : (
     <span
       className="flex shrink-0 items-center justify-center rounded-full font-display font-black"
-      style={{ width: size, height: size, background: color, color: '#14110d', fontSize: size * 0.36, boxShadow: `0 0 0 2px ${ring}, 0 0 0 4px #0f0d0c` }}
+      style={{ width: size, height: size, background: color, color: '#14110d', fontSize: size * 0.36, boxShadow: `0 0 0 2px ${ring}, 0 0 0 4px #15181b` }}
       aria-label={name}
     >
       {initials}

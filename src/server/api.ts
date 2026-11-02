@@ -21,6 +21,8 @@
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
 import { CHARACTER_COMMANDS, executeCommand, type Command } from '../game/commands.js';
 import { migrateState } from '../game/migrate.js';
+import { readBuildInfo } from '../build/buildInfo.js';
+import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import type { Actor, GameState } from '../game/types.js';
 import { phaseName } from '../game/text.js';
@@ -107,6 +109,7 @@ export const LOGIN_LIMITS = {
 
 export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
   try {
+    if (req.method === 'GET' && req.op === 'version') return ok(readBuildInfo(process.env, APP_VERSION, null)); // no DB access
     if (req.method === 'GET' && req.op === 'health') return ok(await health(repo));
     if (req.method === 'POST') checkCsrf(req);
     await requireCompatibleSchema(repo);

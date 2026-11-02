@@ -29,7 +29,7 @@ export function PartyPanel({ view, selectedTokenId, onSelect, online = false }: 
                 }`}
                 title={`Select ${t.name} and show on map`}
               >
-                <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online={online} color={t.color} accent={t.id === view.viewerId ? '#f3dc9a' : t.accent} initials={t.initials} name={t.name} size={30} />
+                <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online={online} color={t.color} accent={t.id === view.viewerId ? '#e8d4a6' : t.accent} initials={t.initials} name={t.name} size={30} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-sm font-medium text-marble-50">

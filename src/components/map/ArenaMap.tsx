@@ -311,7 +311,7 @@ export function ArenaMap(props: Props) {
               <g pointerEvents="none">
                 <path d={reachShapes.fill} fill="rgba(243,220,154,0.16)" />
                 <path d={reachShapes.edge} stroke="#000" strokeOpacity={0.5} strokeWidth={5} fill="none" />
-                <path d={reachShapes.edge} stroke="#f3dc9a" strokeWidth={2.2} fill="none" />
+                <path d={reachShapes.edge} stroke="#e8d4a6" strokeWidth={2.2} fill="none" />
               </g>
             )}
 
@@ -330,19 +330,19 @@ export function ArenaMap(props: Props) {
                 <polyline
                   points={previewPath.map((p) => `${p.x},${p.y}`).join(' ')}
                   fill="none"
-                  stroke={hoverExplain?.ok ? '#f3dc9a' : '#e5484d'}
+                  stroke={hoverExplain?.ok ? '#e8d4a6' : '#e5484d'}
                   strokeWidth={3}
                   strokeDasharray="6 5"
                   strokeLinecap="round"
                   filter="url(#soft-glow)"
                 />
                 {previewPath.slice(1).map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={hoverExplain?.ok ? '#f3dc9a' : '#e5484d'} />
+                  <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={hoverExplain?.ok ? '#e8d4a6' : '#e5484d'} />
                 ))}
               </g>
             )}
 
-            {selectedHex && view.hexByKey[selectedHex] && <HexOutline k={selectedHex} color="#f3dc9a" width={3} />}
+            {selectedHex && view.hexByKey[selectedHex] && <HexOutline k={selectedHex} color="#e8d4a6" width={3} />}
             {hover && hover !== selectedHex && <HexOutline k={hover} color="rgba(255,255,255,0.75)" width={1.6} />}
 
             {view.trackers.map((t) => (

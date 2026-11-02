@@ -30,7 +30,7 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gold-700/40 bg-ink-900/85 px-4 py-2 backdrop-blur">
       <div className="flex items-center gap-2.5">
-        <ApexEmblem className="h-9 w-9 drop-shadow-[0_0_8px_rgba(212,166,74,.45)]" />
+        <ApexEmblem className="h-9 w-9 drop-shadow-[0_0_8px_rgba(192,155,88,.45)]" />
         <div className="leading-tight">
           <div className="font-display text-xl font-black tracking-[0.3em] text-gold-300">APEX</div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-marble-500">{online ? online.campaignName : 'Arena of the Eternal Will'}</div>
