@@ -3,10 +3,10 @@
  * These screens contain no Supabase code, so they also render when the deployment
  * is not configured – joining then shows a clear setup error instead of a local game.
  */
+import { SplineHero } from '../components/SplineHero';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ApexEmblem, Spinner } from '../components/brand';
 import { PROFILES, type ProfileConfig } from '../data/profiles';
-import { CampaignPreview } from './CampaignPreview';
 import { Portrait } from './Portrait';
 
 export const PROFILE_KEY = 'apex.profile';
@@ -43,7 +43,7 @@ export function WelcomeScreen({ onJoin }: { onJoin: () => void }) {
         <h1 className="mt-4 font-display text-4xl font-black tracking-[0.08em] text-gold-300 sm:text-5xl">Welcome to APEX</h1>
         <p className="mt-2 font-display text-lg tracking-[0.12em] text-gold-200/90 sm:text-xl">APEX – Arena of the Eternal Will</p>
       </div>
-      <CampaignPreview className="mt-6 h-56 sm:h-72" />
+      <SplineHero className="mt-6 h-56 sm:h-72" />
       <div className="panel mt-6 p-6">
         <p className="text-sm leading-relaxed text-marble-100">
           At the height of its power, the Empire built an arena that no map can contain. Floating aqueducts, roads that carry the marching and

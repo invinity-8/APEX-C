@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { TERRAIN, TERRAIN_ORDER } from '../../game/terrain';
 import { fmt } from '../../game/text';
 
-export function Legend() {
+export function Legend({ atmosphere, setAtmosphere }: { atmosphere?: boolean; setAtmosphere?: (on: boolean) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
@@ -19,6 +19,12 @@ export function Legend() {
       </button>
       {open && (
         <div className="panel mt-2 w-60 p-3 text-xs">
+          {setAtmosphere && (
+            <label className="mb-2 flex items-center justify-between gap-2 border-b border-ink-600 pb-2 text-marble-300">
+              Atmosphere (fog, light, vignette)
+              <input type="checkbox" checked={!!atmosphere} onChange={(e) => setAtmosphere(e.target.checked)} aria-label="Map atmosphere" />
+            </label>
+          )}
           <div className="panel-title mb-2">Terrain · Movement Cost</div>
           <ul className="space-y-1">
             {TERRAIN_ORDER.map((t) => (

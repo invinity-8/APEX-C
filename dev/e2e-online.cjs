@@ -94,6 +94,19 @@ const waitText = (page, re, timeout = 10000) =>
     check('version details expand (environment, commit, API)', await anon.getByRole('dialog', { name: 'Deployment details' }).isVisible());
     await badge.getByRole('button').click();
   }
+  // ---------- Spline hero & reduced motion (APEX 0.5) ----------
+  {
+    const hero = anon.getByTestId('spline-hero');
+    check('welcome hero shows the Spline poster immediately', await hero.locator('img').evaluate((i) => i.complete && i.naturalWidth > 0).catch(() => false));
+    const rm = await b.newContext({ viewport: { width: 1200, height: 800 }, reducedMotion: 'reduce' });
+    const rp = await rm.newPage();
+    let spline = 0;
+    rp.on('request', (r) => /splinecode|splinetool|\/assets\/runtime-/.test(r.url()) && spline++);
+    await rp.goto(url('/'));
+    await rp.waitForTimeout(2500);
+    check('reduced motion: no Spline runtime or scene is downloaded, the poster stays', spline === 0 && (await rp.getByTestId('spline-hero').getAttribute('data-state')) === 'poster');
+    await rm.close();
+  }
   await anon.getByRole('button', { name: 'Join Campaign' }).click();
   await anon.getByRole('heading', { name: 'Who are you?' }).waitFor();
   await anon.waitForTimeout(800);
@@ -520,6 +533,12 @@ const waitText = (page, re, timeout = 10000) =>
     await gm.getByRole('button', { name: /☰ Widgets/ }).click();
     await gm.getByRole('menuitem', { name: /Reset workspace/ }).click();
     check('Reset workspace restores the default layout', (await order('right'))[0] === 'gm-tools' && (await order('left')).length === 0);
+    check('map atmosphere overlay is on by default', (await gm.getByTestId('atmosphere').count()) === 1);
+    await gm.getByRole('button', { name: /Legend/ }).click();
+    await gm.getByLabel('Map atmosphere').uncheck();
+    check('the atmosphere can be switched off (personal setting)', await gm.evaluate(() => localStorage.getItem('apex.map.atmosphere') === 'off'));
+    await gm.getByLabel('Map atmosphere').check();
+    await gm.getByRole('button', { name: /Legend/ }).click();
     await gm.screenshot({ path: out + '/e2e-workspace-gm.png' });
     // players: GM widgets cannot be unlocked through the stored layout
     await hannah.evaluate(() => {
