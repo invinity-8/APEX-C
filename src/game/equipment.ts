@@ -112,13 +112,14 @@ export const slotOfItem = (eq: Equipment, itemId: string): EquipSlot | null => E
 
 // ---------------------------------------------------------------- rules applied by commands (mutating)
 
-export type EquipError = 'noSuchItem' | 'noEquipProps' | 'wrongSlot' | 'twoHandedOff' | 'gmLocked';
+export type EquipError = 'noSuchItem' | 'noEquipProps' | 'wrongSlot' | 'twoHandedOff' | 'gmLocked' | 'unidentified';
 
 /** Equips an item into a slot; moves it if it was equipped elsewhere (never duplicates). */
 export function equipItem(t: Token, itemId: string, slot: EquipSlot): EquipError | null {
   const item = t.inventory.find((i) => i.id === itemId);
   if (!item) return 'noSuchItem';
   if (!item.equip) return 'noEquipProps';
+  if (item.identified === false) return 'unidentified';
   if (!slotAccepts(slot, item.equip)) return 'wrongSlot';
   const eq = structuredClone(equipmentOf(t));
   const main = mainOf(slot);
@@ -313,6 +314,7 @@ export function weaponMods(item: Item, rules: ItemRules = DEFAULT_ITEM_RULES): {
       flatLeft -= v;
       if (v > 0) out.flat.push({ damage: e.damage, value: v });
     } else if (e.type === 'bane') out.banes.push(`+${m.value} vs ${e.creature}`);
+    else if (e.type === 'critDamage') out.banes.push(`+${m.value} on a critical hit`);
   }
   out.toHit = Math.min(out.toHitTotal, rules.toHitCap);
   return out;
@@ -449,3 +451,15 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
 }
 
 export const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+/** One-click equip from the inventory: a fitting slot of the ACTIVE weapon set, free slots first. */
+export function suggestSlot(eq: Equipment, item: Pick<Item, 'id' | 'equip'>): EquipSlot | null {
+  if (!item.equip) return null;
+  const cands = EQUIP_SLOTS.filter((s) => {
+    if (!slotAccepts(s, item.equip)) return false;
+    const set = setOfSlot(s);
+    if (set !== null && set !== eq.activeSet) return false;
+    return !(mainOf(s) && isTwoHanded(item.equip));
+  });
+  return cands.find((s) => !eq.slots[s]) ?? cands[0] ?? null;
+}

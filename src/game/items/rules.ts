@@ -6,7 +6,8 @@ export type Rarity = 'normal' | 'magic' | 'rare' | 'unique';
 /** Unique is reserved for a later release: it cannot be generated or created yet. */
 export const GENERATABLE_RARITIES: Rarity[] = ['normal', 'magic', 'rare'];
 
-export const MODIFIER_VERSION = 1;
+/** 2: weapon suffixes (of Ruin, of Alacrity on weapons) so rare weapons can reach 3–4 modifiers. */
+export const MODIFIER_VERSION = 2;
 export const MAX_ITEM_LEVEL = 30;
 
 export interface AffixRule {
@@ -39,6 +40,8 @@ export interface ItemRules {
   speedCap: number;
   /** Flat bonus damage per weapon hit from modifiers (all elements together). */
   flatDamageCap: number;
+  /** Economy: Arcane Fragments needed for one Orb of Renewal. */
+  fragmentsPerOrb: number;
 }
 
 export const DEFAULT_ITEM_RULES: ItemRules = {
@@ -51,6 +54,7 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   maxHpCap: 20,
   speedCap: 10,
   flatDamageCap: 6,
+  fragmentsPerOrb: 10,
 };
 
 /** Hard limits the GM's overrides must stay within (validation). */
@@ -64,6 +68,7 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   maxHpCap: [0, 60],
   speedCap: [0, 30],
   flatDamageCap: [0, 12],
+  fragmentsPerOrb: [2, 100],
 };
 
 export function itemRulesOf(state: { itemRules?: Partial<ItemRules> }): ItemRules {

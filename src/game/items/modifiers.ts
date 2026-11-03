@@ -30,7 +30,8 @@ export type ModEffect =
   | { type: 'initiative' }
   | { type: 'carry' }
   | { type: 'speed' }
-  | { type: 'bane'; creature: Creature };
+  | { type: 'bane'; creature: Creature }
+  | { type: 'critDamage' };
 
 export interface ModTier {
   tier: number;
@@ -184,11 +185,23 @@ export const MODIFIERS: ModDef[] = [
     name: 'of Alacrity',
     affix: 'suffix',
     family: 'initiative',
-    tags: ['feet', 'hands', 'jewellery'],
+    tags: ['feet', 'hands', 'jewellery', 'weapon'],
     tiers: [t(1, 6, 1, 1, 250), t(2, 20, 2, 2, 80)],
     effect: { type: 'initiative' },
     text: '+{v} to initiative',
     description: 'At most +2 from all equipped modifiers.',
+  },
+  {
+    id: 'crit-damage',
+    name: 'of Ruin',
+    affix: 'suffix',
+    family: 'crit-damage',
+    tags: ['weapon'],
+    tiers: [t(1, 1, 2, 3, 500), t(2, 10, 3, 5, 300), t(3, 20, 5, 8, 120)],
+    effect: { type: 'critDamage' },
+    local: true,
+    text: '+{v} damage on a critical hit with this weapon',
+    description: 'Added once to the total damage of a critical hit (not doubled).',
   },
   {
     id: 'carry',

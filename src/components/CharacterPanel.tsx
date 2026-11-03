@@ -418,7 +418,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
           <EquipmentPanel game={game} token={token} run={run} isGm={isGm} />
         </section>
       )}
-      {tab === 'inventory' && <InventoryPanel token={token} run={run} busy={game.busy} embedded />}
+      {tab === 'inventory' && <InventoryPanel token={token} run={run} busy={game.busy} rules={game.view.itemRules} isGm={isGm} embedded />}
 
       {tab === 'appearance' && (
         <div className="space-y-3">

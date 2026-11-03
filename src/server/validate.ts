@@ -5,7 +5,9 @@
  */
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
-import { ITEM_RULE_LIMITS } from '../game/items/rules.js';
+import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
+import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
+import { MAX_COUNT } from '../game/items/loot.js';
 import { MARKER_STYLES } from '../game/types.js';
 import { TERRAIN_ORDER } from '../game/terrain.js';
 
@@ -32,6 +34,40 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'place':
       if (!isId(c.tokenId) || !isAxial(c.to)) return bad('tokenId/to');
       return { ok: true, command: { type: c.type, tokenId: c.tokenId, to: { q: c.to.q, r: c.to.r } } };
+    case 'arsenalGenerate': {
+      if (!isId(c.stagedId) || !isId(c.baseId) || !oneOf(c.rarity, ['normal', 'magic', 'rare'] as const) || !isInt(c.itemLevel, MAX_ITEM_LEVEL) || c.itemLevel < 1 || typeof c.identified !== 'boolean') return bad('arsenalGenerate');
+      if (c.quantity !== undefined && (!isInt(c.quantity, 99) || c.quantity < 1)) return bad('quantity');
+      if (c.count !== undefined && (!isInt(c.count, MAX_COUNT) || c.count < 1)) return bad('count');
+      if (c.giveTo !== undefined && !isId(c.giveTo)) return bad('giveTo');
+      // NOTE: never accept a client seed – the server injects it (api.ts).
+      return {
+        ok: true,
+        command: { type: 'arsenalGenerate', stagedId: c.stagedId, baseId: c.baseId, rarity: c.rarity, itemLevel: c.itemLevel, identified: c.identified, ...(c.quantity !== undefined ? { quantity: c.quantity } : {}), ...(c.count !== undefined ? { count: c.count } : {}), ...(c.giveTo !== undefined ? { giveTo: c.giveTo } : {}) },
+      };
+    }
+    case 'arsenalGive':
+      if (!isId(c.stagedId) || !isId(c.tokenId)) return bad('arsenalGive');
+      return { ok: true, command: { type: 'arsenalGive', stagedId: c.stagedId, tokenId: c.tokenId } };
+    case 'arsenalDiscard':
+      if (!isId(c.stagedId)) return bad('arsenalDiscard');
+      return { ok: true, command: { type: 'arsenalDiscard', stagedId: c.stagedId } };
+    case 'gmGrantCurrency':
+      if (!isId(c.tokenId) || !oneOf(c.currency, CURRENCY_IDS) || !isInt(c.amount, MAX_CURRENCY) || c.amount === 0) return bad('gmGrantCurrency');
+      return { ok: true, command: { type: 'gmGrantCurrency', tokenId: c.tokenId, currency: c.currency, amount: c.amount } };
+    case 'gmRevokeItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || (c.reason !== undefined && !isText(c.reason, 120))) return bad('gmRevokeItem');
+      return { ok: true, command: { type: 'gmRevokeItem', tokenId: c.tokenId, itemId: c.itemId, ...(typeof c.reason === 'string' && c.reason.trim() ? { reason: c.reason.trim().slice(0, 120) } : {}) } };
+    case 'gmSetItemLock':
+      if (!isId(c.tokenId) || !isId(c.itemId) || typeof c.locked !== 'boolean') return bad('gmSetItemLock');
+      return { ok: true, command: { type: 'gmSetItemLock', tokenId: c.tokenId, itemId: c.itemId, locked: c.locked } };
+    case 'itemIdentify':
+    case 'itemReroll':
+    case 'itemSalvage':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1e9)) return bad(c.type);
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'combineFragments':
+      if (!isId(c.tokenId) || !isInt(c.sets, 500) || c.sets < 1 || !isInt(c.currencyRev, 1e9)) return bad('combineFragments');
+      return { ok: true, command: { type: 'combineFragments', tokenId: c.tokenId, sets: c.sets, currencyRev: c.currencyRev } };
     case 'setItemRules': {
       if (c.rules === null) return { ok: true, command: { type: 'setItemRules', rules: null } };
       if (!isObj(c.rules)) return bad('rules');
