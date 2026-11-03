@@ -1,10 +1,11 @@
 # APEX – Visual Style Guide (canonical design system)
 
-> **Status: provisional (v0.5-draft).** This file is meant to version *"APEX – Visual Evolution, Design Briefing &
-> Technical Handover v0.2"*. That attachment was **not available** to the implementation session that created this
-> file, so the guide below is built from the art direction written into the APEX 0.5 "Imperial Reforged" brief
-> (palette, reference weighting, materials, constraints). When the v0.2 document is supplied, paste it verbatim into
-> **Appendix A** and reconcile any differences in **§12 Conflicts** – the briefing wins.
+> **Status: canonical implementation guide, aligned with the project owner's Visual Evolution v0.2 briefing.**
+>
+> **Primary creative source:** [APEX – Visual Evolution, Design Briefing v0.2](./APEX_VISUAL_EVOLUTION_BRIEF_V0_2.md).
+> Read that briefing **first** for artistic DNA, environments, imperial architecture, the Aquila Aurea, materials and atmosphere. This document translates the creative intent into the currently implemented UI tokens, components and technical conventions.
+>
+> If the two documents conflict about artistic direction, the v0.2 creative briefing wins; if implementation constraints conflict, document the trade-off before changing code.
 
 ## 1. Promise
 **"A beautiful, disciplined, dangerous empire."** Every screen should feel majestic, ancient, mysterious, dangerous
@@ -104,5 +105,10 @@ Canvas for the map; runtime 3D only where it earns its cost, lazy-loaded, with a
 | Purple ambient glow in the page background | Forest + faint Red ambient light; violet reserved for magic |
 | Bright red errors (`#e5484d`) | Centurion Red `#8E2F2F` surfaces, `#c0504c` for readable red text |
 
-## Appendix A – Visual Evolution, Design Briefing & Technical Handover v0.2
-*(to be inserted verbatim when supplied)*
+## Appendix A – Primary creative source
+
+The original owner's briefing is now separately versioned here:
+
+[APEX_VISUAL_EVOLUTION_BRIEF_V0_2.md](./APEX_VISUAL_EVOLUTION_BRIEF_V0_2.md)
+
+The original briefing's historical setup steps do not supersede the current repository or a later approved development brief.
