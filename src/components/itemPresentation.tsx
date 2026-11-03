@@ -3,13 +3,15 @@
  * Rarity / item level are optional on items (free-text items have neither), so everything degrades to the
  * plain name – narrative items and structured equipment coexist.
  */
+import { baseItem } from '../game/items/bases';
+import { describeMods } from '../game/items/instance';
+import type { Rarity } from '../game/items/rules';
 import type { Item } from '../game/types';
 
 export type ItemCategory = 'weapon' | 'armor' | 'accessory' | 'consumable' | 'other';
-type Rarity = 'normal' | 'magic' | 'rare' | 'unique';
 const RARITY_RANK: Record<Rarity, number> = { normal: 0, magic: 1, rare: 2, unique: 3 };
 
-const meta = (i: Item) => i as Item & { rarity?: Rarity; itemLevel?: number; category?: string; identified?: boolean };
+const meta = (i: Item) => ({ ...i, category: baseItem(i.baseId)?.category as string | undefined });
 
 export function itemCategory(i: Item): ItemCategory {
   const k = i.equip?.kind ?? meta(i).category ?? i.kind;
@@ -52,5 +54,21 @@ export function ItemBadges({ item }: { item: Item }) {
       )}
       {m.itemLevel !== undefined && <span className="ml-1 text-[10px] text-marble-500">ilvl {m.itemLevel}</span>}
     </>
+  );
+}
+
+/** Modifier lines of an identified item (or the "unidentified" note). Nothing for plain items. */
+export function ItemModLines({ item }: { item: Item }) {
+  if (item.identified !== false && !item.mods?.length) return null;
+  const lines = describeMods(item);
+  const color = item.rarity ? RARITY_STYLE[item.rarity].color : undefined;
+  return (
+    <ul className="text-[11px]" aria-label={`Properties of ${item.name}`}>
+      {lines.map((l, i) => (
+        <li key={i} style={{ color }} className={item.identified === false ? 'italic text-marble-500' : undefined}>
+          {l}
+        </li>
+      ))}
+    </ul>
   );
 }

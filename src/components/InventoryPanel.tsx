@@ -16,7 +16,7 @@ import { newEntryId } from '../game/sheet';
 import type { Item } from '../game/types';
 import type { TokenView } from '../game/visibility';
 import type { DispatchResult } from '../state/gameApi';
-import { itemSortKeys, ItemBadges, itemCategory, type ItemCategory } from './itemPresentation';
+import { itemSortKeys, ItemBadges, ItemModLines, itemCategory, type ItemCategory } from './itemPresentation';
 
 interface Props {
   token: TokenView;
@@ -399,6 +399,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
               </span>
             )}
           </div>
+          <ItemModLines item={item} />
           {item.description && <p className="text-xs text-marble-300">{item.description}</p>}
           {item.notes && <p className="text-xs italic text-marble-500">{item.notes}</p>}
           {item.willCapacity !== undefined && (

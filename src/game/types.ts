@@ -1,4 +1,5 @@
 import type { Equipment, ItemEquip } from './equipment.js';
+import type { ItemRules, Rarity } from './items/rules.js';
 /**
  * Central game state structure.
  * Everything that is saved, exported or stored in Supabase is defined here.
@@ -99,6 +100,34 @@ export interface Item {
   rev?: number;
   /** APEX 0.5: manually defined equipment properties (see equipment.ts). */
   equip?: ItemEquip;
+  /** APEX 0.6: base item template id from the item pool (src/game/items/bases.ts). */
+  baseId?: string;
+  /** APEX 0.6: rarity of generated items (missing = plain/free-text item). */
+  rarity?: Rarity;
+  itemLevel?: number;
+  /** false = unidentified: the modifiers exist server-side but are hidden from players until identified. */
+  identified?: boolean;
+  /** Rolled modifiers (server-generated only). */
+  mods?: RolledMod[];
+  /** Modifier repository version the mods were rolled with. */
+  modVersion?: number;
+  /** Where the item came from (GM grant, merchant, trade …). */
+  source?: ItemOrigin;
+  /** Bound items cannot be transferred or traded. */
+  bound?: boolean;
+}
+
+/** One rolled modifier on an item instance (APEX 0.6). */
+export interface RolledMod {
+  modId: string;
+  tier: number;
+  value: number;
+}
+
+export interface ItemOrigin {
+  kind: 'gm' | 'merchant' | 'trade' | 'transfer' | 'loot' | 'legacy';
+  label?: string;
+  day?: number;
 }
 
 /** A place in a character's inventory (Backpack, Pockets … or custom). */
@@ -303,6 +332,8 @@ export interface GameState {
   nextLogId: number;
   /** APEX 0.4: Arena Announcements (newest last, bounded). */
   announcements?: Announcement[];
+  /** APEX 0.6: GM overrides of the itemisation caps (see src/game/items/rules.ts). */
+  itemRules?: Partial<ItemRules>;
 }
 
 /** Who performs an action? */

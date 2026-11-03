@@ -21,6 +21,7 @@ export const T = {
   itemGone: 'This item no longer exists – it was removed on another device.',
   itemChanged: (name: string) => `“${name}” was changed on another device in the meantime. The latest version is shown now – please make your change again.`,
   itemNameRequired: 'Please enter a name or description for the item.',
+  itemQuantityFixed: 'The quantity of a generated (magic/rare) item cannot be changed.',
   itemExists: 'This item was already added.',
   inventoryFull: 'The inventory is full (300 entries).',
   noSuchContainer: 'This container does not exist (any more).',
