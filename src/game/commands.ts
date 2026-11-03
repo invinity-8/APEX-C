@@ -15,7 +15,7 @@ import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
 import { advanceDay, advancePhase } from './day.js';
 import { movePointsForSpeed } from './resources.js';
-import { emptyEquipment, equipItem, reconcileEquipment, unequipSlot, type Ability, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
+import { emptyEquipment, equipItem, reconcileEquipment, unequipSlot, type Ability, type Equipment, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
 import { addAnnouncement, applyEvent, eventEligible, postponeEvent, rejectEvent } from './events.js';
 import { stringHash } from './rng.js';
 import { TERRAIN } from './terrain.js';
@@ -59,7 +59,13 @@ export type Command =
   | { type: 'announce'; category: AnnouncementCategory; title: string; text: string }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
   | { type: 'setWill'; tokenId: string; current?: number; max?: number }
-  | { type: 'setAppearance'; tokenId: string; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
+  | { type: 'setAppearance'; tokenId: string; name?: string; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
+  | {
+      type: 'gmRestoreCharacter';
+      tokenId: string;
+      identity?: { name: string; title: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string };
+      equipment?: Pick<Equipment, 'slots' | 'activeSet' | 'resting' | 'restingKeep'>;
+    }
   | { type: 'invAddItem'; tokenId: string; itemId: string; name: string; quantity?: number; description?: string; notes?: string; container?: string }
   | { type: 'invUpdateItem'; tokenId: string; itemId: string; rev: number; name?: string; quantity?: number; description?: string; notes?: string; container?: string }
   | { type: 'invRemoveItem'; tokenId: string; itemId: string; rev: number }
@@ -403,12 +409,38 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
     case 'setAppearance': {
       // Cosmetic only: tag, colours, marker shape, initials. Never touches rules or permissions.
       const t = state.tokens[cmd.tokenId];
-      if (cmd.title !== undefined) t.title = cmd.title.trim().slice(0, 40) || t.title;
+      if (cmd.name !== undefined && cmd.name.trim()) t.name = cmd.name.trim().slice(0, 40);
+      if (cmd.title !== undefined && cmd.title.trim()) {
+        t.title = cmd.title.trim().slice(0, 60);
+        t.titleCustom = true; // a manually chosen tagline is never regenerated from imported class data
+      }
       if (cmd.color !== undefined) t.color = cmd.color.toLowerCase();
       if (cmd.accent !== undefined) t.accent = cmd.accent.toLowerCase();
       if (cmd.marker !== undefined) t.marker = cmd.marker;
       if (cmd.initials !== undefined && cmd.initials.trim()) t.initials = cmd.initials.trim().slice(0, 3);
       return { ok: true, state }; // no knowledge refresh needed
+    }
+    case 'gmRestoreCharacter': {
+      // Character snapshot restore (GM): identity and equipment CONFIGURATION only. Items, currency and
+      // ownership are never restored – slots that point to items the character no longer owns are dropped.
+      const t = state.tokens[cmd.tokenId];
+      if (t?.kind !== 'player') return fail(prev, T.noSuchToken);
+      if (cmd.identity) {
+        t.name = cmd.identity.name.trim().slice(0, 40);
+        t.title = cmd.identity.title.trim().slice(0, 60) || t.title;
+        t.titleCustom = true;
+        if (cmd.identity.color) t.color = cmd.identity.color.toLowerCase();
+        if (cmd.identity.accent) t.accent = cmd.identity.accent.toLowerCase();
+        if (cmd.identity.marker) t.marker = cmd.identity.marker;
+        if (cmd.identity.initials?.trim()) t.initials = cmd.identity.initials.trim().slice(0, 3);
+      }
+      if (cmd.equipment) {
+        const cur = t.equipment ?? emptyEquipment();
+        t.equipment = { ...cur, slots: { ...cmd.equipment.slots }, activeSet: cmd.equipment.activeSet, resting: cmd.equipment.resting, restingKeep: [...cmd.equipment.restingKeep] };
+        reconcileEquipment(t);
+      }
+      addLog(state, 'gm', `${t.name}: character configuration restored from a snapshot.`, 'gm');
+      return { ok: true, state };
     }
     default:
       return fail(prev, T.gmOnly);

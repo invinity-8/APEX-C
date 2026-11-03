@@ -164,8 +164,12 @@ export function parseCommand(raw: unknown): ParseResult {
       const hex = (v: unknown) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
       const out: Record<string, unknown> = { type: 'setAppearance', tokenId: c.tokenId };
       if (c.title !== undefined) {
-        if (!isText(c.title, 40)) return bad('title');
+        if (!isText(c.title, 60)) return bad('title');
         out.title = c.title;
+      }
+      if (c.name !== undefined) {
+        if (typeof c.name !== 'string' || !c.name.trim() || c.name.length > 40) return bad('name');
+        out.name = c.name;
       }
       if (c.color !== undefined) {
         if (!hex(c.color)) return bad('color');
@@ -184,6 +188,30 @@ export function parseCommand(raw: unknown): ParseResult {
         out.initials = c.initials;
       }
       if (Object.keys(out).length === 2) return bad('nothing to change');
+      return { ok: true, command: out as Command };
+    }
+    case 'gmRestoreCharacter': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      const out: Record<string, unknown> = { type: 'gmRestoreCharacter', tokenId: c.tokenId };
+      if (c.identity !== undefined) {
+        const i = c.identity;
+        const hex = (v: unknown) => v === undefined || (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v));
+        if (!isObj(i) || typeof i.name !== 'string' || !i.name.trim() || i.name.length > 40 || typeof i.title !== 'string' || i.title.length > 60 || !hex(i.color) || !hex(i.accent) || (i.marker !== undefined && !oneOf(i.marker, MARKER_STYLES)) || (i.initials !== undefined && (typeof i.initials !== 'string' || i.initials.length > 6)))
+          return bad('identity');
+        out.identity = { name: i.name, title: i.title, ...(i.color ? { color: i.color } : {}), ...(i.accent ? { accent: i.accent } : {}), ...(i.marker ? { marker: i.marker } : {}), ...(i.initials ? { initials: i.initials } : {}) };
+      }
+      if (c.equipment !== undefined) {
+        const e = c.equipment;
+        if (!isObj(e) || !isObj(e.slots) || (e.activeSet !== 1 && e.activeSet !== 2) || typeof e.resting !== 'boolean' || !Array.isArray(e.restingKeep)) return bad('equipment');
+        const slots: Record<string, string> = {};
+        for (const [k, v] of Object.entries(e.slots)) {
+          if (!oneOf(k, EQUIP_SLOTS) || !isId(v)) return bad('equipment.slots');
+          slots[k] = v;
+        }
+        if (!e.restingKeep.every((x) => oneOf(x, EQUIP_SLOTS))) return bad('equipment.restingKeep');
+        out.equipment = { slots, activeSet: e.activeSet, resting: e.resting, restingKeep: e.restingKeep as EquipSlot[] };
+      }
+      if (!out.identity && !out.equipment) return bad('nothing to restore');
       return { ok: true, command: out as Command };
     }
     case 'setWalkingSpeed':

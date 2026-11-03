@@ -1,3 +1,4 @@
+import type { FeedbackRow } from '../server/repo';
 /**
  * The interface between the UI and a game backend. Two implementations:
  *  - useDemoGame()   – everything local in this browser (development / demo)
@@ -40,7 +41,7 @@ export type SheetResult = { ok: true; sheet: SheetPayload } | { ok: false; error
 /** Character sheets (stored separately from the game state, one per player character). */
 export interface SheetApi {
   load: (tokenId: string) => Promise<SheetResult>;
-  save: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason?: 'edit' | 'import-merge' | 'import-replace') => Promise<SheetResult>;
+  save: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason?: 'edit' | 'import-merge' | 'import-replace' | 'import-levelup') => Promise<SheetResult>;
   adjust: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) => Promise<SheetResult>;
   /** Changes whenever a sheet may have been changed on another device (live ping or poll). */
   revision: number;
@@ -75,6 +76,11 @@ export interface OnlineControls {
   admin: (action: Record<string, unknown>) => Promise<AdminOverview>;
   /** World-replacing GM action (restore, roster conversion …): idempotent request id, verified outcome. */
   worldAction: (action: Record<string, unknown>) => Promise<DispatchResult>;
+  /** APEX 0.7 – GM character archive (snapshots); throws ApiError with a readable message. */
+  characterArchive: <T>(body: Record<string, unknown>) => Promise<T>;
+  /** APEX 0.7 – feedback: list (own/shared or all for the GM) and actions (submit, update, screenshot). */
+  feedbackList: () => Promise<FeedbackRow[]>;
+  feedback: <T>(body: Record<string, unknown>) => Promise<T>;
 }
 
 export interface GameApi {

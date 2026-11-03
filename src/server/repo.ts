@@ -285,6 +285,16 @@ export interface Repo {
   /** Optimistic write. expectedVersion 0 = create. Returns the new version, or null if someone else wrote first. */
   saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string): Promise<number | null>;
   backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string, userId: string): Promise<void>;
+  /** APEX 0.7: character snapshots + automatic sheet backups of one character (newest first, metadata only). */
+  listSheetBackups(campaignId: string, tokenId: string, limit: number): Promise<SheetBackupInfo[]>;
+  loadSheetBackup(campaignId: string, id: number): Promise<(SheetBackupInfo & { tokenId: string; data: unknown }) | null>;
+
+  // ---- feedback (APEX 0.7)
+  createFeedback(row: NewFeedback): Promise<FeedbackRow>;
+  /** userId set = only that user's reports plus reports the GM shared. */
+  listFeedback(campaignId: string, opts: { userId?: string; limit: number }): Promise<FeedbackRow[]>;
+  updateFeedback(campaignId: string, id: string, patch: Partial<Pick<FeedbackRow, 'status' | 'gmNotes' | 'shared'>>): Promise<FeedbackRow | null>;
+  countRecentFeedback(campaignId: string, userId: string, sinceIso: string): Promise<number>;
 
   logCommand(e: CommandLogEntry): Promise<void>;
   /** Idempotency: reserves a client request id (atomic, unique per campaign) before a state change. */
@@ -293,4 +303,43 @@ export interface Repo {
   finishRequest(campaignId: string, requestId: string, ok: boolean, error: string | null, version: number | null): Promise<void>;
   /** Looks up a reserved request (to verify an action whose response was lost). */
   requestStatus(campaignId: string, requestId: string): Promise<RequestReservation | null>;
+}
+
+/** APEX 0.7 – one row of apex_character_sheet_backups without its payload. */
+export interface SheetBackupInfo {
+  id: number;
+  version: number;
+  reason: string;
+  createdAt: string;
+  /** 'snapshot' = named character snapshot; 'backup' = automatic sheet backup (import, restore …). */
+  kind: 'snapshot' | 'backup';
+  name: string | null;
+  note: string | null;
+  level: string | null;
+}
+
+export type FeedbackKind = 'bug' | 'feature' | 'improvement';
+export type FeedbackStatus = 'new' | 'acknowledged' | 'in_progress' | 'resolved' | 'rejected';
+export interface NewFeedback {
+  campaignId: string;
+  userId: string;
+  profileKey: string;
+  tokenId: string | null;
+  kind: FeedbackKind;
+  category: string;
+  title: string;
+  description: string;
+  steps: string;
+  page: string;
+  appVersion: string;
+  screenshotPath: string | null;
+}
+export interface FeedbackRow extends Omit<NewFeedback, 'campaignId'> {
+  id: string;
+  status: FeedbackStatus;
+  gmNotes: string;
+  shared: boolean;
+  createdAt: string;
+  updatedAt: string;
+  statusChangedAt: string | null;
 }

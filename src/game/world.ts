@@ -22,7 +22,28 @@ export interface CarryOptions {
   keepProgress: boolean;
 }
 
-const CHARACTER_FIELDS = ['name', 'title', 'color', 'initials', 'inventory', 'containers', 'maxMovePoints', 'visionRadius', 'controllers', 'sharesWithParty'] as const;
+// APEX 0.7: equipment, currency, cosmetic choices and the portrait belong to the character as well – a new world
+// must not silently drop them.
+const CHARACTER_FIELDS = [
+  'name',
+  'title',
+  'titleCustom',
+  'color',
+  'accent',
+  'marker',
+  'portrait',
+  'initials',
+  'inventory',
+  'containers',
+  'equipment',
+  'currency',
+  'currencyRev',
+  'speedFt',
+  'maxMovePoints',
+  'visionRadius',
+  'controllers',
+  'sharesWithParty',
+] as const;
 
 /** Copies the character-level data of the old world's player characters into a freshly generated world. */
 export function carryCharacters(prev: GameState, fresh: GameState, opts: CarryOptions): GameState {
@@ -65,6 +86,12 @@ export function reconcileRestore(current: GameState, archived: GameState, choice
     t.inventory = structuredClone(now.inventory);
     if (now.containers) t.containers = structuredClone(now.containers);
     else delete t.containers;
+    // Ownership belongs to the present: keep the current equipment references and currency, never the archived
+    // ones (an item traded away since must not come back, currency must not be duplicated).
+    for (const f of ['equipment', 'currency', 'currencyRev', 'accent', 'marker', 'portrait', 'titleCustom'] as const) {
+      if (now[f] !== undefined) (t as unknown as Record<string, unknown>)[f] = structuredClone(now[f]);
+      else delete t[f];
+    }
     t.will = { current: Math.min(t.will.current, now.will.max), max: now.will.max };
     for (const f of ['name', 'title', 'color', 'initials'] as const) t[f] = now[f];
   }

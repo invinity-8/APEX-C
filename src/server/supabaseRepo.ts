@@ -12,6 +12,9 @@ import type {
   AuthBundle,
   Campaign,
   CommandLogEntry,
+  FeedbackRow,
+  NewFeedback,
+  SheetBackupInfo,
   Credential,
   DeployStatus,
   LoginAttemptStats,
@@ -594,6 +597,79 @@ export class SupabaseRepo implements Repo {
     );
   }
 
+  async listSheetBackups(campaignId: string, tokenId: string, limit: number): Promise<SheetBackupInfo[]> {
+    const rows = check(
+      await this.db
+        .from('apex_character_sheet_backups')
+        .select('id, version, reason, created_at, kind:data->>kind, name:data->>name, note:data->>note, level:data->>level')
+        .eq('campaign_id', campaignId)
+        .eq('token_id', tokenId)
+        .order('id', { ascending: false })
+        .limit(limit),
+      'list sheet backups',
+    ) as Array<Record<string, unknown>>;
+    return rows.map(toBackupInfo);
+  }
+
+  async loadSheetBackup(campaignId: string, id: number) {
+    const r = check(
+      await this.db.from('apex_character_sheet_backups').select('id, token_id, data, version, reason, created_at').eq('campaign_id', campaignId).eq('id', id).maybeSingle(),
+      'load sheet backup',
+    ) as Record<string, unknown> | null;
+    if (!r) return null;
+    const d = (r.data ?? {}) as Record<string, unknown>;
+    return { ...toBackupInfo({ ...r, kind: d.kind, name: d.name, note: d.note, level: d.level }), tokenId: String(r.token_id), data: r.data };
+  }
+
+  // ---------------------------------------------------------------- feedback
+  async createFeedback(f: NewFeedback): Promise<FeedbackRow> {
+    const row = check(
+      await this.db
+        .from('apex_feedback')
+        .insert({
+          campaign_id: f.campaignId,
+          user_id: f.userId,
+          profile_key: f.profileKey,
+          token_id: f.tokenId,
+          kind: f.kind,
+          category: f.category,
+          title: f.title,
+          description: f.description,
+          steps: f.steps,
+          page: f.page,
+          app_version: f.appVersion,
+          screenshot_path: f.screenshotPath,
+        })
+        .select('*')
+        .single(),
+      'create feedback',
+    ) as Record<string, unknown>;
+    return toFeedback(row);
+  }
+
+  async listFeedback(campaignId: string, opts: { userId?: string; limit: number }): Promise<FeedbackRow[]> {
+    let q = this.db.from('apex_feedback').select('*').eq('campaign_id', campaignId);
+    if (opts.userId) q = q.or(`user_id.eq.${opts.userId},shared.eq.true`);
+    const rows = check(await q.order('created_at', { ascending: false }).limit(opts.limit), 'list feedback') as Array<Record<string, unknown>>;
+    return rows.map(toFeedback);
+  }
+
+  async updateFeedback(campaignId: string, id: string, patch: Partial<Pick<FeedbackRow, 'status' | 'gmNotes' | 'shared'>>): Promise<FeedbackRow | null> {
+    const now = new Date().toISOString();
+    const upd: Record<string, unknown> = { updated_at: now };
+    if (patch.status !== undefined) (upd.status = patch.status), (upd.status_changed_at = now);
+    if (patch.gmNotes !== undefined) upd.gm_notes = patch.gmNotes;
+    if (patch.shared !== undefined) upd.shared = patch.shared;
+    const rows = check(await this.db.from('apex_feedback').update(upd).eq('campaign_id', campaignId).eq('id', id).select('*'), 'update feedback') as Array<Record<string, unknown>>;
+    return rows[0] ? toFeedback(rows[0]) : null;
+  }
+
+  async countRecentFeedback(campaignId: string, userId: string, sinceIso: string): Promise<number> {
+    const { count, error } = await this.db.from('apex_feedback').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId).eq('user_id', userId).gte('created_at', sinceIso);
+    if (error) throw new Error(`count feedback: ${error.message}`);
+    return count ?? 0;
+  }
+
   async reserveRequest(e: Omit<CommandLogEntry, 'ok' | 'error' | 'version'> & { requestId: string }): Promise<RequestReservation> {
     const { error } = await this.db.from('apex_command_log').insert({
       campaign_id: e.campaignId,
@@ -643,4 +719,41 @@ export class SupabaseRepo implements Repo {
     });
     if (error) console.warn('[apex-api] command log failed:', error.message);
   }
+}
+
+function toBackupInfo(r: Record<string, unknown>): SheetBackupInfo {
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  return {
+    id: Number(r.id),
+    version: Number(r.version),
+    reason: String(r.reason ?? ''),
+    createdAt: String(r.created_at),
+    kind: r.kind === 'apex-character-snapshot' ? 'snapshot' : 'backup',
+    name: str(r.name),
+    note: str(r.note),
+    level: str(r.level),
+  };
+}
+
+function toFeedback(r: Record<string, unknown>): FeedbackRow {
+  return {
+    id: String(r.id),
+    userId: String(r.user_id ?? ''),
+    profileKey: String(r.profile_key ?? ''),
+    tokenId: (r.token_id as string | null) ?? null,
+    kind: r.kind as FeedbackRow['kind'],
+    category: String(r.category ?? 'other'),
+    title: String(r.title ?? ''),
+    description: String(r.description ?? ''),
+    steps: String(r.steps ?? ''),
+    page: String(r.page ?? ''),
+    appVersion: String(r.app_version ?? ''),
+    screenshotPath: (r.screenshot_path as string | null) ?? null,
+    status: r.status as FeedbackRow['status'],
+    gmNotes: String(r.gm_notes ?? ''),
+    shared: !!r.shared,
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at),
+    statusChangedAt: (r.status_changed_at as string | null) ?? null,
+  };
 }

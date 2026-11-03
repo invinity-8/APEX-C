@@ -5,7 +5,8 @@
  * always keeps a server-side backup. Unrecognised fields stay in a collapsed Advanced section.
  */
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { mergeSheets, sheetIsEmpty, type CharacterSheet } from '../game/sheet';
+import { MAX_PROGRESSION, mergeSheets, sheetIsEmpty, type CharacterSheet } from '../game/sheet';
+import { applyLevelUp, newProgressionId, sheetLevel } from '../game/progression';
 import type { SheetPayload } from '../server/protocol';
 import { extractPdf, MAX_PDF_BYTES, PdfImportError } from '../sheetImport/extract';
 import { GROUP_LABEL, mapExtraction, rowsToSheet, type ImportedItem, type ImportGroup, type ImportRow, type RowStatus } from '../sheetImport/map';
@@ -16,7 +17,7 @@ interface Props {
   current: SheetPayload;
   inventoryNames: string[];
   onClose: () => void;
-  onSave: (sheet: CharacterSheet, mode: 'import-merge' | 'import-replace') => Promise<boolean>;
+  onSave: (sheet: CharacterSheet, mode: 'import-merge' | 'import-replace' | 'import-levelup') => Promise<boolean>;
   onAddItems: (items: ImportedItem[]) => Promise<number>;
 }
 
@@ -65,12 +66,58 @@ function existingValue(r: ImportRow, s: CharacterSheet): string | null {
   }
 }
 
+/** Level-up mode: does this PDF row change the current sheet? ('item' rows never touch the sheet.) */
+export function rowChange(r: ImportRow, s: CharacterSheet): 'same' | 'changed' | 'new' | 'item' {
+  if (r.kind === 'item') return 'item';
+  if (existingValue(r, s) !== null) return 'changed';
+  const has = (list: Array<{ label?: string; name?: string }>) => list.some((d) => n(d.label ?? d.name ?? '') === n(r.label));
+  switch (r.kind) {
+    case 'detail':
+      return has(s.details) ? 'same' : 'new';
+    case 'appearance':
+      return has(s.appearance) ? 'same' : 'new';
+    case 'combat':
+      return has(s.combat) ? 'same' : 'new';
+    case 'spellcasting':
+      return has(s.spellcasting) ? 'same' : 'new';
+    case 'attribute':
+      return has(s.attributes) ? 'same' : 'new';
+    case 'skill':
+      return has(s.skills) ? 'same' : 'new';
+    case 'save':
+      return has(s.saves) ? 'same' : 'new';
+    case 'feature':
+      return has(s.abilities) ? 'same' : 'new';
+    case 'resource': {
+      const x = s.resources.find((d) => n(d.name) === n(r.label));
+      if (!x) return 'new';
+      const max = r.modifier && /^\d+$/.test(r.modifier) ? Number(r.modifier) : null;
+      return max !== null && max !== x.max ? 'changed' : 'same';
+    }
+    case 'hp':
+      if (!s.hitPoints) return 'new';
+      return r.hp === 'max' && String(s.hitPoints.max) !== r.value.trim() ? 'changed' : 'same';
+    case 'spell':
+      return s.spells.some((x) => n(x.name) === n(r.value || r.label) && x.level === (r.level ?? 1)) ? 'same' : 'new';
+    case 'attack':
+      return s.attacks.some((x) => n(x.name) === n(r.value)) ? 'same' : 'new';
+    case 'note':
+      return s.notes.includes(r.value.trim()) ? 'same' : 'new';
+    default:
+      return 'same';
+  }
+}
+
 export function SheetImport({ characterName, current, inventoryNames, onClose, onSave, onAddItems }: Props) {
   const [step, setStep] = useState<Step>({ kind: 'pick' });
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  // APEX 0.7: an existing character gets the incremental "level-up" update by default
+  const [mode, setMode] = useState<'update' | 'full'>('update');
+  const [refill, setRefill] = useState(false);
+  const [lvNote, setLvNote] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const hasExisting = !sheetIsEmpty(current.sheet);
@@ -90,6 +137,7 @@ export function SheetImport({ characterName, current, inventoryNames, onClose, o
         return;
       }
       setRows(m.rows.map((r) => (r.kind === 'item' && owned.has(n(r.value)) ? { ...r, include: false, note: 'Already in the inventory – not added again.' } : r)));
+      if (hasExisting) setMode('update');
       setStep({ kind: 'review', fileName: file.name, format: m.format });
     } catch (e) {
       setStep({ kind: 'error', message: e instanceof PdfImportError ? e.message : 'The PDF could not be read. Please try another file.' });
@@ -119,6 +167,43 @@ export function SheetImport({ characterName, current, inventoryNames, onClose, o
     setBusy(false);
     if (ok) onClose();
   };
+
+  // ---- level-up / incremental update
+  const lvRows = hasExisting ? rows.map((r) => ({ r, change: rowChange(r, current.sheet) })).filter((x) => x.change === 'changed' || x.change === 'new') : [];
+  const [lvPick, setLvPick] = useState<Record<string, boolean>>({});
+  const picked = (key: string, change: string, r: ImportRow) => lvPick[key] ?? (r.status !== 'missing' && !(r.kind === 'hp' && r.hp !== 'max') && change !== 'item');
+  const applyUpdate = async () => {
+    if (step.kind !== 'review') return;
+    const chosen = lvRows.filter((x) => picked(x.r.key, x.change, x.r));
+    if (!chosen.length) return setProblems(['No change is selected – nothing to apply.']);
+    const keys = new Set(chosen.map((x) => x.r.key));
+    const built = rowsToSheet(
+      rows.map((r) => ({ ...r, include: keys.has(r.key) })),
+      { fileName: step.fileName, format: step.format },
+    );
+    if (built.problems.length) return setProblems(built.problems);
+    const next = applyLevelUp(current.sheet, built.sheet, { refillCurrent: refill, mergeSheets });
+    const entry = {
+      id: newProgressionId(),
+      at: new Date().toISOString(),
+      fromLevel: sheetLevel(current.sheet),
+      toLevel: sheetLevel(next),
+      fileName: step.fileName.slice(0, 200),
+      changed: lvRows.map((x) => x.r.label),
+      approved: chosen.map((x) => x.r.label),
+      note: lvNote.trim().slice(0, 2000),
+    };
+    next.progression = [...(current.sheet.progression ?? []), entry].slice(-MAX_PROGRESSION);
+    setBusy(true);
+    const ok = await onSave(next, 'import-levelup');
+    setBusy(false);
+    if (ok) onClose();
+  };
+  const fromLevel = hasExisting ? sheetLevel(current.sheet) : null;
+  const toLevel = useMemo(() => {
+    if (!hasExisting || step.kind !== 'review') return null;
+    return sheetLevel(rowsToSheet(rows.map((r) => ({ ...r, include: r.kind === 'detail' })), { fileName: '', format: '' }).sheet);
+  }, [rows, hasExisting, step.kind]);
 
   const counts = rows.reduce<Record<RowStatus, number>>((a, r) => ((a[r.status] += 1), a), { recognized: 0, uncertain: 0, missing: 0, unrecognized: 0 });
   const raw = rows.filter((r) => r.group === 'raw');
@@ -182,7 +267,93 @@ export function SheetImport({ characterName, current, inventoryNames, onClose, o
           </div>
         )}
 
-        {step.kind === 'review' && (
+        {step.kind === 'review' && hasExisting && (
+          <div className="mt-3 flex flex-wrap gap-1 text-xs" role="tablist" aria-label="Import mode">
+            <button role="tab" aria-selected={mode === 'update'} className={`rounded-lg px-3 py-1 ${mode === 'update' ? 'bg-gold-400/20 text-gold-200' : 'text-marble-300 hover:bg-ink-800'}`} onClick={() => setMode('update')}>
+              Update (level-up) – only changes
+            </button>
+            <button role="tab" aria-selected={mode === 'full'} className={`rounded-lg px-3 py-1 ${mode === 'full' ? 'bg-gold-400/20 text-gold-200' : 'text-marble-300 hover:bg-ink-800'}`} onClick={() => setMode('full')}>
+              Full review (merge / replace)
+            </button>
+          </div>
+        )}
+
+        {step.kind === 'review' && hasExisting && mode === 'update' && (
+          <div className="mt-3 space-y-3 text-xs" aria-label="Level-up changes">
+            <p className="rounded-lg border border-gold-700/40 bg-ink-900/60 p-2 text-sm text-marble-200">
+              {fromLevel !== null && toLevel !== null && fromLevel !== toLevel ? (
+                <b className="text-gold-200" data-testid="levelup-levels">
+                  Level {fromLevel} → {toLevel}
+                </b>
+              ) : (
+                <b className="text-gold-200">Sheet update</b>
+              )}{' '}
+              · {lvRows.length} changed or new values in <b className="text-marble-50">{step.fileName}</b>. Only the ticked changes are applied – everything else (manual edits, title, portrait, appearance, items, currency) stays as it is. A character snapshot is created first.
+            </p>
+            {!lvRows.length && <p className="text-marble-400">This PDF contains no changes compared with the current sheet.</p>}
+            {ORDER.filter((g) => lvRows.some((x) => x.r.group === g)).map((g) => {
+              const inG = lvRows.filter((x) => x.r.group === g);
+              return (
+                <fieldset key={g} className="rounded-lg border border-ink-600 p-2">
+                  <legend className="flex items-center gap-2 px-1 font-semibold uppercase tracking-wider text-gold-300">
+                    {GROUP_LABEL[g]}
+                    <button type="button" className="text-[10px] font-normal normal-case text-marble-400 hover:text-gold-200" onClick={() => setLvPick((p) => ({ ...p, ...Object.fromEntries(inG.map((x) => [x.r.key, true])) }))}>
+                      all
+                    </button>
+                    <button type="button" className="text-[10px] font-normal normal-case text-marble-400 hover:text-gold-200" onClick={() => setLvPick((p) => ({ ...p, ...Object.fromEntries(inG.map((x) => [x.r.key, false])) }))}>
+                      none
+                    </button>
+                  </legend>
+                  <ul className="space-y-0.5">
+                    {inG.map(({ r, change }) => {
+                      const old = existingValue(r, current.sheet);
+                      const label = r.kind === 'spell' ? `Spell: ${r.value || r.label}` : r.kind === 'feature' ? `${change === 'new' ? 'New feature' : 'Feature'}: ${r.label}` : r.kind === 'hp' ? (r.hp === 'max' ? 'Maximum HP' : r.hp === 'current' ? 'Current HP' : 'Temporary HP') : r.label;
+                      const after = r.kind === 'feature' ? (change === 'new' ? 'new' : 'updated text') : r.kind === 'attribute' ? `${r.value}${r.modifier ? ` (${r.modifier})` : ''}` : r.kind === 'resource' ? `max ${r.modifier ?? r.value}` : r.kind === 'spell' ? (r.level ? `level ${r.level}` : 'cantrip') : r.value;
+                      return (
+                        <li key={r.key} data-levelup={r.label}>
+                          <label className="flex items-start gap-2 text-marble-200">
+                            <input type="checkbox" checked={picked(r.key, change, r)} onChange={(e) => setLvPick((p) => ({ ...p, [r.key]: e.target.checked }))} aria-label={`Apply ${label}`} />
+                            <span>
+                              <b className="text-marble-50">{label}</b>: {change === 'new' ? <span className="text-emerald-300">new</span> : <span className="text-marble-400">{r.kind === 'resource' ? `max ${current.sheet.resources.find((x) => n(x.name) === n(r.label))?.max ?? '—'}` : r.kind === 'hp' ? String(current.sheet.hitPoints?.max ?? '—') : (old ?? '—')}</span>}
+                              {change !== 'new' && ' → '}
+                              {change !== 'new' && <span className="text-gold-100">{after}</span>}
+                              {change === 'new' && r.kind !== 'feature' && after && <span className="text-gold-100"> {after}</span>}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </fieldset>
+              );
+            })}
+            <label className="flex items-start gap-2 text-marble-300">
+              <input type="checkbox" checked={refill} onChange={(e) => setRefill(e.target.checked)} />
+              <span>Also take <b>current</b> hit points and current resource uses from the PDF (otherwise only maxima change; current values are kept).</span>
+            </label>
+            <label className="block text-marble-300">
+              Note for the history (optional)
+              <input className={input} value={lvNote} maxLength={500} onChange={(e) => setLvNote(e.target.value)} aria-label="Level-up note" placeholder="e.g. After the Arena Trial" />
+            </label>
+            {problems.length > 0 && (
+              <ul role="alert" className="list-disc rounded-lg border border-blood-400/50 bg-blood-600/20 p-2 pl-6 text-red-200">
+                {problems.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex justify-end gap-2 border-t border-ink-600 pt-3">
+              <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+              <button className="btn btn-gold" onClick={() => void applyUpdate()} disabled={busy || !lvRows.length}>
+                {busy && <Spinner />} Apply {lvRows.filter((x) => picked(x.r.key, x.change, x.r)).length} selected changes
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step.kind === 'review' && (!hasExisting || mode === 'full') && (
           <div className="mt-3 space-y-3">
             <div className="flex flex-wrap items-center gap-2 text-xs text-marble-300">
               <span>

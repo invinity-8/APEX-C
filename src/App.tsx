@@ -24,9 +24,10 @@ import { PlayersPanel } from './components/PlayersPanel';
 import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { ArsenalPanel } from './components/ArsenalPanel';
+import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
 
-type View = 'map' | 'character' | 'inventory' | 'arsenal';
+type View = 'map' | 'character' | 'inventory' | 'arsenal' | 'feedback';
 
 interface Toast {
   id: number;
@@ -280,6 +281,7 @@ export default function App({ game }: { game: GameApi }) {
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
     { id: 'inventory', label: '🎒 Inventory' },
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
+    ...(isGm && game.online ? [{ id: 'feedback' as View, label: '📮 Feedback' }] : []),
   ];
 
   return (
@@ -318,6 +320,7 @@ export default function App({ game }: { game: GameApi }) {
       <Header
         game={game}
         notify={notify}
+        area={screen === 'map' ? 'Map' : screen === 'character' ? 'Character' : screen === 'inventory' ? 'Inventory' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
       />
       <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Player navigation">
@@ -333,7 +336,7 @@ export default function App({ game }: { game: GameApi }) {
             {t.label}
           </button>
         ))}
-        {isGm && screen !== 'map' && screen !== 'arsenal' && (
+        {isGm && screen !== 'map' && screen !== 'arsenal' && screen !== 'feedback' && (
           <label className="ml-auto flex items-center gap-2 text-xs text-marble-300">
             Character
             <select
@@ -364,7 +367,9 @@ export default function App({ game }: { game: GameApi }) {
               {toast.text}
             </div>
           )}
-          {screen === 'arsenal' && isGm && state ? (
+          {screen === 'feedback' && isGm && game.online ? (
+            <FeedbackInbox online={game.online} notify={notify} />
+          ) : screen === 'arsenal' && isGm && state ? (
             <ArsenalPanel state={state} run={run} />
           ) : !sheetToken ? (
             <p className="p-6 text-sm text-marble-500">No character available.</p>

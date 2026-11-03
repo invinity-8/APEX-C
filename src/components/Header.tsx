@@ -5,14 +5,17 @@ import { safeRadius } from '../game/zone';
 import { phaseName } from '../game/text';
 import { ApexEmblem, Spinner } from './brand';
 import { Segmented } from './ui';
+import { FeedbackButton } from './Feedback';
 
 interface Props {
   game: GameApi;
   onAdvancePhase: () => void;
   notify: (msg: string, kind?: 'error' | 'info') => void;
+  /** Current UI area (for feedback reports). */
+  area?: string;
 }
 
-export function Header({ game, onAdvancePhase, notify }: Props) {
+export function Header({ game, onAdvancePhase, notify, area = 'Map' }: Props) {
   const { view, gmState, demo, online } = game;
   const fileRef = useRef<HTMLInputElement>(null);
   const [pwOpen, setPwOpen] = useState(false);
@@ -136,6 +139,7 @@ export function Header({ game, onAdvancePhase, notify }: Props) {
             <span className="hidden max-w-40 truncate text-[11px] text-marble-300 lg:inline" title="Signed-in profile">
               {online.profileName}
             </span>
+            <FeedbackButton online={online} area={area} notify={notify} />
             <button className="btn btn-ghost px-2" onClick={() => setPwOpen(true)} title="Change your password" aria-label="Change your password">
               🔑
             </button>

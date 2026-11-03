@@ -97,8 +97,13 @@ export const api = {
     request<{ tokenId: string; portraitV: number; version: number }>('POST', 'portrait', {}, { tokenId, image }, { timeoutMs: 30_000 }),
   sheet: (tokenId: string) => request<SheetPayload>('GET', 'sheet', { token: tokenId }),
   party: () => request<{ members: PartyVital[] }>('GET', 'party'),
-  saveSheet: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason: 'edit' | 'import-merge' | 'import-replace' = 'edit') =>
+  saveSheet: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason: 'edit' | 'import-merge' | 'import-replace' | 'import-levelup' = 'edit') =>
     request<SheetPayload>('POST', 'sheet', {}, { action: 'save', tokenId, sheet, expectedVersion, reason }),
   adjustSheet: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) =>
     request<SheetPayload>('POST', 'sheet', {}, { action: 'adjust', tokenId, target, delta, resourceId }),
+  /** APEX 0.7 – GM character archive (snapshots). */
+  characterArchive: <T>(body: Record<string, unknown>) => request<T>('POST', 'character-archive', {}, body),
+  /** APEX 0.7 – feedback reports (players: own + shared, GM: all). */
+  feedbackList: () => request<{ feedback: import('../server/repo').FeedbackRow[] }>('GET', 'feedback'),
+  feedback: <T>(body: Record<string, unknown>) => request<T>('POST', 'feedback', {}, body, { timeoutMs: 30_000 }),
 };
