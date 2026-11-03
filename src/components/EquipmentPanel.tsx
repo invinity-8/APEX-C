@@ -68,6 +68,20 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
 
   const equip = (itemId: string, slot: EquipSlot) => void run({ type: 'equipItem', tokenId: token.id, itemId, slot });
   const carried = inv.filter((i) => !slotOfItem(eq, i.id));
+  const wornKind = (sl: EquipSlot) => (active.has(sl) && eq.slots[sl] ? items.get(eq.slots[sl]!)?.equip?.kind : undefined);
+  const set = eq.activeSet;
+  const worn: Worn = {
+    head: !!wornKind('head'),
+    cloak: !!wornKind('cloak'),
+    chest: !!wornKind('chest'),
+    gloves: !!wornKind('gloves'),
+    boots: !!wornKind('boots'),
+    amulet: !!wornKind('amulet'),
+    rings: !!(wornKind('ring1') || wornKind('ring2')),
+    main: !!wornKind(set === 1 ? 'main1' : 'main2'),
+    shield: wornKind(set === 1 ? 'off1' : 'off2') === 'shield',
+    offWeapon: !!wornKind(set === 1 ? 'off1' : 'off2') && wornKind(set === 1 ? 'off1' : 'off2') !== 'shield',
+  };
 
   // A render FUNCTION, not a nested component: a nested component would re-mount on every hover re-render
   // and lose the drag-and-drop target.
@@ -98,8 +112,11 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
           }}
           draggable={!!item}
           onDragStart={(e) => item && e.dataTransfer.setData(DND, item.id)}
+          title={item ? `${item.name.replace(/[[\]]/g, '')} – ${itemSummary(item.equip)}${item.description ? `\n${item.description}` : ''}${!counts ? '\n(not active: other weapon set or resting)' : ''}` : `${SLOT_LABEL[slot]}: drop or choose an item`}
         >
-          <span className="apex-slot-label">{SLOT_LABEL[slot]}</span>
+          <span className="apex-slot-label">
+            <SlotIcon slot={slot} /> {SLOT_LABEL[slot]}
+          </span>
           <span className="apex-slot-item">{item ? item.name.replace(/[[\]]/g, '') : '—'}</span>
           {item?.equip && <span className="apex-slot-meta">{itemSummary(item.equip)}</span>}
         </button>
@@ -155,8 +172,8 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
           {renderSlot('cloak')}
           {renderSlot('chest')}
         </div>
-        <div className="apex-doll-figure" aria-hidden>
-          <ImperialSilhouette resting={eq.resting} />
+        <div className="apex-doll-figure">
+          <HeroFigure worn={worn} />
         </div>
         <div className="apex-doll-col">
           {renderSlot('gloves')}
@@ -431,24 +448,103 @@ function ItemEquipEditor({ item, isGm, onClose, onSave }: { item: Item; isGm: bo
   );
 }
 
-/** Original APEX figure: a legionary-like silhouette with a crested helm (not based on any existing artwork). */
-function ImperialSilhouette({ resting }: { resting: boolean }) {
+export type Worn = Partial<Record<'head' | 'cloak' | 'chest' | 'gloves' | 'boots' | 'amulet' | 'rings' | 'main' | 'shield' | 'offWeapon', boolean>>;
+
+/**
+ * Equipment figure (APEX 0.6): a neutral, well-proportioned silhouette (≈ 7.5 heads tall) with layered
+ * equipment overlays that appear only for what is actually worn in the active set / preset. Original artwork.
+ */
+export function HeroFigure({ worn }: { worn: Worn }) {
+  const gold = '#c09b58';
   return (
-    <svg viewBox="0 0 120 240" className="h-full w-full">
+    <svg viewBox="0 0 160 320" className="h-full w-full" role="img" aria-label={`Figure wearing: ${Object.entries(worn).filter(([, v]) => v).map(([k]) => k).join(', ') || 'nothing'}`}>
       <defs>
-        <linearGradient id="apex-doll-g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#c09b58" stopOpacity=".35" />
-          <stop offset="1" stopColor="#8c806a" stopOpacity=".12" />
+        <linearGradient id="hf-body" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#4e565d" />
+          <stop offset="1" stopColor="#2c3237" />
         </linearGradient>
+        <linearGradient id="hf-plate" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#bcb29e" />
+          <stop offset="1" stopColor="#6f675a" />
+        </linearGradient>
+        <linearGradient id="hf-gold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#e8d4a6" />
+          <stop offset="1" stopColor="#a2803f" />
+        </linearGradient>
+        <radialGradient id="hf-halo" cx=".5" cy=".42" r=".55">
+          <stop offset="0" stopColor={gold} stopOpacity=".16" />
+          <stop offset="1" stopColor={gold} stopOpacity="0" />
+        </radialGradient>
       </defs>
-      <g fill="url(#apex-doll-g)" stroke="#c09b58" strokeOpacity=".55" strokeWidth="1.2">
-        {!resting && <path d="M46 14 Q60 -2 74 14 L72 18 Q60 10 48 18 Z" fill="#8e2f2f" fillOpacity=".6" />}
-        <ellipse cx="60" cy="30" rx="13" ry="15" />
-        <path d="M50 46 L70 46 L74 54 L92 62 L98 112 L88 114 L82 76 L80 120 L86 168 L78 232 L66 232 L62 174 L58 174 L54 232 L42 232 L34 168 L40 120 L38 76 L32 114 L22 112 L28 62 L46 54 Z" />
-        {!resting && <path d="M40 66 L80 66 L82 112 L60 120 L38 112 Z" fill="#c09b58" fillOpacity=".18" />}
-        {!resting && <path d="M38 120 L82 120 L84 134 L36 134 Z" fill="#8e2f2f" fillOpacity=".45" />}
+      <ellipse cx="80" cy="150" rx="78" ry="150" fill="url(#hf-halo)" />
+      <ellipse cx="80" cy="308" rx="44" ry="7" fill="#000" opacity=".35" />
+      {worn.cloak && <path data-layer="cloak" d="M50 72 Q80 64 110 72 L122 250 Q80 268 38 250 Z" fill="#8e2f2f" stroke="#5a1d1d" strokeWidth="1.2" />}
+      {/* body */}
+      <g fill="url(#hf-body)" stroke="#8c806a" strokeOpacity=".55" strokeWidth="1">
+        <circle cx="80" cy="38" r="16" />
+        <path d="M73 52 h14 v10 h-14 z" />
+        <path d="M50 70 Q80 60 110 70 L114 100 Q108 132 100 156 L102 168 L58 168 L60 156 Q52 132 46 100 Z" />
+        <path d="M50 72 Q40 76 38 96 L34 150 Q33 168 38 178 L45 178 L46 150 L52 104 Z" />
+        <path d="M110 72 Q120 76 122 96 L126 150 Q127 168 122 178 L115 178 L114 150 L108 104 Z" />
+        <path d="M58 166 L102 166 L100 226 L96 298 L84 298 L81 214 L79 214 L76 298 L64 298 L60 226 Z" />
       </g>
-      <path d="M60 140 m-9 0 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0" fill="none" stroke="#c09b58" strokeOpacity=".25" />
+      {worn.boots && <path data-layer="boots" d="M62 262 L77 262 L77 300 L58 302 Q57 296 62 292 Z M83 262 L98 262 L98 292 Q103 296 102 302 L83 300 Z" fill="#4a3926" stroke="#2b2118" strokeWidth="1" />}
+      {worn.chest && (
+        <g data-layer="chest">
+          <path d="M52 72 Q80 62 108 72 L111 100 Q105 128 98 150 L62 150 Q55 128 49 100 Z" fill="url(#hf-plate)" stroke="#4e463a" strokeWidth="1.2" />
+          <path d="M80 70 L80 148" stroke="#5b5345" strokeWidth="1" />
+          <path d="M60 150 L100 150 L102 168 L58 168 Z" fill="#8e2f2f" stroke="#5a1d1d" strokeWidth="1" />
+          <path d="M52 74 Q80 66 108 74" fill="none" stroke={gold} strokeWidth="2" />
+        </g>
+      )}
+      {worn.amulet && <g data-layer="amulet"><path d="M70 66 Q80 82 90 66" fill="none" stroke={gold} strokeWidth="1.2" /><circle cx="80" cy="82" r="4" fill="url(#hf-gold)" /></g>}
+      {worn.gloves && <path data-layer="gloves" d="M33 158 h13 v22 h-13 z M114 158 h13 v22 h-13 z" fill="#5d4a34" stroke="#2b2118" strokeWidth="1" />}
+      {worn.rings && <g data-layer="rings" fill={gold}><circle cx="40" cy="176" r="2" /><circle cx="120" cy="176" r="2" /></g>}
+      {worn.head && (
+        <g data-layer="head">
+          <path d="M63 40 Q63 18 80 17 Q97 18 97 40 L97 46 L89 46 L89 36 L71 36 L71 46 L63 46 Z" fill="url(#hf-plate)" stroke="#4e463a" strokeWidth="1.2" />
+          <path d="M70 18 Q80 4 92 16 L88 20 Q80 12 74 20 Z" fill="#8e2f2f" />
+        </g>
+      )}
+      {worn.main && (
+        <g data-layer="main">
+          <path d="M38 178 L38 238 L41 246 L44 238 L44 178 Z" fill="#c8c3b8" stroke="#6f675a" strokeWidth=".8" />
+          <rect x="31" y="172" width="20" height="5" rx="1.5" fill="url(#hf-gold)" />
+          <rect x="38.5" y="160" width="5" height="12" fill="#5d4a34" />
+        </g>
+      )}
+      {worn.shield && (
+        <g data-layer="shield">
+          <path d="M108 150 L146 150 L146 186 Q146 214 127 226 Q108 214 108 186 Z" fill="#8e2f2f" stroke={gold} strokeWidth="2.2" />
+          <path d="M127 160 L127 214 M114 180 L140 180" stroke={gold} strokeWidth="1.4" opacity=".8" />
+        </g>
+      )}
+      {worn.offWeapon && !worn.shield && (
+        <g data-layer="offWeapon">
+          <path d="M118 178 L118 218 L121 224 L124 218 L124 178 Z" fill="#c8c3b8" stroke="#6f675a" strokeWidth=".8" />
+          <rect x="113" y="173" width="16" height="4" rx="1.5" fill="url(#hf-gold)" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+const SLOT_ICON: Record<string, string> = {
+  head: 'M3 10 Q3 3 8 3 Q13 3 13 10 L13 12 L10 12 L10 8 L6 8 L6 12 L3 12 Z',
+  amulet: 'M4 2 Q8 9 12 2 M8 9 a2.5 2.5 0 1 0 0.01 0',
+  cloak: 'M5 2 L11 2 L14 14 L2 14 Z',
+  chest: 'M3 3 Q8 1 13 3 L12 11 L8 14 L4 11 Z',
+  gloves: 'M4 14 L4 6 L6 6 L6 3 L8 3 L8 6 L10 4 L12 5 L12 14 Z',
+  ring: 'M8 4 a4 4 0 1 0 0.01 0 M6 2 L10 2',
+  boots: 'M5 2 L9 2 L9 10 L14 12 L14 14 L5 14 Z',
+  main: 'M12 2 L14 4 L6 12 L4 12 L4 10 Z M3 11 L5 13',
+  off: 'M3 3 L13 3 L13 8 Q13 13 8 15 Q3 13 3 8 Z',
+};
+function SlotIcon({ slot }: { slot: EquipSlot }) {
+  const key = slot.startsWith('ring') ? 'ring' : slot.startsWith('main') ? 'main' : slot.startsWith('off') ? 'off' : slot;
+  return (
+    <svg viewBox="0 0 16 16" className="mr-0.5 inline h-3 w-3 align-[-2px]" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round">
+      <path d={SLOT_ICON[key]} />
     </svg>
   );
 }

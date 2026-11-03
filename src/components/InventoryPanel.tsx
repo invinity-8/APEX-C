@@ -1,16 +1,22 @@
 /**
- * Free-text inventory (APEX 0.3). Reads the character's inventory from the authoritative game
- * state and changes it only through commands (validated on the server). Every item edit names
- * the item's revision, so a change made on another device is never silently overwritten.
+ * Inventory (APEX 0.3, reworked in 0.6). Reads the character's inventory from the authoritative game state and
+ * changes it only through server-validated commands. Every item edit names the item's revision, so a change made
+ * on another device is never silently overwritten.
+ *
+ * 0.6 usability: search, sort (view only – the manual order is what is stored), category filter, drag & drop to
+ * reorder or move between containers (with ↑/↓ and a move menu as click/keyboard alternatives), delete with a
+ * short undo window, split and merge of plain stacks, clear "equipped" badges. Free-text items stay first-class:
+ * "Old iron key wrapped in red cloth" needs no template.
  */
-import { useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Command } from '../game/commands';
-import { containerOfItem, DEFAULT_CONTAINERS, INVENTORY_LIMITS } from '../game/inventory';
-import { newEntryId } from '../game/sheet';
 import { SLOT_LABEL, equipmentOf, slotOfItem } from '../game/equipment';
+import { DEFAULT_CONTAINERS, INVENTORY_LIMITS, canMerge, containerOfItem, isStackable } from '../game/inventory';
+import { newEntryId } from '../game/sheet';
 import type { Item } from '../game/types';
 import type { TokenView } from '../game/visibility';
 import type { DispatchResult } from '../state/gameApi';
+import { itemSortKeys, ItemBadges, itemCategory, type ItemCategory } from './itemPresentation';
 
 interface Props {
   token: TokenView;
@@ -21,15 +27,48 @@ interface Props {
 }
 
 const input = 'rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50 focus:border-gold-400 focus:outline-none';
+const DND = 'application/x-apex-inventory-item';
+const UNDO_MS = 5000;
+type Sort = 'manual' | 'name' | 'type' | 'quantity' | 'rarity' | 'level';
+type Filter = 'all' | 'equipped' | 'unequipped' | ItemCategory;
+const FILTERS: Array<[Filter, string]> = [
+  ['all', 'All'],
+  ['equipped', 'Equipped'],
+  ['unequipped', 'Not equipped'],
+  ['weapon', 'Weapons'],
+  ['armor', 'Armour & shields'],
+  ['accessory', 'Accessories'],
+  ['consumable', 'Consumables & currency'],
+  ['other', 'Other'],
+];
 
 export function InventoryPanel({ token, run, busy, embedded }: Props) {
   const details = token.details;
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
-  const items = details?.inventory ?? [];
+  const items = useMemo(() => details?.inventory ?? [], [details?.inventory]);
+  const eq = equipmentOf({ equipment: details?.equipment });
   const [name, setName] = useState('');
   const [qty, setQty] = useState(1);
   const [target, setTarget] = useState(containers[0]?.id ?? 'backpack');
   const [newContainer, setNewContainer] = useState('');
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState<Sort>('manual');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [dragId, setDragId] = useState<string | null>(null);
+  // delete with undo: the item disappears at once, the command is sent only after the undo window
+  const [pending, setPending] = useState<Record<string, { item: Item; timer: number }>>({});
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  useEffect(
+    () => () => {
+      // leaving the screen confirms pending deletions (the user already chose to delete)
+      for (const p of Object.values(pendingRef.current)) {
+        clearTimeout(p.timer);
+        void run({ type: 'invRemoveItem', tokenId: token.id, itemId: p.item.id, rev: p.item.rev ?? 0 });
+      }
+    },
+    [run, token.id],
+  );
 
   if (!details) return <p className="p-4 text-sm text-marble-500">This inventory is not visible.</p>;
 
@@ -47,21 +86,46 @@ export function InventoryPanel({ token, run, busy, embedded }: Props) {
     if (!newContainer.trim()) return;
     if ((await run({ type: 'invAddContainer', tokenId: token.id, containerId: newEntryId('c'), name: newContainer.trim() })).ok) setNewContainer('');
   };
+  const remove = (item: Item) => {
+    const timer = window.setTimeout(() => {
+      setPending((p) => {
+        const { [item.id]: _gone, ...rest } = p;
+        return rest;
+      });
+      void run({ type: 'invRemoveItem', tokenId: token.id, itemId: item.id, rev: item.rev ?? 0 });
+    }, UNDO_MS);
+    setPending((p) => ({ ...p, [item.id]: { item, timer } }));
+  };
+  const undo = (id: string) =>
+    setPending((p) => {
+      if (p[id]) clearTimeout(p[id].timer);
+      const { [id]: _back, ...rest } = p;
+      return rest;
+    });
+  const move = (item: Item, container: string, beforeItemId?: string | null) =>
+    void run({ type: 'invMoveItem', tokenId: token.id, itemId: item.id, rev: item.rev ?? 0, container, ...(beforeItemId ? { beforeItemId } : {}) });
+
+  const needle = q.trim().toLowerCase();
+  const visible = items.filter((i) => !pending[i.id]);
+  const matches = (i: Item) => {
+    if (needle && !`${i.name} ${i.description} ${i.notes ?? ''}`.toLowerCase().includes(needle)) return false;
+    const equipped = !!slotOfItem(eq, i.id);
+    if (filter === 'equipped') return equipped;
+    if (filter === 'unequipped') return !equipped;
+    if (filter !== 'all') return itemCategory(i) === filter;
+    return true;
+  };
+  const sorted = (list: Item[]) => (sort === 'manual' ? list : [...list].sort((a, b) => itemSortKeys[sort](a, b)));
+  const viewFiltered = needle || filter !== 'all' || sort !== 'manual';
 
   return (
     <div className={embedded ? 'space-y-3' : 'mx-auto max-w-5xl space-y-3 p-3'} aria-label={`Inventory of ${token.name}`}>
-      <section className="panel p-3">
+      <section className="panel space-y-2 p-3">
         <h2 className="font-display text-2xl font-black text-gold-200">Inventory – {token.name}</h2>
-        <form onSubmit={add} className="mt-2 flex flex-wrap items-end gap-2">
+        <form onSubmit={add} className="flex flex-wrap items-end gap-2">
           <label className="min-w-[14rem] flex-1 text-xs text-marble-300">
             New entry
-            <input
-              className={`${input} mt-1 w-full`}
-              placeholder="e.g. Old iron key, wrapped in red cloth"
-              value={name}
-              maxLength={INVENTORY_LIMITS.name}
-              onChange={(e) => setName(e.target.value)}
-            />
+            <input className={`${input} mt-1 w-full`} placeholder="e.g. Old iron key, wrapped in red cloth" value={name} maxLength={INVENTORY_LIMITS.name} onChange={(e) => setName(e.target.value)} />
           </label>
           <label className="text-xs text-marble-300">
             Qty
@@ -81,12 +145,69 @@ export function InventoryPanel({ token, run, busy, embedded }: Props) {
             + Add
           </button>
         </form>
+        <div className="flex flex-wrap items-end gap-2 border-t border-ink-700 pt-2 text-xs" role="search">
+          <label className="min-w-[10rem] flex-1 text-marble-300">
+            Search
+            <input className={`${input} mt-1 w-full`} placeholder="Find an item…" aria-label="Search inventory" value={q} onChange={(e) => setQ(e.target.value)} />
+          </label>
+          <label className="text-marble-300">
+            Sort
+            <select className={`${input} mt-1 block`} aria-label="Sort inventory" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+              <option value="manual">Manual order</option>
+              <option value="name">Name</option>
+              <option value="type">Type</option>
+              <option value="rarity">Rarity</option>
+              <option value="level">Item level</option>
+              <option value="quantity">Quantity</option>
+            </select>
+          </label>
+          <label className="text-marble-300">
+            Show
+            <select className={`${input} mt-1 block`} aria-label="Filter inventory" value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
+              {FILTERS.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {viewFiltered && <p className="text-[11px] text-marble-500">Filtered or sorted view – drag & drop and ↑/↓ reorder the stored order only in “Manual order” without search or filter.</p>}
       </section>
+
+      {Object.values(pending).map(({ item }) => (
+        <div key={item.id} role="status" className="flex items-center gap-3 rounded-lg border border-blood-600/60 bg-blood-800/40 px-3 py-2 text-xs text-marble-100" data-undo={item.id}>
+          <span className="flex-1">
+            “{item.name}” will be removed{slotOfItem(eq, item.id) ? ' (it is equipped and will be unequipped)' : ''}.
+          </span>
+          <button className="btn btn-ghost px-2 py-0.5" onClick={() => undo(item.id)}>
+            ↶ Undo
+          </button>
+        </div>
+      ))}
 
       <div className="grid gap-3 md:grid-cols-2">
         {containers.map((c) => {
-          const inside = items.filter((i) => containerOfItem(i, containers) === c.id);
-          return <ContainerCard key={c.id} token={token} container={c} items={inside} containers={containers} run={run} canDelete={containers.length > 1} />;
+          const inside = visible.filter((i) => containerOfItem(i, containers) === c.id);
+          return (
+            <ContainerCard
+              key={c.id}
+              token={token}
+              container={c}
+              items={sorted(inside.filter(matches))}
+              allInside={inside}
+              allItems={visible}
+              containers={containers}
+              run={run}
+              canDelete={containers.length > 1}
+              reorderable={!viewFiltered}
+              eqSlot={(id) => slotOfItem(eq, id)}
+              dragId={dragId}
+              setDragId={setDragId}
+              onMove={move}
+              onRemove={remove}
+            />
+          );
         })}
       </div>
 
@@ -105,29 +226,52 @@ export function InventoryPanel({ token, run, busy, embedded }: Props) {
   );
 }
 
-function ContainerCard({
-  token,
-  container,
-  items,
-  containers,
-  run,
-  canDelete,
-}: {
+interface CardProps {
   token: TokenView;
   container: { id: string; name: string };
   items: Item[];
+  allInside: Item[];
+  allItems: Item[];
   containers: Array<{ id: string; name: string }>;
   run: (cmd: Command) => Promise<DispatchResult>;
   canDelete: boolean;
-}) {
+  reorderable: boolean;
+  eqSlot: (id: string) => ReturnType<typeof slotOfItem>;
+  dragId: string | null;
+  setDragId: (id: string | null) => void;
+  onMove: (item: Item, container: string, beforeItemId?: string | null) => void;
+  onRemove: (item: Item) => void;
+}
+
+function ContainerCard(props: CardProps) {
+  const { token, container, items, run } = props;
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(container.name);
+  const [over, setOver] = useState(false);
   const rename = async (e: FormEvent) => {
     e.preventDefault();
     if ((await run({ type: 'invRenameContainer', tokenId: token.id, containerId: container.id, name: title })).ok) setRenaming(false);
   };
+  const dragged = props.allItems.find((i) => i.id === props.dragId);
   return (
-    <section className="panel p-3" aria-label={container.name} data-container={container.id}>
+    <section
+      className={`panel p-3 transition-colors ${over ? 'border-gold-400/80' : ''}`}
+      aria-label={container.name}
+      data-container={container.id}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DND)) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)}
+      onDrop={(e) => {
+        setOver(false);
+        if (!dragged) return;
+        e.preventDefault();
+        props.onMove(dragged, container.id, null);
+        props.setDragId(null);
+      }}
+    >
       <div className="mb-2 flex items-center gap-2">
         {renaming ? (
           <form onSubmit={rename} className="flex flex-1 gap-1">
@@ -142,7 +286,7 @@ function ContainerCard({
         ) : (
           <>
             <h3 className="panel-title flex-1">
-              {container.name} <span className="text-marble-500">({items.length})</span>
+              {container.name} <span className="text-marble-500">({props.allInside.length})</span>
             </h3>
             <button
               className="text-[11px] text-marble-500 hover:text-gold-200"
@@ -153,11 +297,11 @@ function ContainerCard({
             >
               Rename
             </button>
-            {canDelete && (
+            {props.canDelete && (
               <button
                 className="text-[11px] text-marble-500 hover:text-blood-400 disabled:opacity-40"
-                disabled={items.length > 0}
-                title={items.length ? 'Only empty containers can be deleted' : 'Delete this container'}
+                disabled={props.allInside.length > 0}
+                title={props.allInside.length ? 'Only empty containers can be deleted' : 'Delete this container'}
                 onClick={() => void run({ type: 'invRemoveContainer', tokenId: token.id, containerId: container.id })}
               >
                 Delete
@@ -168,29 +312,31 @@ function ContainerCard({
       </div>
       {items.length ? (
         <ul className="space-y-1.5">
-          {items.map((i) => (
-            <ItemRow key={i.id} token={token} item={i} containers={containers} run={run} />
+          {items.map((i, idx) => (
+            <ItemRow key={i.id} {...props} item={i} prev={items[idx - 1]} next={items[idx + 1]} />
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-marble-500">Empty.</p>
+        <p className="rounded-md border border-dashed border-ink-600 px-2 py-3 text-center text-xs text-marble-500">{props.allInside.length ? 'No item matches the search or filter.' : 'Empty – drop an item here.'}</p>
       )}
     </section>
   );
 }
 
-function ItemRow({ token, item, containers, run }: { token: TokenView; item: Item; containers: Array<{ id: string; name: string }>; run: (cmd: Command) => Promise<DispatchResult> }) {
-  const [editing, setEditing] = useState(false);
+function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
+  const { token, item, containers, run, reorderable } = props;
+  const [mode, setMode] = useState<'view' | 'edit' | 'split'>('view');
   const [draft, setDraft] = useState({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity });
+  const [splitQty, setSplitQty] = useState(1);
   const rev = item.rev ?? 0;
-  const equippedIn = slotOfItem(equipmentOf({ equipment: token.details?.equipment }), item.id);
-  const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number; container: string }>) =>
-    run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
+  const slot = props.eqSlot(item.id);
+  const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o));
+  const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number }>) => run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if ((await update(draft)).ok) setEditing(false);
+    if ((await update(draft)).ok) setMode('view');
   };
-  if (editing) {
+  if (mode === 'edit') {
     return (
       <li className="rounded-lg border border-gold-700/50 bg-ink-900/60 p-2">
         <form onSubmit={save} className="space-y-1.5 text-xs text-marble-300">
@@ -203,7 +349,7 @@ function ItemRow({ token, item, containers, run }: { token: TokenView; item: Ite
               <input className={`${input} w-16`} type="number" min={0} value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
             </label>
             <span className="flex-1" />
-            <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setEditing(false)}>
+            <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setMode('view')}>
               Cancel
             </button>
             <button type="submit" className="btn btn-gold px-2 py-0.5">
@@ -215,15 +361,41 @@ function ItemRow({ token, item, containers, run }: { token: TokenView; item: Ite
     );
   }
   return (
-    <li className="rounded-lg border border-ink-600 bg-ink-800/50 p-2" data-item={item.id}>
+    <li
+      className={`rounded-lg border bg-ink-800/50 p-2 ${slot ? 'border-gold-600/60' : 'border-ink-600'} ${props.dragId === item.id ? 'opacity-40' : ''}`}
+      data-item={item.id}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData(DND, item.id);
+        props.setDragId(item.id);
+      }}
+      onDragEnd={() => props.setDragId(null)}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DND) || !reorderable) return;
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onDrop={(e) => {
+        const dragged = props.allItems.find((i) => i.id === props.dragId);
+        if (!dragged || dragged.id === item.id || !reorderable) return;
+        e.preventDefault();
+        e.stopPropagation();
+        props.onMove(dragged, containerOfItem(item, containers), item.id);
+        props.setDragId(null);
+      }}
+    >
       <div className="flex items-start gap-2">
+        <span className="cursor-grab select-none pt-0.5 text-marble-600" aria-hidden title="Drag to reorder or move">
+          ⠿
+        </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
-            {item.name}
-            {equippedIn && (
+            <ItemBadges item={item} />
+            {slot && (
               <span className="ml-1.5 rounded border border-gold-500/50 px-1 text-[10px] uppercase tracking-wider text-gold-300" title="Equipped – see the Equipment tab">
-                equipped · {SLOT_LABEL[equippedIn]}
+                equipped · {SLOT_LABEL[slot]}
               </span>
             )}
           </div>
@@ -242,14 +414,35 @@ function ItemRow({ token, item, containers, run }: { token: TokenView; item: Ite
           <button className="btn btn-ghost h-7 w-7 px-0" aria-label={`Increase quantity of ${item.name}`} onClick={() => void update({ quantity: item.quantity + 1 })}>
             +
           </button>
+          <button className="btn btn-ghost h-7 w-7 px-0 hover:border-blood-400/70 hover:text-blood-400" aria-label={`Delete ${item.name}`} title="Delete (you can undo for 5 seconds)" onClick={() => props.onRemove(item)}>
+            ✕
+          </button>
         </div>
       </div>
+      {mode === 'split' && (
+        <form
+          className="mt-1.5 flex items-center gap-2 text-[11px] text-marble-300"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if ((await run({ type: 'invSplitStack', tokenId: token.id, itemId: item.id, rev, quantity: splitQty, newItemId: newEntryId('itm') })).ok) setMode('view');
+          }}
+        >
+          Split off
+          <input className={`${input} w-16 py-0.5 text-xs`} aria-label={`Quantity to split from ${item.name}`} type="number" min={1} max={item.quantity - 1} value={splitQty} onChange={(e) => setSplitQty(Math.max(1, Math.min(item.quantity - 1, Math.round(Number(e.target.value) || 1))))} />
+          <button className="btn btn-gold px-2 py-0.5" type="submit">
+            Confirm split
+          </button>
+          <button className="btn btn-ghost px-2 py-0.5" type="button" onClick={() => setMode('view')}>
+            Cancel
+          </button>
+        </form>
+      )}
       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
         <select
           aria-label={`Move ${item.name} to`}
           className="rounded-md border border-ink-600 bg-ink-900 px-1.5 py-0.5 text-[11px] text-marble-300"
           value={containerOfItem(item, containers)}
-          onChange={(e) => void update({ container: e.target.value })}
+          onChange={(e) => props.onMove(item, e.target.value, null)}
         >
           {containers.map((c) => (
             <option key={c.id} value={c.id}>
@@ -257,21 +450,35 @@ function ItemRow({ token, item, containers, run }: { token: TokenView; item: Ite
             </option>
           ))}
         </select>
+        {reorderable && (
+          <>
+            <button className="text-marble-500 hover:text-gold-200 disabled:opacity-30" aria-label={`Move ${item.name} up`} disabled={!props.prev} onClick={() => props.prev && props.onMove(item, containerOfItem(item, containers), props.prev.id)}>
+              ↑
+            </button>
+            <button className="text-marble-500 hover:text-gold-200 disabled:opacity-30" aria-label={`Move ${item.name} down`} disabled={!props.next} onClick={() => props.next && props.onMove(props.next, containerOfItem(item, containers), item.id)}>
+              ↓
+            </button>
+          </>
+        )}
         <button
           className="text-marble-500 hover:text-gold-200"
           onClick={() => {
             setDraft({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity });
-            setEditing(true);
+            setMode('edit');
           }}
         >
           Edit
         </button>
-        <button
-          className="text-marble-500 hover:text-blood-400"
-          onClick={() => confirm(`Remove “${item.name}” from the inventory?`) && void run({ type: 'invRemoveItem', tokenId: token.id, itemId: item.id, rev })}
-        >
-          Remove
-        </button>
+        {isStackable(item) && item.quantity > 1 && (
+          <button className="text-marble-500 hover:text-gold-200" onClick={() => (setSplitQty(1), setMode('split'))}>
+            Split
+          </button>
+        )}
+        {mergeTarget && (
+          <button className="text-marble-500 hover:text-gold-200" title={`Merge into the other “${mergeTarget.name}” stack`} onClick={() => void run({ type: 'invMergeStack', tokenId: token.id, itemId: item.id, rev, intoItemId: mergeTarget.id, intoRev: mergeTarget.rev ?? 0 })}>
+            Merge stacks
+          </button>
+        )}
       </div>
     </li>
   );

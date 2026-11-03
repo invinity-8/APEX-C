@@ -297,6 +297,39 @@ const waitText = (page, re, timeout = 10000) =>
   check('a player can create a custom container', await waitText(hannah, /Hidden Chest/));
   await hannah.getByLabel('Move Old iron key, wrapped in red cloth to').selectOption({ label: '→ Hidden Chest' });
   check('items can be moved between containers', await hannah.locator('[data-container] >> text=Old iron key').count().then((n) => n > 0) && (await waitText(hannah, /Hidden Chest \(1\)/i)));
+  // ---------- inventory usability (APEX 0.6) ----------
+  {
+    const inv = async () => (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.inventory;
+    await hannah.getByRole('button', { name: 'Delete Old iron key, wrapped in red cloth' }).click();
+    check('delete offers an undo before anything is sent', await hannah.getByRole('button', { name: /Undo/ }).isVisible());
+    await hannah.getByRole('button', { name: /Undo/ }).click();
+    await hannah.waitForTimeout(5600);
+    check('undo keeps the item (no delete command sent)', (await inv()).some((i) => i.name.startsWith('Old iron key')));
+    await hannah.getByPlaceholder(/Old iron key/).fill('Torch');
+    await hannah.getByLabel('Qty', { exact: true }).first().fill('5');
+    await hannah.getByRole('button', { name: '+ Add' }).click();
+    await waitText(hannah, /5×\s*Torch/);
+    await hannah.locator('[data-item]', { hasText: 'Torch' }).getByRole('button', { name: 'Split' }).click();
+    await hannah.getByLabel('Quantity to split from Torch').fill('2');
+    await hannah.getByRole('button', { name: 'Confirm split' }).click();
+    await hannah.waitForTimeout(700);
+    const torches = (await inv()).filter((i) => i.name === 'Torch');
+    check('a stack splits without creating units (3 + 2)', torches.length === 2 && torches.reduce((n, i) => n + i.quantity, 0) === 5);
+    await hannah.locator('[data-item]', { hasText: '2×' }).filter({ hasText: 'Torch' }).getByRole('button', { name: 'Merge stacks' }).click();
+    await hannah.waitForTimeout(700);
+    const merged = (await inv()).filter((i) => i.name === 'Torch');
+    check('stacks merge back (5)', merged.length === 1 && merged[0].quantity === 5);
+    const inBackpack = async () => (await inv()).filter((i) => (i.container ?? 'backpack') === 'backpack').map((i) => i.id);
+    const before = await inBackpack();
+    await hannah.getByRole('button', { name: 'Move Torch up' }).click();
+    await hannah.waitForTimeout(700);
+    const after = await inBackpack();
+    check('↑ reorders within the container and the order is stored on the server', after.indexOf(merged[0].id) === before.indexOf(merged[0].id) - 1);
+    await hannah.getByLabel('Search inventory').fill('iron key');
+    check('search filters the inventory', !(await hannah.locator('[data-item]', { hasText: 'Torch' }).count()) && (await hannah.locator('[data-item]', { hasText: 'Old iron key' }).count()) === 1);
+    await hannah.getByLabel('Search inventory').fill('');
+    await hannah.screenshot({ path: out + '/e2e-inventory-06.png', fullPage: true });
+  }
   await hannah.screenshot({ path: out + '/e2e-inventory.png', fullPage: true });
 
   // ---------- privacy ----------
