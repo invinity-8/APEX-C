@@ -21,6 +21,7 @@ import {
   nudgeWidget,
   readLayout,
   resizeDock,
+  resetWidget,
   toggleCollapsed,
   writeLayout,
   type Dock,
@@ -140,6 +141,7 @@ export function Workspace({ widgets, defaults, storageKey, center }: { widgets: 
             onHide={() => setLayout((l) => hideWidget(l, id))}
             onNudge={(d) => setLayout((l) => nudgeWidget(l, id, d, metas))}
             onMoveTo={(d) => setLayout((l) => moveWidget(l, id, d, l.docks[d].length, metas))}
+            onReset={() => setLayout((l) => resetWidget(l, id, defaults))}
             onDragStart={() => setDrag(id)}
             onDragEnd={() => {
               setDrag(null);
@@ -183,6 +185,7 @@ function WidgetFrame(props: {
   onHide: () => void;
   onNudge: (d: -1 | 1) => void;
   onMoveTo: (d: Dock) => void;
+  onReset: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
@@ -233,11 +236,12 @@ function WidgetFrame(props: {
                   </MenuItem>
                 ))}
                 <MenuItem onClick={() => (props.onToggle(), setMenu(false))}>{collapsed ? 'Expand' : 'Collapse'}</MenuItem>
-                <MenuItem onClick={() => (props.onHide(), setMenu(false))}>Hide (restore via “Widgets”)</MenuItem>
+                <MenuItem onClick={() => (props.onReset(), setMenu(false))}>↺ Reset to default position</MenuItem>
+                <MenuItem onClick={() => (props.onHide(), setMenu(false))}>Close (restore via “Widgets”)</MenuItem>
               </div>
             )}
           </div>
-          <button className="ws-icon" aria-label={`Hide ${def.title}`} title="Hide – data is kept" onClick={props.onHide}>
+          <button className="ws-icon" aria-label={`Close ${def.title}`} title="Close – restore it via “Widgets”" onClick={props.onHide}>
             ×
           </button>
         </div>
@@ -279,7 +283,7 @@ function WidgetMenu({ hidden, onAdd, onReset }: { hidden: WidgetDef[]; onAdd: (i
             <div className="px-2 py-1 text-[11px] text-marble-500">All widgets are shown.</div>
           )}
           <div className="imperial-rule my-1" />
-          <MenuItem onClick={() => (onReset(), setOpen(false))}>↺ Reset workspace</MenuItem>
+          <MenuItem onClick={() => (onReset(), setOpen(false))}>↺ Reset Layout to Default</MenuItem>
         </div>
       )}
     </div>

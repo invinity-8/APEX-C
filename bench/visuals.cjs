@@ -27,29 +27,14 @@ async function frames(page, ms = 2500) {
 
 (async () => {
   const b = await chromium.launch();
-  // ---- welcome screen: poster first, Spline runtime lazy ----
-  for (const reduce of [false, true]) {
-    const ctx = await b.newContext({ viewport: { width: 1400, height: 900 }, reducedMotion: reduce ? 'reduce' : 'no-preference' });
+  // ---- welcome screen: static SVG illustration (APEX 0.7 – no 3D runtime) ----
+  {
+    const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
     const page = await ctx.newPage();
-    let bytes = 0;
-    page.on('response', async (r) => {
-      if (/runtime|splinecode|\.wasm/.test(r.url())) bytes += Number(r.headers()['content-length'] || (await r.body().catch(() => Buffer.alloc(0))).length);
-    });
     const t0 = Date.now();
     await page.goto(base + '/');
-    await page.getByTestId('spline-hero').waitFor();
-    const posterMs = Date.now() - t0;
-    const state = await page
-      .waitForFunction(() => ['live', 'fallback'].includes(document.querySelector('[data-testid=spline-hero]')?.dataset.state ?? ''), null, { timeout: 30000 })
-      .then(() => page.getByTestId('spline-hero').getAttribute('data-state'), () => page.getByTestId('spline-hero').getAttribute('data-state'));
-    const liveMs = await page.evaluate(() => window.__apexSplineMs ?? null);
-    const f = await frames(page);
-    const cdp = await ctx.newCDPSession(page);
-    await cdp.send('Performance.enable');
-    const heap = (await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === 'JSHeapUsedSize').value / 1048576;
-    console.log(
-      `welcome${reduce ? ' (reduced motion)' : ''}: poster ${posterMs} ms · hero state "${state}" · runtime+scene load ${liveMs ?? '–'} ms · lazy bytes ${(bytes / 1024).toFixed(0)} KB · frames median ${pct(f, 0.5)} ms p95 ${pct(f, 0.95)} ms · heap ${heap.toFixed(0)} MB`,
-    );
+    await page.getByTestId('welcome-vista').waitFor();
+    console.log(`welcome: illustration visible after ${Date.now() - t0} ms · frames median ${pct(await frames(page), 0.5)} ms`);
     await ctx.close();
   }
   // ---- maps: GM vs player, atmosphere on/off, r39 / r78 ----

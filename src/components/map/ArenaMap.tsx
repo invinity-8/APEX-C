@@ -19,7 +19,7 @@ import type { Fog, TokenView, ViewModel } from '../../game/visibility';
 import type { ReachExplanation } from '../../game/viewRules';
 import { HEX_SIZE, boundaryPath, center } from './geometry';
 import { HEX_FEATURE_INFO } from './landmark';
-import { Legend } from './Legend';
+import { AtmosphereToggle } from './Legend';
 import { LightCanvas, usePrefersReducedMotion } from './LightCanvas';
 import { AtmosphereCanvas } from './AtmosphereCanvas';
 import { MapDefs } from './MapDefs';
@@ -418,7 +418,7 @@ export function ArenaMap(props: Props) {
         </div>
       )}
 
-      <Legend atmosphere={atmosphere} setAtmosphere={setAtmosphere} />
+      <AtmosphereToggle atmosphere={atmosphere} setAtmosphere={setAtmosphere} />
 
       <div className="absolute right-3 bottom-3 z-10 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
         <button className="btn btn-ghost h-9 w-9 text-base" title="Zoom in (+)" aria-label="Zoom in" onClick={() => zoomAt(1.25, size.w / 2, size.h / 2)}>

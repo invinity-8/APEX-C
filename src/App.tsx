@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityLog } from './components/ActivityLog';
+import { Chronicle } from './components/ActivityLog';
+import { LegendContent } from './components/map/Legend';
 import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
 import { CharacterSummary, GmTools, PartyHealth } from './components/PartyWidgets';
 import { EquipmentPanel } from './components/EquipmentPanel';
@@ -216,7 +217,10 @@ export default function App({ game }: { game: GameApi }) {
   // Workspace widgets (APEX 0.5). The set is decided by the SERVER-provided role and data: a player's client
   // never builds GM widget definitions (and never receives GM data), so a stored layout cannot unlock them.
   // Widgets render lazily (only while expanded); stable ids keep open widgets mounted.
-  const widgets: WidgetDef[] = [];
+  const widgets: WidgetDef[] = [
+    { id: 'chronicle', title: 'Arena Chronicle', icon: '📜', render: () => <Chronicle log={view.log} isGm={isGm} /> },
+    { id: 'legend', title: 'Legend', icon: '🗺', render: () => <LegendContent /> },
+  ];
   if (isGm && state) {
     widgets.push(
       {
@@ -264,10 +268,10 @@ export default function App({ game }: { game: GameApi }) {
     () =>
       role === 'gm'
         ? defaultLayout(
-            { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'] },
-            ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players'],
+            { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players', 'legend'], bottom: ['chronicle'] },
+            ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players', 'legend'],
           )
-        : defaultLayout({ right: ['vitals', 'my-character', 'equipment', 'party', 'selection', 'intel', 'notifications'] }, ['equipment', 'notifications'], ['inventory']),
+        : defaultLayout({ right: ['vitals', 'my-character', 'equipment', 'party', 'selection', 'intel', 'notifications', 'legend'], bottom: ['chronicle'] }, ['equipment', 'notifications', 'legend'], ['inventory']),
     [role],
   );
 
@@ -392,7 +396,6 @@ export default function App({ game }: { game: GameApi }) {
             onHexClick={onHexClick}
             onTokenClick={onTokenClick}
           />
-          <ActivityLog log={view.log} isGm={isGm} />
           {!isGm && (
             <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-arcane-500/50 bg-ink-900/90 px-3 py-1 text-[11px] text-arcane-300">
               Playing as {view.tokens.find((t) => t.id === view.viewerId)?.name}
