@@ -9,6 +9,7 @@
  * exactly this function. Players therefore cannot cheat.
  */
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
+import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
 import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js';
 import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
@@ -31,6 +32,7 @@ export type Command =
   | { type: 'place'; tokenId: string; to: Axial }
   | { type: 'endDay' }
   | { type: 'setItemRules'; rules: Partial<ItemRules> | null }
+  | LootCommand
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'adjustMovePoints'; tokenId: string; delta: number }
@@ -96,6 +98,10 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'setResting',
   'setItemEquip',
   'setEquipConfig',
+  'itemIdentify',
+  'itemReroll',
+  'itemSalvage',
+  'combineFragments',
 ]);
 
 /** May the actor edit this character's sheet resources and inventory? GM: all; player: only their own character. */
@@ -184,7 +190,8 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   if (CHARACTER_COMMANDS.has(cmd.type) && !canEditCharacter(prev, actor, (cmd as { tokenId: string }).tokenId)) {
     return fail(prev, prev.tokens[(cmd as { tokenId: string }).tokenId] ? T.notYourCharacter : T.noSuchToken);
   }
-  if (cmd.type.startsWith('inv')) return executeInventory(prev, cmd as InventoryCommand);
+  if (LOOT_COMMANDS.has(cmd.type)) return executeLoot(prev, actor, cmd as LootCommand);
+  if (cmd.type.startsWith('inv')) return executeInventory(prev, actor, cmd as InventoryCommand);
   if (EQUIPMENT_COMMANDS.has(cmd.type)) return executeEquipment(prev, actor, cmd as EquipmentCommand);
 
   const state: GameState = structuredClone(prev);
@@ -417,7 +424,7 @@ type InventoryCommand = Extract<Command, { type: 'invAddItem' | 'invUpdateItem' 
  * Inventory changes. They only touch one character's inventory (no knowledge refresh, no log:
  * inventories are private to the owner and the GM).
  */
-function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult {
+function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand): CommandResult {
   const state = cloneOneToken(prev, cmd.tokenId);
   const t = state.tokens[cmd.tokenId];
   materializeInventory(t);
@@ -471,6 +478,7 @@ function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult
     case 'invRemoveItem': {
       const item = findItem(cmd.itemId, cmd.rev);
       if (typeof item === 'string') return fail(prev, item);
+      if (item.locked && actor.role !== 'gm') return fail(prev, 'The Game Master has restricted this item – it cannot be deleted.');
       t.inventory = t.inventory.filter((i) => i !== item);
       reconcileEquipment(t); // a removed item can no longer be equipped anywhere
       break;
@@ -564,6 +572,7 @@ const EQUIP_ERROR: Record<EquipError, string> = {
   wrongSlot: 'This item does not fit that equipment slot.',
   twoHandedOff: 'A two-handed weapon needs both hands – the off hand stays empty.',
   gmLocked: 'The Game Master has locked this item’s properties.',
+  unidentified: 'Identify this item before equipping it.',
 };
 
 /** Equipment changes: private to the owner and the GM (no log, no knowledge refresh). */

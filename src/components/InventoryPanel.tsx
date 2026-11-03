@@ -10,12 +10,17 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Command } from '../game/commands';
-import { SLOT_LABEL, equipmentOf, slotOfItem } from '../game/equipment';
+import { SLOT_LABEL, equipmentOf, slotOfItem, suggestSlot, type Equipment } from '../game/equipment';
+import { balanceOf, CURRENCIES } from '../game/items/currency';
+import { canIdentify, canReroll, canSalvage, salvageReward, type Check } from '../game/items/loot';
+import { DEFAULT_ITEM_RULES, RARITY_LABEL, type ItemRules } from '../game/items/rules';
+import { CurrencyBar, ItemInspect } from './items/ItemUi';
 import { DEFAULT_CONTAINERS, INVENTORY_LIMITS, canMerge, containerOfItem, isStackable } from '../game/inventory';
 import { newEntryId } from '../game/sheet';
 import type { Item } from '../game/types';
 import type { TokenView } from '../game/visibility';
 import type { DispatchResult } from '../state/gameApi';
+import { baseItem } from '../game/items/bases';
 import { itemSortKeys, ItemBadges, ItemModLines, itemCategory, type ItemCategory } from './itemPresentation';
 
 interface Props {
@@ -24,6 +29,10 @@ interface Props {
   busy: boolean;
   /** Inside the character dashboard (no outer page padding). */
   embedded?: boolean;
+  /** Effective balance rules (fragment ratio, caps). */
+  rules?: ItemRules;
+  /** The GM looks at a character's inventory: extra actions (revoke, restrict). */
+  isGm?: boolean;
 }
 
 const input = 'rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50 focus:border-gold-400 focus:outline-none';
@@ -42,7 +51,7 @@ const FILTERS: Array<[Filter, string]> = [
   ['other', 'Other'],
 ];
 
-export function InventoryPanel({ token, run, busy, embedded }: Props) {
+export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITEM_RULES, isGm = false }: Props) {
   const details = token.details;
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
   const items = useMemo(() => details?.inventory ?? [], [details?.inventory]);
@@ -175,6 +184,13 @@ export function InventoryPanel({ token, run, busy, embedded }: Props) {
         {viewFiltered && <p className="text-[11px] text-marble-500">Filtered or sorted view – drag & drop and ↑/↓ reorder the stored order only in “Manual order” without search or filter.</p>}
       </section>
 
+      <CurrencyBar
+        currency={details.currency}
+        currencyRev={details.currencyRev ?? 0}
+        rules={rules}
+        onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
+      />
+
       {Object.values(pending).map(({ item }) => (
         <div key={item.id} role="status" className="flex items-center gap-3 rounded-lg border border-blood-600/60 bg-blood-800/40 px-3 py-2 text-xs text-marble-100" data-undo={item.id}>
           <span className="flex-1">
@@ -206,6 +222,9 @@ export function InventoryPanel({ token, run, busy, embedded }: Props) {
               setDragId={setDragId}
               onMove={move}
               onRemove={remove}
+              eq={eq}
+              rules={rules}
+              isGm={isGm}
             />
           );
         })}
@@ -241,6 +260,9 @@ interface CardProps {
   setDragId: (id: string | null) => void;
   onMove: (item: Item, container: string, beforeItemId?: string | null) => void;
   onRemove: (item: Item) => void;
+  eq: Equipment;
+  rules: ItemRules;
+  isGm: boolean;
 }
 
 function ContainerCard(props: CardProps) {
@@ -325,7 +347,13 @@ function ContainerCard(props: CardProps) {
 
 function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   const { token, item, containers, run, reorderable } = props;
-  const [mode, setMode] = useState<'view' | 'edit' | 'split'>('view');
+  const [mode, setMode] = useState<'view' | 'edit' | 'split' | 'reroll' | 'salvage' | 'revoke'>('view');
+  const [inspect, setInspect] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const [reason, setReason] = useState('');
+  const structured = !!item.baseId;
+  const fixedQty = !!item.rarity || !!item.mods?.length;
   const [draft, setDraft] = useState({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity });
   const [splitQty, setSplitQty] = useState(1);
   const rev = item.rev ?? 0;
@@ -344,7 +372,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <textarea className={`${input} min-h-12 w-full`} aria-label="Description" placeholder="Description" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
           <textarea className={`${input} min-h-12 w-full`} aria-label="Notes" placeholder="Notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
           <div className="flex items-center gap-2">
-            <label>
+            <label className={item.rarity || item.mods?.length ? 'hidden' : undefined}>
               Qty{' '}
               <input className={`${input} w-16`} type="number" min={0} value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
             </label>
@@ -409,17 +437,99 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button className="btn btn-ghost h-7 w-7 px-0" aria-label={`Decrease quantity of ${item.name}`} onClick={() => void update({ quantity: Math.max(0, item.quantity - 1) })}>
+          {structured && (
+            <button className="btn btn-ghost h-7 px-2 text-[11px]" aria-expanded={inspect} aria-label={`Inspect ${item.name}`} onClick={() => setInspect((v) => !v)}>
+              Inspect
+            </button>
+          )}
+          {structured && (
+            <button className="btn btn-ghost h-7 px-2 text-[11px]" aria-haspopup="menu" aria-expanded={menu} aria-label={`Actions for ${item.name}`} onClick={() => setMenu((v) => !v)}>
+              Actions ▾
+            </button>
+          )}
+          {!fixedQty && (
+            <button className="btn btn-ghost h-7 w-7 px-0" aria-label={`Decrease quantity of ${item.name}`} onClick={() => void update({ quantity: Math.max(0, item.quantity - 1) })}>
             −
-          </button>
-          <button className="btn btn-ghost h-7 w-7 px-0" aria-label={`Increase quantity of ${item.name}`} onClick={() => void update({ quantity: item.quantity + 1 })}>
-            +
-          </button>
-          <button className="btn btn-ghost h-7 w-7 px-0 hover:border-blood-400/70 hover:text-blood-400" aria-label={`Delete ${item.name}`} title="Delete (you can undo for 5 seconds)" onClick={() => props.onRemove(item)}>
+            </button>
+          )}
+          {!fixedQty && (
+            <button className="btn btn-ghost h-7 w-7 px-0" aria-label={`Increase quantity of ${item.name}`} onClick={() => void update({ quantity: item.quantity + 1 })}>
+              +
+            </button>
+          )}
+          <button
+            className="btn btn-ghost h-7 w-7 px-0 hover:border-blood-400/70 hover:text-blood-400 disabled:opacity-30"
+            aria-label={`Delete ${item.name}`}
+            title={item.locked && !props.isGm ? 'Restricted by the Game Master – cannot be deleted' : 'Delete (you can undo for 5 seconds)'}
+            disabled={!!item.locked && !props.isGm}
+            onClick={() => props.onRemove(item)}
+          >
             ✕
           </button>
         </div>
       </div>
+      {menu && structured && <ItemActions {...props} close={() => setMenu(false)} onMode={(m) => (setMenu(false), setMode(m))} onRevealed={() => (setRevealed(true), setInspect(true), window.setTimeout(() => setRevealed(false), 1600))} />}
+      {mode === 'reroll' && (
+        <Confirm
+          tone="arcane"
+          title={`Reroll ${item.name}?`}
+          confirm="Spend 1 Orb of Renewal and reroll"
+          onCancel={() => setMode('view')}
+          onConfirm={async () => {
+            const r = await run({ type: 'itemReroll', tokenId: token.id, itemId: item.id, rev });
+            if (r.ok) (setMode('view'), setInspect(true), setRevealed(true), window.setTimeout(() => setRevealed(false), 1600));
+          }}
+        >
+          <p>
+            All {item.mods?.length ?? 0} modifiers are replaced by a new random set that fits a {RARITY_LABEL[item.rarity ?? 'normal']} {baseItem(item.baseId)?.name ?? 'item'} of item level {item.itemLevel}. Base item, item level, rarity, owner and equipment slot stay the same.
+          </p>
+          <p className="text-amber-200">The new result can be worse and cannot be undone or previewed. You have {balanceOf({ currency: token.details?.currency }, 'orb')} Orb(s) of Renewal.</p>
+        </Confirm>
+      )}
+      {mode === 'salvage' && (
+        <Confirm
+          tone="blood"
+          title={`Salvage ${item.name}?`}
+          confirm={`Salvage for ${salvageReward(item)} Arcane Fragment${salvageReward(item) === 1 ? '' : 's'}`}
+          onCancel={() => setMode('view')}
+          onConfirm={async () => {
+            if ((await run({ type: 'itemSalvage', tokenId: token.id, itemId: item.id, rev })).ok) setMode('view');
+          }}
+        >
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3">
+            <dt className="text-marble-500">Item</dt>
+            <dd>{item.identified === false ? `Unidentified ${item.name}` : item.name}</dd>
+            <dt className="text-marble-500">Rarity</dt>
+            <dd>{RARITY_LABEL[item.rarity ?? 'normal']}</dd>
+            <dt className="text-marble-500">Item level</dt>
+            <dd>{item.itemLevel ?? '—'}</dd>
+            <dt className="text-marble-500">Reward</dt>
+            <dd className="font-semibold text-arcane-300" data-testid="salvage-reward">
+              {salvageReward(item)} Arcane Fragment{salvageReward(item) === 1 ? '' : 's'}
+            </dd>
+          </dl>
+          <p className="text-amber-200">The item is destroyed permanently.</p>
+        </Confirm>
+      )}
+      {mode === 'revoke' && (
+        <Confirm
+          tone="blood"
+          title={`Revoke ${item.name} from ${token.name}?`}
+          confirm="Revoke item"
+          onCancel={() => setMode('view')}
+          onConfirm={async () => {
+            if ((await run({ type: 'gmRevokeItem', tokenId: token.id, itemId: item.id, ...(reason.trim() ? { reason: reason.trim() } : {}) })).ok) setMode('view');
+          }}
+        >
+          <p>Generated items return to the Arsenal tray; the action is recorded in the item audit log.</p>
+          <input className={`${input} w-full`} placeholder="Reason (optional)" aria-label="Revoke reason" value={reason} maxLength={120} onChange={(e) => setReason(e.target.value)} />
+        </Confirm>
+      )}
+      {inspect && structured && (
+        <div className={`mt-2 ${revealed ? 'apex-reveal' : ''}`}>
+          <ItemInspect item={item} inventory={props.allItems} equipment={props.eq} containers={containers} rules={props.rules} gmView={props.isGm} onClose={() => setInspect(false)} />
+        </div>
+      )}
       {mode === 'split' && (
         <form
           className="mt-1.5 flex items-center gap-2 text-[11px] text-marble-300"
@@ -482,5 +592,85 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
         )}
       </div>
     </li>
+  );
+}
+
+/** Item action menu: every action is listed; unavailable ones are disabled with the reason shown. */
+function ItemActions(props: CardProps & { item: Item; close: () => void; onMode: (m: 'reroll' | 'salvage' | 'revoke') => void; onRevealed: () => void }) {
+  const { token, item, run, eq } = props;
+  const purse = { currency: token.details?.currency };
+  const actor = props.isGm ? ({ role: 'gm' } as const) : ({ role: 'player', tokenId: token.id } as const);
+  const slot = slotOfItem(eq, item.id);
+  const target = suggestSlot(eq, item);
+  const rev = item.rev ?? 0;
+  const rows: Array<{ label: string; check: Check; act: () => void }> = [
+    {
+      label: 'Identify',
+      check: canIdentify(purse, item),
+      act: async () => {
+        props.close();
+        if ((await run({ type: 'itemIdentify', tokenId: token.id, itemId: item.id, rev })).ok) props.onRevealed();
+      },
+    },
+    slot
+      ? { label: `Unequip (${SLOT_LABEL[slot]})`, check: { ok: true }, act: () => (props.close(), void run({ type: 'unequipSlot', tokenId: token.id, slot })) }
+      : {
+          label: target ? `Equip (${SLOT_LABEL[target]}${eq.slots[target] ? ', replaces current' : ''})` : 'Equip',
+          check: item.identified === false ? { ok: false, reason: 'Identify this item before equipping it.' } : !item.equip ? { ok: false, reason: 'This item cannot be equipped.' } : !target ? { ok: false, reason: 'No fitting slot in the active weapon set.' } : { ok: true },
+          act: () => (props.close(), target && void run({ type: 'equipItem', tokenId: token.id, itemId: item.id, slot: target })),
+        },
+    { label: 'Reroll (Orb of Renewal)', check: canReroll(purse, item), act: () => props.onMode('reroll') },
+    { label: 'Salvage', check: canSalvage({ equipment: token.details?.equipment }, item, actor), act: () => props.onMode('salvage') },
+  ];
+  if (props.isGm) {
+    rows.push({ label: 'Revoke (GM)', check: { ok: true }, act: () => props.onMode('revoke') });
+    rows.push({ label: item.locked ? 'Lift GM restriction' : 'Restrict (no salvage/delete)', check: { ok: true }, act: () => (props.close(), void run({ type: 'gmSetItemLock', tokenId: token.id, itemId: item.id, locked: !item.locked })) });
+  }
+  rows.push({ label: 'Send to player', check: { ok: false, reason: 'Player-to-player transfers arrive in a later update.' }, act: () => undefined });
+  return (
+    <div role="menu" aria-label={`Actions for ${item.name}`} className="mt-1.5 grid gap-1 rounded-lg border border-gold-700/40 bg-ink-950/90 p-1.5 text-xs sm:grid-cols-2">
+      {rows.map((r) => (
+        <button
+          key={r.label}
+          role="menuitem"
+          disabled={!r.check.ok}
+          onClick={r.act}
+          className="rounded-md border border-ink-600 px-2 py-1 text-left text-marble-100 hover:border-gold-400/70 hover:bg-gold-400/10 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-ink-600 disabled:hover:bg-transparent"
+        >
+          <span className="block font-medium">{r.label}</span>
+          {!r.check.ok && <span className="block text-[10px] text-marble-500">{r.check.reason}</span>}
+          {r.check.ok && r.label === 'Identify' && <span className="block text-[10px] text-marble-500">Uses 1 {CURRENCIES.seal.name} (you have {balanceOf(purse, 'seal')})</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Confirm({ title, confirm, tone, children, onConfirm, onCancel }: { title: string; confirm: string; tone: 'arcane' | 'blood'; children: React.ReactNode; onConfirm: () => Promise<void>; onCancel: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div role="alertdialog" aria-label={title} className={`mt-1.5 space-y-1.5 rounded-lg border p-2 text-xs text-marble-200 ${tone === 'arcane' ? 'border-arcane-400/60 bg-arcane-500/10' : 'border-blood-400/60 bg-blood-800/30'}`}>
+      <p className="font-semibold text-marble-50">{title}</p>
+      {children}
+      <div className="flex justify-end gap-2">
+        <button className="btn btn-ghost px-2 py-0.5" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button
+          className="btn btn-gold px-2 py-0.5"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onConfirm();
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {confirm}
+        </button>
+      </div>
+    </div>
   );
 }

@@ -29,6 +29,7 @@ import type {
 } from './types.js';
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
+import type { CurrencyId } from './items/currency.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
 
 // ---------------- Grundfunktionen ----------------
@@ -131,6 +132,9 @@ export interface TokenDetails {
   containers?: InventoryContainer[];
   /** APEX 0.5: private like the inventory (owner + GM only). */
   equipment?: Equipment;
+  /** APEX 0.6: magical currency (owner + GM only). */
+  currency?: Partial<Record<CurrencyId, number>>;
+  currencyRev?: number;
 }
 
 export interface TokenView {
@@ -218,6 +222,7 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   inventory: withInventory ? t.inventory.map((i) => (redact ? redactItem({ ...i }) : structuredClone(i))) : [],
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
+  ...(withInventory ? { currency: { ...(t.currency ?? {}) }, currencyRev: t.currencyRev ?? 0 } : {}),
 });
 
 const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact = false): TokenView => ({

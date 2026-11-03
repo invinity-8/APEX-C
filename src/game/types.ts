@@ -1,5 +1,6 @@
 import type { Equipment, ItemEquip } from './equipment.js';
 import type { ItemRules, Rarity } from './items/rules.js';
+import type { CurrencyId } from './items/currency.js';
 /**
  * Central game state structure.
  * Everything that is saved, exported or stored in Supabase is defined here.
@@ -115,6 +116,10 @@ export interface Item {
   source?: ItemOrigin;
   /** Bound items cannot be transferred or traded. */
   bound?: boolean;
+  /** GM restriction (quest item …): players cannot salvage or delete it. */
+  locked?: boolean;
+  /** Short, public item history (newest last, bounded) – never contains hidden modifier data. */
+  history?: Array<{ day: number; text: string }>;
 }
 
 /** One rolled modifier on an item instance (APEX 0.6). */
@@ -172,6 +177,9 @@ export interface Token {
   speedFt?: number;
   /** APEX 0.5: equipped items (references into `inventory`), weapon sets, resting preset. */
   equipment?: Equipment;
+  /** APEX 0.6: magical currency balances (server-authoritative) and their revision. */
+  currency?: Partial<Record<CurrencyId, number>>;
+  currencyRev?: number;
 }
 
 export type TeamVisibility = 'auto' | 'hidden' | 'revealed';
@@ -334,6 +342,24 @@ export interface GameState {
   announcements?: Announcement[];
   /** APEX 0.6: GM overrides of the itemisation caps (see src/game/items/rules.ts). */
   itemRules?: Partial<ItemRules>;
+  /** APEX 0.6: GM Arsenal – generated items waiting to be handed out (GM-only). */
+  arsenal?: { staged: Item[] };
+  /** APEX 0.6: item audit trail (GM-only, bounded). */
+  itemAudit?: ItemAuditEntry[];
+  nextAuditId?: number;
+}
+
+export interface ItemAuditEntry {
+  id: number;
+  day: number;
+  phase: Phase;
+  /** 'GM' or the acting character's name. */
+  by: string;
+  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine';
+  tokenId?: string;
+  itemId?: string;
+  itemName?: string;
+  detail: string;
 }
 
 /** Who performs an action? */

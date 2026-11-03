@@ -20,6 +20,7 @@
  */
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
 import { CHARACTER_COMMANDS, executeCommand, type Command } from '../game/commands.js';
+import { SEEDED_COMMANDS } from '../game/items/loot.js';
 import { migrateState } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
@@ -531,6 +532,9 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
   const parsed = parseCommand(body.command);
   if (!parsed.ok) throw new HttpError(400, parsed.error);
   const cmd = parsed.command;
+  // Server-side randomness: generation and rerolls get a crypto seed here – never from the client. It is set once,
+  // before the optimistic-locking retry loop, so a re-validation after a write conflict yields the same roll.
+  if (SEEDED_COMMANDS.has(cmd.type)) (cmd as { seed?: number }).seed = crypto.getRandomValues(new Uint32Array(1))[0];
   const as = typeof body.as === 'string' ? body.as : undefined;
   const viewAs = as ?? (CHARACTER_COMMANDS.has(cmd.type) ? (cmd as { tokenId: string }).tokenId : undefined);
   const tracked = isRequestId(body.requestId);

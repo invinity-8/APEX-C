@@ -2,6 +2,7 @@
  * Demo backend: keeps the game state in this browser, runs commands locally and saves automatically.
  * It never talks to the shared online campaign.
  */
+import { SEEDED_COMMANDS } from '../game/items/loot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createDemoState } from '../data/demo';
 import { executeCommand, type Command } from '../game/commands';
@@ -41,7 +42,9 @@ export function useDemoGame(): GameApi {
 
   const dispatch = useCallback(
     async (cmd: Command) => {
-      const res = executeCommand(stateRef.current, actor, cmd);
+      // Demo mode runs the rules locally; it plays the server's role and supplies the random seed itself.
+      const c = SEEDED_COMMANDS.has(cmd.type) ? ({ ...cmd, seed: crypto.getRandomValues(new Uint32Array(1))[0] } as Command) : cmd;
+      const res = executeCommand(stateRef.current, actor, c);
       if (res.ok) {
         stateRef.current = res.state;
         setState(res.state);

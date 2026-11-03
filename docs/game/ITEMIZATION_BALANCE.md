@@ -62,6 +62,8 @@ action-RPG ideas; no modifier data was copied from other games or fan databases.
 Fields per modifier: `id`, `name` (affix name), `affix` (prefix/suffix), `family`, `tags` (which bases can roll it),
 `tiers` (`tier`, `ilvl`, `min`, `max`, `weight`), `effect`, `local` (applies to the weapon itself), `text`,
 `description`. `MODIFIER_VERSION` is stored on every rolled item, and changing tiers or values requires bumping it.
+Version 2 (APEX 0.6 playable loot) added the weapon suffixes *of Ruin* and *of Alacrity* on weapons. Without them,
+weapons had prefixes only, so a Rare weapon could never exceed 2 modifiers.
 
 **Families are mutually exclusive**: an item carries at most one modifier per family. For example, a sword cannot
 roll fire and cold flat damage together, because both belong to `flat-damage`.
@@ -83,7 +85,8 @@ roll fire and cold flat damage together, because both belong to `flat-damage`.
 | `res-<element>` (fire, cold, lightning, poison, necrotic, radiant) | of Ash, of the North Wind, of Grounding, of the Antidote, of the Living, of Shade | armour, shields, jewellery, cloaks, helmets, gloves, boots, belts | 1: 5–10 · 8: 11–18 · 16: 19–26 · 24: 27–34 | APEX resistance points |
 | `save-<ability>` | of Fortitude, of Reflexes, of Resolve … | jewellery, cloaks, belts, shields | 8: +1 · 22: +2 | saving throws (one family for all saves) |
 | `skill-<skill>` | of the Watch, of Hushed Steps … | jewellery, head, hands, feet, cloak, belt | 1: +1 · 15: +2 | one skill (one family for all skills) |
-| `initiative` | of Alacrity | feet, hands, jewellery | 6: +1 · 20: +2 | initiative |
+| `initiative` | of Alacrity | feet, hands, jewellery, weapons | 6: +1 · 20: +2 | initiative |
+| `crit-damage` | of Ruin | weapons | 1: 2–3 · 10: 3–5 · 20: 5–8 | extra damage once on a critical hit with this weapon (local) |
 | `carry` | of the Mule | belts, gloves | 1: 10–20 · 12: 25–40 lb | carrying capacity |
 | `speed` | of the March | boots | 12: +5 ft | walking speed **on the sheet only** – arena movement points are never changed |
 
@@ -169,7 +172,43 @@ reveals the already-rolled modifiers. It never rerolls them.
   “From equipped modifiers” lines and are never written into the sheet.
 * Generated items cannot change quantity, cannot be split, and their equipment statistics are GM-locked.
 
-## 10. Tuning guidance for GMs
+## 10. The playable loot loop (GM Arsenal, currency, identify, reroll, salvage)
+
+All of these are server-validated commands in `src/game/items/loot.ts` and run through `/api/apex?op=command`.
+
+| Command | Who | What happens |
+| --- | --- | --- |
+| `arsenalGenerate` | GM | Rolls an item on the server (crypto seed injected by `api.ts`) into the **Arsenal tray** (preview, GM-only), or directly into a character's inventory (`giveTo`). `count` 1–10 rolls items separately; stackables use `quantity`. |
+| `arsenalGive` / `arsenalDiscard` | GM | Moves a tray item into an inventory, or deletes the preview. |
+| `gmGrantCurrency` | GM | Adds or removes Seals, Orbs or Fragments (never below 0, max 9999). |
+| `gmRevokeItem` | GM | Removes an item (with an optional reason). Generated items return to the tray. Audited. |
+| `gmSetItemLock` | GM | Restricts an item (quest item): players cannot salvage or delete it. |
+| `itemIdentify` | owner | Spends 1 **Seal of Revelation** and reveals the modifiers rolled at creation (no reroll). Magic items get their affix name; rare items get a stable name derived from the item id. |
+| `itemReroll` | owner | Spends 1 **Orb of Renewal** and replaces all modifiers of an identified Magic/Rare item with a new server roll. Base, item level, rarity, owner and slot stay; there is no preview or undo. |
+| `itemSalvage` | owner | Destroys an unequipped, unlocked, generated item for Arcane Fragments (table below). |
+| `combineFragments` | owner | `fragmentsPerOrb` Fragments (default **10**, GM-adjustable 2–100) → 1 Orb, several sets at once. |
+
+**Salvage reward** (shown before confirming): Normal 1; Magic 2 (+1 from item level 15); Rare 4 + ⌊item level / 10⌋,
+at most 6. Only items generated from the item pool can be salvaged; free-text items never pay out, so players cannot
+create value from nothing.
+
+**Exploit protection**
+* Randomness comes only from a server seed. A client-supplied `seed` is dropped by the validator.
+* Item actions name the item revision (`rev`) and `combineFragments` names the purse revision (`currencyRev`). After a
+  success, a repeated request is refused, so nothing is spent or paid twice. Requests also carry a request id
+  (`apex_command_log`), and an exact retry returns the first result without applying it again.
+* Every write is an optimistic-locking compare-and-swap of the campaign state. Concurrent actions are re-validated
+  against the newest state, so two simultaneous spends of the last Orb cannot both succeed.
+* Players cannot generate items, grant currency, change a generated item's quantity or statistics, or split it.
+  Unidentified items cannot be equipped and grant nothing. Their modifiers are removed from every player response.
+* Currency and inventories of other characters are never sent to a player.
+* The item audit log (GM-only, last 300 entries) records generation, grants, revokes, restrictions, identification,
+  rerolls, salvage and fragment conversion.
+
+Currency is stored on the character token (`token.currency`, `token.currencyRev`) inside the existing campaign state.
+No database migration is needed.
+
+## 11. Tuning guidance for GMs
 
 * For gritty campaigns, lower `toHitCap`, `acCap` and `saveCap` to 1 and keep `resistanceCap` at 60 (30 %).
 * For heroic campaigns, keep the defaults. Raising `toHitCap` or `acCap` to 3 noticeably weakens bounded accuracy.

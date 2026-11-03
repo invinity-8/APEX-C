@@ -22,9 +22,10 @@ import { phaseName } from './game/text';
 import { PlayersPanel } from './components/PlayersPanel';
 import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
+import { ArsenalPanel } from './components/ArsenalPanel';
 import { WorldPanel } from './components/WorldPanel';
 
-type View = 'map' | 'character' | 'inventory';
+type View = 'map' | 'character' | 'inventory' | 'arsenal';
 
 interface Toast {
   id: number;
@@ -255,7 +256,7 @@ export default function App({ game }: { game: GameApi }) {
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
       { id: 'intel', title: 'Intelligence', icon: '👁', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
       { id: 'notifications', title: 'Notifications', icon: '📣', render: () => <AnnouncementHistory announcements={view.announcements} open /> },
-      { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} embedded /> : null) },
+      { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} rules={view.itemRules} embedded /> : null) },
     );
   }
   const role = isGm ? 'gm' : 'player';
@@ -274,6 +275,7 @@ export default function App({ game }: { game: GameApi }) {
     { id: 'map', label: '🗺 Map' },
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
     { id: 'inventory', label: '🎒 Inventory' },
+    ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
   ];
 
   return (
@@ -327,7 +329,7 @@ export default function App({ game }: { game: GameApi }) {
             {t.label}
           </button>
         ))}
-        {isGm && screen !== 'map' && (
+        {isGm && screen !== 'map' && screen !== 'arsenal' && (
           <label className="ml-auto flex items-center gap-2 text-xs text-marble-300">
             Character
             <select
@@ -358,12 +360,14 @@ export default function App({ game }: { game: GameApi }) {
               {toast.text}
             </div>
           )}
-          {!sheetToken ? (
+          {screen === 'arsenal' && isGm && state ? (
+            <ArsenalPanel state={state} run={run} />
+          ) : !sheetToken ? (
             <p className="p-6 text-sm text-marble-500">No character available.</p>
           ) : screen === 'character' ? (
             <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} />
           ) : (
-            <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} />
+            <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} rules={view.itemRules} isGm={isGm} />
           )}
         </div>
       )}
