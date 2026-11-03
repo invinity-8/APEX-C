@@ -150,8 +150,10 @@ export interface Token {
   name: string;
   kind: TokenKind;
   teamId: string;
-  /** Kurzbeschreibung, z. B. Klasse/Herkunft. */
+  /** Character title / tagline shown under the name (e.g. "Will-Weaver"). */
   title: string;
+  /** APEX 0.7: the tagline was set by hand – imports and defaults never overwrite it. */
+  titleCustom?: boolean;
   color: string;
   initials: string;
   pos: Axial;

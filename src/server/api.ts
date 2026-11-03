@@ -25,6 +25,7 @@ import { migrateState } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
+import { buildSnapshot, isSnapshot, restoreSheetParts, sheetLevel, SHEET_PARTS, type SheetPart } from '../game/progression.js';
 import type { Actor, GameState } from '../game/types.js';
 import { phaseName } from '../game/text.js';
 import { buildPlayerView } from '../game/visibility.js';
@@ -56,7 +57,7 @@ import type {
   PartyVital,
   WireView,
 } from './protocol.js';
-import { WorldConflictError, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
+import { WorldConflictError, type FeedbackRow, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
 import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
 import { isId, isInt, isObj, parseCommand } from './validate.js';
 
@@ -158,6 +159,12 @@ export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiRespons
         return ok(await partyVitals(user, repo));
       case 'POST sheet':
         return ok(await runSheet(user, req.body, repo));
+      case 'POST character-archive':
+        return ok(await runCharacterArchive(user, req.body, repo));
+      case 'GET feedback':
+        return ok(await listFeedback(user, repo));
+      case 'POST feedback':
+        return ok(await runFeedback(user, req.body, repo));
       default:
         throw new HttpError(404, 'Unknown API operation.');
     }
@@ -726,7 +733,7 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
     const parsed = parseSheet(body.sheet);
     if (!parsed.ok) throw new HttpError(400, parsed.error);
     if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER) || body.expectedVersion < 0) throw new HttpError(400, 'Invalid sheet version.');
-    const reason = body.reason === 'import-merge' || body.reason === 'import-replace' ? body.reason : 'edit';
+    const reason = body.reason === 'import-merge' || body.reason === 'import-replace' || body.reason === 'import-levelup' ? body.reason : 'edit';
     const cur = await repo.loadSheet(cid, tokenId);
     if ((cur?.version ?? 0) !== body.expectedVersion) {
       throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded – please check it and save again.', 'sheet_conflict', undefined, {
@@ -734,7 +741,16 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
       });
     }
     // Never replace data without a backup: imports always back up the previous sheet first.
-    if (cur && reason !== 'edit') await repo.backupSheet(cid, tokenId, cur.data, cur.version, `Before ${reason === 'import-replace' ? 'import (replace)' : 'import (merge)'}`, user.id);
+    if (cur && reason === 'import-levelup') {
+      // APEX 0.7: a level-up update always creates a full character snapshot first (restorable by the GM).
+      const prevSheet = parseSheet(cur.data);
+      if (prevSheet.ok) {
+        const from = sheetLevel(prevSheet.sheet);
+        const to = sheetLevel(parsed.sheet);
+        const label = from !== null && to !== null && from !== to ? `Before level-up ${from} → ${to}` : 'Before sheet update (PDF)';
+        await repo.backupSheet(cid, tokenId, buildSnapshot(prevSheet.sheet, state!.tokens[tokenId], label, 'Automatic snapshot before an incremental PDF update.'), cur.version, 'snapshot', user.id);
+      }
+    } else if (cur && reason !== 'edit') await repo.backupSheet(cid, tokenId, cur.data, cur.version, `Before ${reason === 'import-replace' ? 'import (replace)' : 'import (merge)'}`, user.id);
     const v = await repo.saveSheet(cid, tokenId, parsed.sheet, body.expectedVersion, user.id);
     if (v === null) {
       throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded – please check it and save again.', 'sheet_conflict', undefined, {
@@ -769,6 +785,145 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
     throw new HttpError(409, 'The character sheet is being changed elsewhere right now. Please try again.', 'conflict');
   }
   throw new HttpError(400, 'Unknown sheet action.');
+}
+
+// ---------------------------------------------------------------- character archive (APEX 0.7, GM only)
+
+/**
+ * Character snapshots: create, list, read, and restore SELECTED sheet parts. Restoring never touches items or
+ * currency (the snapshot only records them for reference); identity / equipment configuration are restored by the
+ * GM client with the game command gmRestoreCharacter, which drops references to items no longer owned.
+ */
+async function runCharacterArchive(user: AuthUser, body: unknown, repo: Repo) {
+  if (user.role !== 'gm') throw new HttpError(403, 'Only the Game Master can manage character archives.', 'forbidden');
+  if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
+  const cid = user.campaignId;
+  const state = (await repo.loadState(cid))?.state ?? null;
+  if (body.action === 'list') {
+    const tokenId = sheetAccess(user, body.tokenId, state);
+    return { snapshots: await repo.listSheetBackups(cid, tokenId, 100) };
+  }
+  if (body.action === 'get') {
+    if (!isInt(body.id, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid snapshot.');
+    const b = await repo.loadSheetBackup(cid, body.id);
+    if (!b) throw new HttpError(404, 'Snapshot not found.');
+    if (isSnapshot(b.data)) return { info: b, snapshot: b.data };
+    const p = parseSheet(b.data);
+    if (!p.ok) throw new HttpError(422, 'This backup cannot be read.');
+    return { info: b, snapshot: { kind: 'backup', name: b.reason, note: '', level: null, takenAt: b.createdAt, sheet: p.sheet, character: null } };
+  }
+  if (body.action === 'create') {
+    const tokenId = sheetAccess(user, body.tokenId, state);
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
+    if (!name) throw new HttpError(400, 'Please name the snapshot.');
+    const note = typeof body.note === 'string' ? body.note : '';
+    const cur = await repo.loadSheet(cid, tokenId);
+    const p = cur ? parseSheet(cur.data) : null;
+    const sheet = p?.ok ? p.sheet : emptySheet();
+    await repo.backupSheet(cid, tokenId, buildSnapshot(sheet, state!.tokens[tokenId], name, note), cur?.version ?? 0, 'snapshot', user.id);
+    return { snapshots: await repo.listSheetBackups(cid, tokenId, 100) };
+  }
+  if (body.action === 'restore') {
+    const tokenId = sheetAccess(user, body.tokenId, state);
+    if (!isInt(body.id, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid snapshot.');
+    const parts = Array.isArray(body.parts) ? body.parts.filter((x): x is SheetPart => SHEET_PARTS.some((p) => p.id === x)) : [];
+    if (!parts.length) throw new HttpError(400, 'Choose what to restore.');
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid sheet version.');
+    const b = await repo.loadSheetBackup(cid, body.id);
+    if (!b || b.tokenId !== tokenId) throw new HttpError(404, 'Snapshot not found for this character.');
+    const snapSheet = isSnapshot(b.data) ? parseSheet(b.data.sheet) : parseSheet(b.data);
+    if (!snapSheet.ok) throw new HttpError(422, 'This snapshot cannot be read.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) throw new HttpError(409, 'The character sheet changed in the meantime – please review it again.', 'sheet_conflict');
+    const curSheet = cur ? parseSheet(cur.data) : null;
+    const now = curSheet?.ok ? curSheet.sheet : emptySheet();
+    // the state before the restore is kept as a snapshot too – a restore can always be undone
+    await repo.backupSheet(cid, tokenId, buildSnapshot(now, state!.tokens[tokenId], `Before restore (${b.name ?? b.reason})`, `Parts: ${parts.join(', ')}`), cur?.version ?? 0, 'snapshot', user.id);
+    const v = await repo.saveSheet(cid, tokenId, restoreSheetParts(now, snapSheet.sheet, parts), cur?.version ?? 0, user.id);
+    if (v === null) throw new HttpError(409, 'The character sheet changed in the meantime – please review it again.', 'sheet_conflict');
+    return { sheet: await sheetPayload(repo, cid, tokenId, state!), snapshots: await repo.listSheetBackups(cid, tokenId, 100) };
+  }
+  throw new HttpError(400, 'Unknown archive action.');
+}
+
+// ---------------------------------------------------------------- feedback (APEX 0.7)
+
+const FEEDBACK_KINDS = ['bug', 'feature', 'improvement'] as const;
+const FEEDBACK_STATUS = ['new', 'acknowledged', 'in_progress', 'resolved', 'rejected'] as const;
+export const FEEDBACK_LIMITS = { perHour: 10, screenshotBytes: 1_500_000, title: 140, description: 5000, steps: 3000 };
+const cleanText = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max) : '');
+
+/** Players see their own reports (and ones the GM shared) – without GM notes or other players' identities. */
+function feedbackFor(user: AuthUser, rows: FeedbackRow[]) {
+  if (user.role === 'gm') return rows;
+  return rows.map((r) => ({ ...r, gmNotes: '', userId: r.userId === user.id ? r.userId : '', profileKey: r.userId === user.id ? r.profileKey : '', tokenId: r.userId === user.id ? r.tokenId : null }));
+}
+
+async function listFeedback(user: AuthUser, repo: Repo) {
+  const rows = await repo.listFeedback(user.campaignId, { ...(user.role === 'gm' ? {} : { userId: user.id }), limit: 500 });
+  return { feedback: feedbackFor(user, rows) };
+}
+
+async function runFeedback(user: AuthUser, body: unknown, repo: Repo) {
+  if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
+  const cid = user.campaignId;
+  if (body.action === 'submit') {
+    const kind = FEEDBACK_KINDS.find((k) => k === body.kind);
+    const title = cleanText(body.title, FEEDBACK_LIMITS.title);
+    if (!kind || !title) throw new HttpError(400, 'Please choose a type and enter a title.');
+    const since = new Date(Date.now() - 3600_000).toISOString();
+    if ((await repo.countRecentFeedback(cid, user.id, since)) >= FEEDBACK_LIMITS.perHour) throw new HttpError(429, 'Thank you! You have sent many reports in the last hour – please wait a little.', 'rate_limited');
+    let screenshotPath: string | null = null;
+    if (body.screenshot !== undefined && body.screenshot !== null) {
+      if (typeof body.screenshot !== 'string') throw new HttpError(400, 'Invalid screenshot.');
+      const b64 = body.screenshot.replace(/^data:image\/[a-z]+;base64,/, '');
+      if (b64.length > Math.ceil((FEEDBACK_LIMITS.screenshotBytes * 4) / 3) + 8 || !/^[A-Za-z0-9+/=]+$/.test(b64)) throw new HttpError(413, 'The screenshot is too large (max. 1.5 MB).');
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const type = imageType(bytes);
+      if (!type) throw new HttpError(415, 'Screenshots must be JPG, PNG or WebP pictures.');
+      screenshotPath = `${cid}/feedback/${crypto.randomUUID()}.${type === 'image/jpeg' ? 'jpg' : type === 'image/png' ? 'png' : 'webp'}`;
+      await repo.uploadPortrait(screenshotPath, bytes, type);
+    }
+    const tokenId = typeof body.tokenId === 'string' && user.tokenIds.includes(body.tokenId) ? body.tokenId : (user.tokenIds[0] ?? null);
+    const row = await repo.createFeedback({
+      campaignId: cid,
+      userId: user.id,
+      profileKey: user.profileKey,
+      tokenId: user.role === 'gm' ? null : tokenId,
+      kind,
+      category: cleanText(body.category, 40) || 'other',
+      title,
+      description: cleanText(body.description, FEEDBACK_LIMITS.description),
+      steps: cleanText(body.steps, FEEDBACK_LIMITS.steps),
+      page: cleanText(body.page, 120),
+      appVersion: cleanText(body.appVersion, 40) || APP_VERSION,
+      screenshotPath,
+    });
+    return { feedback: feedbackFor(user, [row])[0] };
+  }
+  if (body.action === 'screenshot') {
+    if (typeof body.id !== 'string') throw new HttpError(400, 'Invalid report.');
+    const rows = await repo.listFeedback(cid, { ...(user.role === 'gm' ? {} : { userId: user.id }), limit: 500 });
+    const r = rows.find((x) => x.id === body.id);
+    if (!r?.screenshotPath || (user.role !== 'gm' && r.userId !== user.id)) throw new HttpError(404, 'No screenshot.');
+    return { url: await repo.portraitUrl(r.screenshotPath, 300) };
+  }
+  if (body.action === 'update') {
+    if (user.role !== 'gm') throw new HttpError(403, 'Only the Game Master can update reports.', 'forbidden');
+    if (typeof body.id !== 'string' || body.id.length > 64) throw new HttpError(400, 'Invalid report.');
+    const patch: Partial<Pick<FeedbackRow, 'status' | 'gmNotes' | 'shared'>> = {};
+    if (body.status !== undefined) {
+      const st = FEEDBACK_STATUS.find((x) => x === body.status);
+      if (!st) throw new HttpError(400, 'Invalid status.');
+      patch.status = st;
+    }
+    if (body.gmNotes !== undefined) patch.gmNotes = cleanText(body.gmNotes, 3000);
+    if (body.shared !== undefined) patch.shared = body.shared === true;
+    const row = await repo.updateFeedback(cid, body.id, patch);
+    if (!row) throw new HttpError(404, 'Report not found.');
+    return { feedback: row };
+  }
+  throw new HttpError(400, 'Unknown feedback action.');
 }
 
 // ---------------------------------------------------------------- admin (GM only)

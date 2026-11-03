@@ -119,7 +119,24 @@ export interface CharacterSheet {
   /** Advanced: unrecognised but possibly meaningful imported fields, kept apart from the sheet. */
   raw: SheetEntry[];
   source: SheetSource;
+  /** APEX 0.7: level-up / re-import history (newest last, bounded). */
+  progression?: ProgressionEntry[];
 }
+
+/** One approved level-up or sheet update from a re-imported PDF (APEX 0.7). */
+export interface ProgressionEntry {
+  id: string;
+  at: string;
+  fromLevel: number | null;
+  toLevel: number | null;
+  fileName: string;
+  /** Labels of the fields that differed in the PDF. */
+  changed: string[];
+  /** Labels of the changes that were approved and applied. */
+  approved: string[];
+  note: string;
+}
+export const MAX_PROGRESSION = 50;
 
 export const SHEET_LIMITS = {
   listItems: 200,
@@ -268,6 +285,26 @@ export function parseSheet(raw: unknown): SheetParse {
     orbs = { primary, secondary };
   }
 
+  let progression: ProgressionEntry[] | undefined;
+  if (raw.progression !== undefined) {
+    if (!Array.isArray(raw.progression) || raw.progression.length > MAX_PROGRESSION) return bad('progression');
+    progression = [];
+    const lvl = (v: unknown) => (v === null || v === undefined ? null : typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 40 ? v : undefined);
+    const labels = (v: unknown) => (Array.isArray(v) && v.length <= 300 && v.every((x) => typeof x === 'string') ? v.map((x) => str(x, L.label * 2)!) : null);
+    for (const p of raw.progression) {
+      if (!isObj(p) || typeof p.id !== 'string' || !ID_RE.test(p.id)) return bad('progression entry');
+      const at = str(p.at, 40);
+      const fileName = str(p.fileName ?? '', 200);
+      const note = str(p.note ?? '', L.value);
+      const fromLevel = lvl(p.fromLevel);
+      const toLevel = lvl(p.toLevel);
+      const changed = labels(p.changed);
+      const approved = labels(p.approved);
+      if (!at || fileName === null || note === null || fromLevel === undefined || toLevel === undefined || !changed || !approved) return bad('progression entry');
+      progression.push({ id: p.id, at, fromLevel, toLevel, fileName, changed, approved, note });
+    }
+  }
+
   const src = isObj(raw.source) ? raw.source : {};
   const source: SheetSource = { kind: src.kind === 'pdf' ? 'pdf' : 'manual' };
   const fileName = str(src.fileName, 200);
@@ -297,6 +334,7 @@ export function parseSheet(raw: unknown): SheetParse {
       notes,
       raw: rawFields as SheetEntry[],
       source,
+      ...(progression ? { progression } : {}),
     },
   };
 }
@@ -341,6 +379,7 @@ export function mergeSheets(existing: CharacterSheet, imported: CharacterSheet):
     notes,
     raw: mergeList(existing.raw, imported.raw, (x) => x.label),
     source: imported.source,
+    ...(existing.progression ? { progression: existing.progression } : {}), // history is never replaced by an import
   };
 }
 

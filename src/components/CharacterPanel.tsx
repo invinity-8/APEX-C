@@ -18,11 +18,13 @@ import { CharacterPortrait } from './CharacterVisuals';
 import { EquipmentPanel } from './EquipmentPanel';
 import { VitalsPanel } from './ResourceOrbs';
 import { InventoryPanel } from './InventoryPanel';
+import { IdentityEditor } from './IdentityEditor';
+import { CharacterHistory } from './CharacterHistory';
 import { Bar } from './ui';
 
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
 
-type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'equipment' | 'inventory' | 'appearance' | 'notes';
+type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'equipment' | 'inventory' | 'appearance' | 'notes' | 'history';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
@@ -32,6 +34,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'inventory', label: 'Inventory' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
+  { id: 'history', label: 'History' },
 ];
 const TAB_KEY = 'apex.character.tab';
 
@@ -102,7 +105,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
     setConflict(null);
   };
 
-  const save = async (sheet: CharacterSheet, expected: number, reason: 'edit' | 'import-merge' | 'import-replace' = 'edit', quiet = false) => {
+  const save = async (sheet: CharacterSheet, expected: number, reason: 'edit' | 'import-merge' | 'import-replace' | 'import-levelup' = 'edit', quiet = false) => {
     setSaving(true);
     const r = await sheets.save(token.id, sheet, expected, reason);
     setSaving(false);
@@ -148,7 +151,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const set = (patch: Partial<CharacterSheet>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const changedElsewhere = editing && data && data.version !== baseVersion;
   const build = sheet.details.find((d) => /race, class|class & level|^class$/i.test(d.label))?.value;
-  const canEditSheet = tab !== 'inventory' && tab !== 'appearance' && tab !== 'equipment';
+  const canEditSheet = tab !== 'inventory' && tab !== 'appearance' && tab !== 'equipment' && tab !== 'history';
 
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Character sheet of ${token.name}`}>
@@ -156,10 +159,11 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
         <CharacterPortrait tokenId={token.id} portraitV={token.portraitV} online={game.mode === 'online'} color={token.color} accent={token.accent} initials={token.initials} name={token.name} size={56} />
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-2xl font-black text-gold-200">{token.name}</h2>
-          <p className="text-xs" style={{ color: token.accent ?? undefined }}>
+          {/* APEX 0.7: the tagline is shown exactly as chosen – imported class data never replaces it */}
+          <p className="text-xs" style={{ color: token.accent ?? undefined }} data-testid="header-tagline">
             <span className={token.accent ? '' : 'text-marble-300'}>{token.title}</span>
-            {build && <span className="text-marble-300"> · {build}</span>}
           </p>
+          {build && <p className="text-[11px] text-marble-400">{build}</p>}
           <p className="text-[11px] text-marble-500">
             {data?.updatedAt ? `Sheet saved ${new Date(data.updatedAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}` : 'No sheet saved yet'}
             {data?.sheet.source.kind === 'pdf' && ` · imported from ${data.sheet.source.fileName ?? 'PDF'}`}
@@ -225,6 +229,9 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
 
       {tab === 'overview' && (
         <div className="grid gap-3 lg:grid-cols-3">
+          <div className="lg:col-span-3">
+            <IdentityEditor token={token} data={data} run={run} notify={notify} save={(s, v) => save(s, v, 'edit', true)} />
+          </div>
           <section className="panel space-y-2 p-3 lg:col-span-2">
             <h3 className="panel-title">At a glance</h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -432,6 +439,8 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
           </EntrySection>
         </div>
       )}
+
+      {tab === 'history' && <CharacterHistory game={game} token={token} isGm={isGm} sheet={data} run={run} notify={notify} onSheet={(p) => setData(p)} />}
 
       {tab === 'notes' && (
         <div className="grid gap-3 lg:grid-cols-2">

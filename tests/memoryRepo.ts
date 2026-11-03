@@ -5,6 +5,9 @@ import type {
   AuthBundle,
   Campaign,
   CommandLogEntry,
+  FeedbackRow,
+  NewFeedback,
+  SheetBackupInfo,
   Credential,
   DeployStatus,
   LoginAttemptStats,
@@ -32,7 +35,8 @@ export class MemoryRepo implements Repo {
   assignmentList: Assignment[] = [];
   states = new Map<string, StoredState>();
   sheets = new Map<string, StoredSheet>(); // `${campaign}:${token}`
-  sheetBackups: Array<{ campaignId: string; tokenId: string; data: unknown; version: number; reason: string }> = [];
+  sheetBackups: Array<{ id: number; campaignId: string; tokenId: string; data: unknown; version: number; reason: string; createdAt: string }> = [];
+  feedback: Array<FeedbackRow & { campaignId: string }> = [];
   snapshots: Array<SnapshotInfo & { campaignId: string; state: GameState }> = [];
   log: CommandLogEntry[] = [];
   /** Test hook: runs before the next optimistic write (simulates a concurrent writer). */
@@ -329,7 +333,49 @@ export class MemoryRepo implements Repo {
     return expectedVersion + 1;
   }
   async backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string) {
-    this.sheetBackups.push({ campaignId, tokenId, data: structuredClone(data), version, reason });
+    this.sheetBackups.push({ id: this.sheetBackups.length + 1, campaignId, tokenId, data: structuredClone(data), version, reason, createdAt: new Date(this.now()).toISOString() });
+  }
+  private backupInfo(b: MemoryRepo['sheetBackups'][number]): SheetBackupInfo {
+    const d = (b.data ?? {}) as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+    return { id: b.id, version: b.version, reason: b.reason, createdAt: b.createdAt, kind: d.kind === 'apex-character-snapshot' ? 'snapshot' : 'backup', name: str(d.name), note: str(d.note), level: str(d.level) };
+  }
+  async listSheetBackups(campaignId: string, tokenId: string, limit: number) {
+    return this.sheetBackups.filter((b) => b.campaignId === campaignId && b.tokenId === tokenId).reverse().slice(0, limit).map((b) => this.backupInfo(b));
+  }
+  async loadSheetBackup(campaignId: string, id: number) {
+    const b = this.sheetBackups.find((x) => x.campaignId === campaignId && x.id === id);
+    return b ? { ...this.backupInfo(b), tokenId: b.tokenId, data: structuredClone(b.data) } : null;
+  }
+  async createFeedback(f: NewFeedback) {
+    const now = new Date(this.now()).toISOString();
+    const row = { ...f, id: `fb-${this.feedback.length + 1}`, status: 'new' as const, gmNotes: '', shared: false, createdAt: now, updatedAt: now, statusChangedAt: null };
+    this.feedback.push(row);
+    const { campaignId: _c, ...out } = row;
+    void _c;
+    return structuredClone(out);
+  }
+  async listFeedback(campaignId: string, opts: { userId?: string; limit: number }) {
+    return this.feedback
+      .filter((f) => f.campaignId === campaignId && (!opts.userId || f.userId === opts.userId || f.shared))
+      .reverse()
+      .slice(0, opts.limit)
+      .map(({ campaignId: _c, ...f }) => (void _c, structuredClone(f)));
+  }
+  async updateFeedback(campaignId: string, id: string, patch: Partial<Pick<FeedbackRow, 'status' | 'gmNotes' | 'shared'>>) {
+    const f = this.feedback.find((x) => x.campaignId === campaignId && x.id === id);
+    if (!f) return null;
+    const now = new Date(this.now()).toISOString();
+    if (patch.status !== undefined) (f.status = patch.status), (f.statusChangedAt = now);
+    if (patch.gmNotes !== undefined) f.gmNotes = patch.gmNotes;
+    if (patch.shared !== undefined) f.shared = patch.shared;
+    f.updatedAt = now;
+    const { campaignId: _c, ...out } = f;
+    void _c;
+    return structuredClone(out);
+  }
+  async countRecentFeedback(campaignId: string, userId: string, sinceIso: string) {
+    return this.feedback.filter((f) => f.campaignId === campaignId && f.userId === userId && f.createdAt >= sinceIso).length;
   }
   async logCommand(e: CommandLogEntry) {
     this.log.push(e);

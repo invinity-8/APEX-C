@@ -484,6 +484,9 @@ export function useOnlineGame(
             signOut,
             admin: adminRaw,
             worldAction,
+            characterArchive: api.characterArchive,
+            feedbackList: () => api.feedbackList().then((r) => r.feedback),
+            feedback: api.feedback,
           }
         : undefined,
     [worldNotice, worldAction, payload, profileName, changePassword, campaignId, setActiveCharacter, connection, realtime, unknownAction, syncError, lastSync, refreshForce, signOut, adminRaw],

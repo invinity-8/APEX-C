@@ -143,6 +143,8 @@ export interface TokenView {
   kind: TokenKind;
   teamId: string;
   title: string;
+  /** The tagline was set by hand (never regenerated from imported data). */
+  titleCustom?: boolean;
   color: string;
   initials: string;
   pos: Axial;
@@ -231,6 +233,7 @@ const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact 
   kind: t.kind,
   teamId: t.teamId,
   title: t.title,
+  ...(t.titleCustom ? { titleCustom: true } : {}),
   color: t.color,
   initials: t.initials,
   pos: { ...t.pos },

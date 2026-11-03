@@ -50,7 +50,7 @@ describe('Character appearance (cosmetic)', () => {
     const before = structuredClone(repo.states.get(CID)!.state.tokens.sinna);
     await call('POST', 'command', { campaignId: CID, command: { type: 'setAppearance', tokenId: 'sinna', title: 'Game Master', marker: 'crest' } }, {}, hannah);
     const after = repo.states.get(CID)!.state.tokens.sinna;
-    expect({ ...after, title: before.title, marker: before.marker }).toEqual(before); // nothing but cosmetics changed
+    expect({ ...after, title: before.title, marker: before.marker, titleCustom: before.titleCustom }).toEqual(before); // nothing but cosmetics changed
     expect(((await call('GET', 'session', null, {}, hannah)).body as { user: { role: string } }).user.role).toBe('player');
     // the GM may restyle any character
     expect((await call('POST', 'command', { campaignId: CID, command: { type: 'setAppearance', tokenId: 'aster', accent: '#ffffff' } }, {}, gm)).status).toBe(200);
