@@ -277,7 +277,7 @@
 }
 
 /* ---------------------------------------------------------------- APEX 0.5 paper doll */
-.apex-doll { display: grid; grid-template-columns: 1fr 96px 1fr; gap: 8px; align-items: stretch; }
+.apex-doll { display: grid; grid-template-columns: 1fr 150px 1fr; gap: 10px; align-items: stretch; }
 .apex-doll-col { display: flex; flex-direction: column; gap: 6px; }
 .apex-doll-figure { display: flex; align-items: center; justify-content: center; padding: 4px 0; filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
 .apex-slot { display: flex; width: 100%; min-height: 48px; flex-direction: column; justify-content: center; gap: 1px; padding: 5px 8px; text-align: left;
@@ -291,7 +291,7 @@
 .apex-slot-label { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--apex-text-muted); }
 .apex-slot-item { font-size: 12px; color: var(--apex-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .apex-slot-meta { font-size: 10px; color: var(--apex-highlight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 420px) { .apex-doll { grid-template-columns: 1fr 64px 1fr; } }
+@media (max-width: 480px) { .apex-doll { grid-template-columns: 1fr 96px 1fr; } }
 
 /* ---------------------------------------------------------------- APEX 0.5 resource orbs */
 .apex-orb { position: relative; margin: 0; filter: drop-shadow(0 6px 12px rgba(0,0,0,.65)); }

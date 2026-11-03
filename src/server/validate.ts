@@ -211,6 +211,16 @@ export function parseCommand(raw: unknown): ParseResult {
       }
       return { ok: true, command: out as Command };
     }
+    case 'invMoveItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000) || !isId(c.container)) return bad('tokenId/itemId/rev/container');
+      if (c.beforeItemId !== undefined && c.beforeItemId !== null && !isId(c.beforeItemId)) return bad('beforeItemId');
+      return { ok: true, command: { type: 'invMoveItem', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, container: c.container, ...(c.beforeItemId ? { beforeItemId: c.beforeItemId as string } : {}) } };
+    case 'invSplitStack':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isId(c.newItemId) || !isInt(c.rev, 1_000_000_000) || !isInt(c.quantity, INVENTORY_LIMITS.quantity)) return bad('split');
+      return { ok: true, command: { type: 'invSplitStack', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, quantity: c.quantity, newItemId: c.newItemId } };
+    case 'invMergeStack':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isId(c.intoItemId) || !isInt(c.rev, 1_000_000_000) || !isInt(c.intoRev, 1_000_000_000)) return bad('merge');
+      return { ok: true, command: { type: 'invMergeStack', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, intoItemId: c.intoItemId, intoRev: c.intoRev } };
     case 'invRemoveItem':
       if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000)) return bad('tokenId/itemId/rev');
       return { ok: true, command: { type: 'invRemoveItem', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };

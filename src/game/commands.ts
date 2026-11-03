@@ -21,7 +21,7 @@ import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
 import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
-import { INVENTORY_LIMITS, materializeInventory } from './inventory.js';
+import { INVENTORY_LIMITS, canMerge, containerOfItem, isStackable, materializeInventory } from './inventory.js';
 
 export { fmt };
 
@@ -62,6 +62,10 @@ export type Command =
   | { type: 'invAddContainer'; tokenId: string; containerId: string; name: string }
   | { type: 'invRenameContainer'; tokenId: string; containerId: string; name: string }
   | { type: 'invRemoveContainer'; tokenId: string; containerId: string }
+  // APEX 0.6 inventory usability: reorder / move between containers, split and merge stacks
+  | { type: 'invMoveItem'; tokenId: string; itemId: string; rev: number; container: string; beforeItemId?: string | null }
+  | { type: 'invSplitStack'; tokenId: string; itemId: string; rev: number; quantity: number; newItemId: string }
+  | { type: 'invMergeStack'; tokenId: string; itemId: string; rev: number; intoItemId: string; intoRev: number }
   | { type: 'setWalkingSpeed'; tokenId: string; speedFt: number }
   // APEX 0.5 – equipment (items stay in the inventory; slots only reference them)
   | { type: 'equipItem'; tokenId: string; itemId: string; slot: EquipSlot }
@@ -81,6 +85,9 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'invAddContainer',
   'invRenameContainer',
   'invRemoveContainer',
+  'invMoveItem',
+  'invSplitStack',
+  'invMergeStack',
   'equipItem',
   'unequipSlot',
   'setWeaponSet',
@@ -389,7 +396,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   return { ok: true, state };
 }
 
-type InventoryCommand = Extract<Command, { type: 'invAddItem' | 'invUpdateItem' | 'invRemoveItem' | 'invAddContainer' | 'invRenameContainer' | 'invRemoveContainer' }>;
+type InventoryCommand = Extract<Command, { type: 'invAddItem' | 'invUpdateItem' | 'invRemoveItem' | 'invAddContainer' | 'invRenameContainer' | 'invRemoveContainer' | 'invMoveItem' | 'invSplitStack' | 'invMergeStack' }>;
 
 /**
  * Inventory changes. They only touch one character's inventory (no knowledge refresh, no log:
@@ -466,6 +473,57 @@ function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult
       const name = text(cmd.name, L.containerName);
       if (!name) return fail(prev, T.containerNameRequired);
       c.name = name;
+      break;
+    }
+    case 'invMoveItem': {
+      // Reorder inside a container or move to another one; the inventory array order IS the display order.
+      const item = findItem(cmd.itemId, cmd.rev);
+      if (typeof item === 'string') return fail(prev, item);
+      if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
+      const rest = t.inventory.filter((i) => i !== item);
+      let at = rest.length;
+      if (cmd.beforeItemId) {
+        const j = rest.findIndex((i) => i.id === cmd.beforeItemId);
+        if (j < 0) return fail(prev, T.itemGone);
+        at = j;
+      } else {
+        // append after the last item of the target container
+        for (let j = rest.length - 1; j >= 0; j--) if (containerOfItem(rest[j], containers) === cmd.container) {
+          at = j + 1;
+          break;
+        }
+      }
+      item.container = cmd.container;
+      item.rev = (item.rev ?? 0) + 1;
+      rest.splice(at, 0, item);
+      t.inventory = rest;
+      break;
+    }
+    case 'invSplitStack': {
+      const item = findItem(cmd.itemId, cmd.rev);
+      if (typeof item === 'string') return fail(prev, item);
+      const q = Math.round(cmd.quantity);
+      if (q < 1 || q >= item.quantity) return fail(prev, 'Choose a quantity between 1 and one less than the stack size.');
+      if (t.inventory.some((i) => i.id === cmd.newItemId)) return fail(prev, T.itemExists);
+      if (t.inventory.length >= L.items) return fail(prev, T.inventoryFull);
+      if (!isStackable(item)) return fail(prev, 'Only plain stackable items can be split.');
+      item.quantity -= q;
+      item.rev = (item.rev ?? 0) + 1;
+      const copy: Item = { ...structuredClone(item), id: cmd.newItemId, quantity: q, rev: 0 };
+      t.inventory.splice(t.inventory.indexOf(item) + 1, 0, copy);
+      break;
+    }
+    case 'invMergeStack': {
+      const item = findItem(cmd.itemId, cmd.rev);
+      if (typeof item === 'string') return fail(prev, item);
+      const into = findItem(cmd.intoItemId, cmd.intoRev);
+      if (typeof into === 'string') return fail(prev, into);
+      if (item === into) return fail(prev, 'An item cannot be merged into itself.');
+      if (!canMerge(item, into)) return fail(prev, 'Only identical plain items can be merged.');
+      into.quantity = clamp(into.quantity + item.quantity, 0, L.quantity);
+      into.rev = (into.rev ?? 0) + 1;
+      t.inventory = t.inventory.filter((i) => i !== item);
+      reconcileEquipment(t);
       break;
     }
     case 'invRemoveContainer': {

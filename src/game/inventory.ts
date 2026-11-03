@@ -47,3 +47,12 @@ export function materializeInventory(t: Token): void {
   t.containers = containersOf(t);
   for (const i of t.inventory) i.container = containerOfItem(i, t.containers);
 }
+
+/** Stacks may be split/merged only when nothing makes copies distinguishable (no equipment or item-system data). */
+export function isStackable(i: Item): boolean {
+  const x = i as Item & { rarity?: string; mods?: unknown[]; identified?: boolean; bound?: boolean };
+  return !i.equip && !x.rarity && !(x.mods && x.mods.length) && i.willCapacity === undefined;
+}
+export function canMerge(a: Item, b: Item): boolean {
+  return isStackable(a) && isStackable(b) && a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && (a.description ?? '') === (b.description ?? '') && a.kind === b.kind;
+}
