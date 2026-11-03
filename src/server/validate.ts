@@ -5,6 +5,7 @@
  */
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
+import { ITEM_RULE_LIMITS } from '../game/items/rules.js';
 import { MARKER_STYLES } from '../game/types.js';
 import { TERRAIN_ORDER } from '../game/terrain.js';
 
@@ -31,6 +32,16 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'place':
       if (!isId(c.tokenId) || !isAxial(c.to)) return bad('tokenId/to');
       return { ok: true, command: { type: c.type, tokenId: c.tokenId, to: { q: c.to.q, r: c.to.r } } };
+    case 'setItemRules': {
+      if (c.rules === null) return { ok: true, command: { type: 'setItemRules', rules: null } };
+      if (!isObj(c.rules)) return bad('rules');
+      const rules: Record<string, number> = {};
+      for (const [k, v] of Object.entries(c.rules)) {
+        if (!(k in ITEM_RULE_LIMITS) || !isInt(v, 1000)) return bad(`rules.${k}`);
+        rules[k] = v;
+      }
+      return { ok: true, command: { type: 'setItemRules', rules } };
+    }
     case 'endDay':
     case 'advancePhase':
       return { ok: true, command: { type: c.type } };

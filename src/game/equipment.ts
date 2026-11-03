@@ -12,11 +12,14 @@
  */
 import type { CharacterSheet } from './sheet.js';
 import type { Item, Token } from './types.js';
+import { modifier, type Element, ELEMENTS, type SaveAbility } from './items/modifiers.js';
+import { DEFAULT_ITEM_RULES, type ItemRules } from './items/rules.js';
+import { resistanceReduction } from './items/resistance.js';
 
-export type EquipSlot = 'head' | 'chest' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'ring1' | 'ring2' | 'main1' | 'off1' | 'main2' | 'off2';
-export const EQUIP_SLOTS: EquipSlot[] = ['head', 'amulet', 'cloak', 'chest', 'gloves', 'ring1', 'ring2', 'boots', 'main1', 'off1', 'main2', 'off2'];
-export type ItemKind = 'head' | 'armor' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'ring' | 'weapon' | 'shield' | 'focus';
-export const ITEM_KINDS: ItemKind[] = ['weapon', 'shield', 'armor', 'head', 'gloves', 'boots', 'cloak', 'amulet', 'ring', 'focus'];
+export type EquipSlot = 'head' | 'chest' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'belt' | 'ring1' | 'ring2' | 'main1' | 'off1' | 'main2' | 'off2';
+export const EQUIP_SLOTS: EquipSlot[] = ['head', 'amulet', 'cloak', 'chest', 'belt', 'gloves', 'ring1', 'ring2', 'boots', 'main1', 'off1', 'main2', 'off2'];
+export type ItemKind = 'head' | 'armor' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'belt' | 'ring' | 'weapon' | 'shield' | 'focus';
+export const ITEM_KINDS: ItemKind[] = ['weapon', 'shield', 'armor', 'head', 'gloves', 'boots', 'cloak', 'amulet', 'belt', 'ring', 'focus'];
 export type ArmorType = 'light' | 'medium' | 'heavy';
 export type WeaponProperty = 'finesse' | 'light' | 'heavy' | 'two-handed' | 'versatile' | 'reach' | 'thrown' | 'ranged' | 'loading' | 'ammunition';
 export const WEAPON_PROPERTIES: WeaponProperty[] = ['finesse', 'light', 'heavy', 'two-handed', 'versatile', 'reach', 'thrown', 'ranged', 'loading', 'ammunition'];
@@ -53,7 +56,7 @@ export interface Equipment {
   acOtherLabel?: string;
 }
 
-export const DEFAULT_RESTING_KEEP: EquipSlot[] = ['amulet', 'ring1', 'ring2', 'cloak'];
+export const DEFAULT_RESTING_KEEP: EquipSlot[] = ['amulet', 'ring1', 'ring2', 'cloak', 'belt'];
 export const emptyEquipment = (): Equipment => ({ slots: {}, activeSet: 1, resting: false, restingKeep: [...DEFAULT_RESTING_KEEP] });
 export const equipmentOf = (t: Pick<Token, 'equipment'>): Equipment => t.equipment ?? emptyEquipment();
 
@@ -64,6 +67,7 @@ export const SLOT_LABEL: Record<EquipSlot, string> = {
   boots: 'Boots',
   cloak: 'Cloak',
   amulet: 'Amulet',
+  belt: 'Belt',
   ring1: 'Ring',
   ring2: 'Ring',
   main1: 'Main hand',
@@ -79,6 +83,7 @@ const SLOT_KINDS: Record<EquipSlot, ItemKind[]> = {
   boots: ['boots'],
   cloak: ['cloak'],
   amulet: ['amulet'],
+  belt: ['belt'],
   ring1: ['ring'],
   ring2: ['ring'],
   main1: ['weapon', 'focus'],
@@ -217,11 +222,100 @@ export interface CalcStep {
 
 export interface DerivedStats {
   ac: { value: number | null; steps: CalcStep[]; source: 'derived' | 'imported' | 'none'; imported: number | null; note?: string };
-  attacks: Array<{ slot: EquipSlot; name: string; toHit: number | null; damage: string; steps: CalcStep[]; properties: WeaponProperty[] }>;
+  attacks: Array<{ slot: EquipSlot; name: string; toHit: number | null; damage: string; steps: CalcStep[]; properties: WeaponProperty[]; extra: string[] }>;
+  /** APEX 0.6: character-wide bonuses from modifiers on equipped, identified items of the active set. */
+  bonuses: ItemBonuses;
   abilityMods: Partial<Record<Ability, number>>;
   proficiency: number | null;
   resting: boolean;
   activeSet: 1 | 2;
+}
+
+export interface BonusLine {
+  total: number;
+  /** after the bounded-accuracy cap */
+  value: number;
+  cap: number;
+  steps: CalcStep[];
+}
+export interface ItemBonuses {
+  resistances: Record<Element, BonusLine & { reduction: number }>;
+  ac: BonusLine;
+  maxHp: BonusLine;
+  initiative: BonusLine;
+  speed: BonusLine;
+  carry: BonusLine;
+  saves: Partial<Record<SaveAbility, BonusLine>>;
+  skills: Record<string, BonusLine>;
+}
+
+const line = (cap: number): BonusLine => ({ total: 0, value: 0, cap, steps: [] });
+const addTo = (l: BonusLine, label: string, v: number) => {
+  l.total += v;
+  l.steps.push({ label, value: v, op: '+' });
+};
+const finish = (l: BonusLine) => {
+  l.value = Math.min(l.total, l.cap);
+  if (l.total > l.cap) l.steps.push({ label: `Capped at ${l.cap}`, value: l.cap, op: 'cap' });
+  return l;
+};
+
+/** Modifiers of items that are worn in an ACTIVE slot and identified (unidentified items grant nothing yet). */
+export function itemBonuses(worn: Array<{ slot: EquipSlot; item: Item }>, rules: ItemRules = DEFAULT_ITEM_RULES): ItemBonuses {
+  const b: ItemBonuses = {
+    resistances: Object.fromEntries(ELEMENTS.map((e) => [e, { ...line(rules.resistanceCap), reduction: 0 }])) as ItemBonuses['resistances'],
+    ac: line(rules.acCap),
+    maxHp: line(rules.maxHpCap),
+    initiative: line(rules.initiativeCap),
+    speed: line(rules.speedCap),
+    carry: line(Infinity),
+    saves: {},
+    skills: {},
+  };
+  for (const { item } of worn) {
+    if (item.identified === false) continue;
+    for (const m of item.mods ?? []) {
+      const def = modifier(m.modId);
+      if (!def || def.local) continue;
+      const e = def.effect;
+      if (e.type === 'resistance') addTo(b.resistances[e.element], item.name, m.value);
+      else if (e.type === 'ac') addTo(b.ac, item.name, m.value);
+      else if (e.type === 'maxHp') addTo(b.maxHp, item.name, m.value);
+      else if (e.type === 'initiative') addTo(b.initiative, item.name, m.value);
+      else if (e.type === 'speed') addTo(b.speed, item.name, m.value);
+      else if (e.type === 'carry') addTo(b.carry, item.name, m.value);
+      else if (e.type === 'save') addTo((b.saves[e.ability] ??= line(rules.saveCap)), item.name, m.value);
+      else if (e.type === 'skill') addTo((b.skills[e.skill] ??= line(rules.skillCap)), item.name, m.value);
+    }
+  }
+  for (const el of ELEMENTS) {
+    const r = b.resistances[el];
+    finish(r);
+    r.reduction = resistanceReduction(r.value, rules.resistanceCap);
+  }
+  [b.ac, b.maxHp, b.initiative, b.speed, b.carry, ...Object.values(b.saves), ...Object.values(b.skills)].forEach((l) => l && finish(l));
+  return b;
+}
+
+/** Weapon-local modifiers of one weapon: to-hit (capped), flat damage (capped, all types together), banes. */
+export function weaponMods(item: Item, rules: ItemRules = DEFAULT_ITEM_RULES): { toHit: number; toHitTotal: number; flat: Array<{ damage: string; value: number }>; flatCapped: boolean; banes: string[] } {
+  const out = { toHit: 0, toHitTotal: 0, flat: [] as Array<{ damage: string; value: number }>, flatCapped: false, banes: [] as string[] };
+  if (item.identified === false) return out;
+  let flatLeft = rules.flatDamageCap;
+  for (const m of item.mods ?? []) {
+    const def = modifier(m.modId);
+    if (!def?.local) continue;
+    const e = def.effect;
+    if (e.type === 'toHit') out.toHitTotal += m.value;
+    else if (e.type === 'flatDamage') {
+      const v = Math.min(m.value, flatLeft);
+      if (v < m.value) out.flatCapped = true;
+      flatLeft -= v;
+      if (v > 0) out.flat.push({ damage: e.damage, value: v });
+    } else if (e.type === 'bane') out.banes.push(`+${m.value} vs ${e.creature}`);
+  }
+  out.toHit = Math.min(out.toHitTotal, rules.toHitCap);
+  return out;
 }
 
 const ABILITY_NAMES: Record<Ability, RegExp> = { str: /^str/i, dex: /^dex/i, con: /^con/i, int: /^int/i, wis: /^wis/i, cha: /^cha/i };
@@ -242,7 +336,7 @@ export function abilityMods(sheet: CharacterSheet): Partial<Record<Ability, numb
   return out;
 }
 
-export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment'>): DerivedStats {
+export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment'>, rules: ItemRules = DEFAULT_ITEM_RULES): DerivedStats {
   const eq = equipmentOf(token);
   const mods = abilityMods(sheet);
   const pb = num(sheet.combat.find((c) => /^proficiency bonus$/i.test(c.label))?.value);
@@ -252,6 +346,7 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     .map((s) => ({ slot: s, item: eq.slots[s] ? items.get(eq.slots[s]!) : undefined }))
     .filter((x): x is { slot: EquipSlot; item: Item } => !!x.item?.equip);
   const allEquipped = EQUIP_SLOTS.map((s) => (eq.slots[s] ? items.get(eq.slots[s]!) : undefined)).filter((i): i is Item => !!i?.equip);
+  const bonuses = itemBonuses(worn, rules);
   const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther;
 
   // ---- Armor Class
@@ -301,7 +396,15 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
       value += eq.acOther;
       steps.push({ label: eq.acOtherLabel || 'Other modifiers', value: eq.acOther, op: '+' });
     }
+    if (bonuses.ac.value) {
+      value += bonuses.ac.value;
+      steps.push({ label: `Item modifiers${bonuses.ac.total > bonuses.ac.value ? ` (capped at +${bonuses.ac.cap})` : ''}`, value: bonuses.ac.value, op: '+' });
+    }
     ac = { value, steps, source: 'derived', imported: importedAc };
+  }
+  if (ac.source === 'imported' && bonuses.ac.value && ac.value !== null) {
+    // the imported sheet does not know APEX items – add the modifier bonus once, visibly
+    ac = { ...ac, value: ac.value + bonuses.ac.value, steps: [...ac.steps, { label: 'Item modifiers (not part of the imported sheet)', value: bonuses.ac.value, op: '+' }] };
   }
 
   // ---- attacks of the active weapon set
@@ -330,12 +433,19 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
         steps.push({ label: 'Item bonus', value: e.attackBonus, op: '+' });
       }
     }
+    const wm = weaponMods(w.item, rules);
+    if (toHit !== null && wm.toHit) {
+      toHit += wm.toHit;
+      steps.push({ label: `Weapon modifiers${wm.toHitTotal > wm.toHit ? ` (capped at +${rules.toHitCap})` : ''}`, value: wm.toHit, op: '+' });
+    }
     const isOff = w.slot === 'off1' || w.slot === 'off2';
     const dmgMod = m !== undefined && !(isOff && m > 0) ? m + (e.attackBonus ?? 0) : (e.attackBonus ?? 0);
     const dmg = e.damage ? `${e.damage}${dmgMod ? (dmgMod > 0 ? `+${dmgMod}` : `${dmgMod}`) : ''}${e.damageType ? ` ${e.damageType}` : ''}` : '—';
-    attacks.push({ slot: w.slot, name: w.item.name, toHit, damage: dmg + (isOff ? ' (off hand)' : ''), steps, properties: props });
+    const flat = wm.flat.map((f) => ` + ${f.value} ${f.damage}`).join('');
+    const extra = [...wm.banes, ...(wm.flatCapped ? [`Flat damage capped at ${rules.flatDamageCap}`] : [])];
+    attacks.push({ slot: w.slot, name: w.item.name, toHit, damage: dmg + flat + (isOff ? ' (off hand)' : ''), steps, properties: props, extra });
   }
-  return { ac, attacks, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
+  return { ac, attacks, bonuses, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
 }
 
 export const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);

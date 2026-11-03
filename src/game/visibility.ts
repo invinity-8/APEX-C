@@ -28,6 +28,8 @@ import type {
   Announcement,
 } from './types.js';
 import { containersOf } from './inventory.js';
+import { redactItem } from './items/instance.js';
+import { itemRulesOf, type ItemRules } from './items/rules.js';
 
 // ---------------- Grundfunktionen ----------------
 
@@ -191,6 +193,8 @@ export interface ViewModel {
   log: LogEntry[];
   /** Arena Announcements (public by definition; the newest 20). */
   announcements: Announcement[];
+  /** APEX 0.6: effective itemisation caps (public rules, needed for derived stats). */
+  itemRules: ItemRules;
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -202,7 +206,7 @@ export function edgeMask(state: GameState, h: Axial): number {
   return mask;
 }
 
-const detailsOf = (t: Token, withInventory = true): TokenDetails => ({
+const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails => ({
   movePoints: t.movePoints,
   maxMovePoints: t.maxMovePoints,
   ...(t.speedFt ? { speedFt: t.speedFt } : {}),
@@ -211,12 +215,12 @@ const detailsOf = (t: Token, withInventory = true): TokenDetails => ({
   controllers: [...t.controllers],
   sharesWithParty: t.sharesWithParty,
   will: { ...t.will },
-  inventory: withInventory ? t.inventory.map((i) => ({ ...i })) : [],
+  inventory: withInventory ? t.inventory.map((i) => (redact ? redactItem({ ...i }) : structuredClone(i))) : [],
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
 });
 
-const tokenView = (t: Token, withDetails: boolean, withInventory = true): TokenView => ({
+const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact = false): TokenView => ({
   id: t.id,
   name: t.name,
   kind: t.kind,
@@ -228,7 +232,7 @@ const tokenView = (t: Token, withDetails: boolean, withInventory = true): TokenV
   ...(t.accent ? { accent: t.accent } : {}),
   ...(t.marker ? { marker: t.marker } : {}),
   ...(t.portrait ? { portraitV: t.portrait.v } : {}),
-  details: withDetails ? detailsOf(t, withInventory) : undefined,
+  details: withDetails ? detailsOf(t, withInventory, redact) : undefined,
 });
 
 /** Vollansicht für den Spielleiter. */
@@ -276,6 +280,7 @@ export function buildGmView(state: GameState): ViewModel {
     trackers: trackersOf(state),
     log: state.log.slice(),
     announcements: (state.announcements ?? []).slice(-20),
+    itemRules: itemRulesOf(state),
   };
 }
 
@@ -349,7 +354,7 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
   const tokens: TokenView[] = [];
   for (const t of Object.values(state.tokens)) {
     // Party members' movement/Will stay shared, but inventories are private to their owner.
-    if (groupIds.has(t.id)) tokens.push(tokenView(t, true, t.id === viewerId));
+    if (groupIds.has(t.id)) tokens.push(tokenView(t, true, t.id === viewerId, true));
     else if (t.kind === 'rival') {
       const team = state.teams[t.teamId];
       const seen = team?.visibility === 'revealed' || (team?.visibility === 'auto' && visible.has(hexKey(t.pos)));
@@ -395,5 +400,6 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     trackers: trackersOf(state),
     log: state.log.filter((e) => e.audience === 'all'),
     announcements: (state.announcements ?? []).slice(-20),
+    itemRules: itemRulesOf(state),
   };
 }

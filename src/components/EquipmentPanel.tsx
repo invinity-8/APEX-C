@@ -20,9 +20,13 @@ import {
   slotOfItem,
   suggestEquip,
   type Ability,
+  type BonusLine,
   type EquipSlot,
+  type ItemBonuses,
   type ItemEquip,
 } from '../game/equipment';
+import { ELEMENTS } from '../game/items/modifiers';
+import { formatReduction, resistanceLabel } from '../game/items/resistance';
 import type { CharacterSheet } from '../game/sheet';
 import type { Item } from '../game/types';
 import type { TokenView } from '../game/visibility';
@@ -62,7 +66,7 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
   const [editing, setEditing] = useState<Item | null>(null);
   const [chooser, setChooser] = useState<EquipSlot | null>(null);
   const [over, setOver] = useState<EquipSlot | null>(null);
-  const derived = sheet ? deriveStats(sheet, { inventory: inv, equipment: token.details?.equipment }) : null;
+  const derived = sheet ? deriveStats(sheet, { inventory: inv, equipment: token.details?.equipment }, game.view.itemRules) : null;
   const active = new Set(activeSlots(eq));
   if (!token.details) return <p className="text-xs text-marble-500">This equipment is not visible.</p>;
 
@@ -179,6 +183,7 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
           {renderSlot('gloves')}
           {renderSlot('ring1')}
           {renderSlot('ring2')}
+          {renderSlot('belt')}
           {renderSlot('boots')}
         </div>
       </div>
@@ -258,6 +263,39 @@ function RestingKeep({ keep, onChange }: { keep: EquipSlot[]; onChange: (k: Equi
   );
 }
 
+/** Character-wide bonuses from equipped item modifiers (active set only), each with its sources and cap. */
+export function BonusSummary({ b }: { b: ItemBonuses }) {
+  const rows: Array<{ key: string; label: string; detail: string; title: string }> = [];
+  const tip = (l: BonusLine) => l.steps.map((s) => (s.op === 'cap' ? s.label : `${s.label} +${s.value}`)).join(' · ');
+  for (const el of ELEMENTS) {
+    const r = b.resistances[el];
+    if (r.total) rows.push({ key: `res-${el}`, label: resistanceLabel(el, r.total, r.cap).split(':')[0], detail: `${r.total} points${r.total > r.value ? ` (capped at ${r.cap})` : ''} · ${formatReduction(r.reduction)} damage reduction`, title: tip(r) });
+  }
+  const simple: Array<[string, BonusLine, string]> = [
+    ['Max HP', b.maxHp, ''],
+    ['Initiative', b.initiative, ''],
+    ['Walking speed', b.speed, ' ft'],
+    ['Carrying capacity', b.carry, ' lb'],
+  ];
+  for (const [label, l, unit] of simple) if (l.total) rows.push({ key: label, label, detail: `+${l.value}${unit}${l.total > l.value ? ` (capped, ${l.total} total)` : ''}`, title: tip(l) });
+  for (const [a, l] of Object.entries(b.saves)) if (l?.total) rows.push({ key: `save-${a}`, label: `${a.toUpperCase()} saves`, detail: `+${l.value}${l.total > l.value ? ' (capped)' : ''}`, title: tip(l) });
+  for (const [s, l] of Object.entries(b.skills)) if (l.total) rows.push({ key: `skill-${s}`, label: s, detail: `+${l.value}${l.total > l.value ? ' (capped)' : ''}`, title: tip(l) });
+  if (!rows.length) return null;
+  return (
+    <div className="mt-2 border-t border-gold-700/20 pt-1 text-[11px]" aria-label="Item modifier bonuses">
+      <div className="text-[10px] uppercase tracking-wider text-marble-500">From equipped modifiers</div>
+      <ul>
+        {rows.map((r) => (
+          <li key={r.key} className="flex justify-between gap-2" title={r.title}>
+            <span className="text-marble-300">{r.label}</span>
+            <span className="tabular-nums text-gold-200">{r.detail}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof deriveStats> | null; eq: ReturnType<typeof equipmentOf>; onConfig: (c: { unarmoredAbility?: Ability | null; acOther?: number; acOtherLabel?: string }) => void }) {
   const [open, setOpen] = useState(false);
   if (!derived) return <p className="text-marble-500">Load or import a character sheet to calculate Armor Class and attacks.</p>;
@@ -292,12 +330,16 @@ function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof de
               <tr key={a.slot} title={a.steps.map((s) => `${s.label} ${fmt(s.value)}`).join(' · ')}>
                 <td className="text-marble-50">{a.name.replace(/[[\]]/g, '')}</td>
                 <td className="text-center tabular-nums text-gold-200">{a.toHit === null ? '—' : fmt(a.toHit)}</td>
-                <td className="text-marble-300">{a.damage}</td>
+                <td className="text-marble-300">
+                  {a.damage}
+                  {a.extra.length > 0 && <span className="block text-[10px] text-marble-500">{a.extra.join(' · ')}</span>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      <BonusSummary b={derived.bonuses} />
       <button className="mt-1 text-[11px] text-marble-500 hover:text-gold-200" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {open ? '▾' : '▸'} Manual AC modifiers
       </button>
@@ -537,6 +579,7 @@ const SLOT_ICON: Record<string, string> = {
   gloves: 'M4 14 L4 6 L6 6 L6 3 L8 3 L8 6 L10 4 L12 5 L12 14 Z',
   ring: 'M8 4 a4 4 0 1 0 0.01 0 M6 2 L10 2',
   boots: 'M5 2 L9 2 L9 10 L14 12 L14 14 L5 14 Z',
+  belt: 'M1 6 L15 6 L15 10 L1 10 Z M6 5 L10 5 L10 11 L6 11 Z',
   main: 'M12 2 L14 4 L6 12 L4 12 L4 10 Z M3 11 L5 13',
   off: 'M3 3 L13 3 L13 8 Q13 13 8 15 Q3 13 3 8 Z',
 };

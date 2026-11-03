@@ -8,6 +8,7 @@
  * In online mode the browser only sends commands to the server, which runs
  * exactly this function. Players therefore cannot cheat.
  */
+import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js';
 import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
@@ -29,6 +30,7 @@ export type Command =
   | { type: 'move'; tokenId: string; to: Axial }
   | { type: 'place'; tokenId: string; to: Axial }
   | { type: 'endDay' }
+  | { type: 'setItemRules'; rules: Partial<ItemRules> | null }
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'adjustMovePoints'; tokenId: string; delta: number }
@@ -366,6 +368,19 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       addAnnouncement(state, { category: cmd.category, title: cmd.title, text: cmd.text });
       addLog(state, 'event', `📣 ${cmd.title.trim().slice(0, 80)}${cmd.text.trim() ? ` – ${cmd.text.trim().slice(0, 200)}` : ''}`);
       return { ok: true, state };
+    case 'setItemRules': {
+      if (cmd.rules === null) {
+        delete state.itemRules;
+        break;
+      }
+      const next: Partial<ItemRules> = { ...(state.itemRules ?? {}) };
+      for (const [k, v] of Object.entries(cmd.rules) as Array<[keyof ItemRules, number]>) {
+        const [lo, hi] = ITEM_RULE_LIMITS[k];
+        next[k] = clamp(Math.round(v), lo, hi);
+      }
+      state.itemRules = next;
+      break;
+    }
     case 'setShrink':
       if (cmd.enabled !== undefined) state.config.shrink.enabled = cmd.enabled;
       if (cmd.mode !== undefined) state.config.shrink.mode = cmd.mode;
@@ -446,6 +461,7 @@ function executeInventory(prev: GameState, cmd: InventoryCommand): CommandResult
       }
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
       if (cmd.container !== undefined) item.container = cmd.container;
+      if (cmd.quantity !== undefined && (item.rarity || item.mods?.length) && Math.round(cmd.quantity) !== item.quantity) return fail(prev, T.itemQuantityFixed);
       if (cmd.quantity !== undefined) item.quantity = clamp(Math.round(cmd.quantity), 0, L.quantity);
       if (cmd.description !== undefined) item.description = text(cmd.description, L.description) ?? '';
       if (cmd.notes !== undefined) item.notes = text(cmd.notes, L.notes) || undefined;
