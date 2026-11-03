@@ -4,7 +4,7 @@
  * Documented in docs/design/ASSET_REGISTRY.md. Every entry names its fallback; nothing may require a live
  * Spline editor connection at runtime.
  */
-export type AssetFormat = 'svg-inline' | 'canvas-procedural' | 'webp' | 'png' | 'avif' | 'css' | 'splinecode';
+export type AssetFormat = 'svg-inline' | 'canvas-procedural' | 'webp' | 'png' | 'avif' | 'css';
 
 export interface AssetEntry {
   id: string;
@@ -66,26 +66,15 @@ export const ASSETS: AssetEntry[] = [
     version: '0.5',
   },
   {
-    id: 'spline.aquila-aurea',
-    use: 'Welcome-screen hero: Aquila Aurea monument, labyrinth plinth, column ring, aqueduct, Centurion-red banners, meadow',
-    format: 'splinecode',
-    path: 'public/assets/spline/aquila-aurea.splinecode',
-    source: 'Spline file "APEX Imperial Asset Kit" https://app.spline.design/file/09a1cf4b-f497-45ea-b5e5-5578e3d6f96c (code export https://prod.spline.design/xie9ry1qfODiundG/scene.splinecode)',
-    optimisation: '128 KB, procedural primitives only (no textures); runtime lazy-loaded only on capable devices, only on the welcome screen, disposed on unmount; served from our origin',
-    licence: 'Original APEX artwork created for the project in the owner’s Spline account; no third-party assets',
-    fallback: 'spline.aquila-aurea.poster (static image)',
-    version: '0.5',
-  },
-  {
-    id: 'spline.aquila-aurea.poster',
-    use: 'Static poster of the same scene (shown first; the only image on reduced-motion / low-end devices)',
-    format: 'webp',
-    path: 'public/assets/spline/aquila-aurea-poster.webp',
-    source: 'Render of the Spline scene above (Spline viewport capture), converted to WebP',
-    optimisation: '1280×800, 8 KB WebP (quality 72)',
-    licence: 'Original APEX artwork',
+    id: 'welcome.vista',
+    use: 'Welcome-screen illustration: dusk over the arena, aqueduct, column ring, labyrinth plinth, golden eagle standard',
+    format: 'svg-inline',
+    path: 'src/components/ImperialVista.tsx',
+    source: 'Original APEX inline SVG (replaces the APEX 0.5 Spline scene, removed in 0.7)',
+    optimisation: 'Inline SVG, no request, no runtime, no animation',
+    licence: 'Original APEX',
     fallback: 'Dark panel background',
-    version: '0.5',
+    version: '0.7',
   },
   {
     id: 'map.atmosphere',

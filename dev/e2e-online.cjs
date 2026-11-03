@@ -94,18 +94,18 @@ const waitText = (page, re, timeout = 10000) =>
     check('version details expand (environment, commit, API)', await anon.getByRole('dialog', { name: 'Deployment details' }).isVisible());
     await badge.getByRole('button').click();
   }
-  // ---------- Spline hero & reduced motion (APEX 0.5) ----------
+  // ---------- welcome illustration (APEX 0.7: Spline removed) ----------
   {
-    const hero = anon.getByTestId('spline-hero');
-    check('welcome hero shows the Spline poster immediately', await hero.locator('img').evaluate((i) => i.complete && i.naturalWidth > 0).catch(() => false));
-    const rm = await b.newContext({ viewport: { width: 1200, height: 800 }, reducedMotion: 'reduce' });
-    const rp = await rm.newPage();
+    check('welcome screen shows the static APEX illustration', await anon.getByTestId('welcome-vista').isVisible());
+    const ctx = await b.newContext({ viewport: { width: 1200, height: 800 } });
+    const p = await ctx.newPage();
     let spline = 0;
-    rp.on('request', (r) => /splinecode|splinetool|\/assets\/runtime-/.test(r.url()) && spline++);
-    await rp.goto(url('/'));
-    await rp.waitForTimeout(2500);
-    check('reduced motion: no Spline runtime or scene is downloaded, the poster stays', spline === 0 && (await rp.getByTestId('spline-hero').getAttribute('data-state')) === 'poster');
-    await rm.close();
+    p.on('request', (r) => /spline|\.splinecode|\.wasm/i.test(r.url()) && spline++);
+    await p.goto(url('/'));
+    await p.waitForTimeout(2500);
+    const text = await p.evaluate(() => document.documentElement.outerHTML);
+    check('no Spline request, embed or “Built with Spline” branding', spline === 0 && !/spline/i.test(text), `${spline} requests`);
+    await ctx.close();
   }
   await anon.getByRole('button', { name: 'Join Campaign' }).click();
   await anon.getByRole('heading', { name: 'Who are you?' }).waitFor();
@@ -549,7 +549,7 @@ const waitText = (page, re, timeout = 10000) =>
     check('widgets reorder within a dock', r1.indexOf('selection') > r1.indexOf('events'));
     await gm.locator('[data-widget="events"] .ws-handle > button[aria-expanded]').click();
     check('a widget collapses (body unmounted)', (await gm.locator('[data-widget="events"] .ws-body').count()) === 0);
-    await gm.getByRole('button', { name: 'Hide Sites' }).click();
+    await gm.getByRole('button', { name: 'Close Sites' }).click();
     check('a widget can be hidden', (await gm.locator('[data-widget="sites"]').count()) === 0);
     // drag & drop: GM Tools → bottom of the left dock
     const src = gm.locator('[data-widget="gm-tools"] .ws-handle');
@@ -564,14 +564,28 @@ const waitText = (page, re, timeout = 10000) =>
     await gm.getByRole('menuitem', { name: /Sites/ }).click();
     check('a hidden widget is restored from the Widgets menu', (await gm.locator('[data-widget="sites"]').count()) === 1);
     await gm.getByRole('button', { name: /☰ Widgets/ }).click();
-    await gm.getByRole('menuitem', { name: /Reset workspace/ }).click();
-    check('Reset workspace restores the default layout', (await order('right'))[0] === 'gm-tools' && (await order('left')).length === 0);
+    await gm.getByRole('menuitem', { name: /Reset Layout to Default/ }).click();
+    check('Reset Layout to Default restores the default layout', (await order('right'))[0] === 'gm-tools' && (await order('left')).length === 0 && (await order('bottom'))[0] === 'chronicle');
+    // Chronicle + Legend are widgets now
+    await menu('chronicle', 'Move to right dock');
+    check('the Arena Chronicle moves like any widget', (await order('right')).includes('chronicle') && !(await order('bottom')).includes('chronicle'));
+    await menu('chronicle', /Reset to default position/);
+    check('one widget can be reset to its default position', (await order('bottom'))[0] === 'chronicle' && !(await order('right')).includes('chronicle'));
+    await gm.locator('[data-widget="legend"] .ws-handle > button[aria-expanded]').click();
+    check('the Legend is a widget (terrain costs)', await gm.locator('[data-widget="legend"]').getByText('Terrain · Movement Cost').isVisible());
+    check('the chronicle groups entries by day/night', (await gm.locator('[data-widget="chronicle"] section[aria-label^="Day"], [data-widget="chronicle"] section[aria-label^="Night"]').count()) > 0);
+    const list = gm.getByTestId('chronicle-list');
+    await list.evaluate((el) => (el.scrollTop = 0));
+    const scrollable = await list.evaluate((el) => el.scrollHeight > el.clientHeight + 30);
+    if (scrollable) {
+      await gm.getByTestId('chronicle-jump').waitFor({ timeout: 3000 });
+      await gm.getByTestId('chronicle-jump').click();
+      check('Jump to Latest scrolls to the newest entry', await list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 30));
+    } else check('Jump to Latest scrolls to the newest entry', true);
     check('map atmosphere overlay is on by default', (await gm.getByTestId('atmosphere').count()) === 1);
-    await gm.getByRole('button', { name: /Legend/ }).click();
     await gm.getByLabel('Map atmosphere').uncheck();
     check('the atmosphere can be switched off (personal setting)', await gm.evaluate(() => localStorage.getItem('apex.map.atmosphere') === 'off'));
     await gm.getByLabel('Map atmosphere').check();
-    await gm.getByRole('button', { name: /Legend/ }).click();
     await gm.screenshot({ path: out + '/e2e-workspace-gm.png' });
     // players: GM widgets cannot be unlocked through the stored layout
     await hannah.evaluate(() => {

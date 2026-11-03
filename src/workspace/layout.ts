@@ -142,3 +142,18 @@ export function writeLayout(key: string, l: Layout): void {
     /* private mode / quota – layout simply is not remembered */
   }
 }
+
+/** Puts ONE widget back to its default dock, position and collapsed state; every other widget stays where it is. */
+export function resetWidget(l: Layout, id: string, defaults: Layout): Layout {
+  const docks = { left: l.docks.left.filter((x) => x !== id), right: l.docks.right.filter((x) => x !== id), bottom: l.docks.bottom.filter((x) => x !== id) };
+  const hidden = l.hidden.filter((x) => x !== id);
+  const collapsed = l.collapsed.filter((x) => x !== id);
+  if (defaults.collapsed.includes(id)) collapsed.push(id);
+  const home = DOCKS.find((d) => defaults.docks[d].includes(id));
+  if (!home) return { ...l, docks, hidden: [...hidden, id], collapsed };
+  const order = defaults.docks[home];
+  const before = order.slice(0, order.indexOf(id)).filter((x) => docks[home].includes(x));
+  const at = before.length ? docks[home].indexOf(before[before.length - 1]) + 1 : 0;
+  docks[home].splice(at, 0, id);
+  return { ...l, docks, hidden, collapsed };
+}
