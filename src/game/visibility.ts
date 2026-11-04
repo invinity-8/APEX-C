@@ -30,6 +30,7 @@ import type {
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
 import type { BeastForm } from './beasts.js';
+import type { CharacterCosmetics } from './cosmetics.js';
 import type { CurrencyId } from './items/currency.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
 
@@ -155,6 +156,8 @@ export interface TokenView {
   title: string;
   /** The tagline was set by hand (never regenerated from imported data). */
   titleCustom?: boolean;
+  /** APEX 0.7: cosmetic rewards (selected: public; unlocked: owner + GM only). */
+  cosmetics?: CharacterCosmetics;
   color: string;
   initials: string;
   pos: Axial;
@@ -252,6 +255,8 @@ const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact 
   teamId: t.teamId,
   title: t.title,
   ...(t.titleCustom ? { titleCustom: true } : {}),
+  // APEX 0.7: the chosen cosmetics are public (everyone sees the card); what is unlocked stays private
+  ...(t.cosmetics && Object.keys(t.cosmetics.selected).length ? { cosmetics: { unlocked: withDetails && withInventory ? [...t.cosmetics.unlocked] : [], selected: { ...t.cosmetics.selected } } } : withDetails && withInventory && t.cosmetics ? { cosmetics: { unlocked: [...t.cosmetics.unlocked], selected: {} } } : {}),
   color: t.color,
   initials: t.initials,
   pos: { ...t.pos },

@@ -24,7 +24,9 @@ import { PlayersPanel } from './components/PlayersPanel';
 import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { ArsenalPanel } from './components/ArsenalPanel';
-import { FeedbackInbox } from './components/Feedback';
+import { FeedbackDialog, FeedbackInbox } from './components/Feedback';
+import { CurrencyBar } from './components/items/ItemUi';
+import type { ItemRules } from './game/items/rules';
 import { WorldPanel } from './components/WorldPanel';
 
 type View = 'map' | 'character' | 'inventory' | 'arsenal' | 'feedback';
@@ -244,9 +246,18 @@ export default function App({ game }: { game: GameApi }) {
         render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} />,
       },
     );
+    // APEX 0.7: the navigation areas are also available as movable widgets (hidden by default – add via “Widgets”)
+    const focus = (selectedToken?.kind === 'player' ? selectedToken : null) ?? playerTokens[0] ?? null;
+    widgets.push(
+      { id: 'arsenal', title: 'Arsenal', icon: '⚔', render: () => <ArsenalPanel state={state} run={run} /> },
+      { id: 'character-sheet', title: 'Character Sheet', icon: '📜', render: () => (focus ? <CharacterPanel key={focus.id} game={game} token={focus} isGm run={run} notify={notify} /> : null) },
+      { id: 'inventory-widget', title: 'Inventory', icon: '🎒', render: () => (focus ? <InventoryPanel key={focus.id} token={focus} run={run} busy={game.busy} rules={view.itemRules} isGm game={game} embedded /> : null) },
+      { id: 'currency-vault', title: 'Currency Vault', icon: '💠', render: () => (focus ? <VaultWidget token={focus} run={run} rules={view.itemRules} /> : null) },
+    );
     if (game.online) {
       const online = game.online;
       widgets.push(
+        { id: 'feedback-inbox', title: 'Feedback', icon: '📮', render: () => <FeedbackInbox online={online} notify={notify} /> },
         { id: 'world', title: 'World Management', icon: '🌍', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
         { id: 'players', title: 'Players & Access', icon: '👥', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
       );
@@ -261,6 +272,9 @@ export default function App({ game }: { game: GameApi }) {
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
       { id: 'intel', title: 'Intelligence', icon: '👁', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
       { id: 'notifications', title: 'Notifications', icon: '📣', render: () => <AnnouncementHistory announcements={view.announcements} open /> },
+      { id: 'character-sheet', title: 'Character Sheet', icon: '📜', render: () => (me ? <CharacterPanel key={me.id} game={game} token={me} isGm={false} run={run} notify={notify} /> : null) },
+      { id: 'currency-vault', title: 'Currency Vault', icon: '💠', render: () => (me ? <VaultWidget token={me} run={run} rules={view.itemRules} /> : null) },
+      ...(game.online ? [{ id: 'feedback', title: 'Feedback', icon: '💬', render: () => <FeedbackDialog online={game.online!} area="Map" notify={notify} embedded /> }] : []),
       { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} rules={view.itemRules} game={game} embedded /> : null) },
     );
   }
@@ -271,8 +285,9 @@ export default function App({ game }: { game: GameApi }) {
         ? defaultLayout(
             { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players', 'legend'], bottom: ['chronicle'] },
             ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players', 'legend'],
+            ['arsenal', 'character-sheet', 'inventory-widget', 'currency-vault', 'feedback-inbox'],
           )
-        : defaultLayout({ right: ['vitals', 'my-character', 'equipment', 'party', 'selection', 'intel', 'notifications', 'legend'], bottom: ['chronicle'] }, ['equipment', 'notifications', 'legend'], ['inventory']),
+        : defaultLayout({ right: ['vitals', 'my-character', 'equipment', 'party', 'selection', 'intel', 'notifications', 'legend'], bottom: ['chronicle'] }, ['equipment', 'notifications', 'legend'], ['inventory', 'character-sheet', 'currency-vault', 'feedback']),
     [role],
   );
 
@@ -448,5 +463,22 @@ function MovementPill({ token }: { token: import('./game/visibility').TokenView 
       )}
       <span className="text-marble-500">MP{d.speedFt ? ` · ${d.speedFt} ft` : ''}</span>
     </div>
+  );
+}
+
+/** APEX 0.7: the Currency Vault on its own (as a workspace widget). */
+function VaultWidget({ token, run, rules }: { token: import('./game/visibility').TokenView; run: (cmd: import('./game/commands').Command) => Promise<import('./state/gameApi').DispatchResult>; rules: ItemRules }) {
+  const d = token.details;
+  if (!d) return <p className="text-xs text-marble-500">Not visible.</p>;
+  return (
+    <CurrencyBar
+      currency={d.currency}
+      currencyRev={d.currencyRev ?? 0}
+      rules={rules}
+      onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
+      onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
+      lastTransmute={d.lastTransmute}
+      transmuteUnlocked={!!d.transmuteUnlocked}
+    />
   );
 }

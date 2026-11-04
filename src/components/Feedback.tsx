@@ -5,7 +5,8 @@
  * passwords, tokens, character records or the campaign state. Players see the status of their own reports; the
  * GM's inbox lists every report with filters, search, status changes, notes, sharing and CSV/JSON export.
  */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { APP_VERSION } from '../build/version';
 import type { FeedbackKind, FeedbackRow, FeedbackStatus } from '../server/repo';
 import type { OnlineControls } from '../state/gameApi';
@@ -46,7 +47,8 @@ export function FeedbackButton({ online, area, notify }: { online: OnlineControl
   );
 }
 
-function FeedbackDialog({ online, area, notify, onClose }: { online: OnlineControls; area: string; notify: (m: string, k?: 'error' | 'info') => void; onClose: () => void }) {
+export function FeedbackDialog({ online, area, notify, onClose, embedded = false }: { online: OnlineControls; area: string; notify: (m: string, k?: 'error' | 'info') => void; onClose?: () => void; /** inside a workspace widget (no overlay) */ embedded?: boolean }) {
+  const sizeRef = useResizePersist('apex.feedback.size');
   const [tab, setTab] = useState<'new' | 'mine'>('new');
   const [kind, setKind] = useState<FeedbackKind>('bug');
   const [title, setTitle] = useState('');
@@ -92,14 +94,17 @@ function FeedbackDialog({ online, area, notify, onClose }: { online: OnlineContr
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-8" role="dialog" aria-modal="true" aria-label="Feedback">
-      <div className="panel w-full max-w-xl space-y-3 p-4 text-sm">
+  // Not embedded: render into <body> – the header (backdrop-filter) would otherwise trap `position: fixed` and squeeze
+  // the dialog into a thin strip above the map.
+  const node = (
+    <div className={embedded ? '' : 'fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-8'} role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-label="Feedback">
+      {/* APEX 0.7: the dialog can be resized (handle bottom-right); the size is remembered on this device */}
+      <div ref={embedded ? undefined : sizeRef} className={embedded ? 'space-y-3 text-sm' : 'panel apex-resizable space-y-3 p-4 text-sm'} data-testid="feedback-panel">
         <div className="flex items-center gap-2">
           <h2 className="flex-1 font-display text-xl font-bold text-gold-200">Feedback</h2>
-          <button className="btn btn-ghost" onClick={onClose} aria-label="Close feedback">
+          {onClose && <button className="btn btn-ghost" onClick={onClose} aria-label="Close feedback">
             ✕
-          </button>
+          </button>}
         </div>
         <div className="flex gap-1 text-xs" role="tablist">
           <button role="tab" aria-selected={tab === 'new'} className={`rounded-lg px-3 py-1 ${tab === 'new' ? 'bg-gold-400/20 text-gold-200' : 'text-marble-300'}`} onClick={() => setTab('new')}>
@@ -162,7 +167,7 @@ function FeedbackDialog({ online, area, notify, onClose }: { online: OnlineContr
               </p>
             )}
             <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-ghost" onClick={onClose}>
+              <button type="button" className="btn btn-ghost" onClick={() => onClose?.()}>
                 Cancel
               </button>
               <button type="submit" className="btn btn-gold" disabled={busy || !title.trim()}>
@@ -198,6 +203,7 @@ function FeedbackDialog({ online, area, notify, onClose }: { online: OnlineContr
       </div>
     </div>
   );
+  return embedded ? node : createPortal(node, document.body);
 }
 
 // ---------------------------------------------------------------- GM inbox
@@ -368,4 +374,36 @@ function InboxDetail({ r, onUpdate, onShot }: { r: FeedbackRow; onUpdate: (p: Pa
       </div>
     </div>
   );
+}
+
+/** Remembers the user-resized size of an element (local only, debounced by the ResizeObserver). */
+function useResizePersist(key: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) ?? 'null') as { w: number; h: number } | null;
+      if (saved && saved.w > 0 && saved.h > 0) {
+        el.style.width = `${Math.min(saved.w, window.innerWidth - 24)}px`;
+        el.style.height = `${Math.min(saved.h, window.innerHeight - 24)}px`;
+      }
+    } catch {
+      /* not remembered */
+    }
+    let t: number | undefined;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(t);
+      t = window.setTimeout(() => {
+        try {
+          localStorage.setItem(key, JSON.stringify({ w: Math.round(el.offsetWidth), h: Math.round(el.offsetHeight) }));
+        } catch {
+          /* ignore */
+        }
+      }, 300);
+    });
+    ro.observe(el);
+    return () => (ro.disconnect(), clearTimeout(t));
+  }, [key]);
+  return ref;
 }
