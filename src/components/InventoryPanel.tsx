@@ -203,6 +203,7 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
         onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
         onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
         lastTransmute={details.lastTransmute}
+        transmuteUnlocked={!!details.transmuteUnlocked}
       />
         </div>
       </div>

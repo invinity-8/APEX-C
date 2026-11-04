@@ -161,6 +161,16 @@ const OTHER: I[] = [
     'Holds up to 500 pounds, not exceeding a volume of 64 cubic feet; the bag always weighs 15 pounds. Retrieving an item is an action. Placing it inside another extradimensional space is not allowed in APEX (it would destroy both).',
   ],
   ['Iron Ingot', 'material', 'metal', 1, 1, true, APEX, 'Raw material.'],
+  [
+    'Imperial Transmutation Cube',
+    'gear',
+    'artifact',
+    3,
+    undefined,
+    false,
+    APEX,
+    'A palm-sized cube of black basalt banded in gold, its faces etched with the eagle and the labyrinth. Whoever carries it can perform Arcane Transmutation (fragments into random Orbs).',
+  ],
   ['Arcane Dust', 'material', 'reagent', 0, 5, true, APEX, 'Glittering residue of controlled magic.'],
   ['Quest Token', 'quest', 'quest', 0, undefined, false, APEX, 'A story object – rename it and describe it for your campaign.'],
 ];

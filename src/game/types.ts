@@ -189,6 +189,8 @@ export interface Token {
   currencyRev?: number;
   /** APEX 0.7: outcome of the last Arcane Transmutation (shown to the owner once). */
   lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
+  /** APEX 0.7: GM-granted permanent Arcane Transmutation access (otherwise carrying the cube unlocks it). */
+  cubeAccess?: boolean;
   /** APEX 0.7: Sneak mode – each step costs double movement points. Not invisibility: being unseen still needs a Stealth check. */
   sneaking?: boolean;
   /** APEX 0.7: player-uploaded pictures per Wild Shape form (private storage path + cache version; path never sent). */

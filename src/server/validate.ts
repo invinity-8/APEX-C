@@ -80,6 +80,9 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'gmTimeTwist':
       if (!isId(c.tokenId) || !oneOf(c.action, ['resolve', 'cancel'] as const)) return bad('gmTimeTwist');
       return { ok: true, command: { type: 'gmTimeTwist', tokenId: c.tokenId, action: c.action } };
+    case 'gmSetCubeAccess':
+      if (!isId(c.tokenId) || typeof c.permanent !== 'boolean') return bad('gmSetCubeAccess');
+      return { ok: true, command: { type: 'gmSetCubeAccess', tokenId: c.tokenId, permanent: c.permanent } };
     case 'gmRechargeItem':
       if (!isId(c.tokenId) || !isId(c.itemId)) return bad('gmRechargeItem');
       return { ok: true, command: { type: 'gmRechargeItem', tokenId: c.tokenId, itemId: c.itemId } };

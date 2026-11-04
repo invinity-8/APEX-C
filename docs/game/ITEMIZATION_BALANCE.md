@@ -279,3 +279,21 @@ Each is labelled `situational` or `cosmetic` on the item.
     character was incapacitated.
 - Only one postponed turn can exist at a time. Retries are refused (item revision and charge state).
 - Recharge: once per long rest, by the GM (*Recharge*).
+
+## 13. Currency Vault & Imperial Transmutation Cube (APEX 0.7)
+
+- **Currency Vault:** a compact grid with original APEX glyphs; no Path of Exile artwork or layout is copied.
+  - Groups: *Orbs & seals* (Seal of Revelation, Orb of Renewal, Augmentation, Ascension) and *Materials* (Arcane
+    Fragments).
+  - Stack counts sit on the icons. Hover shows a tooltip, click opens the details, and a small action panel sits
+    below.
+  - All existing balances are kept as they were.
+- **Imperial Transmutation Cube** (base item `apex-imperial-transmutation-cube`): an original APEX artifact (basalt
+  cube with gold bands). It unlocks **Arcane Transmutation**, which turns fragments into random Orbs.
+  - **Unlock rule:** the character must **currently carry** a cube (it has a persistent item id and an owner), or
+    the GM has granted **permanent access** (*Arsenal → Magical currency → Arcane Transmutation access*). If the
+    cube is revoked, lost or deleted, access ends again unless permanent access was granted.
+  - **The server enforces it** (`hasCube` in `transmuteFragments`); a locked button is only the explanation.
+  - **Not locked:** balances, identification, rerolls, Augmentation/Ascension and combining fragments into Orbs of
+    Renewal.
+  - The GM grants the cube like any item ("Generate & give") or puts it in a loot table.
