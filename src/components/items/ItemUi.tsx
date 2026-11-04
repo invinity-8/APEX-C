@@ -5,7 +5,7 @@
 import { useState, type FormEvent } from 'react';
 import { EQUIP_SLOTS, SLOT_LABEL, activeSlots, equipmentOf, itemBonuses, slotOfItem, type Equipment, type EquipSlot } from '../../game/equipment';
 import { baseItem } from '../../game/items/bases';
-import { balanceOf, CURRENCIES, CURRENCY_IDS, type CurrencyId } from '../../game/items/currency';
+import { balanceOf, CURRENCIES, type CurrencyId } from '../../game/items/currency';
 import { modifier, modText } from '../../game/items/modifiers';
 import { uniqueDef } from '../../game/items/uniques';
 import type { CarryLoad } from '../../game/items/weight';
@@ -33,6 +33,19 @@ export function CurrencyIcon({ id, size = 20 }: { id: CurrencyId; size?: number 
           <path d="M15.6 6.6v2.4h-2.4M8.4 17.4V15h2.4" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" />
         </>
       )}
+      {id === 'augment' && (
+        <>
+          <circle cx="12" cy="12" r="8.5" fill="#123a31" stroke={c} strokeWidth="1.6" />
+          <path d="M12 7v10M7 12h10" stroke={c} strokeWidth="1.9" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="3.2" fill="none" stroke={c} strokeWidth=".9" opacity=".7" />
+        </>
+      )}
+      {id === 'ascend' && (
+        <>
+          <circle cx="12" cy="12" r="8.5" fill="#3d2213" stroke={c} strokeWidth="1.6" />
+          <path d="M7.5 14.5l4.5-4.5 4.5 4.5M7.5 10.5l4.5-4.5 4.5 4.5" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
       {id === 'fragment' && (
         <>
           <path d="M12 3l5.5 6.5L13 21l-6.5-9z" fill="#2b1d3d" stroke={c} strokeWidth="1.5" strokeLinejoin="round" />
@@ -43,7 +56,28 @@ export function CurrencyIcon({ id, size = 20 }: { id: CurrencyId; size?: number 
   );
 }
 
-/** Prominent balances + "Combine Fragments" (players and GM on a character's inventory). */
+/** The Imperial Transmutation Cube – original APEX glyph (basalt cube, gold bands, eagle facet). */
+export function CubeIcon({ size = 28, locked = false }: { size?: number; locked?: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="shrink-0" style={{ opacity: locked ? 0.45 : 1 }}>
+      <path d="M12 2.5l8 4.5v10l-8 4.5-8-4.5V7z" fill="#1c1a1f" stroke="#c09b58" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M4 7l8 4.5 8-4.5M12 11.5v10" fill="none" stroke="#c09b58" strokeWidth="1" opacity=".8" />
+      <path d="M12 6.2l1 1.6 1.8.2-1.3 1.1.4 1.8L12 10l-1.6.9.4-1.8-1.3-1.1 1.8-.2z" fill="#e3c25b" />
+      {locked && <path d="M9 15.5h6v4H9zM10.2 15.5v-1.4a1.8 1.8 0 0 1 3.6 0v1.4" fill="none" stroke="#b9b2a2" strokeWidth="1" />}
+    </svg>
+  );
+}
+
+const VAULT_GROUPS: Array<{ label: string; ids: CurrencyId[] }> = [
+  { label: 'Orbs & seals', ids: ['seal', 'orb', 'augment', 'ascend'] },
+  { label: 'Materials', ids: ['fragment'] },
+];
+
+/**
+ * Currency Vault (APEX 0.7): compact icon grid with stack counts, tooltips and click-to-inspect, plus a small action
+ * panel. Basic functions (balances, combining fragments into Orbs of Renewal) are always available; Arcane
+ * Transmutation needs the Imperial Transmutation Cube – the server enforces it, the lock here only explains it.
+ */
 export function CurrencyBar({
   currency,
   currencyRev,
@@ -51,6 +85,7 @@ export function CurrencyBar({
   onCombine,
   onTransmute,
   lastTransmute,
+  transmuteUnlocked = false,
 }: {
   currency: Partial<Record<CurrencyId, number>> | undefined;
   currencyRev: number;
@@ -58,90 +93,125 @@ export function CurrencyBar({
   onCombine?: (sets: number, currencyRev: number) => Promise<boolean>;
   onTransmute?: (sets: number, currencyRev: number) => Promise<boolean>;
   lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
+  transmuteUnlocked?: boolean;
 }) {
   const purse = { currency };
   const per = rules.fragmentsPerOrb;
   const max = Math.floor(balanceOf(purse, 'fragment') / per);
-  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState<CurrencyId | null>(null);
+  const [panel, setPanel] = useState<'combine' | 'transmute' | null>(null);
   const [sets, setSets] = useState(1);
-  const [tOpen, setTOpen] = useState(false);
-  const [tSets, setTSets] = useState(1);
   const [shownRev, setShownRev] = useState<number | null>(null);
   const tPer = rules.fragmentsPerRandomOrb;
   const tMax = Math.floor(balanceOf(purse, 'fragment') / tPer);
   const w = [rules.transmuteWeightRenewal, rules.transmuteWeightAugment, rules.transmuteWeightAscension];
   const wSum = w.reduce((a, b) => a + b, 0) || 1;
   const odds = (i: number) => `${Math.round((w[i] / wSum) * 100)}%`;
-  const transmute = async (e: FormEvent) => {
-    e.preventDefault();
-    if (onTransmute && (await onTransmute(Math.min(tSets, tMax), currencyRev))) (setTOpen(false), setTSets(1), setShownRev(currencyRev + 1));
-  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (onCombine && (await onCombine(Math.min(sets, max), currencyRev))) (setOpen(false), setSets(1));
+    if (panel === 'combine' && onCombine && (await onCombine(Math.min(sets, max), currencyRev))) (setPanel(null), setSets(1));
+    if (panel === 'transmute' && onTransmute && (await onTransmute(Math.min(sets, tMax), currencyRev))) (setPanel(null), setSets(1), setShownRev(currencyRev + 1));
   };
+  const limit = panel === 'combine' ? max : tMax;
   return (
-    <section className="panel p-3" aria-label="Magical currency">
-      <div className="flex flex-wrap items-center gap-2">
-        {CURRENCY_IDS.map((id) => (
-          <div key={id} className="flex min-w-[9.5rem] flex-1 items-center gap-2 rounded-lg border border-ink-600 bg-ink-900/60 px-2 py-1.5" title={CURRENCIES[id].purpose} data-currency={id}>
-            <CurrencyIcon id={id} size={26} />
-            <div className="leading-tight">
-              <div className="font-display text-xl font-black tabular-nums" style={{ color: CURRENCIES[id].color }} data-testid={`balance-${id}`}>
-                {balanceOf(purse, id)}
-              </div>
-              <div className="text-[10px] uppercase tracking-wider text-marble-500">{CURRENCIES[id].plural}</div>
+    <section className="apex-vault panel p-2.5" aria-label="Currency vault">
+      <div className="mb-1.5 flex items-center gap-2">
+        <h3 className="panel-title flex-1">Currency vault</h3>
+        <span className={`flex items-center gap-1 text-[10px] ${transmuteUnlocked ? 'text-gold-200' : 'text-marble-500'}`} data-testid="cube-status" title={transmuteUnlocked ? 'Imperial Transmutation Cube: Arcane Transmutation unlocked' : 'Acquire the Imperial Transmutation Cube to unlock Arcane Transmutation'}>
+          <CubeIcon size={18} locked={!transmuteUnlocked} />
+          {transmuteUnlocked ? 'Cube unlocked' : 'Cube locked'}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {VAULT_GROUPS.map((g) => (
+          <div key={g.label}>
+            <div className="mb-1 text-[9px] uppercase tracking-[0.18em] text-marble-500">{g.label}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {g.ids.map((id) => {
+                const n = balanceOf(purse, id);
+                return (
+                  <button
+                    key={id}
+                    className={`apex-vault-slot ${sel === id ? 'is-selected' : ''} ${n ? '' : 'is-empty'}`}
+                    style={{ ['--slot-color' as string]: CURRENCIES[id].color }}
+                    title={`${CURRENCIES[id].name} – ${CURRENCIES[id].purpose}`}
+                    aria-label={`${CURRENCIES[id].plural}: ${n}`}
+                    aria-pressed={sel === id}
+                    onClick={() => setSel(sel === id ? null : id)}
+                    data-currency={id}
+                  >
+                    <CurrencyIcon id={id} size={30} />
+                    <span className="apex-vault-count" data-testid={`balance-${id}`}>
+                      {n}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
-        {onTransmute && (
-          <button className="btn btn-ghost text-xs" disabled={tMax < 1} title={tMax < 1 ? `Requires ${tPer} Arcane Fragments` : `${tPer} Arcane Fragments → 1 random Orb`} onClick={() => setTOpen((o) => !o)}>
-            Arcane Transmutation
-          </button>
-        )}
-        {onCombine && (
-          <button className="btn btn-ghost text-xs" disabled={max < 1} title={max < 1 ? `Requires ${per} Arcane Fragments` : `${per} Arcane Fragments → 1 Orb of Renewal`} onClick={() => setOpen((o) => !o)}>
-            Combine Fragments
-          </button>
-        )}
       </div>
-      {max < 1 && onCombine && <p className="mt-1 text-[11px] text-marble-500">Combine Fragments: requires {per} Arcane Fragments for one Orb of Renewal.</p>}
+      {sel && (
+        <div className="mt-2 flex items-start gap-2 rounded-md border border-ink-600 bg-ink-950/70 p-2 text-xs" data-testid="vault-inspect">
+          <CurrencyIcon id={sel} size={36} />
+          <div>
+            <div className="font-semibold" style={{ color: CURRENCIES[sel].color }}>
+              {CURRENCIES[sel].name} × {balanceOf(purse, sel)}
+            </div>
+            <div className="text-marble-300">{CURRENCIES[sel].purpose}</div>
+          </div>
+        </div>
+      )}
+      {(onCombine || onTransmute) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-ink-700 pt-2 text-xs">
+          {onCombine && (
+            <button className={`btn px-2 py-0.5 text-[11px] ${panel === 'combine' ? 'btn-active' : 'btn-ghost'}`} disabled={max < 1} title={`${per} Arcane Fragments → 1 Orb of Renewal`} onClick={() => (setPanel(panel === 'combine' ? null : 'combine'), setSets(1))}>
+              Combine Fragments
+            </button>
+          )}
+          {onTransmute && (
+            <button
+              className={`btn px-2 py-0.5 text-[11px] ${panel === 'transmute' ? 'btn-active' : 'btn-ghost'}`}
+              disabled={!transmuteUnlocked || tMax < 1}
+              title={!transmuteUnlocked ? 'Requires the Imperial Transmutation Cube' : `${tPer} Arcane Fragments → 1 random Orb`}
+              onClick={() => (setPanel(panel === 'transmute' ? null : 'transmute'), setSets(1))}
+            >
+              <span className="inline-flex items-center gap-1">
+                <CubeIcon size={14} locked={!transmuteUnlocked} /> Arcane Transmutation
+              </span>
+            </button>
+          )}
+          {!transmuteUnlocked && onTransmute && <span className="text-[10px] text-marble-500">Arcane Transmutation unlocks with the Imperial Transmutation Cube.</span>}
+          {transmuteUnlocked && max < 1 && tMax < 1 && <span className="text-[10px] text-marble-500">Requires {Math.min(per, tPer)} Arcane Fragments.</span>}
+        </div>
+      )}
       {lastTransmute && shownRev !== null && lastTransmute.rev === shownRev && (
         <p role="status" className="apex-reveal mt-2 rounded-lg border border-arcane-400/50 bg-arcane-500/10 p-2 text-xs text-arcane-300" data-testid="transmute-result">
           Arcane Transmutation:{' '}
           {(Object.entries(lastTransmute.result) as Array<[CurrencyId, number]>).map(([c, n]) => `${n} × ${n === 1 ? CURRENCIES[c].name : CURRENCIES[c].plural}`).join(', ')}
         </p>
       )}
-      {tOpen && tMax >= 1 && (
-        <form onSubmit={transmute} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-arcane-400/40 bg-ink-900/70 p-2 text-xs text-marble-300" aria-label="Arcane transmutation">
+      {panel && limit >= 1 && (
+        <form onSubmit={submit} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-arcane-400/40 bg-ink-900/70 p-2 text-xs text-marble-300" aria-label={panel === 'combine' ? 'Combine fragments' : 'Arcane transmutation'}>
           <label>
-            Random Orbs{' '}
-            <input className="w-16 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50" type="number" min={1} max={tMax} value={tSets} onChange={(e) => setTSets(Math.max(1, Math.min(tMax, Math.round(Number(e.target.value) || 1))))} aria-label="Random orbs to create" />
+            {panel === 'combine' ? 'Orbs to create' : 'Random Orbs'}{' '}
+            <input className="w-16 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50" type="number" min={1} max={limit} value={sets} onChange={(e) => setSets(Math.max(1, Math.min(limit, Math.round(Number(e.target.value) || 1))))} aria-label={panel === 'combine' ? 'Orbs to create' : 'Random orbs to create'} />
           </label>
           <span>
-            Uses <strong className="text-marble-50">{tSets * tPer}</strong> fragments. Each Orb is rolled on the server: Renewal {odds(0)} · Augmentation {odds(1)} · Ascension {odds(2)}.
+            {panel === 'combine' ? (
+              <>
+                Uses <strong className="text-marble-50">{sets * per}</strong> of {balanceOf(purse, 'fragment')} fragments → <strong className="text-marble-50">{sets}</strong> Orb{sets === 1 ? '' : 's'} of Renewal
+              </>
+            ) : (
+              <>
+                Uses <strong className="text-marble-50">{sets * tPer}</strong> fragments. Rolled on the server: Renewal {odds(0)} · Augmentation {odds(1)} · Ascension {odds(2)}.
+              </>
+            )}
           </span>
           <button type="submit" className="btn btn-gold px-2 py-0.5">
-            Transmute
+            {panel === 'combine' ? 'Combine' : 'Transmute'}
           </button>
-          <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setTOpen(false)}>
-            Cancel
-          </button>
-        </form>
-      )}
-      {open && max >= 1 && (
-        <form onSubmit={submit} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-arcane-400/40 bg-ink-900/70 p-2 text-xs text-marble-300" aria-label="Combine fragments">
-          <label>
-            Orbs to create{' '}
-            <input className="w-16 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50" type="number" min={1} max={max} value={sets} onChange={(e) => setSets(Math.max(1, Math.min(max, Math.round(Number(e.target.value) || 1))))} aria-label="Orbs to create" />
-          </label>
-          <span>
-            Uses <strong className="text-marble-50">{sets * per}</strong> of {balanceOf(purse, 'fragment')} Arcane Fragments → <strong className="text-marble-50">{sets}</strong> Orb{sets === 1 ? '' : 's'} of Renewal
-          </span>
-          <button type="submit" className="btn btn-gold px-2 py-0.5">
-            Combine
-          </button>
-          <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setOpen(false)}>
+          <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setPanel(null)}>
             Cancel
           </button>
         </form>

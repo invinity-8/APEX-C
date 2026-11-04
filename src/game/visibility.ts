@@ -142,6 +142,9 @@ export interface TokenDetails {
   /** APEX 0.7: Sneak mode (owner + GM) and the cache versions of uploaded beast pictures (never the storage path). */
   sneaking?: boolean;
   beastImageV?: Record<string, number>;
+  /** APEX 0.7: Arcane Transmutation unlocked (cube carried or GM entitlement). */
+  transmuteUnlocked?: boolean;
+  cubeAccess?: boolean;
 }
 
 export interface TokenView {
@@ -239,6 +242,8 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),
   ...(withInventory && t.bodyType ? { bodyType: t.bodyType } : {}),
   ...(withInventory && t.sneaking ? { sneaking: true } : {}),
+  ...(withInventory && (t.cubeAccess || t.inventory.some((i) => i.baseId === 'apex-imperial-transmutation-cube')) ? { transmuteUnlocked: true } : {}),
+  ...(withInventory && t.cubeAccess ? { cubeAccess: true } : {}),
   ...(withInventory && t.beastImages ? { beastImageV: Object.fromEntries(Object.entries(t.beastImages).map(([k, v]) => [k, v.v])) } : {}),
 });
 

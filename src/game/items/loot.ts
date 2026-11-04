@@ -46,9 +46,10 @@ export type LootCommand =
   | { type: 'itemActivate'; tokenId: string; itemId: string; rev: number }
   | { type: 'arsenalGenerateUnique'; stagedId: string; uniqueId: string; giveTo?: string }
   | { type: 'gmTimeTwist'; tokenId: string; action: 'resolve' | 'cancel' }
-  | { type: 'gmRechargeItem'; tokenId: string; itemId: string };
+  | { type: 'gmRechargeItem'; tokenId: string; itemId: string }
+  | { type: 'gmSetCubeAccess'; tokenId: string; permanent: boolean };
 
-export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem']);
+export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem', 'gmSetCubeAccess']);
 export const LOOT_PLAYER_COMMANDS = new Set<LootCommand['type']>(['itemIdentify', 'itemReroll', 'itemSalvage', 'combineFragments', 'itemAugment', 'itemAscend', 'transmuteFragments', 'itemActivate']);
 export const LOOT_COMMANDS = new Set<string>([...LOOT_GM_COMMANDS, ...LOOT_PLAYER_COMMANDS]);
 /** Commands that need a server-provided random seed. */
@@ -220,6 +221,14 @@ function uniqueItem(id: string, uniqueId: string, day: number): Item | null {
     history: [{ day, text: 'Created in the GM Arsenal' }],
   };
 }
+
+/**
+ * APEX 0.7 – Imperial Transmutation Cube: advanced currency crafting (Arcane Transmutation) is unlocked while the
+ * character CARRIES a cube (current possession), or permanently if the GM granted the entitlement. Basic currency
+ * functions (balances, identify, reroll, combining fragments into Orbs of Renewal) never need the cube.
+ */
+export const CUBE_BASE = 'apex-imperial-transmutation-cube';
+export const hasCube = (t: Pick<Token, 'inventory' | 'cubeAccess'>) => !!t.cubeAccess || t.inventory.some((i) => i.baseId === CUBE_BASE);
 
 // ---------------------------------------------------------------- command execution
 
@@ -413,6 +422,7 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
     case 'transmuteFragments': {
       const t0 = prev.tokens[cmd.tokenId];
       if (!t0) return fail(prev, 'Unknown character.');
+      if (!hasCube(t0)) return fail(prev, 'Arcane Transmutation requires the Imperial Transmutation Cube.');
       if ((t0.currencyRev ?? 0) !== cmd.currencyRev) return fail(prev, 'Your currency changed in the meantime – please try again.');
       if (typeof cmd.seed !== 'number') return fail(prev, 'This needs a server seed.');
       const sets = Math.floor(cmd.sets);
@@ -499,6 +509,15 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       item.rev = (item.rev ?? 0) + 1;
       addHistory(state, item, 'Recharged (long rest)');
       audit(state, { by: 'GM', action: 'activate', tokenId: cmd.tokenId, itemId: item.id, itemName: item.name, detail: 'Recharged' });
+      return { ok: true, state };
+    }
+    case 'gmSetCubeAccess': {
+      if (prev.tokens[cmd.tokenId]?.kind !== 'player') return fail(prev, 'Unknown character.');
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      if (cmd.permanent) t.cubeAccess = true;
+      else delete t.cubeAccess;
+      audit(state, { by: 'GM', action: 'lock', tokenId: t.id, detail: cmd.permanent ? 'Permanent Transmutation access granted' : 'Permanent Transmutation access revoked (the cube itself still unlocks it)' });
       return { ok: true, state };
     }
     case 'combineFragments': {

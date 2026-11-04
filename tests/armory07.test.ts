@@ -140,6 +140,7 @@ describe('Orb of Ascension', () => {
 describe('Arcane Transmutation', () => {
   it('server-random Orbs by weight, atomic, no double spend', () => {
     let s = fresh([], { fragment: 10_000 });
+    s.tokens.sinna.cubeAccess = true; // APEX 0.7: Arcane Transmutation needs the cube
     const n = 900;
     s = run(s, { type: 'transmuteFragments', tokenId: 'sinna', sets: n, currencyRev: 0 } as Command, P, 42);
     const c = s.tokens.sinna.currency!;
@@ -150,14 +151,18 @@ describe('Arcane Transmutation', () => {
     expect(Math.abs((c.ascend ?? 0) / n - 0.05)).toBeLessThan(0.03);
     expect(s.tokens.sinna.lastTransmute?.rev).toBe(s.tokens.sinna.currencyRev);
     expect(refuse(s, { type: 'transmuteFragments', tokenId: 'sinna', sets: 1, currencyRev: 0, seed: 1 })).toMatch(/changed in the meantime/);
-    expect(refuse(fresh([], { fragment: 9 }), { type: 'transmuteFragments', tokenId: 'sinna', sets: 1, currencyRev: 0, seed: 1 })).toMatch(/Requires 10/);
+    const poor = fresh([], { fragment: 9 });
+    poor.tokens.sinna.cubeAccess = true;
+    expect(refuse(poor, { type: 'transmuteFragments', tokenId: 'sinna', sets: 1, currencyRev: 0, seed: 1 })).toMatch(/Requires 10/);
     expect(parseCommand({ type: 'transmuteFragments', tokenId: 'sinna', sets: 1, currencyRev: 0, seed: 7 }).ok && 'seed' in (parseCommand({ type: 'transmuteFragments', tokenId: 'sinna', sets: 1, currencyRev: 0, seed: 7 }) as { command: object }).command).toBe(false);
   });
 
   it('the GM changes weights and cost', () => {
     const rules = itemRulesOf({ itemRules: { transmuteWeightRenewal: 0, transmuteWeightAugment: 0, transmuteWeightAscension: 1, fragmentsPerRandomOrb: 4 } });
     expect(transmuteTable(rules).filter((x) => x.weight > 0).map((x) => x.value)).toEqual(['ascend']);
-    let s = run(fresh([], { fragment: 8 }), { type: 'setItemRules', rules: { transmuteWeightRenewal: 0, transmuteWeightAugment: 0, transmuteWeightAscension: 1, fragmentsPerRandomOrb: 4 } }, GM);
+    const base = fresh([], { fragment: 8 });
+    base.tokens.sinna.cubeAccess = true;
+    let s = run(base, { type: 'setItemRules', rules: { transmuteWeightRenewal: 0, transmuteWeightAugment: 0, transmuteWeightAscension: 1, fragmentsPerRandomOrb: 4 } }, GM);
     s = run(s, { type: 'transmuteFragments', tokenId: 'sinna', sets: 2, currencyRev: 0 } as Command, P, 3);
     expect(s.tokens.sinna.currency).toMatchObject({ fragment: 0, ascend: 2 });
   });

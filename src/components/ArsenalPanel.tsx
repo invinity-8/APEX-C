@@ -10,7 +10,7 @@ import type { Command } from '../game/commands';
 import { BASE_ITEMS, baseItem, type BaseCategory, type BaseItem } from '../game/items/bases';
 import { balanceOf, CURRENCIES, CURRENCY_IDS, type CurrencyId } from '../game/items/currency';
 import { canRollMods } from '../game/items/generate';
-import { MAX_COUNT, MAX_STAGED, type GenRarity } from '../game/items/loot';
+import { CUBE_BASE, MAX_COUNT, MAX_STAGED, type GenRarity } from '../game/items/loot';
 import { eligibleMods } from '../game/items/modifiers';
 import { UNIQUES } from '../game/items/uniques';
 import { BeastEditor } from './BeastEditor';
@@ -377,6 +377,25 @@ function CurrencyGrants({ players, run }: { players: Token[]; run: Run }) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="mt-2 border-t border-ink-700 pt-2 text-xs" aria-label="Transmutation access">
+        <div className="mb-1 text-[10px] uppercase tracking-wider text-marble-500">Arcane Transmutation access (Imperial Transmutation Cube)</div>
+        <ul className="flex flex-wrap gap-2">
+          {players.map((p) => {
+            const carries = p.inventory.some((i) => i.baseId === CUBE_BASE);
+            return (
+              <li key={p.id} className="flex items-center gap-2 rounded-md border border-ink-600 px-2 py-1" data-cube-row={p.id}>
+                <b className="text-marble-100">{p.name}</b>
+                <span className={carries || p.cubeAccess ? 'text-gold-200' : 'text-marble-500'}>{carries ? 'carries a cube' : p.cubeAccess ? 'permanent access' : 'locked'}</span>
+                <label className="flex items-center gap-1 text-marble-300">
+                  <input type="checkbox" checked={!!p.cubeAccess} onChange={(e) => void run({ type: 'gmSetCubeAccess', tokenId: p.id, permanent: e.target.checked })} aria-label={`Permanent transmutation access for ${p.name}`} />
+                  permanent
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-1 text-[11px] text-marble-500">Grant the cube itself via “Generate” (base item “Imperial Transmutation Cube”). By default access needs the cube in the inventory; “permanent” keeps it unlocked without the cube.</p>
       </div>
     </section>
   );

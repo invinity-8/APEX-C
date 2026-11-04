@@ -108,8 +108,12 @@ const waitBalance = (page, id, n) =>
   check('Augmentation adds exactly one modifier', (await waitBalance(hannah, 'augment', 1)) && (await inv()).find((i) => i.id === target).mods.length === before + 1);
   await hannah.screenshot({ path: out + '/armory-orbs.png', fullPage: true });
 
-  // Arcane Transmutation
-  await hannah.getByRole('button', { name: 'Arcane Transmutation' }).click();
+  // Arcane Transmutation – locked until the Imperial Transmutation Cube is acquired (APEX 0.7)
+  check('advanced crafting is locked before the cube is acquired', await hannah.getByRole('button', { name: /Arcane Transmutation/ }).isDisabled());
+  check('the server refuses transmutation without the cube', (await cmd(hannah, { type: 'transmuteFragments', tokenId: 'sinna', sets: 1, currencyRev: 99 })).status === 422);
+  check('GM grants the cube', (await cmd(gm, { type: 'arsenalGenerate', stagedId: 'cube1', baseId: 'apex-imperial-transmutation-cube', rarity: 'normal', itemLevel: 1, identified: true, giveTo: 'sinna' })).status === 200);
+  check('the player sees the unlock', await hannah.getByTestId('cube-status').filter({ hasText: 'Cube unlocked' }).waitFor({ timeout: 10000 }).then(() => true, () => false));
+  await hannah.getByRole('button', { name: /Arcane Transmutation/ }).click();
   await hannah.getByLabel('Random orbs to create').fill('2');
   await hannah.getByRole('form', { name: 'Arcane transmutation' }).getByRole('button', { name: 'Transmute' }).click();
   check('Transmutation consumes fragments and shows the server result', (await waitBalance(hannah, 'fragment', 0)) && /Arcane Transmutation:/.test(await hannah.getByTestId('transmute-result').innerText({ timeout: 10000 })));
