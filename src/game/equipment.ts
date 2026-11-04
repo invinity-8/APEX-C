@@ -12,6 +12,7 @@
  */
 import type { CharacterSheet } from './sheet.js';
 import type { Item, Token } from './types.js';
+import { containersOf } from './inventory.js';
 import { modifier, type Element, ELEMENTS, type SaveAbility } from './items/modifiers.js';
 import { DEFAULT_ITEM_RULES, type ItemRules } from './items/rules.js';
 import { resistanceReduction } from './items/resistance.js';
@@ -462,4 +463,41 @@ export function suggestSlot(eq: Equipment, item: Pick<Item, 'id' | 'equip'>): Eq
     return !(mainOf(s) && isTwoHanded(item.equip));
   });
   return cands.find((s) => !eq.slots[s]) ?? cands[0] ?? null;
+}
+
+
+// ---------------------------------------------------------------- APEX 0.7: one authoritative item location
+
+export const EQUIPPED_CONTAINER = 'equipped';
+
+/**
+ * Equipment slots are the single source of truth for "worn"; the inventory location follows them:
+ *  - an item referenced by a slot (any weapon set, resting or not) lives in the "Equipped / Worn" container and
+ *    remembers the container it came from (`prevContainer`);
+ *  - an item with equipment properties that is no longer referenced by a slot goes back to that container (or the
+ *    first other container) – it is never shown as worn and stored at the same time.
+ * Narrative items without equipment properties may stay in "Equipped / Worn" (a player's choice). Mutates `t` –
+ * call it on a copy inside commands.
+ */
+export function syncEquipmentLocations(t: Token): void {
+  const eq = t.equipment;
+  const worn = new Set(eq ? EQUIP_SLOTS.map((s) => eq.slots[s]).filter((x): x is string => !!x) : []);
+  const needs = t.inventory.some((i) => worn.has(i.id) || (i.equip && i.container === EQUIPPED_CONTAINER));
+  if (!needs) return;
+  const containers = containersOf(t);
+  if (!containers.some((c) => c.id === EQUIPPED_CONTAINER)) containers.push({ id: EQUIPPED_CONTAINER, name: 'Equipped / Worn' });
+  t.containers = containers;
+  const fallback = containers.find((c) => c.id !== EQUIPPED_CONTAINER)?.id ?? EQUIPPED_CONTAINER;
+  for (const i of t.inventory) {
+    if (worn.has(i.id)) {
+      if (i.container !== EQUIPPED_CONTAINER) {
+        if (i.container) i.prevContainer = i.container;
+        i.container = EQUIPPED_CONTAINER;
+      }
+    } else if (i.equip && i.container === EQUIPPED_CONTAINER) {
+      const back = i.prevContainer && i.prevContainer !== EQUIPPED_CONTAINER && containers.some((c) => c.id === i.prevContainer) ? i.prevContainer : fallback;
+      i.container = back;
+      delete i.prevContainer;
+    } else if (i.prevContainer) delete i.prevContainer;
+  }
 }

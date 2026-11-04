@@ -95,6 +95,8 @@ export interface Item {
   willCapacity?: number;
   /** APEX 0.3: inventory container id (missing = derived default, see inventory.ts). */
   container?: string;
+  /** APEX 0.7: container the item came from before it was equipped (it returns there when unequipped). */
+  prevContainer?: string;
   /** Free-text notes of the owner. */
   notes?: string;
   /** Revision counter – edits must name the revision they are based on (no silent overwrites). */
@@ -118,6 +120,10 @@ export interface Item {
   bound?: boolean;
   /** GM restriction (quest item …): players cannot salvage or delete it. */
   locked?: boolean;
+  /** APEX 0.7: unique item definition id (src/game/items/uniques.ts). */
+  uniqueId?: string;
+  /** APEX 0.7: activatable ability state of a unique item (spent until the GM recharges it). */
+  charge?: { spent: boolean; spentDay?: number };
   /** Short, public item history (newest last, bounded) – never contains hidden modifier data. */
   history?: Array<{ day: number; text: string }>;
 }
@@ -182,7 +188,16 @@ export interface Token {
   /** APEX 0.6: magical currency balances (server-authoritative) and their revision. */
   currency?: Partial<Record<CurrencyId, number>>;
   currencyRev?: number;
+  /** APEX 0.7: outcome of the last Arcane Transmutation (shown to the owner once). */
+  lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
+  /** APEX 0.7: cosmetic paper-doll silhouette (never affects rules). */
+  bodyType?: BodyType;
+  /** APEX 0.7: Niri's Timetwister – a postponed turn waiting for the GM (bound to the character, not the item). */
+  timeTwist?: { itemId: string; itemName: string; day: number; phase: Phase };
 }
+
+export type BodyType = 'masculine' | 'feminine';
+export const BODY_TYPES: readonly BodyType[] = ['masculine', 'feminine'];
 
 export type TeamVisibility = 'auto' | 'hidden' | 'revealed';
 export type TeamStrategy = 'manual' | 'patrol' | 'forage' | 'flee' | 'pursue' | 'rest';
@@ -357,7 +372,7 @@ export interface ItemAuditEntry {
   phase: Phase;
   /** 'GM' or the acting character's name. */
   by: string;
-  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine';
+  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine' | 'augment' | 'ascend' | 'transmute' | 'activate';
   tokenId?: string;
   itemId?: string;
   itemName?: string;

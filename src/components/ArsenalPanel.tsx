@@ -12,6 +12,7 @@ import { balanceOf, CURRENCIES, CURRENCY_IDS, type CurrencyId } from '../game/it
 import { canRollMods } from '../game/items/generate';
 import { MAX_COUNT, MAX_STAGED, type GenRarity } from '../game/items/loot';
 import { eligibleMods } from '../game/items/modifiers';
+import { UNIQUES } from '../game/items/uniques';
 import { itemRulesOf, ITEM_RULE_LIMITS, MAX_ITEM_LEVEL, RARITY_LABEL } from '../game/items/rules';
 import { newEntryId } from '../game/sheet';
 import type { GameState, Item, Token } from '../game/types';
@@ -48,6 +49,7 @@ export function ArsenalPanel({ state, run }: { state: GameState; run: Run }) {
         <Generator players={players} run={run} trayFull={staged.length >= MAX_STAGED} />
         <Tray staged={staged} players={players} run={run} />
       </div>
+      <UniquesAndTwists players={players} run={run} />
       <CurrencyGrants players={players} run={run} />
       <Inventories players={players} run={run} rules={itemRulesOf(state)} />
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
@@ -215,6 +217,71 @@ function BaseSummary({ base }: { base: BaseItem }) {
       {base.price !== undefined && ` · ${base.price} gp`}
       <span className="ml-1 text-marble-600">({base.source.name})</span>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- uniques + pending time twists (APEX 0.7)
+
+function UniquesAndTwists({ players, run }: { players: Token[]; run: Run }) {
+  const [to, setTo] = useState(players[0]?.id ?? '');
+  const pending = players.filter((p) => p.timeTwist);
+  const spent = players.flatMap((p) => p.inventory.filter((i) => i.charge?.spent).map((i) => ({ p, i })));
+  return (
+    <section className="panel space-y-2 p-3" aria-label="Unique items">
+      <h3 className="panel-title">Unique items</h3>
+      <p className="text-[11px] text-marble-500">Uniques are created by hand only – they never appear in random loot.</p>
+      {UNIQUES.map((u) => (
+        <div key={u.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-[#c9733a]/50 bg-[#c9733a]/10 p-2 text-xs" data-unique-def={u.id}>
+          <b className="text-[#e8a06a]">{u.name}</b>
+          <span className="text-marble-400">
+            {baseItem(u.baseId)?.name} · item level {u.itemLevel}
+            {u.ability ? ` · ${u.ability.name}` : ''}
+          </span>
+          <span className="flex-1" />
+          <button className="btn btn-ghost px-2 py-0.5" onClick={() => void run({ type: 'arsenalGenerateUnique', stagedId: newEntryId('itm'), uniqueId: u.id })}>
+            Preview in tray
+          </button>
+          <select className={input} aria-label={`Give ${u.name} to`} value={to} onChange={(e) => setTo(e.target.value)}>
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-gold px-2 py-0.5" onClick={() => void run({ type: 'arsenalGenerateUnique', stagedId: newEntryId('itm'), uniqueId: u.id, giveTo: to })}>
+            Create &amp; give
+          </button>
+        </div>
+      ))}
+      {pending.length > 0 && (
+        <div className="space-y-1" aria-label="Pending postponed turns">
+          <h4 className="text-[11px] uppercase tracking-wider text-arcane-300">Postponed turns waiting for you</h4>
+          {pending.map((p) => (
+            <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-md border border-arcane-400/50 p-2 text-xs" data-twist={p.id}>
+              <span className="flex-1">
+                ⏳ <b>{p.name}</b> skipped a turn with {p.timeTwist!.itemName} (day {p.timeTwist!.day}) – give two consecutive turns at their next turn.
+              </span>
+              <button className="btn btn-gold px-2 py-0.5" onClick={() => void run({ type: 'gmTimeTwist', tokenId: p.id, action: 'resolve' })}>
+                Double turn taken
+              </button>
+              <button className="btn btn-ghost px-2 py-0.5" onClick={() => void run({ type: 'gmTimeTwist', tokenId: p.id, action: 'cancel' })} title="Encounter ended or the character was incapacitated">
+                Lost (cancel)
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {spent.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-marble-400">Spent abilities:</span>
+          {spent.map(({ p, i }) => (
+            <button key={i.id} className="btn btn-ghost px-2 py-0.5" onClick={() => void run({ type: 'gmRechargeItem', tokenId: p.id, itemId: i.id })}>
+              Recharge {i.name} ({p.name})
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -386,6 +453,10 @@ const ACTION_LABEL: Record<string, string> = {
   reroll: 'Rerolled',
   salvage: 'Salvaged',
   combine: 'Combined',
+  augment: 'Augmented',
+  ascend: 'Ascended',
+  transmute: 'Transmuted',
+  activate: 'Ability',
 };
 
 function AuditLog({ state }: { state: GameState }) {
@@ -416,7 +487,11 @@ function Balance({ state, run }: { state: GameState; run: Run }) {
   const rules = itemRulesOf(state);
   const [draft, setDraft] = useState(rules);
   const fields: Array<[keyof typeof rules, string]> = [
-    ['fragmentsPerOrb', 'Arcane Fragments per Orb'],
+    ['fragmentsPerOrb', 'Arcane Fragments per Orb of Renewal'],
+    ['fragmentsPerRandomOrb', 'Fragments per random Orb (Transmutation)'],
+    ['transmuteWeightRenewal', 'Transmutation weight: Renewal'],
+    ['transmuteWeightAugment', 'Transmutation weight: Augmentation'],
+    ['transmuteWeightAscension', 'Transmutation weight: Ascension'],
     ['resistanceCap', 'Resistance cap (points)'],
     ['toHitCap', 'To-hit cap per weapon'],
     ['acCap', 'AC cap'],

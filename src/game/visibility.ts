@@ -26,6 +26,7 @@ import type {
   InventoryContainer,
   MarkerStyle,
   Announcement,
+  BodyType,
 } from './types.js';
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
@@ -135,6 +136,10 @@ export interface TokenDetails {
   /** APEX 0.6: magical currency (owner + GM only). */
   currency?: Partial<Record<CurrencyId, number>>;
   currencyRev?: number;
+  /** APEX 0.7 (owner + GM): last transmutation result, pending postponed turn, paper-doll silhouette. */
+  lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
+  timeTwist?: { itemId: string; itemName: string; day: number; phase: Phase };
+  bodyType?: BodyType;
 }
 
 export interface TokenView {
@@ -225,6 +230,9 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
   ...(withInventory ? { currency: { ...(t.currency ?? {}) }, currencyRev: t.currencyRev ?? 0 } : {}),
+  ...(withInventory && t.lastTransmute ? { lastTransmute: structuredClone(t.lastTransmute) } : {}),
+  ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),
+  ...(withInventory && t.bodyType ? { bodyType: t.bodyType } : {}),
 });
 
 const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact = false): TokenView => ({

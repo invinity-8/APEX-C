@@ -12,7 +12,10 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Command } from '../game/commands';
 import { SLOT_LABEL, equipmentOf, slotOfItem, suggestSlot, type Equipment } from '../game/equipment';
 import { balanceOf, CURRENCIES } from '../game/items/currency';
-import { canIdentify, canReroll, canSalvage, salvageReward, type Check } from '../game/items/loot';
+import { canActivate, canAscend, canAugment, canIdentify, canReroll, canSalvage, salvageReward, type Check } from '../game/items/loot';
+import { addableMods } from '../game/items/generate';
+import { AFFIX_RULES } from '../game/items/rules';
+import { uniqueDef } from '../game/items/uniques';
 import { DEFAULT_ITEM_RULES, RARITY_LABEL, type ItemRules } from '../game/items/rules';
 import { CurrencyBar, ItemInspect } from './items/ItemUi';
 import { DEFAULT_CONTAINERS, INVENTORY_LIMITS, canMerge, containerOfItem, isStackable } from '../game/inventory';
@@ -189,7 +192,14 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
         currencyRev={details.currencyRev ?? 0}
         rules={rules}
         onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
+        onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
+        lastTransmute={details.lastTransmute}
       />
+      {details.timeTwist && (
+        <p role="status" className="panel border-arcane-400/60 p-2 text-xs text-arcane-300" data-testid="time-twist">
+          ⏳ Twist of Time pending ({details.timeTwist.itemName}, day {details.timeTwist.day}): your next turn will be two consecutive turns. APEX has no turn tracker yet – the GM resolves it at the table.
+        </p>
+      )}
 
       {Object.values(pending).map(({ item }) => (
         <div key={item.id} role="status" className="flex items-center gap-3 rounded-lg border border-blood-600/60 bg-blood-800/40 px-3 py-2 text-xs text-marble-100" data-undo={item.id}>
@@ -347,7 +357,7 @@ function ContainerCard(props: CardProps) {
 
 function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   const { token, item, containers, run, reorderable } = props;
-  const [mode, setMode] = useState<'view' | 'edit' | 'split' | 'reroll' | 'salvage' | 'revoke'>('view');
+  const [mode, setMode] = useState<'view' | 'edit' | 'split' | 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate'>('view');
   const [inspect, setInspect] = useState(false);
   const [menu, setMenu] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -486,6 +496,54 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <p className="text-amber-200">The new result can be worse and cannot be undone or previewed. You have {balanceOf({ currency: token.details?.currency }, 'orb')} Orb(s) of Renewal.</p>
         </Confirm>
       )}
+      {(mode === 'augment' || mode === 'ascend') && (() => {
+        const base = baseItem(item.baseId);
+        const target = mode === 'ascend' ? (item.rarity === 'normal' ? 'magic' : 'rare') : (item.rarity as 'magic' | 'rare');
+        const pool = base ? addableMods(base, target, item.itemLevel ?? 1, item.mods ?? []) : [];
+        const adds = mode === 'augment' ? 1 : Math.max(1, AFFIX_RULES[target].min - (item.mods?.length ?? 0));
+        const orb = mode === 'augment' ? 'augment' : 'ascend';
+        return (
+          <Confirm
+            tone="arcane"
+            title={mode === 'augment' ? `Augment ${item.name}?` : `Ascend ${item.name} to ${RARITY_LABEL[target]}?`}
+            confirm={mode === 'augment' ? 'Spend 1 Orb of Augmentation' : 'Spend 1 Orb of Ascension'}
+            onCancel={() => setMode('view')}
+            onConfirm={async () => {
+              const r = await run({ type: mode === 'augment' ? 'itemAugment' : 'itemAscend', tokenId: token.id, itemId: item.id, rev });
+              if (r.ok) (setMode('view'), setInspect(true), setRevealed(true), window.setTimeout(() => setRevealed(false), 1600));
+            }}
+          >
+            <p>
+              {mode === 'augment'
+                ? `Adds 1 random modifier. The ${item.mods?.length ?? 0} existing modifier(s) stay unchanged.`
+                : `${RARITY_LABEL[item.rarity ?? 'normal']} → ${RARITY_LABEL[target]}: all existing modifiers stay; ${adds} random modifier${adds === 1 ? ' is' : 's are'} added. Base item and item level stay the same.`}
+            </p>
+            <p className="text-marble-400" data-testid="orb-outcomes">
+              Possible outcomes (one of {pool.length}, by weight): {pool.slice(0, 10).map((d) => d.name).join(', ')}
+              {pool.length > 10 ? ' …' : ''}. The actual roll happens on the server after you confirm – it cannot be previewed or undone.
+            </p>
+            <p className="text-marble-500">You have {balanceOf({ currency: token.details?.currency }, orb)} {orb === 'augment' ? 'Orb(s) of Augmentation' : 'Orb(s) of Ascension'}.</p>
+          </Confirm>
+        );
+      })()}
+      {mode === 'activate' && (
+        <Confirm
+          tone="arcane"
+          title={`Activate ${uniqueDef(item.uniqueId)?.ability?.name ?? 'ability'}?`}
+          confirm="Twist time – skip this turn"
+          onCancel={() => setMode('view')}
+          onConfirm={async () => {
+            if ((await run({ type: 'itemActivate', tokenId: token.id, itemId: item.id, rev })).ok) setMode('view');
+          }}
+        >
+          <p>{uniqueDef(item.uniqueId)?.ability?.text}</p>
+          <ul className="list-disc pl-4 text-marble-400">
+            {uniqueDef(item.uniqueId)?.ability?.rules.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </Confirm>
+      )}
       {mode === 'salvage' && (
         <Confirm
           tone="blood"
@@ -596,7 +654,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
 }
 
 /** Item action menu: every action is listed; unavailable ones are disabled with the reason shown. */
-function ItemActions(props: CardProps & { item: Item; close: () => void; onMode: (m: 'reroll' | 'salvage' | 'revoke') => void; onRevealed: () => void }) {
+function ItemActions(props: CardProps & { item: Item; close: () => void; onMode: (m: 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate') => void; onRevealed: () => void }) {
   const { token, item, run, eq } = props;
   const purse = { currency: token.details?.currency };
   const actor = props.isGm ? ({ role: 'gm' } as const) : ({ role: 'player', tokenId: token.id } as const);
@@ -620,8 +678,14 @@ function ItemActions(props: CardProps & { item: Item; close: () => void; onMode:
           act: () => (props.close(), target && void run({ type: 'equipItem', tokenId: token.id, itemId: item.id, slot: target })),
         },
     { label: 'Reroll (Orb of Renewal)', check: canReroll(purse, item), act: () => props.onMode('reroll') },
+    { label: 'Augment (Orb of Augmentation)', check: canAugment(purse, item), act: () => props.onMode('augment') },
+    { label: 'Ascend (Orb of Ascension)', check: canAscend(purse, item), act: () => props.onMode('ascend') },
+    ...(uniqueDef(item.uniqueId)?.ability
+      ? [{ label: `Activate: ${uniqueDef(item.uniqueId)!.ability!.name}`, check: canActivate({ equipment: token.details?.equipment, timeTwist: token.details?.timeTwist }, item), act: () => props.onMode('activate') }]
+      : []),
     { label: 'Salvage', check: canSalvage({ equipment: token.details?.equipment }, item, actor), act: () => props.onMode('salvage') },
   ];
+  if (props.isGm && item.charge) rows.push({ label: 'Recharge (GM, long rest)', check: item.charge.spent ? { ok: true } : { ok: false, reason: 'Already charged.' }, act: () => (props.close(), void run({ type: 'gmRechargeItem', tokenId: token.id, itemId: item.id })) });
   if (props.isGm) {
     rows.push({ label: 'Revoke (GM)', check: { ok: true }, act: () => props.onMode('revoke') });
     rows.push({ label: item.locked ? 'Lift GM restriction' : 'Restrict (no salvage/delete)', check: { ok: true }, act: () => (props.close(), void run({ type: 'gmSetItemLock', tokenId: token.id, itemId: item.id, locked: !item.locked })) });

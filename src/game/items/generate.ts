@@ -54,12 +54,35 @@ export function canRollMods(base: BaseItem): boolean {
 export function rollMods(base: BaseItem, rarity: Exclude<Rarity, 'unique'>, itemLevel: number, rng: Rng): RolledMod[] {
   const rule = AFFIX_RULES[rarity];
   if (!rule.max || !canRollMods(base)) return [];
+  return addMods(base, rarity, itemLevel, [], randInt(rng, rule.min, rule.max), rng);
+}
+
+/** Modifiers that could still be added to an item (families free, prefix/suffix budget left) – for previews. */
+export function addableMods(base: BaseItem, rarity: Exclude<Rarity, 'unique'>, itemLevel: number, existing: RolledMod[]): ModDef[] {
+  const rule = AFFIX_RULES[rarity];
+  if (existing.length >= rule.max || !canRollMods(base)) return [];
+  const defs = existing.map((m) => modifier(m.modId)).filter((d): d is ModDef => !!d);
+  const families = new Set(defs.map((d) => d.family));
+  const prefixes = defs.filter((d) => d.affix === 'prefix').length;
+  const suffixes = defs.length - prefixes;
+  return eligibleMods(base.modTags, clampItemLevel(itemLevel))
+    .map((e) => e.def)
+    .filter((d) => !families.has(d.family) && (d.affix === 'prefix' ? prefixes < rule.maxPrefixes : suffixes < rule.maxSuffixes));
+}
+
+/**
+ * Adds up to `n` modifiers to `existing` (kept untouched) with the same unbiased weighted rules as a fresh roll:
+ * eligible tag, tier item level, free family, prefix/suffix budget and the rarity's maximum.
+ */
+export function addMods(base: BaseItem, rarity: Exclude<Rarity, 'unique'>, itemLevel: number, existing: RolledMod[], n: number, rng: Rng): RolledMod[] {
+  const rule = AFFIX_RULES[rarity];
   const pool = eligibleMods(base.modTags, clampItemLevel(itemLevel));
-  const count = randInt(rng, rule.min, rule.max);
-  const out: RolledMod[] = [];
-  const families = new Set<string>();
-  let prefixes = 0;
-  let suffixes = 0;
+  const out: RolledMod[] = [...existing];
+  const defs = existing.map((m) => modifier(m.modId)).filter((d): d is ModDef => !!d);
+  const families = new Set<string>(defs.map((d) => d.family));
+  let prefixes = defs.filter((d) => d.affix === 'prefix').length;
+  let suffixes = defs.length - prefixes;
+  const count = Math.min(n, rule.max - existing.length);
   for (let i = 0; i < count; i++) {
     const options: Array<{ value: { def: ModDef; tier: ModTier }; weight: number }> = [];
     for (const { def, tiers } of pool) {

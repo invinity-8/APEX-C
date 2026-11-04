@@ -214,3 +214,68 @@ No database migration is needed.
 * For heroic campaigns, keep the defaults. Raising `toHitCap` or `acCap` to 3 noticeably weakens bounded accuracy.
 * Prefer handing out more *magic* items with targeted resistances over many *rare* items. Rares are where
   combinations stack up.
+
+## 12. APEX 0.7 – The Imperial Armory
+
+### Equipment location (one authoritative source)
+Equipment slots are the single truth for "worn":
+- An item referenced by a slot lives in the **Equipped / Worn** container and remembers `prevContainer`. This
+  applies to both weapon sets and the Resting preset. If the container is missing, it is created.
+- When the slot reference disappears (unequip, replaced, restored, item gone), equipment returns to
+  `prevContainer`, or to the first other container if that one no longer exists.
+- Moving a worn item to another container is refused ("unequip it first"). Moving gear with equipment properties
+  into *Equipped / Worn* is refused ("use Equip"). Narrative free-text items may still be placed there.
+- Ownership never changes and nothing is duplicated. Derived stats follow the slots.
+
+### New crafting currency
+| Currency | Effect | Rules |
+| --- | --- | --- |
+| **Orb of Augmentation** | Adds **one** random eligible modifier | Identified Magic/Rare only. Needs a free affix slot (Magic ≤ 2, Rare ≤ 4) and a free prefix/suffix budget. Respects families and item-level tiers. Existing modifiers are never changed. If nothing is eligible, the action is refused and **nothing is spent**. |
+| **Orb of Ascension** | Rarity +1: Normal → Magic → Rare | Identified items only. Keeps base, item level and **all existing modifiers**. Adds only what the new rarity needs to reach its minimum (Normal→Magic: +1; Magic→Rare: up to 3 in total). Magic items are renamed from their affixes, rares get their stable rare name. Never creates Uniques. |
+
+The confirmation dialogs list the *possible* modifiers by name. The actual roll happens on the server after
+confirming and cannot be previewed or cancelled.
+
+### Arcane Transmutation (random Orb)
+`fragmentsPerRandomOrb` (default 10) fragments → one random Orb per set, picked by weight from the GM-adjustable
+table:
+
+| Outcome | Default weight |
+| --- | ---: |
+| Orb of Renewal | 65 |
+| Orb of Augmentation | 30 |
+| Orb of Ascension | 5 |
+
+Rolls use the server seed (`transmuteFragments`) and the purse revision (`currencyRev`). The command is atomic and
+cannot be double-spent, and the result is shown to the player and recorded in the audit log ("Transmuted"). The
+fixed conversion "10 fragments → Orb of Renewal" stays available.
+
+### Flavour modifiers (MODIFIER_VERSION 3)
+Low-impact, common modifiers that add variety and make "perfect" rares rarer:
+- *Trailworn*: +3–5 lb carrying capacity, applied automatically.
+- *Situational*, shown but never added to totals; the GM applies them:
+  - *Featherweight*: item weight −10–25 %
+  - *of the Forager*: +1 Survival when foraging
+  - *of the Climber*: +1 Athletics when climbing
+  - *of the Hearth*: +5–10 Cold Resistance against environmental cold only
+  - *of the Long Road*: ignore 1 exhaustion level from a forced march
+- *Cosmetic*, with no effect: *Glimmering* and *Engraved*.
+
+Each is labelled `situational` or `cosmetic` on the item.
+
+### Unique: Niri's Timetwister
+- An Imperial Medallion (amulet), item level 20. Fixed modifier: +2 initiative.
+- It is created only by the GM (*Arsenal → Unique items*) and never appears in random loot.
+- It cannot be salvaged, rerolled, augmented or ascended.
+- **Twist of Time:** while worn (amulet slot, active) and charged, the wearer skips their current turn. At their
+  next turn they take two consecutive full turns.
+  - A full turn is movement + action + bonus action + object interaction. The reaction does not double.
+  - It applies only in a turn-based encounter. A day/night phase is not a turn.
+- **APEX has no authoritative turn queue yet.** Activation therefore does not fake turn mechanics:
+  - It records a *postponed turn* on the **character** (`token.timeTwist`), not on the amulet. Moving, unequipping
+    or giving away the amulet does not move the turn.
+  - It spends the charge, writes a Chronicle entry and an audit entry.
+  - The GM resolves it with *Double turn taken*, or cancels it with *Lost* when the encounter ended or the
+    character was incapacitated.
+- Only one postponed turn can exist at a time. Retries are refused (item revision and charge state).
+- Recharge: once per long rest, by the GM (*Recharge*).

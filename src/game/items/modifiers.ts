@@ -31,7 +31,11 @@ export type ModEffect =
   | { type: 'carry' }
   | { type: 'speed' }
   | { type: 'bane'; creature: Creature }
-  | { type: 'critDamage' };
+  | { type: 'critDamage' }
+  /** APEX 0.7: applies only in a narrow situation the GM adjudicates – shown, never added automatically. */
+  | { type: 'situational' }
+  /** APEX 0.7: no mechanical effect at all. */
+  | { type: 'cosmetic' };
 
 export interface ModTier {
   tier: number;
@@ -52,6 +56,8 @@ export interface ModDef {
   tiers: ModTier[];
   effect: ModEffect;
   local?: boolean;
+  /** APEX 0.7 flavour: 'situational' (GM-adjudicated) or 'cosmetic' (no effect). Shown as such on the item. */
+  flavor?: 'situational' | 'cosmetic';
   /** Line shown on the identified item, `{v}` = rolled value. */
   text: string;
   description: string;
@@ -224,6 +230,102 @@ export const MODIFIERS: ModDef[] = [
     effect: { type: 'speed' },
     text: '+{v} ft walking speed',
     description: 'Character-sheet walking speed only. It never changes arena movement points (those stay a GM decision).',
+  },
+  // ---------- APEX 0.7 flavour: low impact, common – more variety, fewer "perfect" rares
+  {
+    id: 'trailworn',
+    name: 'Trailworn',
+    affix: 'prefix',
+    family: 'carry-minor',
+    tags: ['feet', 'belt', 'cloak'],
+    tiers: [t(1, 1, 3, 5, 600)],
+    effect: { type: 'carry' },
+    text: '+{v} lb carrying capacity',
+    description: 'A small, always-on carrying bonus.',
+  },
+  {
+    id: 'featherweight',
+    name: 'Featherweight',
+    affix: 'prefix',
+    family: 'light-make',
+    tags: ['armour', 'shield', 'weapon'],
+    tiers: [t(1, 1, 10, 25, 500)],
+    effect: { type: 'situational' },
+    flavor: 'situational',
+    text: 'Weighs {v}% less (GM applies it to encumbrance)',
+    description: 'Lighter make. APEX does not track item weight automatically – the GM applies it.',
+  },
+  {
+    id: 'glimmering',
+    name: 'Glimmering',
+    affix: 'prefix',
+    family: 'glow',
+    tags: ['weapon', 'jewellery', 'head'],
+    tiers: [t(1, 1, 5, 5, 450)],
+    effect: { type: 'cosmetic' },
+    flavor: 'cosmetic',
+    text: 'Sheds a faint glow in a {v} ft radius on command (cosmetic, not bright enough to see by)',
+    description: 'Purely atmospheric.',
+  },
+  {
+    id: 'engraved',
+    name: 'Engraved',
+    affix: 'prefix',
+    family: 'engraving',
+    tags: ['weapon', 'armour', 'shield', 'jewellery'],
+    tiers: [t(1, 1, 1, 3, 500)],
+    effect: { type: 'cosmetic' },
+    flavor: 'cosmetic',
+    text: 'Masterwork imperial engraving (quality {v}) – cosmetic only',
+    description: 'No mechanical effect.',
+  },
+  {
+    id: 'forager',
+    name: 'of the Forager',
+    affix: 'suffix',
+    family: 'forage',
+    tags: ['hands', 'belt', 'cloak'],
+    tiers: [t(1, 1, 1, 1, 550)],
+    effect: { type: 'situational' },
+    flavor: 'situational',
+    text: '+{v} to Survival checks made to forage',
+    description: 'Situational – the GM adds it when foraging.',
+  },
+  {
+    id: 'climber',
+    name: 'of the Climber',
+    affix: 'suffix',
+    family: 'climb',
+    tags: ['hands', 'feet'],
+    tiers: [t(1, 1, 1, 1, 550)],
+    effect: { type: 'situational' },
+    flavor: 'situational',
+    text: '+{v} to Athletics checks made to climb',
+    description: 'Situational – the GM adds it when climbing.',
+  },
+  {
+    id: 'hearth',
+    name: 'of the Hearth',
+    affix: 'suffix',
+    family: 'env-cold',
+    tags: ['cloak', 'armour', 'head'],
+    tiers: [t(1, 1, 5, 10, 500)],
+    effect: { type: 'situational' },
+    flavor: 'situational',
+    text: '+{v} Cold Resistance against environmental cold only (weather, icy water) – not against attacks or spells',
+    description: 'Situational – not added to the Cold Resistance total.',
+  },
+  {
+    id: 'long-road',
+    name: 'of the Long Road',
+    affix: 'suffix',
+    family: 'travel',
+    tags: ['feet', 'cloak'],
+    tiers: [t(1, 1, 1, 1, 450)],
+    effect: { type: 'situational' },
+    flavor: 'situational',
+    text: 'Once per day, ignore {v} level of exhaustion from a forced march (GM)',
+    description: 'Situational – travel fatigue only.',
   },
 ];
 
