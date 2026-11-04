@@ -22,7 +22,6 @@ import type {
   Site,
   Token,
   TokenKind,
-  WillPool,
   InventoryContainer,
   MarkerStyle,
   Announcement,
@@ -127,7 +126,6 @@ export interface TokenDetails {
   visionBonus: number;
   controllers: string[];
   sharesWithParty: boolean;
-  will: WillPool;
   /** Private: only the character's own player and the GM receive the inventory. */
   inventory: Item[];
   containers?: InventoryContainer[];
@@ -225,7 +223,6 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   visionBonus: t.visionBonus,
   controllers: [...t.controllers],
   sharesWithParty: t.sharesWithParty,
-  will: { ...t.will },
   inventory: withInventory ? t.inventory.map((i) => (redact ? redactItem({ ...i }) : structuredClone(i))) : [],
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,

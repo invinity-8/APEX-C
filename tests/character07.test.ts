@@ -95,7 +95,7 @@ describe('character tokens', () => {
   it('a new world keeps equipment, currency, cosmetics and the custom tagline; restoring never brings archived items back', () => {
     const prev = createDemoState({ radius: 6, seed: 2 });
     Object.assign(prev.tokens.sinna, { titleCustom: true, accent: '#123456', currency: { orb: 3 }, currencyRev: 4, equipment: { slots: { main1: 'x' }, activeSet: 1, resting: false, restingKeep: [] } });
-    const next = carryCharacters(prev, createDemoState({ radius: 6, seed: 9 }), { keepProgress: true });
+    const next = carryCharacters(prev, createDemoState({ radius: 6, seed: 9 }));
     expect(next.tokens.sinna).toMatchObject({ titleCustom: true, accent: '#123456', currency: { orb: 3 }, currencyRev: 4 });
     expect(next.tokens.sinna.equipment?.slots.main1).toBe('x');
     const archived = structuredClone(prev);

@@ -1,6 +1,7 @@
 /**
  * Upgrades older save games to the current STATE_VERSION.
  * v1 (APEX 0.1) → v2: adds day/night phase and phase rules.
+ * v2 → v3 (APEX 0.7): removes the legacy Willpower resource (token.will, will-vessel items) – see stripLegacy().
  */
 import { DEFAULT_PHASE_RULES, STATE_VERSION, type GameState } from './types.js';
 
@@ -21,6 +22,41 @@ export function migrateState(raw: unknown): GameState {
   }
   state.phase ??= 'day';
   state.config.phases ??= structuredClone(DEFAULT_PHASE_RULES);
+  stripLegacy(state);
   state.version = STATE_VERSION;
   return state;
+}
+
+/**
+ * Legacy reader (APEX 0.7): removes the obsolete Willpower resource from a state IN PLACE and reports whether it
+ * changed anything. Every other character field, item and resource is left untouched:
+ *  - token.will is dropped;
+ *  - "will-vessel" items become ordinary "misc" items (name, description, notes, quantity kept), their willCharge /
+ *    willCapacity fields are dropped.
+ * Used for every state the server reads (live state, snapshots, archives, imports) and for demo saves, so states
+ * that are written again never contain Willpower. Archives in the database are not rewritten – they are cleaned
+ * when they are read.
+ */
+export function stripLegacy(state: GameState): boolean {
+  let changed = false;
+  for (const t of Object.values(state.tokens ?? {})) {
+    const tok = t as unknown as Record<string, unknown>;
+    if ('will' in tok) {
+      delete tok.will;
+      changed = true;
+    }
+    for (const i of (t.inventory ?? []) as unknown as Array<Record<string, unknown>>) {
+      if (i.kind === 'will-vessel') {
+        i.kind = 'misc';
+        changed = true;
+      }
+      if ('willCharge' in i || 'willCapacity' in i) {
+        delete i.willCharge;
+        delete i.willCapacity;
+        changed = true;
+      }
+    }
+  }
+  if (changed && typeof state.version === 'number' && state.version < STATE_VERSION) state.version = STATE_VERSION;
+  return changed;
 }

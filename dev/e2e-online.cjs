@@ -257,12 +257,8 @@ const waitText = (page, re, timeout = 10000) =>
   await hannah.getByRole('tab', { name: 'Resources' }).click();
   await hannah.getByRole('button', { name: 'Decrease Hit points' }).click();
   check('a player can change a resource manually (HP 9 → 8)', await waitText(hannah, /8\s*\/\s*9/));
-  const willBefore = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.will.current;
-  await hannah.getByTestId('legacy-will').locator('summary').click(); // 0.5: Willpower is a collapsed legacy value
-  await hannah.getByRole('button', { name: 'Decrease Willpower' }).click();
-  await sleep(800);
-  const willAfter = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details.will.current;
-  check('legacy Willpower is still stored in the game state and adjustable (compatibility)', willAfter === willBefore - 1);
+  const sinnaDetails = (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details;
+  check('legacy Willpower is gone (APEX 0.7): not in the state, not in the UI', !('will' in sinnaDetails) && !/Willpower/.test(await hannah.locator('main, body').first().innerText()));
 
   // ---------- appearance ----------
   await hannah.getByRole('tab', { name: 'Appearance' }).click();

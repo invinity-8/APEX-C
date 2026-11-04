@@ -410,7 +410,24 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {sheet.resources.map((r) => (
-                  <Resource key={r.id} label={r.name} current={r.current} max={r.max ?? undefined} color="#7cc98a" onDelta={(d) => void adjust('resource', d, r.id)} />
+                  <Resource
+                    key={r.id}
+                    label={r.name}
+                    current={r.current}
+                    max={r.max ?? undefined}
+                    color="#7cc98a"
+                    onDelta={(d) => void adjust('resource', d, r.id)}
+                    onRemove={() =>
+                      void quickSave((s) => {
+                        s.resources = s.resources.filter((x) => x.id !== r.id);
+                        // a resource orb pointing at the removed resource falls back to the automatic choice
+                        if (s.orbs) {
+                          const keep = (o: typeof s.orbs.primary) => (o?.type === 'resource' && o.resourceId === r.id ? null : o);
+                          s.orbs = { primary: keep(s.orbs.primary), secondary: keep(s.orbs.secondary) };
+                        }
+                      })
+                    }
+                  />
                 ))}
               </div>
             )}
@@ -425,7 +442,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
           <EquipmentPanel game={game} token={token} run={run} isGm={isGm} />
         </section>
       )}
-      {tab === 'inventory' && <InventoryPanel token={token} run={run} busy={game.busy} rules={game.view.itemRules} isGm={isGm} embedded />}
+      {tab === 'inventory' && <InventoryPanel token={token} run={run} busy={game.busy} rules={game.view.itemRules} isGm={isGm} game={game} embedded />}
 
       {tab === 'appearance' && (
         <div className="space-y-3">
@@ -535,25 +552,6 @@ function ApexResources({ game, token, isGm, run }: { game: GameApi; token: Token
               {details.visionBonus ? ` (${details.visionBonus > 0 ? '+' : ''}${details.visionBonus})` : ''} hexes
             </span>
           </div>
-          <details className="rounded-lg border border-ink-700 p-2 text-xs" data-testid="legacy-will">
-            <summary className="cursor-pointer text-marble-500">Legacy: Willpower (APEX 0.1–0.4)</summary>
-            <p className="my-1 text-[11px] text-marble-500">No longer used by any rule. Kept so older worlds, archives and Will vessels stay intact; the GM can still adjust it.</p>
-            <Resource label="Willpower" current={details.will.current} max={details.will.max} color="#a78bfa" onDelta={(d) => void run({ type: 'setWill', tokenId: token.id, current: details.will.current + d })} />
-            {isGm && (
-              <div className="flex items-center justify-between text-xs text-marble-300">
-                <span>Maximum Will (GM)</span>
-                <span className="flex items-center gap-1">
-                  <SmallBtn label="Decrease maximum Will" onClick={() => void run({ type: 'setWill', tokenId: token.id, max: Math.max(0, details.will.max - 1) })}>
-                    −
-                  </SmallBtn>
-                  <span className="w-8 text-center tabular-nums">{details.will.max}</span>
-                  <SmallBtn label="Increase maximum Will" onClick={() => void run({ type: 'setWill', tokenId: token.id, max: details.will.max + 1 })}>
-                    +
-                  </SmallBtn>
-                </span>
-              </div>
-            )}
-          </details>
         </>
       ) : (
         <Empty>Not visible.</Empty>
@@ -693,11 +691,30 @@ function SmallBtn({ children, onClick, label }: { children: ReactNode; onClick: 
   );
 }
 
-function Resource({ label, current, max, color, onDelta, big = false, hint }: { label: string; current: number; max?: number; color: string; onDelta?: (d: number) => void; big?: boolean; hint?: string }) {
+function Resource({ label, current, max, color, onDelta, big = false, hint, onRemove }: { label: string; current: number; max?: number; color: string; onDelta?: (d: number) => void; big?: boolean; hint?: string; onRemove?: () => void }) {
+  const [confirm, setConfirm] = useState(false);
   return (
-    <div className="rounded-lg border border-ink-600 bg-ink-900/50 p-2" title={hint}>
+    <div className="rounded-lg border border-ink-600 bg-ink-900/50 p-2" title={hint} data-resource={label}>
+      {confirm && onRemove && (
+        <div role="alertdialog" aria-label={`Remove ${label}?`} className="mb-1.5 flex flex-wrap items-center gap-2 rounded-md border border-blood-400/60 bg-blood-800/30 p-1.5 text-[11px] text-marble-100">
+          <span className="flex-1">Remove the custom resource “{label}”? Nothing else on the sheet changes.</span>
+          <button className="btn btn-ghost px-2 py-0.5" onClick={() => setConfirm(false)}>
+            Cancel
+          </button>
+          <button className="btn btn-gold px-2 py-0.5" onClick={() => (setConfirm(false), onRemove())}>
+            Remove
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-marble-300">{label}</span>
+        <span className="flex items-center gap-1 text-xs text-marble-300">
+          {label}
+          {onRemove && (
+            <button className="text-marble-600 hover:text-blood-400" aria-label={`Remove ${label}`} title="Remove this custom resource" onClick={() => setConfirm(true)}>
+              ✕
+            </button>
+          )}
+        </span>
         <span className="flex items-center gap-1">
           {onDelta && (
             <SmallBtn label={`Decrease ${label}`} onClick={() => onDelta(-1)}>

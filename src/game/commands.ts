@@ -10,6 +10,8 @@
  */
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
+import { bagItemCount, holdingRefusal, syncHolding } from './items/holding.js';
+import { isBagOfHolding } from './items/weight.js';
 import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js';
 import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
@@ -58,7 +60,6 @@ export type Command =
   | { type: 'createEvent'; eventId: string; name: string; description: string; hexes: string[]; effects: EventEffect[]; announce: boolean }
   | { type: 'announce'; category: AnnouncementCategory; title: string; text: string }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
-  | { type: 'setWill'; tokenId: string; current?: number; max?: number }
   | { type: 'setAppearance'; tokenId: string; name?: string; bodyType?: BodyType; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
   | {
       type: 'gmRestoreCharacter';
@@ -66,8 +67,8 @@ export type Command =
       identity?: { name: string; title: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string };
       equipment?: Pick<Equipment, 'slots' | 'activeSet' | 'resting' | 'restingKeep'>;
     }
-  | { type: 'invAddItem'; tokenId: string; itemId: string; name: string; quantity?: number; description?: string; notes?: string; container?: string }
-  | { type: 'invUpdateItem'; tokenId: string; itemId: string; rev: number; name?: string; quantity?: number; description?: string; notes?: string; container?: string }
+  | { type: 'invAddItem'; tokenId: string; itemId: string; weightKg?: number; name: string; quantity?: number; description?: string; notes?: string; container?: string }
+  | { type: 'invUpdateItem'; tokenId: string; itemId: string; rev: number; name?: string; quantity?: number; description?: string; notes?: string; container?: string; weightKg?: number }
   | { type: 'invRemoveItem'; tokenId: string; itemId: string; rev: number }
   | { type: 'invAddContainer'; tokenId: string; containerId: string; name: string }
   | { type: 'invRenameContainer'; tokenId: string; containerId: string; name: string }
@@ -87,7 +88,6 @@ export type Command =
 
 /** Commands a player may send for their OWN character (besides 'move'). */
 export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
-  'setWill',
   'setAppearance',
   'invAddItem',
   'invUpdateItem',
@@ -402,14 +402,6 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (cmd.enabled !== undefined) state.config.shrink.enabled = cmd.enabled;
       if (cmd.mode !== undefined) state.config.shrink.mode = cmd.mode;
       break;
-    case 'setWill': {
-      const t = state.tokens[cmd.tokenId];
-      if (cmd.max !== undefined && actor.role !== 'gm') return fail(prev, T.willMaxGmOnly);
-      if (cmd.max !== undefined) t.will.max = clamp(Math.round(cmd.max), 0, 999);
-      if (cmd.current !== undefined) t.will.current = clamp(Math.round(cmd.current), 0, t.will.max);
-      else t.will.current = Math.min(t.will.current, t.will.max);
-      break;
-    }
     case 'setAppearance': {
       // Cosmetic only: tag, colours, marker shape, initials. Never touches rules or permissions.
       const t = state.tokens[cmd.tokenId];
@@ -484,6 +476,10 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       if (t.inventory.length >= L.items) return fail(prev, T.inventoryFull);
       if (t.inventory.some((i) => i.id === cmd.itemId)) return fail(prev, T.itemExists);
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
+      if (cmd.container) {
+        const bagRefusal = holdingRefusal(t, { id: cmd.itemId, quantity: clamp(Math.round(cmd.quantity ?? 1), 0, L.quantity), weightKg: cmd.weightKg }, cmd.container);
+        if (bagRefusal) return fail(prev, bagRefusal);
+      }
       t.inventory.push({
         id: cmd.itemId,
         name,
@@ -492,6 +488,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
         quantity: clamp(Math.round(cmd.quantity ?? 1), 0, L.quantity),
         notes: text(cmd.notes, L.notes) || undefined,
         container: cmd.container ?? containers[0].id,
+        ...(cmd.weightKg !== undefined ? { weightKg: Math.round(cmd.weightKg * 100) / 100 } : {}),
         rev: 0,
       });
       break;
@@ -506,9 +503,14 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       }
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
       if (cmd.container !== undefined) {
-        const placement = wornPlacement(t, item, cmd.container);
+        const placement = wornPlacement(t, item, cmd.container) ?? holdingRefusal(t, item, cmd.container);
         if (placement) return fail(prev, placement);
         item.container = cmd.container;
+      }
+      if (cmd.weightKg !== undefined) item.weightKg = Math.round(cmd.weightKg * 100) / 100;
+      if ((cmd.quantity !== undefined || cmd.weightKg !== undefined) && item.container) {
+        const tooHeavy = holdingRefusal(t, { ...item, quantity: 0 }, item.container, clamp(Math.round(cmd.quantity ?? item.quantity), 0, L.quantity));
+        if (tooHeavy) return fail(prev, tooHeavy);
       }
       if (cmd.quantity !== undefined && (item.rarity || item.mods?.length) && Math.round(cmd.quantity) !== item.quantity) return fail(prev, T.itemQuantityFixed);
       if (cmd.quantity !== undefined) item.quantity = clamp(Math.round(cmd.quantity), 0, L.quantity);
@@ -521,6 +523,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       const item = findItem(cmd.itemId, cmd.rev);
       if (typeof item === 'string') return fail(prev, item);
       if (item.locked && actor.role !== 'gm') return fail(prev, 'The Game Master has restricted this item – it cannot be deleted.');
+      if (isBagOfHolding(item) && bagItemCount(t, item)) return fail(prev, `Empty ${item.name} first – it still holds ${bagItemCount(t, item)} item(s).`);
       t.inventory = t.inventory.filter((i) => i !== item);
       reconcileEquipment(t); // a removed item can no longer be equipped anywhere
       break;
@@ -546,7 +549,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       const item = findItem(cmd.itemId, cmd.rev);
       if (typeof item === 'string') return fail(prev, item);
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
-      const placement = wornPlacement(t, item, cmd.container);
+      const placement = wornPlacement(t, item, cmd.container) ?? holdingRefusal(t, item, cmd.container);
       if (placement) return fail(prev, placement);
       const rest = t.inventory.filter((i) => i !== item);
       let at = rest.length;
@@ -596,12 +599,14 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
     }
     case 'invRemoveContainer': {
       if (!containers.some((c) => c.id === cmd.containerId)) return fail(prev, T.noSuchContainer);
+      if (containers.find((c) => c.id === cmd.containerId)?.holding) return fail(prev, 'This container belongs to a Bag of Holding – it goes wherever the bag goes.');
       if (t.inventory.some((i) => i.container === cmd.containerId)) return fail(prev, T.containerNotEmpty);
       if (containers.length <= 1) return fail(prev, T.lastContainer);
       t.containers = containers.filter((c) => c.id !== cmd.containerId);
       break;
     }
   }
+  syncHolding(t); // APEX 0.7: Bag of Holding containers follow the bags the character owns
   return { ok: true, state };
 }
 

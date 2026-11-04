@@ -45,7 +45,7 @@ APEX never invents class features, feats or spell progression. Only what the PDF
   *Level 2 – After Arena Trial*, *Before Boss Encounter* and *GM Manual Backup*. A snapshot contains:
   - the full sheet: identity, attributes, saves, skills, HP, resources and spell slots, spellcasting, features,
     background, notes and appearance
-  - name, tagline, colours, initials, walking speed and Will maximum
+  - name, tagline, colours, initials, walking speed
   - the equipment configuration
   - the inventory and currency, **for reference only**
 - **Compare** a snapshot with the current character or with another snapshot. Differences are shown field by field.

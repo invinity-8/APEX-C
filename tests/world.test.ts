@@ -32,7 +32,7 @@ beforeEach(async () => {
   seedProfiles(repo, CID);
   const s = { ...createDemoState({ radius: 10, seed: 3 }), world: newWorldMeta('First world') };
   s.tokens.sinna.inventory.push({ id: 'key', name: 'Old iron key', kind: 'misc', description: '', quantity: 1, container: 'pockets', rev: 0 });
-  s.tokens.sinna.will.current = 2;
+  (s.tokens.sinna as unknown as Record<string, unknown>).will = { current: 2, max: 10 }; // legacy field from an old save
   s.tokens.sinna.pos = { q: 2, r: -1 };
   repo.states.set(CID, { state: s, version: 7 });
   await activate(repo, CID, 'gm', 'gm-secret-pass');
@@ -73,7 +73,7 @@ describe('Create New World / Reset Current World', () => {
     expect(s.state.config).toMatchObject({ mapRadius: 8, seed: 99 });
     // character-level data carried over
     expect(s.state.tokens.sinna.inventory.some((i) => i.id === 'key')).toBe(true);
-    expect(s.state.tokens.sinna.will).toEqual({ current: 10, max: 10 }); // fresh start: refilled
+    expect('will' in s.state.tokens.sinna).toBe(false); // legacy Willpower is never written again
     // world-level data initialised by the rules
     expect(s.state.tokens.sinna.pos).not.toEqual({ q: 2, r: -1 });
     expect(s.state.tokens.sinna.movePoints).toBe(s.state.tokens.sinna.maxMovePoints);
@@ -89,9 +89,19 @@ describe('Create New World / Reset Current World', () => {
     expect(view.view?.worldName).toBe('Second world');
   });
 
-  it('can keep per-world progress of consumable resources', async () => {
-    await admin({ action: 'createWorld', name: 'Keep', keepProgress: true });
-    expect(state().state.tokens.sinna.will).toEqual({ current: 2, max: 10 });
+  it('older clients may still send keepProgress – it is ignored', async () => {
+    expect((await admin({ action: 'createWorld', name: 'Keep', keepProgress: true })).status).toBe(200);
+    expect('will' in state().state.tokens.sinna).toBe(false);
+  });
+
+  it('old world archives with Willpower still load and are normalised when restored', async () => {
+    await admin({ action: 'createWorld', name: 'Newer' });
+    const archived = repo.archives[0];
+    expect((archived.state.tokens.sinna as unknown as Record<string, unknown>).will).toBeDefined(); // stored archive untouched
+    const r = await admin({ action: 'restoreArchive', archiveId: archived.id, inventory: 'use-archived' });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect('will' in state().state.tokens.sinna).toBe(false);
+    expect(state().state.tokens.sinna.inventory.some((i) => i.id === 'key')).toBe(true); // unrelated data preserved
   });
 
   it('reset requires explicit confirmation and archives first', async () => {
@@ -180,7 +190,7 @@ describe('Security and stale clients', () => {
     const r = await call('POST', 'command', { campaignId: CID, worldId: oldWorld, requestId: 'req-stale-0001', command: { type: 'move', tokenId: 'sinna', to: { q: 1, r: 0 } } }, {}, pl);
     expect(r.status).toBe(409);
     expect((r.body as { code: string }).code).toBe('world_changed');
-    const ok = await call('POST', 'command', { campaignId: CID, worldId: state().state.world!.id, command: { type: 'setWill', tokenId: 'sinna', current: 1 } }, {}, pl);
+    const ok = await call('POST', 'command', { campaignId: CID, worldId: state().state.world!.id, command: { type: 'setAppearance', tokenId: 'sinna', title: 'Will-Weaver' } }, {}, pl);
     expect(ok.status).toBe(200);
   });
 
@@ -200,7 +210,7 @@ describe('Character carry-over rules', () => {
     prev.tokens.aster.visionRadius = 4;
     prev.tokens.aster.movePoints = 0;
     prev.tokens.aster.visionBonus = 3;
-    const next = carryCharacters(prev, createDemoState({ radius: 8, seed: 2 }), { keepProgress: true });
+    const next = carryCharacters(prev, createDemoState({ radius: 8, seed: 2 }));
     expect(next.tokens.aster).toMatchObject({ name: 'Aster the Bold', visionRadius: 4, visionBonus: 0, movePoints: next.tokens.aster.maxMovePoints });
     expect(next.config.seed).toBe(2);
     const restored = reconcileRestore(next, prev, 'keep-current');

@@ -21,7 +21,7 @@
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
 import { CHARACTER_COMMANDS, executeCommand, type Command } from '../game/commands.js';
 import { SEEDED_COMMANDS } from '../game/items/loot.js';
-import { migrateState } from '../game/migrate.js';
+import { migrateState, stripLegacy } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
@@ -110,7 +110,40 @@ export const LOGIN_LIMITS = {
   global: 300,
 };
 
-export async function handleApi(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
+/**
+ * APEX 0.7 legacy reader: every game state the server reads (live state, daily snapshots, world archives) is
+ * normalised by stripLegacy() – obsolete fields such as the old Willpower resource never reach the rules, the
+ * clients or a new write. Stored archives are not rewritten; they are cleaned whenever they are read.
+ */
+export function withLegacyReader(repo: Repo): Repo {
+  return new Proxy(repo, {
+    get(target, prop, receiver) {
+      if (prop === 'loadState')
+        return async (cid: string) => {
+          const s = await target.loadState(cid);
+          if (s) stripLegacy(s.state);
+          return s;
+        };
+      if (prop === 'loadSnapshot')
+        return async (cid: string, id: number) => {
+          const s = await target.loadSnapshot(cid, id);
+          if (s) stripLegacy(s);
+          return s;
+        };
+      if (prop === 'loadArchive')
+        return async (cid: string, id: string) => {
+          const a = await target.loadArchive(cid, id);
+          if (a) stripLegacy(a.state);
+          return a;
+        };
+      const v = Reflect.get(target, prop, receiver);
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+  });
+}
+
+export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResponse> {
+  const repo = withLegacyReader(rawRepo);
   try {
     if (req.method === 'GET' && req.op === 'version') return ok(readBuildInfo(process.env, APP_VERSION, null)); // no DB access
     if (req.method === 'GET' && req.op === 'health') return ok(await health(repo));
@@ -955,11 +988,11 @@ async function transition(repo: Repo, cid: string, expected: number, next: GameS
 async function createWorld(
   user: AuthUser,
   repo: Repo,
-  o: { name: string; radius: number; seed: number; keepProgress: boolean; kind: 'before-create' | 'before-reset' },
+  o: { name: string; radius: number; seed: number; kind: 'before-create' | 'before-reset' },
   cur: { state: GameState; version: number },
 ): Promise<CampaignPayload> {
   const fresh = { ...createDemoState({ radius: o.radius, seed: o.seed }), world: newWorldMeta(o.name) };
-  const next = carryCharacters(cur.state, fresh, { keepProgress: o.keepProgress });
+  const next = carryCharacters(cur.state, fresh);
   const oldName = cur.state.world?.name ?? 'World';
   const label = `${oldName} – ${o.kind === 'before-reset' ? 'before reset' : 'before new world'} (${phaseName(cur.state.phase, cur.state.day)})`;
   await transition(repo, user.campaignId, cur.version, next, { name: label, description: '', kind: o.kind }, user.id);
@@ -1064,7 +1097,7 @@ async function runAdminAction(user: AuthUser, body: Record<string, unknown>, rep
       const existing = await repo.loadState(cid);
       if (existing) {
         // A world already exists: never replace it without an archive – behave like "Create New World".
-        return createWorld(user, repo, { name: 'New world', radius: body.radius, seed: body.seed, keepProgress: true, kind: 'before-create' }, existing);
+        return createWorld(user, repo, { name: 'New world', radius: body.radius, seed: body.seed, kind: 'before-create' }, existing);
       }
       const state = { ...createDemoState({ radius: body.radius, seed: body.seed }), world: newWorldMeta(worldName(body.name) ?? 'First world') };
       await repo.replaceState(cid, state, user.id);
@@ -1089,10 +1122,10 @@ async function runAdminAction(user: AuthUser, body: Record<string, unknown>, rep
       if (!isInt(radius) || radius < MIN_RADIUS || radius > MAX_RADIUS) throw new HttpError(400, `Radius must be between ${MIN_RADIUS} and ${MAX_RADIUS}.`);
       const seed = body.seed === undefined || body.seed === null || body.seed === '' ? randomSeed() : body.seed;
       if (!isInt(seed, 2_000_000_000) || seed === 0) throw new HttpError(400, 'Invalid seed.');
-      if (typeof body.keepProgress !== 'boolean') throw new HttpError(400, 'Please choose whether to keep character progress.');
+      // body.keepProgress (APEX ≤ 0.6, legacy Willpower) is accepted from older clients and ignored.
       const name = body.action === 'resetWorld' ? (worldName(body.name) ?? cur.state.world?.name ?? 'World') : worldName(body.name);
       if (!name) throw new HttpError(400, 'Please enter a name for the new world.');
-      return createWorld(user, repo, { name, radius, seed, keepProgress: body.keepProgress, kind: body.action === 'resetWorld' ? 'before-reset' : 'before-create' }, cur);
+      return createWorld(user, repo, { name, radius, seed, kind: body.action === 'resetWorld' ? 'before-reset' : 'before-create' }, cur);
     }
     case 'restoreArchive': {
       if (typeof body.archiveId !== 'string') throw new HttpError(400, 'Invalid archive.');

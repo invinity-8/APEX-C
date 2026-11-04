@@ -48,6 +48,8 @@ export interface ItemRules {
   transmuteWeightRenewal: number;
   transmuteWeightAugment: number;
   transmuteWeightAscension: number;
+  /** APEX 0.7 carrying: 0 = SRD standard (capacity STR × 15 lb), 1 = SRD variant encumbrance (×5 / ×10 thresholds). */
+  encumbranceVariant: number;
 }
 
 export const DEFAULT_ITEM_RULES: ItemRules = {
@@ -65,6 +67,7 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   transmuteWeightRenewal: 65,
   transmuteWeightAugment: 30,
   transmuteWeightAscension: 5,
+  encumbranceVariant: 0,
 };
 
 /** Hard limits the GM's overrides must stay within (validation). */
@@ -83,6 +86,7 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   transmuteWeightRenewal: [0, 1000],
   transmuteWeightAugment: [0, 1000],
   transmuteWeightAscension: [0, 1000],
+  encumbranceVariant: [0, 1],
 };
 
 export function itemRulesOf(state: { itemRules?: Partial<ItemRules> }): ItemRules {

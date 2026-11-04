@@ -223,7 +223,6 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     visionBonus: 0,
     controllers: [],
     sharesWithParty: true,
-    will: { current: 0, max: 0 },
     inventory: [],
     ...p,
   });
@@ -232,16 +231,14 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     base({
       id: 'sinna', name: 'Sinna', kind: 'player', teamId: 'party', title: 'Will-Weaver',
       color: '#e9c46a', initials: 'SI', pos: { q: 0, r: 1 },
-      will: { current: 6, max: 10 },
       inventory: [
-        { id: 'i1', name: 'Voluntas Vial', kind: 'will-vessel', description: 'Stores bound willpower.', quantity: 1, willCharge: 3, willCapacity: 5 },
+        { id: 'i1', name: 'Voluntas Vial', kind: 'misc', description: 'A sealed glass vial from the Tributum Voluntatis.', quantity: 1 },
         { id: 'i2', name: 'Aqueduct-Stone Staff', kind: 'weapon', description: 'Channels willpower like water.', quantity: 1 },
       ],
     }),
     base({
       id: 'aster', name: 'Aster', kind: 'player', teamId: 'party', title: 'Retired Legionary',
       color: '#6fb1e0', initials: 'AS', pos: { q: 0, r: 1 }, maxMovePoints: 8,
-      will: { current: 2, max: 4 },
       inventory: [
         { id: 'i3', name: 'Scutum', kind: 'armor', description: 'Large legionary shield.', quantity: 1 },
         { id: 'i4', name: 'Gladius', kind: 'weapon', description: 'Short sword.', quantity: 1 },
@@ -250,7 +247,6 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     base({
       id: 'elwin', name: 'Elwin', kind: 'player', teamId: 'party', title: 'Scout',
       color: '#7cc98a', initials: 'EL', pos: { q: -1, r: 2 }, visionRadius: 3,
-      will: { current: 3, max: 5 },
       inventory: [
         { id: 'i5', name: 'Shortbow', kind: 'weapon', description: '20 arrows.', quantity: 1 },
         { id: 'i6', name: 'Climbing Rope', kind: 'tool', description: '50 ft, with grappling hook.', quantity: 1 },
@@ -259,7 +255,6 @@ export function createDemoState(opts: DemoOptions = {}): GameState {
     base({
       id: 'javi', name: 'Javi', kind: 'player', teamId: 'party', title: 'Gladiator-Priest',
       color: '#ece4d2', initials: 'JA', pos: { q: 0, r: 1 },
-      will: { current: 4, max: 8 },
       inventory: [
         { id: 'i7', name: 'Net & Trident', kind: 'weapon', description: 'Classic retiarius gear.', quantity: 1 },
         { id: 'i8', name: 'Healing Potion', kind: 'consumable', description: '2d4+2 HP.', quantity: 2 },

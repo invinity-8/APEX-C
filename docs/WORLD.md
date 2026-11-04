@@ -29,7 +29,6 @@ for future campaign events.
 
 | Element | Where in code | Idea |
 |---|---|---|
-| `Token.will` (current/max) | `src/game/types.ts` | A character's own willpower |
-| `Item.kind = 'will-vessel'` with `willCharge/willCapacity` | `src/game/types.ts` | Vials store Voluntas for later |
+| *(removed in APEX 0.7)* | – | Voluntas stays a story concept; the old Willpower resource and will vessels are no longer part of the game state |
 | Site `Fons Voluntatis` | `src/data/demo.ts` | Refills vials – at a risk |
 | Event effect `modifyMovePoints` | `src/game/events.ts` | Example: “Willstorm” |

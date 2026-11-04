@@ -18,7 +18,7 @@ export function itemCategory(i: Item): ItemCategory {
   if (k === 'weapon' || k === 'focus') return 'weapon';
   if (k === 'armor' || k === 'shield' || k === 'head' || k === 'gloves' || k === 'boots') return 'armor';
   if (k === 'ring' || k === 'amulet' || k === 'cloak' || k === 'belt') return 'accessory';
-  if (k === 'consumable' || k === 'currency' || k === 'will-vessel') return 'consumable';
+  if (k === 'consumable' || k === 'currency') return 'consumable';
   return 'other';
 }
 

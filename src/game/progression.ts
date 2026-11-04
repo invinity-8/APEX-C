@@ -40,7 +40,6 @@ export interface CharacterSnapshot {
     marker?: Token['marker'];
     initials: string;
     speedFt?: number;
-    willMax: number;
     equipment?: Equipment;
     /** Reference only – never restored. */
     inventory: Array<Pick<Item, 'id' | 'name' | 'quantity'> & Partial<Pick<Item, 'baseId' | 'rarity' | 'itemLevel'>>>;
@@ -83,7 +82,6 @@ export function buildSnapshot(sheet: CharacterSheet, t: Token, name: string, not
       ...(t.marker ? { marker: t.marker } : {}),
       initials: t.initials,
       ...(t.speedFt ? { speedFt: t.speedFt } : {}),
-      willMax: t.will.max,
       ...(t.equipment ? { equipment: structuredClone(t.equipment) } : {}),
       inventory: t.inventory.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, ...(i.baseId ? { baseId: i.baseId } : {}), ...(i.rarity ? { rarity: i.rarity } : {}), ...(i.itemLevel ? { itemLevel: i.itemLevel } : {}) })),
       currency: { ...(t.currency ?? {}) },

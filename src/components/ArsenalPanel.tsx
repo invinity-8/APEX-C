@@ -492,6 +492,7 @@ function Balance({ state, run }: { state: GameState; run: Run }) {
     ['transmuteWeightRenewal', 'Transmutation weight: Renewal'],
     ['transmuteWeightAugment', 'Transmutation weight: Augmentation'],
     ['transmuteWeightAscension', 'Transmutation weight: Ascension'],
+    ['encumbranceVariant', 'Variant encumbrance (0 = SRD standard, 1 = variant)'],
     ['resistanceCap', 'Resistance cap (points)'],
     ['toHitCap', 'To-hit cap per weapon'],
     ['acCap', 'AC cap'],

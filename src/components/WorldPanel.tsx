@@ -132,7 +132,7 @@ export function WorldPanel({ state, online, notify, pending }: Props) {
           onClose={() => setDialog(null)}
           onSubmit={(o) =>
             runWorld(
-              dialog.kind === 'reset' ? { action: 'resetWorld', confirm: 'RESET', keepProgress: o.keepProgress, radius: o.radius, seed: o.seed } : { action: 'createWorld', ...o },
+              dialog.kind === 'reset' ? { action: 'resetWorld', confirm: 'RESET', radius: o.radius, seed: o.seed } : { action: 'createWorld', ...o },
               dialog.kind === 'reset' ? 'World reset. The previous world was archived; all players are switched automatically.' : `New world “${o.name}” is active. The previous world was archived.`,
             )
           }
@@ -227,12 +227,11 @@ function NewWorldDialog({
   busy: boolean;
   state: GameState;
   onClose: () => void;
-  onSubmit: (o: { name: string; radius: number; seed: number | null; keepProgress: boolean }) => void;
+  onSubmit: (o: { name: string; radius: number; seed: number | null }) => void;
 }) {
   const [name, setName] = useState(reset ? (state.world?.name ?? 'World') : '');
   const [radius, setRadius] = useState(state.config.mapRadius);
   const [seed, setSeed] = useState('');
-  const [keepProgress, setKeepProgress] = useState(true);
   const [confirmText, setConfirmText] = useState('');
   const seedNum = seed.trim() ? Number(seed) : null;
   const valid = (!seed.trim() || (Number.isInteger(seedNum) && seedNum !== 0)) && radius >= MIN_RADIUS && radius <= MAX_RADIUS && (reset ? confirmText === 'RESET' : !!name.trim());
@@ -263,21 +262,7 @@ function NewWorldDialog({
           <input className={input} inputMode="numeric" value={seed} onChange={(e) => setSeed(e.target.value.replace(/[^\d-]/g, ''))} placeholder="random" />
         </label>
       </div>
-      <fieldset className="space-y-1 text-xs">
-        <legend className="mb-1 font-semibold text-marble-100">Character progress</legend>
-        <label className="flex items-start gap-2">
-          <input type="radio" name="progress" checked={keepProgress} onChange={() => setKeepProgress(true)} />
-          <span>
-            <b className="text-marble-50">Keep progress</b> – characters keep their current Will (consumed willpower stays consumed).
-          </span>
-        </label>
-        <label className="flex items-start gap-2">
-          <input type="radio" name="progress" checked={!keepProgress} onChange={() => setKeepProgress(false)} />
-          <span>
-            <b className="text-marble-50">Fresh start</b> – current Will is refilled to the maximum. Inventories are kept either way.
-          </span>
-        </label>
-      </fieldset>
+      <p className="text-xs text-marble-400">Characters keep their sheet, inventory, equipment and currency.</p>
       {reset && (
         <label className="block text-xs">
           Type <b className="text-red-200">RESET</b> to confirm
@@ -288,7 +273,7 @@ function NewWorldDialog({
         <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
           Cancel
         </button>
-        <button className="btn btn-gold" disabled={busy || !valid} onClick={() => onSubmit({ name: name.trim(), radius, seed: seedNum, keepProgress })}>
+        <button className="btn btn-gold" disabled={busy || !valid} onClick={() => onSubmit({ name: name.trim(), radius, seed: seedNum })}>
           {busy && <Spinner />} {reset ? 'Archive and reset' : 'Archive and create'}
         </button>
       </div>
