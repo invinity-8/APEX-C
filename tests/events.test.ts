@@ -81,7 +81,7 @@ describe('Arena Announcements', () => {
     const pv = (await call('GET', 'state', null, {}, pl)).body as PlayerPayload;
     const a = pv.view!.announcements.at(-1)!;
     expect(a).toMatchObject({ category: 'death', title: 'A TRIBUTE HAS FALLEN', text: 'The cannon sounds once.', day: 1, phase: 'day' });
-    expect(Object.keys(a).sort()).toEqual(['category', 'createdAt', 'day', 'id', 'phase', 'text', 'title']);
+    expect(Object.keys(a).sort()).toEqual(['category', 'createdAt', 'day', 'expiresAt', 'id', 'phase', 'text', 'title']);
     // history is bounded
     for (let i = 0; i < 60; i++) await cmd({ type: 'announce', category: 'general', title: `A${i}`, text: '' });
     expect(st().announcements!.length).toBe(50);

@@ -204,6 +204,8 @@ export interface ViewModel {
   log: LogEntry[];
   /** Arena Announcements (public by definition; the newest 20). */
   announcements: Announcement[];
+  /** APEX 0.7: server time when this view was built (announcement expiry uses server, not device, time). */
+  serverTime: string;
   /** APEX 0.6: effective itemisation caps (public rules, needed for derived stats). */
   itemRules: ItemRules;
 }
@@ -296,6 +298,7 @@ export function buildGmView(state: GameState): ViewModel {
     trackers: trackersOf(state),
     log: state.log.slice(),
     announcements: (state.announcements ?? []).slice(-20),
+    serverTime: new Date().toISOString(),
     itemRules: itemRulesOf(state),
   };
 }
@@ -416,6 +419,7 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     trackers: trackersOf(state),
     log: state.log.filter((e) => e.audience === 'all'),
     announcements: (state.announcements ?? []).slice(-20),
+    serverTime: new Date().toISOString(),
     itemRules: itemRulesOf(state),
   };
 }

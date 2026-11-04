@@ -9,6 +9,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { BareSections } from './ui';
 import type { Announcement, AnnouncementCategory } from '../game/types';
+import { announcementDeliverable } from '../game/events';
 
 export const CATEGORY_STYLE: Record<AnnouncementCategory, { label: string; color: string; glow: string; icon: string }> = {
   general: { label: 'Announcement', color: '#e8d4a6', glow: 'rgba(233,196,106,.55)', icon: '✦' },
@@ -38,7 +39,12 @@ function writeAck(scope: string, ids: Set<string>) {
   }
 }
 
-export function AnnouncementOverlay({ announcements, scope }: { announcements: Announcement[]; scope: string }) {
+export function AnnouncementOverlay({ announcements, scope, serverTime }: { announcements: Announcement[]; scope: string; serverTime?: string }) {
+  // Server clock offset at the time the view arrived – expiry never depends on the device clock alone.
+  const offset = useMemo(() => {
+    const t = serverTime ? Date.parse(serverTime) : NaN;
+    return Number.isFinite(t) ? t - Date.now() : 0;
+  }, [serverTime]);
   const [acked, setAcked] = useState<Set<string>>(() => {
     const prev = readAck(scope);
     if (prev) return prev;
@@ -47,7 +53,8 @@ export function AnnouncementOverlay({ announcements, scope }: { announcements: A
     writeAck(scope, seen);
     return seen;
   });
-  const queue = useMemo(() => announcements.filter((a) => !acked.has(a.id)).slice(-MAX_CATCH_UP), [announcements, acked]);
+  // APEX 0.7: only announcements younger than 60 minutes (server time) may pop up – older ones stay in the history
+  const queue = useMemo(() => announcements.filter((a) => !acked.has(a.id) && announcementDeliverable(a, Date.now() + offset)).slice(-MAX_CATCH_UP), [announcements, acked, offset]);
   const current = queue[0];
 
   const dismiss = useCallback(() => {
