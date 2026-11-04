@@ -121,6 +121,8 @@ export interface CharacterSheet {
   source: SheetSource;
   /** APEX 0.7: level-up / re-import history (newest last, bounded). */
   progression?: ProgressionEntry[];
+  /** APEX 0.7: active Wild Shape form (beast HP kept separate from the character's HP). */
+  wildShape?: { formId: string; formName: string; hp: number; maxHp: number; since: string };
 }
 
 /** One approved level-up or sheet update from a re-imported PDF (APEX 0.7). */
@@ -305,6 +307,18 @@ export function parseSheet(raw: unknown): SheetParse {
     }
   }
 
+  let wildShape: CharacterSheet['wildShape'];
+  if (raw.wildShape !== undefined && raw.wildShape !== null) {
+    const w = raw.wildShape;
+    const formId = isObj(w) ? str(w.formId, 60) : null;
+    const formName = isObj(w) ? str(w.formName, 60) : null;
+    const hp = isObj(w) ? num(w.hp) : null;
+    const maxHp = isObj(w) ? num(w.maxHp) : null;
+    const since = isObj(w) ? str(w.since, 40) : null;
+    if (!formId || !formName || hp === null || maxHp === null || !since || maxHp < 1 || hp < 0 || hp > maxHp) return bad('wild shape');
+    wildShape = { formId, formName, hp, maxHp, since };
+  }
+
   const src = isObj(raw.source) ? raw.source : {};
   const source: SheetSource = { kind: src.kind === 'pdf' ? 'pdf' : 'manual' };
   const fileName = str(src.fileName, 200);
@@ -335,6 +349,7 @@ export function parseSheet(raw: unknown): SheetParse {
       raw: rawFields as SheetEntry[],
       source,
       ...(progression ? { progression } : {}),
+      ...(wildShape ? { wildShape } : {}),
     },
   };
 }
@@ -380,6 +395,7 @@ export function mergeSheets(existing: CharacterSheet, imported: CharacterSheet):
     raw: mergeList(existing.raw, imported.raw, (x) => x.label),
     source: imported.source,
     ...(existing.progression ? { progression: existing.progression } : {}), // history is never replaced by an import
+    ...(existing.wildShape ? { wildShape: existing.wildShape } : {}), // an import never ends an active Wild Shape
   };
 }
 

@@ -9,6 +9,7 @@ import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
 import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
 import { MAX_COUNT } from '../game/items/loot.js';
 import { BODY_TYPES, MARKER_STYLES } from '../game/types.js';
+import { parseBeast } from '../game/beasts.js';
 import { TERRAIN_ORDER } from '../game/terrain.js';
 
 type Obj = Record<string, unknown>;
@@ -95,6 +96,17 @@ export function parseCommand(raw: unknown): ParseResult {
       }
       return { ok: true, command: { type: 'setItemRules', rules } };
     }
+    case 'setSneak':
+      if (!isId(c.tokenId) || typeof c.on !== 'boolean') return bad('setSneak');
+      return { ok: true, command: { type: 'setSneak', tokenId: c.tokenId, on: c.on } };
+    case 'gmSetBeast': {
+      const b = parseBeast(c.beast);
+      if (typeof b === 'string') return bad(b);
+      return { ok: true, command: { type: 'gmSetBeast', beast: b } };
+    }
+    case 'gmRemoveBeast':
+      if (typeof c.beastId !== 'string' || !/^gm-[a-z0-9-]{1,40}$/.test(c.beastId)) return bad('beastId');
+      return { ok: true, command: { type: 'gmRemoveBeast', beastId: c.beastId } };
     case 'endDay':
     case 'advancePhase':
       return { ok: true, command: { type: c.type } };

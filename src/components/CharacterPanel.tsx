@@ -20,6 +20,7 @@ import { VitalsPanel } from './ResourceOrbs';
 import { InventoryPanel } from './InventoryPanel';
 import { IdentityEditor } from './IdentityEditor';
 import { CharacterHistory } from './CharacterHistory';
+import { ClassAbilities } from './ClassAbilities';
 import { Bar } from './ui';
 
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
@@ -193,6 +194,8 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
           )}
         </div>
       </section>
+
+      <ClassAbilities game={game} token={token} data={data} onSheet={(p) => setData(p)} run={run} notify={notify} />
 
       <nav className="flex gap-1 overflow-x-auto pb-1" aria-label="Character sections" role="tablist">
         {TABS.map((t) => (

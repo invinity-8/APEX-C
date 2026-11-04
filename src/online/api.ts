@@ -101,6 +101,8 @@ export const api = {
     request<SheetPayload>('POST', 'sheet', {}, { action: 'save', tokenId, sheet, expectedVersion, reason }),
   adjustSheet: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) =>
     request<SheetPayload>('POST', 'sheet', {}, { action: 'adjust', tokenId, target, delta, resourceId }),
+  sheetAbility: (tokenId: string, body: Record<string, unknown>) => request<SheetPayload>('POST', 'sheet', {}, { ...body, tokenId }),
+  uploadBeastImage: (tokenId: string, formId: string, image: string) => request<{ v: number }>('POST', 'beast-image', {}, { tokenId, formId, image }, { timeoutMs: 30_000 }),
   /** APEX 0.7 – GM character archive (snapshots). */
   characterArchive: <T>(body: Record<string, unknown>) => request<T>('POST', 'character-archive', {}, body),
   /** APEX 0.7 – feedback reports (players: own + shared, GM: all). */

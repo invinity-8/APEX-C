@@ -43,6 +43,8 @@ export interface SheetApi {
   load: (tokenId: string) => Promise<SheetResult>;
   save: (tokenId: string, sheet: CharacterSheet, expectedVersion: number, reason?: 'edit' | 'import-merge' | 'import-replace' | 'import-levelup') => Promise<SheetResult>;
   adjust: (tokenId: string, target: 'hp' | 'hpTemp' | 'resource', delta: number, resourceId?: string) => Promise<SheetResult>;
+  /** APEX 0.7 class abilities and HP: wildShape · revert · damage · heal · tempHp · sorcery (server-validated). */
+  ability: (tokenId: string, body: Record<string, unknown>) => Promise<SheetResult>;
   /** Changes whenever a sheet may have been changed on another device (live ping or poll). */
   revision: number;
   /** HP of the visible party in one request (GM: all player characters, player: own). */
@@ -100,6 +102,8 @@ export interface GameApi {
   sheets: SheetApi;
   /** Online only: upload a cropped portrait (data URL) for a character. */
   uploadPortrait?: (tokenId: string, dataUrl: string) => Promise<DispatchResult>;
+  /** APEX 0.7 (online): own picture for a Wild Shape form. */
+  uploadBeastImage?: (tokenId: string, formId: string, dataUrl: string) => Promise<DispatchResult>;
   demo?: DemoControls;
   online?: OnlineControls;
 }

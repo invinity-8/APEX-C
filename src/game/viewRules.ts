@@ -3,6 +3,7 @@
  * The UI uses it to show reachable hexes and explanations without knowing any
  * secret data. The authoritative check is always executeCommand() (on the server).
  */
+import { sneakFactor } from './commands.js';
 import { equals, type HexKey } from './hex.js';
 import { pathTo, reachable, type ReachInfo } from './movement.js';
 import { TERRAIN } from './terrain.js';
@@ -10,7 +11,8 @@ import { T } from './text.js';
 import type { TokenView, ViewModel } from './visibility.js';
 
 export function viewReach(view: ViewModel, token: TokenView): Map<HexKey, ReachInfo> {
-  const budget = token.details?.movePoints ?? 0;
+  // APEX 0.7 Sneak: double cost per step ⇔ half the budget for the reach display
+  const budget = (token.details?.movePoints ?? 0) / sneakFactor(token);
   return reachable(
     token.pos,
     budget,
@@ -50,8 +52,9 @@ export function explainReach(
   if (!info) return { ok: false, reason: T.reachNoPath };
   const mp = token.details?.movePoints ?? 0;
   const steps = pathTo(full, key)?.length ?? 0;
-  if (info.cost > mp + 1e-9) {
-    return { ok: false, reason: T.reachTooExpensive(info.cost, mp), cost: info.cost };
+  const cost = info.cost * sneakFactor(token);
+  if (cost > mp + 1e-9) {
+    return { ok: false, reason: T.reachTooExpensive(cost, mp), cost };
   }
-  return { ok: true, cost: info.cost, steps };
+  return { ok: true, cost, steps };
 }

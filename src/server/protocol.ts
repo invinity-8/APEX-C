@@ -110,6 +110,8 @@ export interface SheetPayload {
   /** 0 = no sheet saved yet. */
   version: number;
   updatedAt: string | null;
+  /** APEX 0.7: short result text of an ability action (Wild Shape, damage, Font of Magic …). */
+  message?: string;
 }
 
 export type SheetAction =

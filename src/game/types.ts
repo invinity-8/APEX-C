@@ -1,6 +1,7 @@
 import type { Equipment, ItemEquip } from './equipment.js';
 import type { ItemRules, Rarity } from './items/rules.js';
 import type { CurrencyId } from './items/currency.js';
+import type { BeastForm } from './beasts.js';
 /**
  * Central game state structure.
  * Everything that is saved, exported or stored in Supabase is defined here.
@@ -188,6 +189,10 @@ export interface Token {
   currencyRev?: number;
   /** APEX 0.7: outcome of the last Arcane Transmutation (shown to the owner once). */
   lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
+  /** APEX 0.7: Sneak mode – each step costs double movement points. Not invisibility: being unseen still needs a Stealth check. */
+  sneaking?: boolean;
+  /** APEX 0.7: player-uploaded pictures per Wild Shape form (private storage path + cache version; path never sent). */
+  beastImages?: Record<string, { path: string; v: number }>;
   /** APEX 0.7: cosmetic paper-doll silhouette (never affects rules). */
   bodyType?: BodyType;
   /** APEX 0.7: Niri's Timetwister – a postponed turn waiting for the GM (bound to the character, not the item). */
@@ -357,6 +362,8 @@ export interface GameState {
   announcements?: Announcement[];
   /** APEX 0.6: GM overrides of the itemisation caps (see src/game/items/rules.ts). */
   itemRules?: Partial<ItemRules>;
+  /** APEX 0.7: GM-defined Wild Shape forms (in addition to the SRD beasts). */
+  customBeasts?: BeastForm[];
   /** APEX 0.6: GM Arsenal – generated items waiting to be handed out (GM-only). */
   arsenal?: { staged: Item[] };
   /** APEX 0.6: item audit trail (GM-only, bounded). */

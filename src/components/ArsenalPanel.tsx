@@ -13,6 +13,7 @@ import { canRollMods } from '../game/items/generate';
 import { MAX_COUNT, MAX_STAGED, type GenRarity } from '../game/items/loot';
 import { eligibleMods } from '../game/items/modifiers';
 import { UNIQUES } from '../game/items/uniques';
+import { BeastEditor } from './BeastEditor';
 import { itemRulesOf, ITEM_RULE_LIMITS, MAX_ITEM_LEVEL, RARITY_LABEL } from '../game/items/rules';
 import { newEntryId } from '../game/sheet';
 import type { GameState, Item, Token } from '../game/types';
@@ -52,6 +53,7 @@ export function ArsenalPanel({ state, run }: { state: GameState; run: Run }) {
       <UniquesAndTwists players={players} run={run} />
       <CurrencyGrants players={players} run={run} />
       <Inventories players={players} run={run} rules={itemRulesOf(state)} />
+      <BeastEditor beasts={state.customBeasts ?? []} run={run} />
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
         <AuditLog state={state} />
         <Balance state={state} run={run} />

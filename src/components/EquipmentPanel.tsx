@@ -182,6 +182,11 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
         </label>
       </div>
 
+      {sheet?.wildShape && (
+        <p role="status" className="rounded-md border border-emerald-500/50 bg-emerald-900/20 p-2 text-emerald-200" data-testid="wild-shape-equipment">
+          🐾 Wild Shape ({sheet.wildShape.formName}): your equipment has merged into the beast form and has no effect until you revert. Nothing leaves the inventory.
+        </p>
+      )}
       <div className="apex-doll">
         <div className="apex-doll-col">
           {renderSlot('head')}

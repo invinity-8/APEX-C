@@ -29,6 +29,7 @@ import type {
 } from './types.js';
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
+import type { BeastForm } from './beasts.js';
 import type { CurrencyId } from './items/currency.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
 
@@ -138,6 +139,9 @@ export interface TokenDetails {
   lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
   timeTwist?: { itemId: string; itemName: string; day: number; phase: Phase };
   bodyType?: BodyType;
+  /** APEX 0.7: Sneak mode (owner + GM) and the cache versions of uploaded beast pictures (never the storage path). */
+  sneaking?: boolean;
+  beastImageV?: Record<string, number>;
 }
 
 export interface TokenView {
@@ -204,6 +208,8 @@ export interface ViewModel {
   announcements: Announcement[];
   /** APEX 0.6: effective itemisation caps (public rules, needed for derived stats). */
   itemRules: ItemRules;
+  /** APEX 0.7: GM custom Wild Shape forms (public catalogue). */
+  customBeasts: BeastForm[];
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -230,6 +236,8 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.lastTransmute ? { lastTransmute: structuredClone(t.lastTransmute) } : {}),
   ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),
   ...(withInventory && t.bodyType ? { bodyType: t.bodyType } : {}),
+  ...(withInventory && t.sneaking ? { sneaking: true } : {}),
+  ...(withInventory && t.beastImages ? { beastImageV: Object.fromEntries(Object.entries(t.beastImages).map(([k, v]) => [k, v.v])) } : {}),
 });
 
 const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact = false): TokenView => ({
@@ -294,6 +302,7 @@ export function buildGmView(state: GameState): ViewModel {
     log: state.log.slice(),
     announcements: (state.announcements ?? []).slice(-20),
     itemRules: itemRulesOf(state),
+    customBeasts: state.customBeasts ?? [],
   };
 }
 
@@ -414,5 +423,6 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     log: state.log.filter((e) => e.audience === 'all'),
     announcements: (state.announcements ?? []).slice(-20),
     itemRules: itemRulesOf(state),
+    customBeasts: state.customBeasts ?? [],
   };
 }
