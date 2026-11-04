@@ -7,6 +7,7 @@ import { EQUIP_SLOTS, SLOT_LABEL, activeSlots, equipmentOf, itemBonuses, slotOfI
 import { baseItem } from '../../game/items/bases';
 import { balanceOf, CURRENCIES, CURRENCY_IDS, type CurrencyId } from '../../game/items/currency';
 import { modifier, modText } from '../../game/items/modifiers';
+import { uniqueDef } from '../../game/items/uniques';
 import { formatReduction } from '../../game/items/resistance';
 import { DEFAULT_ITEM_RULES, RARITY_LABEL, type ItemRules } from '../../game/items/rules';
 import type { Item } from '../../game/types';
@@ -47,17 +48,33 @@ export function CurrencyBar({
   currencyRev,
   rules = DEFAULT_ITEM_RULES,
   onCombine,
+  onTransmute,
+  lastTransmute,
 }: {
   currency: Partial<Record<CurrencyId, number>> | undefined;
   currencyRev: number;
   rules?: ItemRules;
   onCombine?: (sets: number, currencyRev: number) => Promise<boolean>;
+  onTransmute?: (sets: number, currencyRev: number) => Promise<boolean>;
+  lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
 }) {
   const purse = { currency };
   const per = rules.fragmentsPerOrb;
   const max = Math.floor(balanceOf(purse, 'fragment') / per);
   const [open, setOpen] = useState(false);
   const [sets, setSets] = useState(1);
+  const [tOpen, setTOpen] = useState(false);
+  const [tSets, setTSets] = useState(1);
+  const [shownRev, setShownRev] = useState<number | null>(null);
+  const tPer = rules.fragmentsPerRandomOrb;
+  const tMax = Math.floor(balanceOf(purse, 'fragment') / tPer);
+  const w = [rules.transmuteWeightRenewal, rules.transmuteWeightAugment, rules.transmuteWeightAscension];
+  const wSum = w.reduce((a, b) => a + b, 0) || 1;
+  const odds = (i: number) => `${Math.round((w[i] / wSum) * 100)}%`;
+  const transmute = async (e: FormEvent) => {
+    e.preventDefault();
+    if (onTransmute && (await onTransmute(Math.min(tSets, tMax), currencyRev))) (setTOpen(false), setTSets(1), setShownRev(currencyRev + 1));
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (onCombine && (await onCombine(Math.min(sets, max), currencyRev))) (setOpen(false), setSets(1));
@@ -76,6 +93,11 @@ export function CurrencyBar({
             </div>
           </div>
         ))}
+        {onTransmute && (
+          <button className="btn btn-ghost text-xs" disabled={tMax < 1} title={tMax < 1 ? `Requires ${tPer} Arcane Fragments` : `${tPer} Arcane Fragments → 1 random Orb`} onClick={() => setTOpen((o) => !o)}>
+            Arcane Transmutation
+          </button>
+        )}
         {onCombine && (
           <button className="btn btn-ghost text-xs" disabled={max < 1} title={max < 1 ? `Requires ${per} Arcane Fragments` : `${per} Arcane Fragments → 1 Orb of Renewal`} onClick={() => setOpen((o) => !o)}>
             Combine Fragments
@@ -83,6 +105,29 @@ export function CurrencyBar({
         )}
       </div>
       {max < 1 && onCombine && <p className="mt-1 text-[11px] text-marble-500">Combine Fragments: requires {per} Arcane Fragments for one Orb of Renewal.</p>}
+      {lastTransmute && shownRev !== null && lastTransmute.rev === shownRev && (
+        <p role="status" className="apex-reveal mt-2 rounded-lg border border-arcane-400/50 bg-arcane-500/10 p-2 text-xs text-arcane-300" data-testid="transmute-result">
+          Arcane Transmutation:{' '}
+          {(Object.entries(lastTransmute.result) as Array<[CurrencyId, number]>).map(([c, n]) => `${n} × ${n === 1 ? CURRENCIES[c].name : CURRENCIES[c].plural}`).join(', ')}
+        </p>
+      )}
+      {tOpen && tMax >= 1 && (
+        <form onSubmit={transmute} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-arcane-400/40 bg-ink-900/70 p-2 text-xs text-marble-300" aria-label="Arcane transmutation">
+          <label>
+            Random Orbs{' '}
+            <input className="w-16 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50" type="number" min={1} max={tMax} value={tSets} onChange={(e) => setTSets(Math.max(1, Math.min(tMax, Math.round(Number(e.target.value) || 1))))} aria-label="Random orbs to create" />
+          </label>
+          <span>
+            Uses <strong className="text-marble-50">{tSets * tPer}</strong> fragments. Each Orb is rolled on the server: Renewal {odds(0)} · Augmentation {odds(1)} · Ascension {odds(2)}.
+          </span>
+          <button type="submit" className="btn btn-gold px-2 py-0.5">
+            Transmute
+          </button>
+          <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setTOpen(false)}>
+            Cancel
+          </button>
+        </form>
+      )}
       {open && max >= 1 && (
         <form onSubmit={submit} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-arcane-400/40 bg-ink-900/70 p-2 text-xs text-marble-300" aria-label="Combine fragments">
           <label>
@@ -196,9 +241,10 @@ export function ItemInspect({
               const res = e.type === 'resistance' ? totals.resistances[e.element] : null;
               return (
                 <li key={i} data-mod={m.modId}>
-                  <span style={{ color: r?.color }}>{modText(def, m.value)}</span>
+                  <span style={{ color: def.flavor ? '#b9b2a2' : r?.color }}>{modText(def, m.value)}</span>
                   <span className="ml-1 text-[10px] text-marble-500">
-                    ({def.affix}, tier {m.tier})
+                    ({item.rarity === 'unique' ? 'fixed' : `${def.affix}, tier ${m.tier}`}
+                    {def.flavor ? ` · ${def.flavor}` : ''})
                   </span>
                   {res && equippedActive && (
                     <div className="pl-2 text-[11px] text-marble-400">
@@ -212,6 +258,27 @@ export function ItemInspect({
           </ul>
         )}
       </div>
+      {uniqueDef(item.uniqueId) && (
+        <div className="mt-2 border-t border-ink-700 pt-1.5" data-unique={item.uniqueId}>
+          <p className="italic text-[#d9a273]">{uniqueDef(item.uniqueId)!.flavor}</p>
+          {uniqueDef(item.uniqueId)!.ability && (
+            <div className="mt-1.5 rounded-md border border-[#c9733a]/50 bg-[#c9733a]/10 p-2">
+              <p className="font-semibold text-[#e8a06a]">
+                {uniqueDef(item.uniqueId)!.ability!.name}
+                <span className="ml-2 text-[10px] font-normal text-marble-400" data-testid="unique-charge">
+                  {item.charge?.spent ? 'Spent – recharges once per long rest' : 'Charged'}
+                </span>
+              </p>
+              <p className="text-marble-200">{uniqueDef(item.uniqueId)!.ability!.text}</p>
+              <ul className="mt-1 list-disc pl-4 text-[11px] text-marble-400">
+                {uniqueDef(item.uniqueId)!.ability!.rules.map((x) => (
+                  <li key={x}>{x}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       {base?.requirements?.str && <p className="mt-1.5 text-marble-400">Requires Strength {base.requirements.str} (otherwise −10 ft speed)</p>}
       {base?.stealthDisadvantage && <p className="text-marble-400">Disadvantage on Stealth checks</p>}
       <p className="mt-1.5 text-marble-400">

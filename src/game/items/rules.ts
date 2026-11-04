@@ -7,7 +7,8 @@ export type Rarity = 'normal' | 'magic' | 'rare' | 'unique';
 export const GENERATABLE_RARITIES: Rarity[] = ['normal', 'magic', 'rare'];
 
 /** 2: weapon suffixes (of Ruin, of Alacrity on weapons) so rare weapons can reach 3–4 modifiers. */
-export const MODIFIER_VERSION = 2;
+/** 3 (APEX 0.7): low-impact situational and cosmetic flavour modifiers. */
+export const MODIFIER_VERSION = 3;
 export const MAX_ITEM_LEVEL = 30;
 
 export interface AffixRule {
@@ -42,6 +43,11 @@ export interface ItemRules {
   flatDamageCap: number;
   /** Economy: Arcane Fragments needed for one Orb of Renewal. */
   fragmentsPerOrb: number;
+  /** APEX 0.7 – Arcane Transmutation: fragments per random Orb and the relative weights of the outcomes. */
+  fragmentsPerRandomOrb: number;
+  transmuteWeightRenewal: number;
+  transmuteWeightAugment: number;
+  transmuteWeightAscension: number;
 }
 
 export const DEFAULT_ITEM_RULES: ItemRules = {
@@ -55,6 +61,10 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   speedCap: 10,
   flatDamageCap: 6,
   fragmentsPerOrb: 10,
+  fragmentsPerRandomOrb: 10,
+  transmuteWeightRenewal: 65,
+  transmuteWeightAugment: 30,
+  transmuteWeightAscension: 5,
 };
 
 /** Hard limits the GM's overrides must stay within (validation). */
@@ -69,6 +79,10 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   speedCap: [0, 30],
   flatDamageCap: [0, 12],
   fragmentsPerOrb: [2, 100],
+  fragmentsPerRandomOrb: [2, 100],
+  transmuteWeightRenewal: [0, 1000],
+  transmuteWeightAugment: [0, 1000],
+  transmuteWeightAscension: [0, 1000],
 };
 
 export function itemRulesOf(state: { itemRules?: Partial<ItemRules> }): ItemRules {

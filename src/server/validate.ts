@@ -8,7 +8,7 @@ import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
 import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
 import { MAX_COUNT } from '../game/items/loot.js';
-import { MARKER_STYLES } from '../game/types.js';
+import { BODY_TYPES, MARKER_STYLES } from '../game/types.js';
 import { TERRAIN_ORDER } from '../game/terrain.js';
 
 type Obj = Record<string, unknown>;
@@ -65,6 +65,23 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'itemSalvage':
       if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1e9)) return bad(c.type);
       return { ok: true, command: { type: c.type, tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'itemAugment':
+    case 'itemAscend':
+    case 'itemActivate':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1e9)) return bad(c.type);
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'transmuteFragments':
+      if (!isId(c.tokenId) || !isInt(c.sets, 500) || c.sets < 1 || !isInt(c.currencyRev, 1e9)) return bad('transmuteFragments');
+      return { ok: true, command: { type: 'transmuteFragments', tokenId: c.tokenId, sets: c.sets, currencyRev: c.currencyRev } };
+    case 'arsenalGenerateUnique':
+      if (!isId(c.stagedId) || !isId(c.uniqueId) || (c.giveTo !== undefined && !isId(c.giveTo))) return bad('arsenalGenerateUnique');
+      return { ok: true, command: { type: 'arsenalGenerateUnique', stagedId: c.stagedId, uniqueId: c.uniqueId, ...(c.giveTo !== undefined ? { giveTo: c.giveTo } : {}) } };
+    case 'gmTimeTwist':
+      if (!isId(c.tokenId) || !oneOf(c.action, ['resolve', 'cancel'] as const)) return bad('gmTimeTwist');
+      return { ok: true, command: { type: 'gmTimeTwist', tokenId: c.tokenId, action: c.action } };
+    case 'gmRechargeItem':
+      if (!isId(c.tokenId) || !isId(c.itemId)) return bad('gmRechargeItem');
+      return { ok: true, command: { type: 'gmRechargeItem', tokenId: c.tokenId, itemId: c.itemId } };
     case 'combineFragments':
       if (!isId(c.tokenId) || !isInt(c.sets, 500) || c.sets < 1 || !isInt(c.currencyRev, 1e9)) return bad('combineFragments');
       return { ok: true, command: { type: 'combineFragments', tokenId: c.tokenId, sets: c.sets, currencyRev: c.currencyRev } };
@@ -170,6 +187,10 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.name !== undefined) {
         if (typeof c.name !== 'string' || !c.name.trim() || c.name.length > 40) return bad('name');
         out.name = c.name;
+      }
+      if (c.bodyType !== undefined) {
+        if (!oneOf(c.bodyType, BODY_TYPES)) return bad('bodyType');
+        out.bodyType = c.bodyType;
       }
       if (c.color !== undefined) {
         if (!hex(c.color)) return bad('color');

@@ -13,14 +13,16 @@
  *    identification reveals them, it never rolls.
  */
 import type { Actor, GameState, Item, ItemAuditEntry, Token } from '../types.js';
-import { reconcileEquipment, slotOfItem, equipmentOf } from '../equipment.js';
+import { activeSlots, reconcileEquipment, slotOfItem, equipmentOf } from '../equipment.js';
 import { containersOf, INVENTORY_LIMITS } from '../inventory.js';
 import { stringHash } from '../rng.js';
 import { baseItem, type BaseItem } from './bases.js';
 import { balanceOf, CURRENCIES, currencyLabel, MAX_CURRENCY, type CurrencyId } from './currency.js';
-import { canRollMods, clampItemLevel, generatedName, rollMods, seededRng } from './generate.js';
+import { addableMods, addMods, canRollMods, clampItemLevel, generatedName, rollMods, seededRng, weightedPick } from './generate.js';
+import { uniqueDef } from './uniques.js';
+import { addLog } from '../log.js';
 import { createItem } from './instance.js';
-import { itemRulesOf, MODIFIER_VERSION, RARITY_LABEL } from './rules.js';
+import { AFFIX_RULES, itemRulesOf, MODIFIER_VERSION, RARITY_LABEL } from './rules.js';
 
 export type GenRarity = 'normal' | 'magic' | 'rare';
 
@@ -34,13 +36,21 @@ export type LootCommand =
   | { type: 'itemIdentify'; tokenId: string; itemId: string; rev: number }
   | { type: 'itemReroll'; tokenId: string; itemId: string; rev: number; seed?: number }
   | { type: 'itemSalvage'; tokenId: string; itemId: string; rev: number }
-  | { type: 'combineFragments'; tokenId: string; sets: number; currencyRev: number };
+  | { type: 'combineFragments'; tokenId: string; sets: number; currencyRev: number }
+  // APEX 0.7
+  | { type: 'itemAugment'; tokenId: string; itemId: string; rev: number; seed?: number }
+  | { type: 'itemAscend'; tokenId: string; itemId: string; rev: number; seed?: number }
+  | { type: 'transmuteFragments'; tokenId: string; sets: number; currencyRev: number; seed?: number }
+  | { type: 'itemActivate'; tokenId: string; itemId: string; rev: number }
+  | { type: 'arsenalGenerateUnique'; stagedId: string; uniqueId: string; giveTo?: string }
+  | { type: 'gmTimeTwist'; tokenId: string; action: 'resolve' | 'cancel' }
+  | { type: 'gmRechargeItem'; tokenId: string; itemId: string };
 
-export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock']);
-export const LOOT_PLAYER_COMMANDS = new Set<LootCommand['type']>(['itemIdentify', 'itemReroll', 'itemSalvage', 'combineFragments']);
+export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem']);
+export const LOOT_PLAYER_COMMANDS = new Set<LootCommand['type']>(['itemIdentify', 'itemReroll', 'itemSalvage', 'combineFragments', 'itemAugment', 'itemAscend', 'transmuteFragments', 'itemActivate']);
 export const LOOT_COMMANDS = new Set<string>([...LOOT_GM_COMMANDS, ...LOOT_PLAYER_COMMANDS]);
 /** Commands that need a server-provided random seed. */
-export const SEEDED_COMMANDS = new Set<string>(['arsenalGenerate', 'itemReroll']);
+export const SEEDED_COMMANDS = new Set<string>(['arsenalGenerate', 'itemReroll', 'itemAugment', 'itemAscend', 'transmuteFragments']);
 
 export const MAX_STAGED = 24;
 export const MAX_AUDIT = 300;
@@ -80,8 +90,46 @@ export function canReroll(t: Pick<Token, 'currency'>, item: Item): Check {
   return yes;
 }
 
+export function canAugment(t: Pick<Token, 'currency'>, item: Item): Check {
+  if (!item.rarity || !item.baseId) return no('Only generated equipment can be augmented.');
+  if (item.identified === false) return no('Identify this item first.');
+  if (item.rarity === 'normal') return no('Normal items have no affix slots – use an Orb of Ascension first.');
+  if (item.rarity !== 'magic' && item.rarity !== 'rare') return no('Unique items cannot be augmented.');
+  const base = baseItem(item.baseId);
+  if (!base) return no('Unknown base item.');
+  if ((item.mods?.length ?? 0) >= AFFIX_RULES[item.rarity].max) return no(`No free affix slot (${RARITY_LABEL[item.rarity]} items have at most ${AFFIX_RULES[item.rarity].max}).`);
+  if (!addableMods(base, item.rarity, item.itemLevel ?? 1, item.mods ?? []).length) return no('No eligible modifier can be added to this item.');
+  if (balanceOf(t, 'augment') < 1) return no('Requires 1 Orb of Augmentation.');
+  return yes;
+}
+
+export function canAscend(t: Pick<Token, 'currency'>, item: Item): Check {
+  if (!item.rarity || !item.baseId) return no('Only generated equipment can be ascended.');
+  if (item.identified === false) return no('Identify this item first.');
+  if (item.rarity === 'rare') return no('Rare is the highest rarity an Orb of Ascension can reach.');
+  if (item.rarity !== 'normal' && item.rarity !== 'magic') return no('Unique items cannot be ascended.');
+  const base = baseItem(item.baseId);
+  if (!base || !canRollMods(base)) return no('This base item cannot carry modifiers.');
+  const next = item.rarity === 'normal' ? 'magic' : 'rare';
+  if (!addableMods(base, next, item.itemLevel ?? 1, item.mods ?? []).length) return no('No eligible modifier can be added to this item.');
+  if (balanceOf(t, 'ascend') < 1) return no('Requires 1 Orb of Ascension.');
+  return yes;
+}
+
+export function canActivate(t: Pick<Token, 'equipment' | 'timeTwist'>, item: Item): Check {
+  const def = uniqueDef(item.uniqueId);
+  if (!def?.ability) return no('This item has no ability to activate.');
+  if (item.charge?.spent) return no('Spent – recharges once per long rest (the GM recharges it).');
+  const eq = equipmentOf(t);
+  const slot = slotOfItem(eq, item.id);
+  if (!slot || !activeSlots(eq).includes(slot)) return no('Wear it (amulet slot, not resting) to activate it.');
+  if (t.timeTwist) return no('You already have a postponed turn waiting.');
+  return yes;
+}
+
 export function canSalvage(t: Pick<Token, 'equipment'>, item: Item, actor: Actor): Check {
   if (!item.rarity || !item.baseId) return no('Only generated equipment can be salvaged.');
+  if (item.rarity === 'unique') return no('Unique items cannot be salvaged.');
   if (item.locked && actor.role !== 'gm') return no('The Game Master has restricted this item.');
   if (item.bound) return no('Bound items cannot be salvaged.');
   if (slotOfItem(equipmentOf(t), item.id)) return no('Unequip before salvaging.');
@@ -134,6 +182,40 @@ function generate(base: BaseItem, cmd: Extract<LootCommand, { type: 'arsenalGene
   if (item.identified === false) item.name = base.name; // the affix name would reveal the modifiers
   item.history = [{ day, text: 'Created in the GM Arsenal' }];
   return item;
+}
+
+/** Transmutation outcome table from the balance rules (weights ≥ 0; all zero → Renewal only). */
+export function transmuteTable(rules: ReturnType<typeof itemRulesOf>): Array<{ value: CurrencyId; weight: number }> {
+  const t: Array<{ value: CurrencyId; weight: number }> = [
+    { value: 'orb', weight: rules.transmuteWeightRenewal },
+    { value: 'augment', weight: rules.transmuteWeightAugment },
+    { value: 'ascend', weight: rules.transmuteWeightAscension },
+  ];
+  return t.some((x) => x.weight > 0) ? t : [{ value: 'orb', weight: 1 }];
+}
+
+function uniqueItem(id: string, uniqueId: string, day: number): Item | null {
+  const def = uniqueDef(uniqueId);
+  const base = baseItem(def?.baseId);
+  if (!def || !base) return null;
+  return {
+    id,
+    name: def.name,
+    kind: 'misc',
+    description: def.flavor,
+    quantity: 1,
+    rev: 0,
+    baseId: base.id,
+    uniqueId: def.id,
+    rarity: 'unique',
+    itemLevel: def.itemLevel,
+    mods: structuredClone(def.mods),
+    modVersion: MODIFIER_VERSION,
+    ...(base.equip ? { equip: { ...structuredClone(base.equip), gmLocked: true } } : {}),
+    ...(def.ability ? { charge: { spent: false } } : {}),
+    source: { kind: 'gm', label: 'GM Arsenal (unique)', day },
+    history: [{ day, text: 'Created in the GM Arsenal' }],
+  };
 }
 
 // ---------------------------------------------------------------- command execution
@@ -284,6 +366,135 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       setBalance(t, 'fragment', next);
       audit(state, { by, action: 'salvage', tokenId: t.id, itemId: item.id, itemName: item.name, detail: `${describe(item)} → ${currencyLabel('fragment', reward)}` });
       return { ok: true, state, message: `Salvaged ${item.name}: +${currencyLabel('fragment', reward)}.` };
+    }
+    case 'itemAugment':
+    case 'itemAscend': {
+      const item0 = prev.tokens[cmd.tokenId]?.inventory.find((i) => i.id === cmd.itemId);
+      if (!item0) return fail(prev, 'This item is no longer in the inventory.');
+      if ((item0.rev ?? 0) !== cmd.rev) return fail(prev, `“${item0.name}” was changed in the meantime – please look at it again.`);
+      const check = cmd.type === 'itemAugment' ? canAugment(prev.tokens[cmd.tokenId], item0) : canAscend(prev.tokens[cmd.tokenId], item0);
+      if (!check.ok) return fail(prev, check.reason);
+      if (typeof cmd.seed !== 'number') return fail(prev, 'This needs a server seed.');
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      const item = t.inventory.find((i) => i.id === cmd.itemId)!;
+      const base = baseItem(item.baseId)!;
+      const rng = seededRng(cmd.seed);
+      const before = item.mods?.length ?? 0;
+      if (cmd.type === 'itemAugment') {
+        const rarity = item.rarity as 'magic' | 'rare';
+        const wasAuto = rarity === 'magic' && item.name === generatedName(base, 'magic', item.mods ?? [], () => 0);
+        item.mods = addMods(base, rarity, item.itemLevel ?? 1, item.mods ?? [], 1, rng);
+        if (item.mods.length === before) return fail(prev, 'No eligible modifier can be added to this item.'); // nothing consumed
+        if (wasAuto) item.name = generatedName(base, 'magic', item.mods, () => 0);
+        setBalance(t, 'augment', balanceOf(t, 'augment') - 1);
+        addHistory(state, item, 'Augmented with an Orb of Augmentation');
+      } else {
+        const next = item.rarity === 'normal' ? 'magic' : 'rare';
+        // keep every existing (valid) modifier, add only what the new rarity needs to reach its minimum
+        const need = Math.max(1, AFFIX_RULES[next].min - before);
+        item.mods = addMods(base, next, item.itemLevel ?? 1, item.mods ?? [], need, rng);
+        if (item.mods.length === before) return fail(prev, 'No eligible modifier can be added to this item.');
+        item.rarity = next;
+        item.modVersion = MODIFIER_VERSION;
+        item.name = revealedName(base, item);
+        setBalance(t, 'ascend', balanceOf(t, 'ascend') - 1);
+        addHistory(state, item, `Ascended to ${RARITY_LABEL[next]} with an Orb of Ascension`);
+      }
+      item.rev = (item.rev ?? 0) + 1;
+      audit(state, { by: byName(prev, actor), action: cmd.type === 'itemAugment' ? 'augment' : 'ascend', tokenId: t.id, itemId: item.id, itemName: item.name, detail: `${describe(item)} · ${item.mods.length - before} modifier(s) added` });
+      return { ok: true, state };
+    }
+    case 'transmuteFragments': {
+      const t0 = prev.tokens[cmd.tokenId];
+      if (!t0) return fail(prev, 'Unknown character.');
+      if ((t0.currencyRev ?? 0) !== cmd.currencyRev) return fail(prev, 'Your currency changed in the meantime – please try again.');
+      if (typeof cmd.seed !== 'number') return fail(prev, 'This needs a server seed.');
+      const sets = Math.floor(cmd.sets);
+      const cost = sets * rules.fragmentsPerRandomOrb;
+      if (sets < 1) return fail(prev, 'Choose at least one Orb.');
+      if (balanceOf(t0, 'fragment') < cost) return fail(prev, `Requires ${currencyLabel('fragment', cost)}.`);
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      const rng = seededRng(cmd.seed);
+      const table = transmuteTable(rules);
+      const got: Partial<Record<CurrencyId, number>> = {};
+      for (let i = 0; i < sets; i++) {
+        const c = weightedPick(rng, table)!;
+        got[c] = (got[c] ?? 0) + 1;
+      }
+      const cur = { ...(t.currency ?? {}) };
+      cur.fragment = balanceOf(t, 'fragment') - cost;
+      for (const [c, n] of Object.entries(got) as Array<[CurrencyId, number]>) cur[c] = Math.min(MAX_CURRENCY, balanceOf(t, c) + n);
+      t.currency = cur;
+      t.currencyRev = (t.currencyRev ?? 0) + 1;
+      const summary = (Object.entries(got) as Array<[CurrencyId, number]>).map(([c, n]) => currencyLabel(c, n)).join(', ');
+      t.lastTransmute = { rev: t.currencyRev, result: got };
+      audit(state, { by: byName(prev, actor), action: 'transmute', tokenId: t.id, detail: `${currencyLabel('fragment', cost)} → ${summary}` });
+      return { ok: true, state, message: `Arcane Transmutation: ${summary}.` };
+    }
+    case 'arsenalGenerateUnique': {
+      const target = cmd.giveTo ? prev.tokens[cmd.giveTo] : undefined;
+      if (cmd.giveTo && target?.kind !== 'player') return fail(prev, 'Unknown character.');
+      const item = uniqueItem(cmd.stagedId, cmd.uniqueId, prev.day);
+      if (!item) return fail(prev, 'Unknown unique item.');
+      const state = prepare(prev, cmd.giveTo);
+      if (cmd.giveTo) {
+        const t = state.tokens[cmd.giveTo];
+        addHistory(state, item, `Given to ${t.name}`);
+        const err = addToInventory(t, item);
+        if (err) return fail(prev, err);
+        audit(state, { by: 'GM', action: 'give', tokenId: t.id, itemId: item.id, itemName: item.name, detail: 'Unique – created and given' });
+      } else {
+        const staged = state.arsenal?.staged ?? [];
+        if (staged.length >= MAX_STAGED) return fail(prev, `The Arsenal tray holds at most ${MAX_STAGED} items.`);
+        if (staged.some((i) => i.id === item.id)) return fail(prev, 'This item was already generated.');
+        state.arsenal = { staged: [...staged, item] };
+        audit(state, { by: 'GM', action: 'generate', itemId: item.id, itemName: item.name, detail: 'Unique' });
+      }
+      return { ok: true, state };
+    }
+    case 'itemActivate': {
+      const t0 = prev.tokens[cmd.tokenId];
+      const item0 = t0?.inventory.find((i) => i.id === cmd.itemId);
+      if (!item0) return fail(prev, 'This item is no longer in the inventory.');
+      if ((item0.rev ?? 0) !== cmd.rev) return fail(prev, `“${item0.name}” was changed in the meantime – please look at it again.`);
+      const c = canActivate(t0, item0);
+      if (!c.ok) return fail(prev, c.reason);
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      const item = t.inventory.find((i) => i.id === cmd.itemId)!;
+      item.charge = { spent: true, spentDay: state.day };
+      item.rev = (item.rev ?? 0) + 1;
+      t.timeTwist = { itemId: item.id, itemName: item.name, day: state.day, phase: state.phase };
+      addHistory(state, item, 'Twist of Time activated');
+      state.log = [...prev.log];
+      addLog(state, 'event', `⏳ ${t.name} twists time with ${item.name}: the current turn is skipped – two consecutive turns follow at ${t.name}’s next turn (the GM resolves it).`);
+      audit(state, { by: byName(prev, actor), action: 'activate', tokenId: t.id, itemId: item.id, itemName: item.name, detail: 'Twist of Time – postponed turn pending' });
+      return { ok: true, state };
+    }
+    case 'gmTimeTwist': {
+      const t0 = prev.tokens[cmd.tokenId];
+      if (!t0?.timeTwist) return fail(prev, 'No postponed turn is waiting for this character.');
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      const tw = t.timeTwist!;
+      delete t.timeTwist;
+      state.log = [...prev.log];
+      addLog(state, 'event', cmd.action === 'resolve' ? `⏳ ${t.name} takes two consecutive turns (${tw.itemName}).` : `⏳ ${t.name}’s postponed turn is lost (${tw.itemName}).`);
+      audit(state, { by: 'GM', action: 'activate', tokenId: t.id, itemId: tw.itemId, itemName: tw.itemName, detail: cmd.action === 'resolve' ? 'Double turn resolved' : 'Postponed turn cancelled (encounter ended / incapacitated)' });
+      return { ok: true, state };
+    }
+    case 'gmRechargeItem': {
+      const item0 = prev.tokens[cmd.tokenId]?.inventory.find((i) => i.id === cmd.itemId);
+      if (!item0?.charge) return fail(prev, 'This item has no charge.');
+      const state = prepare(prev, cmd.tokenId);
+      const item = state.tokens[cmd.tokenId].inventory.find((i) => i.id === cmd.itemId)!;
+      item.charge = { spent: false };
+      item.rev = (item.rev ?? 0) + 1;
+      addHistory(state, item, 'Recharged (long rest)');
+      audit(state, { by: 'GM', action: 'activate', tokenId: cmd.tokenId, itemId: item.id, itemName: item.name, detail: 'Recharged' });
+      return { ok: true, state };
     }
     case 'combineFragments': {
       const t0 = prev.tokens[cmd.tokenId];

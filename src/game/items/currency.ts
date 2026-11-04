@@ -2,13 +2,15 @@
  * APEX magical currency (APEX 0.6) – original names. Balances live on the character token
  * (`token.currency`) and only ever change through server-validated commands.
  */
-export type CurrencyId = 'seal' | 'orb' | 'fragment';
-export const CURRENCY_IDS: CurrencyId[] = ['seal', 'orb', 'fragment'];
+export type CurrencyId = 'seal' | 'orb' | 'augment' | 'ascend' | 'fragment';
+export const CURRENCY_IDS: CurrencyId[] = ['seal', 'orb', 'augment', 'ascend', 'fragment'];
 export const MAX_CURRENCY = 9999;
 
 export const CURRENCIES: Record<CurrencyId, { name: string; plural: string; purpose: string; color: string }> = {
   seal: { name: 'Seal of Revelation', plural: 'Seals of Revelation', purpose: 'Identifies one unidentified item.', color: '#e3c25b' },
   orb: { name: 'Orb of Renewal', plural: 'Orbs of Renewal', purpose: 'Rerolls every modifier of one identified Magic or Rare item.', color: '#7da2ff' },
+  augment: { name: 'Orb of Augmentation', plural: 'Orbs of Augmentation', purpose: 'Adds one random eligible modifier to an identified Magic or Rare item with a free affix slot.', color: '#5fc6a8' },
+  ascend: { name: 'Orb of Ascension', plural: 'Orbs of Ascension', purpose: 'Raises an identified item one rarity step (Normal → Magic → Rare), keeping its modifiers.', color: '#e08a4a' },
   fragment: { name: 'Arcane Fragment', plural: 'Arcane Fragments', purpose: 'Salvaged from equipment; combine them into Orbs of Renewal.', color: '#b48ce6' },
 };
 

@@ -15,14 +15,14 @@ import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
 import { advanceDay, advancePhase } from './day.js';
 import { movePointsForSpeed } from './resources.js';
-import { emptyEquipment, equipItem, reconcileEquipment, unequipSlot, type Ability, type Equipment, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
+import { EQUIPPED_CONTAINER, SLOT_LABEL, emptyEquipment, equipItem, reconcileEquipment, slotOfItem, syncEquipmentLocations, unequipSlot, type Ability, type Equipment, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
 import { addAnnouncement, applyEvent, eventEligible, postponeEvent, rejectEvent } from './events.js';
 import { stringHash } from './rng.js';
 import { TERRAIN } from './terrain.js';
 import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
-import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility } from './types.js';
+import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility, Token, BodyType } from './types.js';
 import { INVENTORY_LIMITS, canMerge, containerOfItem, isStackable, materializeInventory } from './inventory.js';
 
 export { fmt };
@@ -59,7 +59,7 @@ export type Command =
   | { type: 'announce'; category: AnnouncementCategory; title: string; text: string }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
   | { type: 'setWill'; tokenId: string; current?: number; max?: number }
-  | { type: 'setAppearance'; tokenId: string; name?: string; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
+  | { type: 'setAppearance'; tokenId: string; name?: string; bodyType?: BodyType; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
   | {
       type: 'gmRestoreCharacter';
       tokenId: string;
@@ -108,6 +108,10 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'itemReroll',
   'itemSalvage',
   'combineFragments',
+  'itemAugment',
+  'itemAscend',
+  'transmuteFragments',
+  'itemActivate',
 ]);
 
 /** May the actor edit this character's sheet resources and inventory? GM: all; player: only their own character. */
@@ -410,6 +414,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       // Cosmetic only: tag, colours, marker shape, initials. Never touches rules or permissions.
       const t = state.tokens[cmd.tokenId];
       if (cmd.name !== undefined && cmd.name.trim()) t.name = cmd.name.trim().slice(0, 40);
+      if (cmd.bodyType !== undefined) t.bodyType = cmd.bodyType; // cosmetic paper-doll silhouette only
       if (cmd.title !== undefined && cmd.title.trim()) {
         t.title = cmd.title.trim().slice(0, 60);
         t.titleCustom = true; // a manually chosen tagline is never regenerated from imported class data
@@ -438,6 +443,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
         const cur = t.equipment ?? emptyEquipment();
         t.equipment = { ...cur, slots: { ...cmd.equipment.slots }, activeSet: cmd.equipment.activeSet, resting: cmd.equipment.resting, restingKeep: [...cmd.equipment.restingKeep] };
         reconcileEquipment(t);
+        syncEquipmentLocations(t);
       }
       addLog(state, 'gm', `${t.name}: character configuration restored from a snapshot.`, 'gm');
       return { ok: true, state };
@@ -499,7 +505,11 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
         item.name = name;
       }
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
-      if (cmd.container !== undefined) item.container = cmd.container;
+      if (cmd.container !== undefined) {
+        const placement = wornPlacement(t, item, cmd.container);
+        if (placement) return fail(prev, placement);
+        item.container = cmd.container;
+      }
       if (cmd.quantity !== undefined && (item.rarity || item.mods?.length) && Math.round(cmd.quantity) !== item.quantity) return fail(prev, T.itemQuantityFixed);
       if (cmd.quantity !== undefined) item.quantity = clamp(Math.round(cmd.quantity), 0, L.quantity);
       if (cmd.description !== undefined) item.description = text(cmd.description, L.description) ?? '';
@@ -536,6 +546,8 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       const item = findItem(cmd.itemId, cmd.rev);
       if (typeof item === 'string') return fail(prev, item);
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
+      const placement = wornPlacement(t, item, cmd.container);
+      if (placement) return fail(prev, placement);
       const rest = t.inventory.filter((i) => i !== item);
       let at = rest.length;
       if (cmd.beforeItemId) {
@@ -650,6 +662,7 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
       break;
     }
   }
+  syncEquipmentLocations(t); // APEX 0.7: the inventory location always follows the slots
   return { ok: true, state };
 }
 
@@ -658,6 +671,14 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
  * knowledge …) with the previous state. Safe because every command clones before it mutates; it turns a
  * ~27 ms full-state clone on a radius-78 world into well under a millisecond.
  */
+/** APEX 0.7: worn items stay in "Equipped / Worn"; equipment is put on with Equip, not by moving it there. */
+function wornPlacement(t: Token, item: Item, container: string): string | null {
+  const slot = slotOfItem(t.equipment ?? emptyEquipment(), item.id);
+  if (slot && container !== EQUIPPED_CONTAINER) return `${item.name} is worn (${SLOT_LABEL[slot]}) – unequip it first.`;
+  if (!slot && item.equip && container === EQUIPPED_CONTAINER) return `Use “Equip” to wear ${item.name}.`;
+  return null;
+}
+
 function cloneOneToken(prev: GameState, tokenId: string): GameState {
   return { ...prev, tokens: { ...prev.tokens, [tokenId]: structuredClone(prev.tokens[tokenId]) } };
 }

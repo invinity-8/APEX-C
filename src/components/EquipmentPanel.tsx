@@ -28,7 +28,7 @@ import {
 import { ELEMENTS } from '../game/items/modifiers';
 import { formatReduction, resistanceLabel } from '../game/items/resistance';
 import type { CharacterSheet } from '../game/sheet';
-import type { Item } from '../game/types';
+import type { BodyType, Item } from '../game/types';
 import type { TokenView } from '../game/visibility';
 import type { DispatchResult, GameApi } from '../state/gameApi';
 
@@ -167,6 +167,19 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
         >
           ☾ Resting / Unarmored
         </button>
+        <span className="flex-1" />
+        <label className="flex items-center gap-1 text-marble-400" title="Cosmetic only – no effect on attributes, slots or rules">
+          Silhouette
+          <select
+            className="rounded-md border border-ink-600 bg-ink-900 px-1.5 py-0.5 text-[11px] text-marble-100"
+            aria-label="Body type"
+            value={token.details?.bodyType ?? 'masculine'}
+            onChange={(e) => void run({ type: 'setAppearance', tokenId: token.id, bodyType: e.target.value as BodyType })}
+          >
+            <option value="masculine">Masculine-presenting</option>
+            <option value="feminine">Feminine-presenting</option>
+          </select>
+        </label>
       </div>
 
       <div className="apex-doll">
@@ -177,7 +190,7 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
           {renderSlot('chest')}
         </div>
         <div className="apex-doll-figure">
-          <HeroFigure worn={worn} />
+          <HeroFigure worn={worn} body={token.details?.bodyType} />
         </div>
         <div className="apex-doll-col">
           {renderSlot('gloves')}
@@ -496,7 +509,7 @@ export type Worn = Partial<Record<'head' | 'cloak' | 'chest' | 'gloves' | 'boots
  * Equipment figure (APEX 0.6): a neutral, well-proportioned silhouette (≈ 7.5 heads tall) with layered
  * equipment overlays that appear only for what is actually worn in the active set / preset. Original artwork.
  */
-export function HeroFigure({ worn }: { worn: Worn }) {
+export function HeroFigure({ worn, body = 'masculine' }: { worn: Worn; body?: BodyType }) {
   const gold = '#c09b58';
   return (
     <svg viewBox="0 0 160 320" className="h-full w-full" role="img" aria-label={`Figure wearing: ${Object.entries(worn).filter(([, v]) => v).map(([k]) => k).join(', ') || 'nothing'}`}>
@@ -521,14 +534,26 @@ export function HeroFigure({ worn }: { worn: Worn }) {
       <ellipse cx="80" cy="150" rx="78" ry="150" fill="url(#hf-halo)" />
       <ellipse cx="80" cy="308" rx="44" ry="7" fill="#000" opacity=".35" />
       {worn.cloak && <path data-layer="cloak" d="M50 72 Q80 64 110 72 L122 250 Q80 268 38 250 Z" fill="#8e2f2f" stroke="#5a1d1d" strokeWidth="1.2" />}
-      {/* body */}
-      <g fill="url(#hf-body)" stroke="#8c806a" strokeOpacity=".55" strokeWidth="1">
-        <circle cx="80" cy="38" r="16" />
-        <path d="M73 52 h14 v10 h-14 z" />
-        <path d="M50 70 Q80 60 110 70 L114 100 Q108 132 100 156 L102 168 L58 168 L60 156 Q52 132 46 100 Z" />
-        <path d="M50 72 Q40 76 38 96 L34 150 Q33 168 38 178 L45 178 L46 150 L52 104 Z" />
-        <path d="M110 72 Q120 76 122 96 L126 150 Q127 168 122 178 L115 178 L114 150 L108 104 Z" />
-        <path d="M58 166 L102 166 L100 226 L96 298 L84 298 L81 214 L79 214 L76 298 L64 298 L60 226 Z" />
+      {/* body – APEX 0.7: two cosmetic silhouettes sharing the same slot anchors, so every overlay fits both */}
+      {body === 'feminine' && !worn.head && <path data-layer="hair" d="M63 36 Q62 18 80 18 Q98 18 97 36 L100 70 Q92 64 89 52 L71 52 Q68 64 60 70 Z" fill="#3a2c22" stroke="#22190f" strokeWidth="1" />}
+      <g fill="url(#hf-body)" stroke="#8c806a" strokeOpacity=".55" strokeWidth="1" data-body={body}>
+        <circle cx="80" cy="38" r={body === 'feminine' ? 15 : 16} />
+        <path d={body === 'feminine' ? 'M74 52 h12 v10 h-12 z' : 'M73 52 h14 v10 h-14 z'} />
+        {body === 'feminine' ? (
+          <>
+            <path d="M54 70 Q80 62 106 70 L108 96 Q101 120 97 134 Q104 150 104 166 L56 166 Q56 150 63 134 Q59 120 52 96 Z" />
+            <path d="M54 72 Q44 76 42 96 L38 150 Q37 168 41 178 L47 178 L48 150 L55 104 Z" />
+            <path d="M106 72 Q116 76 118 96 L122 150 Q123 168 119 178 L113 178 L112 150 L105 104 Z" />
+            <path d="M57 164 L103 164 L101 226 L95 298 L84 298 L81 214 L79 214 L76 298 L65 298 L59 226 Z" />
+          </>
+        ) : (
+          <>
+            <path d="M50 70 Q80 60 110 70 L114 100 Q108 132 100 156 L102 168 L58 168 L60 156 Q52 132 46 100 Z" />
+            <path d="M50 72 Q40 76 38 96 L34 150 Q33 168 38 178 L45 178 L46 150 L52 104 Z" />
+            <path d="M110 72 Q120 76 122 96 L126 150 Q127 168 122 178 L115 178 L114 150 L108 104 Z" />
+            <path d="M58 166 L102 166 L100 226 L96 298 L84 298 L81 214 L79 214 L76 298 L64 298 L60 226 Z" />
+          </>
+        )}
       </g>
       {worn.boots && <path data-layer="boots" d="M62 262 L77 262 L77 300 L58 302 Q57 296 62 292 Z M83 262 L98 262 L98 292 Q103 296 102 302 L83 300 Z" fill="#4a3926" stroke="#2b2118" strokeWidth="1" />}
       {worn.chest && (
