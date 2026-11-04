@@ -8,6 +8,7 @@ import { baseItem } from '../../game/items/bases';
 import { balanceOf, CURRENCIES, CURRENCY_IDS, type CurrencyId } from '../../game/items/currency';
 import { modifier, modText } from '../../game/items/modifiers';
 import { uniqueDef } from '../../game/items/uniques';
+import type { CarryLoad } from '../../game/items/weight';
 import { formatReduction } from '../../game/items/resistance';
 import { DEFAULT_ITEM_RULES, RARITY_LABEL, type ItemRules } from '../../game/items/rules';
 import type { Item } from '../../game/types';
@@ -303,3 +304,36 @@ export function ItemInspect({
 }
 
 export const EQUIP_ORDER = EQUIP_SLOTS;
+
+// ---------------------------------------------------------------- carry weight gauge (APEX 0.7)
+
+const LOAD_TONE: Record<CarryLoad['state'], { color: string; label: string }> = {
+  ok: { color: '#7cc98a', label: 'Unburdened' },
+  encumbered: { color: '#e3c25b', label: 'Encumbered (−10 ft)' },
+  heavily: { color: '#e08a4a', label: 'Heavily encumbered (−20 ft, disadvantage)' },
+  over: { color: '#e05252', label: 'Overburdened' },
+};
+
+/** Compact vertical gauge: current load / capacity in kg, percentage and state. */
+export function CarryGauge({ load }: { load: CarryLoad }) {
+  const pct = load.pct === null ? 0 : Math.min(100, load.pct);
+  const tone = LOAD_TONE[load.state];
+  return (
+    <div className="flex items-stretch gap-2 rounded-lg border border-ink-600 bg-ink-900/60 p-2" aria-label="Carry weight" data-testid="carry-gauge" data-state={load.state}>
+      <div className="relative w-3.5 overflow-hidden rounded-full border border-ink-500 bg-ink-800" style={{ minHeight: 76 }} role="meter" aria-valuemin={0} aria-valuemax={load.capacityKg ?? 0} aria-valuenow={load.loadKg} aria-label="Carried weight">
+        <div className="absolute inset-x-0 bottom-0 transition-[height] duration-500 motion-reduce:transition-none" style={{ height: `${pct}%`, background: tone.color }} />
+        {load.encumberedAtKg && load.capacityKg ? <div className="absolute inset-x-0 border-t border-dashed border-gold-200/60" style={{ bottom: `${(load.encumberedAtKg / load.capacityKg) * 100}%` }} /> : null}
+        {load.heavilyAtKg && load.capacityKg ? <div className="absolute inset-x-0 border-t border-dashed border-amber-300/70" style={{ bottom: `${(load.heavilyAtKg / load.capacityKg) * 100}%` }} /> : null}
+      </div>
+      <div className="flex flex-col justify-between text-[11px] leading-tight">
+        <span className="text-[10px] uppercase tracking-wider text-marble-500">Carry weight</span>
+        <span className="font-display text-base font-black tabular-nums text-marble-50" data-testid="carry-load">
+          {load.loadKg.toFixed(1)}
+          <span className="text-marble-400"> / {load.capacityKg === null ? '?' : load.capacityKg.toFixed(1)} kg</span>
+        </span>
+        <span className="tabular-nums text-marble-400">{load.pct === null ? 'Strength missing on the sheet' : `${load.pct} %`}</span>
+        <span style={{ color: tone.color }}>{tone.label}</span>
+      </div>
+    </div>
+  );
+}

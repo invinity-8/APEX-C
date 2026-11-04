@@ -261,7 +261,7 @@ export default function App({ game }: { game: GameApi }) {
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
       { id: 'intel', title: 'Intelligence', icon: '👁', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
       { id: 'notifications', title: 'Notifications', icon: '📣', render: () => <AnnouncementHistory announcements={view.announcements} open /> },
-      { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} rules={view.itemRules} embedded /> : null) },
+      { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} rules={view.itemRules} game={game} embedded /> : null) },
     );
   }
   const role = isGm ? 'gm' : 'player';
@@ -376,7 +376,7 @@ export default function App({ game }: { game: GameApi }) {
           ) : screen === 'character' ? (
             <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} />
           ) : (
-            <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} rules={view.itemRules} isGm={isGm} />
+            <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} rules={view.itemRules} isGm={isGm} game={game} />
           )}
         </div>
       )}

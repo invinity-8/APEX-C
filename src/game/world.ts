@@ -13,15 +13,6 @@
  */
 import type { GameState, Token, WorldMeta } from './types.js';
 
-export interface CarryOptions {
-  /**
-   * true  = keep per-world progress of consumable character resources (current Will).
-   * false = start fresh: current Will refilled to the maximum.
-   * Inventory is character-level and always kept.
-   */
-  keepProgress: boolean;
-}
-
 // APEX 0.7: equipment, currency, cosmetic choices and the portrait belong to the character as well – a new world
 // must not silently drop them.
 const CHARACTER_FIELDS = [
@@ -46,7 +37,7 @@ const CHARACTER_FIELDS = [
 ] as const;
 
 /** Copies the character-level data of the old world's player characters into a freshly generated world. */
-export function carryCharacters(prev: GameState, fresh: GameState, opts: CarryOptions): GameState {
+export function carryCharacters(prev: GameState, fresh: GameState): GameState {
   const next = structuredClone(fresh);
   const start = Object.values(next.tokens).find((t) => t.kind === 'player')?.pos ?? { q: 0, r: 0 };
   for (const old of Object.values(prev.tokens)) {
@@ -61,7 +52,6 @@ export function carryCharacters(prev: GameState, fresh: GameState, opts: CarryOp
     for (const f of CHARACTER_FIELDS) {
       if (old[f] !== undefined) (t as unknown as Record<string, unknown>)[f] = structuredClone(old[f]);
     }
-    t.will = opts.keepProgress ? { ...old.will } : { current: old.will.max, max: old.will.max };
     // World-level values start fresh according to the APEX rules.
     t.movePoints = t.maxMovePoints;
     t.visionBonus = 0;
@@ -92,7 +82,6 @@ export function reconcileRestore(current: GameState, archived: GameState, choice
       if (now[f] !== undefined) (t as unknown as Record<string, unknown>)[f] = structuredClone(now[f]);
       else delete t[f];
     }
-    t.will = { current: Math.min(t.will.current, now.will.max), max: now.will.max };
     for (const f of ['name', 'title', 'color', 'initials'] as const) t[f] = now[f];
   }
   return next;

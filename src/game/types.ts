@@ -11,7 +11,8 @@ import type { Axial, HexKey } from './hex.js';
 import type { TerrainType } from './terrain.js';
 
 /** v2: day/night phases, terrain elevation & landmark features. */
-export const STATE_VERSION = 2;
+/** 3 (APEX 0.7): the legacy Willpower resource was removed (see migrate.ts). */
+export const STATE_VERSION = 3;
 
 // ---------------- Map ----------------
 
@@ -79,24 +80,20 @@ export interface GameConfig {
 
 export type TokenKind = 'player' | 'rival';
 
-export interface WillPool {
-  current: number;
-  max: number;
-}
-
 export interface Item {
   id: string;
   name: string;
-  kind: 'weapon' | 'armor' | 'tool' | 'consumable' | 'will-vessel' | 'misc';
+  kind: 'weapon' | 'armor' | 'tool' | 'consumable' | 'misc';
   description: string;
   quantity: number;
-  /** Nur für Willensgefäße: gespeicherte Willenskraft. */
-  willCharge?: number;
-  willCapacity?: number;
   /** APEX 0.3: inventory container id (missing = derived default, see inventory.ts). */
   container?: string;
   /** APEX 0.7: container the item came from before it was equipped (it returns there when unequipped). */
   prevContainer?: string;
+  /** APEX 0.7: weight per unit in kilograms (overrides the base item's SRD weight; free-text items default to 0). */
+  weightKg?: number;
+  /** APEX 0.7: Bag of Holding contents while the bag is NOT in a character's inventory (tray / transfer). */
+  held?: Item[];
   /** Free-text notes of the owner. */
   notes?: string;
   /** Revision counter – edits must name the revision they are based on (no silent overwrites). */
@@ -145,6 +142,8 @@ export interface ItemOrigin {
 export interface InventoryContainer {
   id: string;
   name: string;
+  /** APEX 0.7: id of the Bag of Holding item this container belongs to. */
+  holding?: string;
 }
 
 /** Cosmetic map marker shapes (APEX 0.4). */
@@ -172,7 +171,6 @@ export interface Token {
   controllers: string[];
   /** Nur Spieler: Teilt diese Figur Sicht & Wissen mit dem Rest der Gruppe? */
   sharesWithParty: boolean;
-  will: WillPool;
   inventory: Item[];
   /** APEX 0.3: inventory containers (missing = the default set, see inventory.ts). */
   containers?: InventoryContainer[];

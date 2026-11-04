@@ -21,6 +21,8 @@ import { balanceOf, CURRENCIES, currencyLabel, MAX_CURRENCY, type CurrencyId } f
 import { addableMods, addMods, canRollMods, clampItemLevel, generatedName, rollMods, seededRng, weightedPick } from './generate.js';
 import { uniqueDef } from './uniques.js';
 import { addLog } from '../log.js';
+import { packBag, syncHolding } from './holding.js';
+import { isBagOfHolding } from './weight.js';
 import { createItem } from './instance.js';
 import { AFFIX_RULES, itemRulesOf, MODIFIER_VERSION, RARITY_LABEL } from './rules.js';
 
@@ -157,9 +159,10 @@ function revealedName(base: BaseItem, item: Item): string {
 }
 
 function addToInventory(t: Token, item: Item): string | null {
-  if (t.inventory.length >= INVENTORY_LIMITS.items) return `${t.name}'s inventory is full.`;
+  if (t.inventory.length + 1 + (item.held?.length ?? 0) > INVENTORY_LIMITS.items) return `${t.name}'s inventory is full.`;
   if (t.inventory.some((i) => i.id === item.id)) return 'An item with this id already exists.';
   t.inventory.push({ ...item, container: containersOf(t)[0].id });
+  syncHolding(t); // a Bag of Holding unpacks its contents into its own container
   return null;
 }
 
@@ -272,6 +275,7 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
     case 'arsenalDiscard': {
       const item = prev.arsenal?.staged.find((i) => i.id === cmd.stagedId);
       if (!item) return fail(prev, 'This item is no longer in the Arsenal tray.');
+      if (item.held?.length) return fail(prev, `${item.name} still holds ${item.held.length} item(s) – give it to a character to unpack them first.`);
       const state = prepare(prev);
       state.arsenal = { staged: state.arsenal!.staged.filter((i) => i.id !== cmd.stagedId) };
       audit(state, { by: 'GM', action: 'discard', itemId: item.id, itemName: item.name, detail: describe(item) });
@@ -294,12 +298,13 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       if (!item) return fail(prev, 'This item is no longer in the inventory.');
       const state = prepare(prev, cmd.tokenId);
       const t = state.tokens[cmd.tokenId];
+      const packed = isBagOfHolding(item) ? packBag(t, t.inventory.find((i) => i.id === cmd.itemId)!) : null; // contents travel with the bag
       t.inventory = t.inventory.filter((i) => i.id !== cmd.itemId);
       reconcileEquipment(t);
       let back = '';
       // generated items go back to the Arsenal tray so an accidental grant can simply be re-given
       if (item.baseId && (state.arsenal?.staged.length ?? 0) < MAX_STAGED && !state.arsenal?.staged.some((i) => i.id === item.id)) {
-        const copy = structuredClone(item);
+        const copy = structuredClone(packed ?? item);
         delete copy.container;
         addHistory(state, copy, `Revoked from ${t.name}`);
         state.arsenal = { staged: [...(state.arsenal?.staged ?? []), copy] };

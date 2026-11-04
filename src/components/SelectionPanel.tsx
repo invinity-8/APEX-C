@@ -127,12 +127,6 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
                       <li key={i.id} className="rounded-md bg-ink-800 px-2 py-1" title={i.description}>
                         <span className="text-marble-50">{i.name}</span>
                         {i.quantity > 1 && <span className="text-marble-500"> ×{i.quantity}</span>}
-                        {i.willCapacity !== undefined && (
-                          <span className="text-arcane-300">
-                            {' '}
-                            · {i.willCharge}/{i.willCapacity} will
-                          </span>
-                        )}
                       </li>
                     ))}
                   </ul>

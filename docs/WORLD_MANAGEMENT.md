@@ -8,17 +8,17 @@ GM-only, in the right sidebar: **World Management**. All actions are checked on 
 | **Archive World** | A complete copy of the current world is stored in `apex_world_archives` (name, description, date). The world itself does not change. Success is only reported after the database confirmed the insert. |
 | **Create New World** | Name, radius, optional seed, *keep progress* or *fresh start*. The current world is archived, a new world is generated, character data is carried over, and the new world becomes active – all in one transaction. |
 | **Reset Current World** | Like *Create New World* with the same name/radius and a new random seed. Requires typing `RESET`. |
-| **Restore Archived World** | Shows the archive and its date; the current world is archived first. Inventories/Will: *keep current* (default) or *use archived*. |
+| **Restore Archived World** | Shows the archive and its date; the current world is archived first. Inventories: *keep current* (default) or *use archived*. Equipment and currency always stay current with *keep current*. |
 
 ## What belongs where
 
 | Level | Data | On a world change |
 |---|---|---|
 | Account | profiles, passwords (Argon2id hashes), roles, sessions | never touched (other tables) |
-| Character | character sheets (own table), inventory + containers, name/title/colour, maximum Will, vision and movement traits, control rights | kept |
+| Character | character sheets (own table), inventory + containers, name/title/colour, equipment, currency, cosmetics, vision and movement traits, control rights | kept |
 | World | map, seed, radius, positions, movement points left, vision bonus, explored terrain (Fog of War), sightings, sites, events, day/night, shrinking, log | new world: initialised by the APEX rules; restore: from the archive |
 
-*Keep progress* keeps the current Will; *Fresh start* refills it to the maximum. Hit points and resources on the character sheet are
+(APEX 0.7: the former *Keep progress / Fresh start* choice concerned only the removed Willpower and is gone.) Hit points and resources on the character sheet are
 never changed by world actions.
 
 ## Safety

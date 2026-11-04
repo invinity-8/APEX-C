@@ -93,10 +93,10 @@ describe('equipment rules (server-authoritative)', () => {
     let s = setup();
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' });
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sh', slot: 'off1' });
-    const hpBefore = structuredClone(s.tokens.sinna.will);
+    const before = { mp: s.tokens.sinna.movePoints, inv: structuredClone(s.tokens.sinna.inventory.length) };
     s = run(s, { type: 'setResting', tokenId: 'sinna', resting: true });
     expect(deriveStats(sheet, s.tokens.sinna).ac).toMatchObject({ value: 10 });
-    expect(s.tokens.sinna.will).toEqual(hpBefore); // no rest benefits granted
+    expect({ mp: s.tokens.sinna.movePoints, inv: s.tokens.sinna.inventory.length }).toEqual(before); // no rest benefits granted
     s = run(s, { type: 'setResting', tokenId: 'sinna', resting: false });
     expect(deriveStats(sheet, s.tokens.sinna).ac.value).toBe(16);
     expect(s.tokens.sinna.equipment!.slots).toMatchObject({ chest: 'bp', off1: 'sh' });

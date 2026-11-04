@@ -17,7 +17,10 @@ import { addableMods } from '../game/items/generate';
 import { AFFIX_RULES } from '../game/items/rules';
 import { uniqueDef } from '../game/items/uniques';
 import { DEFAULT_ITEM_RULES, RARITY_LABEL, type ItemRules } from '../game/items/rules';
-import { CurrencyBar, ItemInspect } from './items/ItemUi';
+import { CarryGauge, CurrencyBar, ItemInspect } from './items/ItemUi';
+import { BAG_CAPACITY_KG, bagContentsKg, carryLoad, itemWeightKg, strengthScore } from '../game/items/weight';
+import { activeSlots, itemBonuses } from '../game/equipment';
+import type { GameApi } from '../state/gameApi';
 import { DEFAULT_CONTAINERS, INVENTORY_LIMITS, canMerge, containerOfItem, isStackable } from '../game/inventory';
 import { newEntryId } from '../game/sheet';
 import type { Item } from '../game/types';
@@ -36,6 +39,8 @@ interface Props {
   rules?: ItemRules;
   /** The GM looks at a character's inventory: extra actions (revoke, restrict). */
   isGm?: boolean;
+  /** APEX 0.7: used to read the Strength score for the carry-weight gauge (one sheet request). */
+  game?: GameApi;
 }
 
 const input = 'rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm text-marble-50 focus:border-gold-400 focus:outline-none';
@@ -54,7 +59,8 @@ const FILTERS: Array<[Filter, string]> = [
   ['other', 'Other'],
 ];
 
-export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITEM_RULES, isGm = false }: Props) {
+export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITEM_RULES, isGm = false, game }: Props) {
+  const strength = useStrength(game, token.id);
   const details = token.details;
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
   const items = useMemo(() => details?.inventory ?? [], [details?.inventory]);
@@ -187,6 +193,9 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
         {viewFiltered && <p className="text-[11px] text-marble-500">Filtered or sorted view – drag & drop and ↑/↓ reorder the stored order only in “Manual order” without search or filter.</p>}
       </section>
 
+      <div className="flex flex-wrap items-stretch gap-3">
+        <CarryGauge load={carryLoad({ inventory: items }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant === 1)} />
+        <div className="min-w-0 flex-1">
       <CurrencyBar
         currency={details.currency}
         currencyRev={details.currencyRev ?? 0}
@@ -195,6 +204,8 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
         onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
         lastTransmute={details.lastTransmute}
       />
+        </div>
+      </div>
       {details.timeTwist && (
         <p role="status" className="panel border-arcane-400/60 p-2 text-xs text-arcane-300" data-testid="time-twist">
           ⏳ Twist of Time pending ({details.timeTwist.itemName}, day {details.timeTwist.day}): your next turn will be two consecutive turns. APEX has no turn tracker yet – the GM resolves it at the table.
@@ -319,6 +330,11 @@ function ContainerCard(props: CardProps) {
           <>
             <h3 className="panel-title flex-1">
               {container.name} <span className="text-marble-500">({props.allInside.length})</span>
+              {(container as { holding?: string }).holding && (
+                <span className="ml-2 font-sans text-[10px] normal-case tracking-normal text-arcane-300" data-testid="bag-capacity">
+                  ✦ Bag of Holding · {bagContentsKg({ inventory: props.allItems }, (container as { holding?: string }).holding!).toFixed(1)} / {BAG_CAPACITY_KG.toFixed(1)} kg · contents do not count towards carry weight
+                </span>
+              )}
             </h3>
             <button
               className="text-[11px] text-marble-500 hover:text-gold-200"
@@ -364,15 +380,17 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   const [reason, setReason] = useState('');
   const structured = !!item.baseId;
   const fixedQty = !!item.rarity || !!item.mods?.length;
-  const [draft, setDraft] = useState({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity });
+  const [draft, setDraft] = useState({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity, weightKg: item.weightKg !== undefined ? String(item.weightKg) : '' });
   const [splitQty, setSplitQty] = useState(1);
   const rev = item.rev ?? 0;
   const slot = props.eqSlot(item.id);
   const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o));
-  const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number }>) => run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
+  const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number; weightKg: number }>) => run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if ((await update(draft)).ok) setMode('view');
+    const { weightKg, ...rest } = draft;
+    const w = weightKg.trim() === '' ? undefined : Math.max(0, Math.min(2000, Number(weightKg)));
+    if ((await update({ ...rest, ...(w !== undefined && Number.isFinite(w) && w !== item.weightKg ? { weightKg: w } : {}) })).ok) setMode('view');
   };
   if (mode === 'edit') {
     return (
@@ -382,6 +400,10 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <textarea className={`${input} min-h-12 w-full`} aria-label="Description" placeholder="Description" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
           <textarea className={`${input} min-h-12 w-full`} aria-label="Notes" placeholder="Notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
           <div className="flex items-center gap-2">
+            <label>
+              kg{' '}
+              <input className={`${input} w-20`} type="number" min={0} step={0.1} aria-label="Weight in kg" value={draft.weightKg} onChange={(e) => setDraft({ ...draft, weightKg: e.target.value })} placeholder={itemWeightKg({ baseId: item.baseId }).toString()} />
+            </label>
             <label className={item.rarity || item.mods?.length ? 'hidden' : undefined}>
               Qty{' '}
               <input className={`${input} w-16`} type="number" min={0} value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Math.max(0, Math.round(Number(e.target.value) || 0)) })} />
@@ -431,6 +453,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
             <ItemBadges item={item} />
+            {itemWeightKg(item) > 0 && <span className="ml-1.5 text-[10px] tabular-nums text-marble-500">{(itemWeightKg(item) * item.quantity).toFixed(1)} kg</span>}
             {slot && (
               <span className="ml-1.5 rounded border border-gold-500/50 px-1 text-[10px] uppercase tracking-wider text-gold-300" title="Equipped – see the Equipment tab">
                 equipped · {SLOT_LABEL[slot]}
@@ -440,11 +463,6 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <ItemModLines item={item} />
           {item.description && <p className="text-xs text-marble-300">{item.description}</p>}
           {item.notes && <p className="text-xs italic text-marble-500">{item.notes}</p>}
-          {item.willCapacity !== undefined && (
-            <p className="text-[11px] text-arcane-300">
-              Will charge {item.willCharge ?? 0} / {item.willCapacity}
-            </p>
-          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {structured && (
@@ -632,7 +650,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
         <button
           className="text-marble-500 hover:text-gold-200"
           onClick={() => {
-            setDraft({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity });
+            setDraft({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity, weightKg: item.weightKg !== undefined ? String(item.weightKg) : '' });
             setMode('edit');
           }}
         >
@@ -737,4 +755,28 @@ function Confirm({ title, confirm, tone, children, onConfirm, onCancel }: { titl
       </div>
     </div>
   );
+}
+
+/** Strength score from the character sheet (one request; refreshed on sheet pings). */
+function useStrength(game: GameApi | undefined, tokenId: string): number | null {
+  const [str, setStr] = useState<number | null>(null);
+  const sheets = game?.sheets;
+  useEffect(() => {
+    if (!sheets) return;
+    let live = true;
+    void sheets.load(tokenId).then((r) => live && setStr(r.ok ? strengthScore(r.sheet.sheet) : null));
+    return () => {
+      live = false;
+    };
+  }, [sheets, tokenId]);
+  return str;
+}
+
+/** Carrying-capacity bonus (lb) from equipped, identified modifiers in active slots. */
+function carryBonusLb(items: Item[], eq: Equipment, rules: ItemRules): number {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const worn = activeSlots(eq)
+    .map((slot) => ({ slot, item: eq.slots[slot] ? byId.get(eq.slots[slot]!) : undefined }))
+    .filter((x): x is { slot: typeof x.slot; item: Item } => !!x.item);
+  return itemBonuses(worn, rules).carry.value;
 }

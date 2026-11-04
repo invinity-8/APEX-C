@@ -447,12 +447,9 @@ describe('Inventory (authoritative game state)', () => {
     expect(inv.find((i) => i.id === 'i2')!.notes).toBe('from the laptop');
   });
 
-  it('players may spend their own Will but only the GM changes maximum Will', async () => {
+  it('the legacy Willpower command no longer exists (APEX 0.7)', async () => {
     const h = as(await login('hannah', 'hannah-pass-1'));
-    expect((await h.cmd({ type: 'setWill', tokenId: 'sinna', current: 4 })).status).toBe(200);
-    expect((await h.cmd({ type: 'setWill', tokenId: 'sinna', max: 50 })).status).toBe(422);
-    expect((await h.cmd({ type: 'setWill', tokenId: 'aster', current: 0 })).status).toBe(403);
-    expect(repo.states.get(CID)!.state.tokens.sinna.will).toEqual({ current: 4, max: 10 });
+    expect((await h.cmd({ type: 'setWill', tokenId: 'sinna', current: 4 })).status).toBe(400);
   });
 });
 

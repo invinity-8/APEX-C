@@ -32,7 +32,7 @@ CharacterPanel ── GET/POST ?op=sheet ▶  own character (GM: all) ───�
    explored/visible hexes, no map radius, no seed, no hidden sites, no GM notes, no rivals out of sight, no future
    events, no GM log entries. Since 0.3 they also never receive other characters' inventories.
 5. **Players can only move and manage their own character.** Allowed player commands: `move` (own or granted
-   characters), `setWill` (current Will only), `inv*` (own inventory). Everything else is GM-only.
+   characters), `inv*` (own inventory), equipment and item actions. Everything else is GM-only.
 6. **No lost updates.** Game state: optimistic locking on `apex_game_states.version`, re-validation and retry; item edits
    carry the item revision (`rev`) so a stale edit is rejected. Sheets: per-sheet version, conflicts return the current
    sheet; `+/-` adjustments are re-applied atomically.
@@ -56,7 +56,7 @@ CharacterPanel ── GET/POST ?op=sheet ▶  own character (GM: all) ───�
 
 ## Character sheets & inventory
 
-- **Authoritative resources** stay in the game state: Will (`Token.will`), movement and vision, inventory
+- **Authoritative resources** stay in the game state: movement and vision, inventory
   (`Token.inventory`, optional `Token.containers`). The Character panel shows them directly; no duplicate copies.
 - **Sheets** (`apex_character_sheets`, one per player character) hold the rules-agnostic sheet: optional hit points,
   details, attributes, skills, custom resources, abilities, notes. Players read/write only their own sheet, the GM all.

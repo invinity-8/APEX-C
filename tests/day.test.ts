@@ -161,8 +161,23 @@ describe('Day & night cycle', () => {
     delete v1.phase;
     delete (v1.config as Record<string, unknown>).phases;
     const up = migrateState(v1);
-    expect(up.version).toBe(2);
+    expect(up.version).toBe(3);
     expect(up.phase).toBe('day');
     expect(up.config.phases.night.visionModifier).toBe(-1);
+  });
+});
+
+describe('legacy Willpower (APEX 0.7)', () => {
+  it('v2 saves lose token.will and will-vessel fields; everything else stays', () => {
+    const s = flatState() as unknown as Record<string, unknown>;
+    const v2 = { ...structuredClone(s), version: 2 } as unknown as { tokens: Record<string, Record<string, unknown>> };
+    const t = Object.values(v2.tokens)[0];
+    t.will = { current: 3, max: 5 };
+    t.inventory = [{ id: 'v', name: 'Voluntas Vial', kind: 'will-vessel', description: 'old', quantity: 1, willCharge: 2, willCapacity: 5, notes: 'mine' }];
+    const up = migrateState(v2);
+    const tok = Object.values(up.tokens)[0] as unknown as Record<string, unknown>;
+    expect(up.version).toBe(3);
+    expect('will' in tok).toBe(false);
+    expect(up.tokens[String(tok.id)].inventory[0]).toEqual({ id: 'v', name: 'Voluntas Vial', kind: 'misc', description: 'old', quantity: 1, notes: 'mine' });
   });
 });

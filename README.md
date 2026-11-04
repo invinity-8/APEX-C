@@ -86,9 +86,10 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 - **Class suggestions** (Druid → Wild Shape, Cleric/Paladin → Channel Divinity, Sorcerer → Sorcery Points, Monk →
   Ki/Focus, Fighter → Superiority Dice, Bard → Bardic Inspiration, Barbarian → Rage, Warlock → Pact Magic Slots)
   only pre-fill a name; the player enters the maximum. Nothing is created automatically.
-- **Willpower (legacy):** no rule uses it any more. It is no longer shown in the selection panel or as an orb; it
-  stays in the game state (archives, old worlds, Will vessels) and is reachable in Character → Resources under
-  "Legacy: Willpower". No data was migrated or deleted.
+- **Willpower:** removed completely in APEX 0.7 (types, command `setWill`, UI, demo data). Old worlds, snapshots
+  and archives still load: a legacy reader (`stripLegacy` in `src/game/migrate.ts`) drops `token.will` and turns
+  "will-vessel" items into ordinary items whenever a state is read, so no new write contains Willpower. See
+  docs/game/INVENTORY_WEIGHT.md.
 - **Movement:** daily movement points = round(8 × walking speed / 30), clamped 4–16
   (20 ft → 5 · 25 → 7 · **30 → 8** · 35 → 9 · 40 → 11 · 50 → 13 · 60+ → 16). The GM applies a speed
   (`setWalkingSpeed`, Selection panel); it changes only the **maximum** – current points never increase, so editing
@@ -188,7 +189,7 @@ character sheets/inventories are kept. Details: [`docs/WORLD_MANAGEMENT.md`](doc
 | Sign-in | *Join Campaign* → *Who are you?* → password → *Enter the Arena*. Argon2id hashes, HttpOnly/Secure/SameSite=Strict session cookie (14 days idle, 30 days max), CSRF header + Origin check, rate limits (5 wrong passwords per profile / 20 per IP / 300 overall per 15 min). No email, OTP, magic link or SMTP. |
 | GM bootstrap | `select apex_private.create_gm_setup_code();` in the Supabase SQL editor → one-time code (24 h) → *First-time setup*. Also the recovery path for a forgotten GM password. |
 | GM administration | *Players & Access → Profiles*: set / reset / remove passwords, activate / deactivate, sign out devices, assign characters. Resetting or deactivating revokes all sessions of that profile immediately. |
-| Character | Navigation *Map · Character · Inventory*. Will, movement and vision come from the game state; the sheet adds optional hit points, details, attributes, skills, custom resources, abilities and notes. Quick +/− buttons, edit mode, conflict handling. |
+| Character | Navigation *Map · Character · Inventory*. Movement and vision come from the game state; the sheet adds optional hit points, details, attributes, skills, custom resources, abilities and notes. Quick +/− buttons, edit mode, conflict handling. |
 | PDF import | Fillable PDFs (e.g. the D&D 5e sheet) and text PDFs, read in the browser – the file is never uploaded. Review screen with *Recognized / Please check / Missing / Unknown field*, merge / replace / cancel, backup before saving, equipment lines → inventory. Scanned PDFs are reported as unreadable (no OCR). |
 | Inventory | Free-text entries with quantity, description and notes; containers Backpack, Pockets, Side Pouch, Equipped / Worn, Other + custom ones (rename, delete when empty), move between containers. Stored in the existing game state; inventories are private to the owner and the GM. Stale edits from another device are rejected instead of overwriting. |
 
@@ -284,7 +285,7 @@ sets passwords in *Players & Access → Profiles* and sees who is online. German
   v0.2 had no network access to Supabase/Vercel. The steps and checklist in `docs/DEPLOYMENT.md` must be run
   before go-live. The schema was tested on PostgreSQL with a Supabase stub, the client against a protocol mock.
 - No line of sight yet (mountains/forests do not block vision).
-- Rival strategies are stored but not automated. Will vessels (charge) are displayed but not yet playable.
+- Rival strategies are stored but not automated.
 - PDF import: no OCR for scanned sheets; Aurora's own character files are not supported yet (use its PDF export).
 - Tree crowns do not sway (water glints, flickering lights and arcane motes are animated).
 - Performance was measured in headless Chromium without GPU; real laptops should be faster, but a check on the

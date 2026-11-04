@@ -166,16 +166,6 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.mode !== undefined) cmd.mode = c.mode as 'danger' | 'closed';
       return { ok: true, command: cmd };
     }
-    case 'setWill': {
-      if (!isId(c.tokenId)) return bad('tokenId');
-      if (c.current !== undefined && !isInt(c.current)) return bad('current');
-      if (c.max !== undefined && !isInt(c.max)) return bad('max');
-      if (c.current === undefined && c.max === undefined) return bad('current/max');
-      const cmd: Command = { type: 'setWill', tokenId: c.tokenId };
-      if (c.current !== undefined) cmd.current = c.current as number;
-      if (c.max !== undefined) cmd.max = c.max as number;
-      return { ok: true, command: cmd };
-    }
     case 'setAppearance': {
       if (!isId(c.tokenId)) return bad('tokenId');
       const hex = (v: unknown) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
@@ -304,6 +294,10 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.container !== undefined) {
         if (!isId(c.container)) return bad('container');
         out.container = c.container;
+      }
+      if (c.weightKg !== undefined) {
+        if (typeof c.weightKg !== 'number' || !Number.isFinite(c.weightKg) || c.weightKg < 0 || c.weightKg > 2000) return bad('weightKg');
+        out.weightKg = c.weightKg;
       }
       return { ok: true, command: out as Command };
     }
