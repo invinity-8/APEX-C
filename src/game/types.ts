@@ -2,6 +2,7 @@ import type { Equipment, ItemEquip } from './equipment.js';
 import type { ItemRules, Rarity } from './items/rules.js';
 import type { CurrencyId } from './items/currency.js';
 import type { BeastForm } from './beasts.js';
+import type { CharacterCosmetics } from './cosmetics.js';
 /**
  * Central game state structure.
  * Everything that is saved, exported or stored in Supabase is defined here.
@@ -189,6 +190,8 @@ export interface Token {
   currencyRev?: number;
   /** APEX 0.7: outcome of the last Arcane Transmutation (shown to the owner once). */
   lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
+  /** APEX 0.7: cosmetic rewards granted by the GM and the player's choice among them (never affects rules). */
+  cosmetics?: CharacterCosmetics;
   /** APEX 0.7: GM-granted permanent Arcane Transmutation access (otherwise carrying the cube unlocks it). */
   cubeAccess?: boolean;
   /** APEX 0.7: Sneak mode – each step costs double movement points. Not invisibility: being unseen still needs a Stealth check. */

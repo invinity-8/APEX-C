@@ -99,6 +99,18 @@ export function parseCommand(raw: unknown): ParseResult {
       }
       return { ok: true, command: { type: 'setItemRules', rules } };
     }
+    case 'setCosmetics': {
+      if (!isId(c.tokenId) || !isObj(c.selected)) return bad('setCosmetics');
+      const selected: Record<string, string | null> = {};
+      for (const [k, v] of Object.entries(c.selected)) {
+        if (!oneOf(k, ['frame', 'wreath', 'ornament', 'background', 'border', 'title'] as const) || (v !== null && !isId(v))) return bad('selected');
+        selected[k] = v as string | null;
+      }
+      return { ok: true, command: { type: 'setCosmetics', tokenId: c.tokenId, selected } };
+    }
+    case 'gmCosmetic':
+      if (!isId(c.tokenId) || !isId(c.cosmeticId) || typeof c.grant !== 'boolean') return bad('gmCosmetic');
+      return { ok: true, command: { type: 'gmCosmetic', tokenId: c.tokenId, cosmeticId: c.cosmeticId, grant: c.grant } };
     case 'setSneak':
       if (!isId(c.tokenId) || typeof c.on !== 'boolean') return bad('setSneak');
       return { ok: true, command: { type: 'setSneak', tokenId: c.tokenId, on: c.on } };

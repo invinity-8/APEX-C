@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { Connection, GameApi } from '../state/gameApi';
 import { downloadState } from '../state/storage';
 import { safeRadius } from '../game/zone';
@@ -240,7 +241,8 @@ function ChangePasswordDialog({ onClose, onSubmit }: { onClose: () => void; onSu
       />
     </label>
   );
-  return (
+  // Portal to <body>: the header has a backdrop-filter, which would trap `position: fixed` inside the header strip.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby={id} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
       <form onSubmit={submit} className="panel w-full max-w-sm space-y-3 p-5">
         <h2 id={id} className="font-display text-lg font-bold text-gold-200">
@@ -263,7 +265,8 @@ function ChangePasswordDialog({ onClose, onSubmit }: { onClose: () => void; onSu
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

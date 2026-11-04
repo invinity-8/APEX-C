@@ -2,7 +2,8 @@
  * Cosmetic character visuals shared by map markers, party cards, the character dashboard and the
  * appearance preview: marker shapes (primary colour + accent ring) and portraits.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MarkerStyle } from '../game/types';
 
 export const MARKER_LABEL: Record<MarkerStyle, string> = { medallion: 'Medallion', gem: 'Gem', hexagon: 'Hexagon', crest: 'Crest' };
@@ -57,6 +58,7 @@ export function CharacterPortrait({
   name,
   size = 56,
   src,
+  zoomable = false,
 }: {
   tokenId: string;
   portraitV?: number;
@@ -68,11 +70,14 @@ export function CharacterPortrait({
   size?: number;
   /** Explicit image (e.g. unsaved crop preview). */
   src?: string;
+  /** APEX 0.7: click opens a large portrait viewer. */
+  zoomable?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
+  const [zoom, setZoom] = useState(false);
   const url = src ?? (online && portraitV && !broken ? `/api/apex?op=portrait&token=${encodeURIComponent(tokenId)}&v=${portraitV}` : null);
   const ring = accent ?? color;
-  return url ? (
+  const img = url ? (
     <img
       src={url}
       alt={`Portrait of ${name}`}
@@ -82,6 +87,18 @@ export function CharacterPortrait({
       className="shrink-0 rounded-full object-cover"
       style={{ width: size, height: size, boxShadow: `0 0 0 2px ${ring}, 0 0 0 4px #15181b` }}
     />
+  ) : null;
+  if (img && zoomable)
+    return (
+      <>
+        <button type="button" className="shrink-0 cursor-zoom-in rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold-300" aria-label={`Enlarge the portrait of ${name}`} onClick={() => setZoom(true)} data-testid="portrait-zoom">
+          {img}
+        </button>
+        {zoom && <PortraitViewer url={url!} name={name} onClose={() => setZoom(false)} />}
+      </>
+    );
+  return img ? (
+    img
   ) : (
     <span
       className="flex shrink-0 items-center justify-center rounded-full font-display font-black"
@@ -90,5 +107,37 @@ export function CharacterPortrait({
     >
       {initials}
     </span>
+  );
+}
+
+/** Large portrait viewer: full image (no crop), closes with ✕, Escape or a click outside; focus returns to the trigger. */
+export function PortraitViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true); // capture: the viewer closes before other Escape handlers run
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      prev?.focus?.();
+    };
+  }, [onClose]);
+  // Portal to <body>: an ancestor with a backdrop-filter / transform would otherwise trap `position: fixed`.
+  return createPortal(
+    <div className="apex-portrait-viewer fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label={`Portrait of ${name}`} onClick={onClose} data-testid="portrait-viewer">
+      <figure className="relative max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+        <img src={url} alt={`Portrait of ${name}`} className="max-h-[85vh] max-w-[92vw] rounded-xl border border-gold-600/60 object-contain shadow-2xl" />
+        <figcaption className="mt-2 text-center font-display text-lg text-gold-200">{name}</figcaption>
+        <button ref={closeRef} type="button" className="btn btn-ghost absolute -top-3 -right-3 h-9 w-9 rounded-full bg-ink-900 px-0" aria-label="Close portrait" onClick={onClose}>
+          ✕
+        </button>
+      </figure>
+    </div>,
+    document.body,
   );
 }

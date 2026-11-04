@@ -340,3 +340,13 @@
 .apex-vault-slot.is-empty > svg { opacity: .35; }
 .apex-vault-count { position: absolute; right: 3px; bottom: 1px; font: 700 11px/1 var(--font-sans, inherit); color: #f3eee3; text-shadow: 0 1px 2px #000, 0 0 3px #000; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .apex-vault-slot { transition: none; } }
+
+/* APEX 0.7 – portrait viewer: smooth enlargement (none for reduced motion) */
+@keyframes apex-portrait-in { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+.apex-portrait-viewer figure { animation: apex-portrait-in .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { .apex-portrait-viewer figure { animation: none; } }
+
+/* APEX 0.7 – resizable dialogs (feedback): visible handle, sensible limits, content scrolls */
+.apex-resizable { resize: both; overflow: auto; width: min(36rem, calc(100vw - 1.5rem)); min-width: min(22rem, calc(100vw - 1.5rem)); min-height: 20rem;
+  max-width: calc(100vw - 1.5rem); max-height: calc(100vh - 2rem); }
+.apex-resizable::-webkit-resizer { background: linear-gradient(135deg, transparent 50%, rgba(192,155,88,.8) 50%); }

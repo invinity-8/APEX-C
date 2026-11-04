@@ -21,6 +21,7 @@ import { InventoryPanel } from './InventoryPanel';
 import { IdentityEditor } from './IdentityEditor';
 import { CharacterHistory } from './CharacterHistory';
 import { ClassAbilities } from './ClassAbilities';
+import { CosmeticsPicker, CosmeticTitle, DecoratedPortrait, cosmeticCardStyle } from './Cosmetics';
 import { Bar } from './ui';
 
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
@@ -156,10 +157,15 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
 
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Character sheet of ${token.name}`}>
-      <section className="panel flex flex-wrap items-center gap-3 p-3">
-        <CharacterPortrait tokenId={token.id} portraitV={token.portraitV} online={game.mode === 'online'} color={token.color} accent={token.accent} initials={token.initials} name={token.name} size={56} />
+      <section className="panel flex flex-wrap items-center gap-3 p-3" style={cosmeticCardStyle(token.cosmetics)} data-testid="character-card">
+        <DecoratedPortrait cosmetics={token.cosmetics} size={56}>
+          <CharacterPortrait tokenId={token.id} portraitV={token.portraitV} online={game.mode === 'online'} color={token.color} accent={token.accent} initials={token.initials} name={token.name} size={56} zoomable />
+        </DecoratedPortrait>
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-2xl font-black text-gold-200">{token.name}</h2>
+          <h2 className="font-display text-2xl font-black text-gold-200">
+            {token.name}
+            <CosmeticTitle cosmetics={token.cosmetics} />
+          </h2>
           {/* APEX 0.7: the tagline is shown exactly as chosen – imported class data never replaces it */}
           <p className="text-xs" style={{ color: token.accent ?? undefined }} data-testid="header-tagline">
             <span className={token.accent ? '' : 'text-marble-300'}>{token.title}</span>
@@ -450,6 +456,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
       {tab === 'appearance' && (
         <div className="space-y-3">
           <AppearanceEditor game={game} token={token} run={run} notify={notify} />
+          <CosmeticsPicker tokenId={token.id} cosmetics={token.cosmetics} run={run} />
           <EntrySection title="Physical description" editing={editing} empty="Gender, age, height, eyes, hair …" rows={sheet.appearance} onChange={(appearance) => set({ appearance })} wide>
             {!editing && (
               <button className="btn btn-ghost mt-2 px-2 py-0.5 text-xs" onClick={startEdit} disabled={!data}>

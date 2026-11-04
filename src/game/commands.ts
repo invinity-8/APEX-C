@@ -11,6 +11,7 @@
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
 import type { BeastForm } from './beasts.js';
+import { cosmetic, type CosmeticKind } from './cosmetics.js';
 
 /** APEX 0.7: sneaking doubles the movement-point cost of every step (= half speed). */
 export const sneakFactor = (t: { sneaking?: boolean; details?: { sneaking?: boolean } }) => (t.sneaking || t.details?.sneaking ? 2 : 1);
@@ -42,6 +43,8 @@ export type Command =
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'setSneak'; tokenId: string; on: boolean }
+  | { type: 'setCosmetics'; tokenId: string; selected: Partial<Record<CosmeticKind, string | null>> }
+  | { type: 'gmCosmetic'; tokenId: string; cosmeticId: string; grant: boolean }
   | { type: 'gmSetBeast'; beast: BeastForm }
   | { type: 'gmRemoveBeast'; beastId: string }
   | { type: 'adjustMovePoints'; tokenId: string; delta: number }
@@ -97,6 +100,7 @@ export type Command =
 export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'setAppearance',
   'setSneak',
+  'setCosmetics',
   'invAddItem',
   'invUpdateItem',
   'invRemoveItem',
@@ -412,6 +416,37 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (cmd.enabled !== undefined) state.config.shrink.enabled = cmd.enabled;
       if (cmd.mode !== undefined) state.config.shrink.mode = cmd.mode;
       break;
+    case 'setCosmetics': {
+      // Players choose only among cosmetics the GM granted them; null clears a slot (plain default).
+      const t = state.tokens[cmd.tokenId];
+      const c = t.cosmetics ?? { unlocked: [], selected: {} };
+      const selected = { ...c.selected };
+      for (const [kind, id] of Object.entries(cmd.selected) as Array<[CosmeticKind, string | null]>) {
+        if (id === null) {
+          delete selected[kind];
+          continue;
+        }
+        const def = cosmetic(id);
+        if (!def || def.kind !== kind) return fail(prev, 'Unknown cosmetic.');
+        if (!c.unlocked.includes(id)) return fail(prev, `${def.name} has not been unlocked for ${t.name}.`);
+        selected[kind] = id;
+      }
+      t.cosmetics = { unlocked: [...c.unlocked], selected };
+      return { ok: true, state };
+    }
+    case 'gmCosmetic': {
+      const t = state.tokens[cmd.tokenId];
+      if (t?.kind !== 'player') return fail(prev, T.noSuchToken);
+      const def = cosmetic(cmd.cosmeticId);
+      if (!def) return fail(prev, 'Unknown cosmetic.');
+      const c = t.cosmetics ?? { unlocked: [], selected: {} };
+      const unlocked = cmd.grant ? [...new Set([...c.unlocked, def.id])] : c.unlocked.filter((x) => x !== def.id);
+      const selected = { ...c.selected };
+      if (!cmd.grant && selected[def.kind] === def.id) delete selected[def.kind];
+      t.cosmetics = { unlocked, selected };
+      addLog(state, 'gm', `${t.name}: cosmetic “${def.name}” ${cmd.grant ? 'granted' : 'revoked'}.`, 'gm');
+      return { ok: true, state };
+    }
     case 'setSneak': {
       // Sneaking only changes the movement cost of FUTURE steps; it never refills or refunds movement points.
       const t = state.tokens[cmd.tokenId];

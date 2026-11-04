@@ -135,7 +135,7 @@ export function CharacterSummary({ game, token }: { game: GameApi; token: TokenV
   return (
     <div className="space-y-2 text-xs">
       <div className="flex items-center gap-2">
-        <CharacterPortrait tokenId={token.id} portraitV={token.portraitV} online={game.mode === 'online'} color={token.color} accent={token.accent} initials={token.initials} name={token.name} size={44} />
+        <CharacterPortrait tokenId={token.id} portraitV={token.portraitV} online={game.mode === 'online'} color={token.color} accent={token.accent} initials={token.initials} name={token.name} size={44} zoomable />
         <div className="min-w-0">
           <div className="truncate font-display text-base font-bold text-gold-200">{token.name}</div>
           <div className="truncate text-marble-300">{build ?? token.title ?? '—'}</div>
