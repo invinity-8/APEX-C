@@ -7,7 +7,8 @@ import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
 import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
-import { MAX_COUNT } from '../game/items/loot.js';
+import { MAX_COUNT, type DraftOp } from '../game/items/loot.js';
+import { DRAFT_LIMITS, ENCOUNTERS, LOOT_CATEGORIES, ROLLED_CATEGORIES, type LootDraftEntry } from '../game/items/lootDraft.js';
 import { BODY_TYPES, MARKER_STYLES } from '../game/types.js';
 import { parseBeast } from '../game/beasts.js';
 import { TERRAIN_ORDER } from '../game/terrain.js';
@@ -23,6 +24,32 @@ const isAxial = (v: unknown): v is { q: number; r: number } => isObj(v) && isInt
 /** Text field: string within the length limit (2× for safety; the rules trim to the exact limit). */
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max * 2;
 const oneOf = <T extends string>(v: unknown, opts: readonly T[]): v is T => typeof v === 'string' && (opts as readonly string[]).includes(v);
+
+const optBool = (v: unknown) => v === undefined || typeof v === 'boolean';
+/** A loot draft edit; text is length-checked here and trimmed/normalised by the rules (lootDraft.ts). */
+function parseDraftOp(o: Obj): DraftOp | null {
+  if (o.kind === 'remove') return isId(o.key) ? { kind: 'remove', key: o.key } : null;
+  if (o.kind === 'set') {
+    if (!isId(o.key)) return null;
+    if (o.quantity !== undefined && (!isInt(o.quantity, DRAFT_LIMITS.quantity) || o.quantity < 1)) return null;
+    if (o.itemLevel !== undefined && (!isInt(o.itemLevel, MAX_ITEM_LEVEL) || o.itemLevel < 1)) return null;
+    if (o.rarity !== undefined && !oneOf(o.rarity, ['normal', 'magic', 'rare'] as const)) return null;
+    if (!optBool(o.identified)) return null;
+    return { kind: 'set', key: o.key, ...(o.quantity !== undefined ? { quantity: o.quantity as number } : {}), ...(o.itemLevel !== undefined ? { itemLevel: o.itemLevel as number } : {}), ...(o.rarity !== undefined ? { rarity: o.rarity as 'normal' } : {}), ...(o.identified !== undefined ? { identified: o.identified as boolean } : {}) };
+  }
+  if (o.kind !== 'add' || !isObj(o.entry)) return null;
+  const e = o.entry;
+  if (!isId(e.key) || !oneOf(e.category, LOOT_CATEGORIES) || !isInt(e.quantity, DRAFT_LIMITS.quantity) || e.quantity < 1) return null;
+  if (e.baseId !== undefined && !isId(e.baseId)) return null;
+  if (e.rarity !== undefined && !oneOf(e.rarity, ['normal', 'magic', 'rare'] as const)) return null;
+  if (e.itemLevel !== undefined && (!isInt(e.itemLevel, MAX_ITEM_LEVEL) || e.itemLevel < 1)) return null;
+  if (e.currency !== undefined && !oneOf(e.currency, CURRENCY_IDS)) return null;
+  for (const [k, max] of [['name', DRAFT_LIMITS.name], ['description', DRAFT_LIMITS.description], ['gmNotes', DRAFT_LIMITS.gmNotes], ['image', DRAFT_LIMITS.image]] as const) if (e[k] !== undefined && !isText(e[k], max)) return null;
+  if (!optBool(e.identified) || !optBool(e.noTransfer) || !optBool(e.salvageable)) return null;
+  const entry: LootDraftEntry = { key: e.key, category: e.category, quantity: e.quantity };
+  for (const k of ['baseId', 'rarity', 'itemLevel', 'currency', 'name', 'description', 'gmNotes', 'image', 'identified', 'noTransfer', 'salvageable'] as const) if (e[k] !== undefined) (entry as unknown as Record<string, unknown>)[k] = e[k];
+  return { kind: 'add', entry };
+}
 
 export type ParseResult = { ok: true; command: Command } | { ok: false; error: string };
 
@@ -46,6 +73,22 @@ export function parseCommand(raw: unknown): ParseResult {
         command: { type: 'arsenalGenerate', stagedId: c.stagedId, baseId: c.baseId, rarity: c.rarity, itemLevel: c.itemLevel, identified: c.identified, ...(c.quantity !== undefined ? { quantity: c.quantity } : {}), ...(c.count !== undefined ? { count: c.count } : {}), ...(c.giveTo !== undefined ? { giveTo: c.giveTo } : {}) },
       };
     }
+    case 'lootDraftCreate': {
+      if (!isId(c.draftId) || c.draftId.length > 40 || !oneOf(c.encounter, ENCOUNTERS) || !isInt(c.referenceLevel, 20) || c.referenceLevel < 1) return bad('lootDraftCreate');
+      if (!Array.isArray(c.categories) || c.categories.length > ROLLED_CATEGORIES.length || !c.categories.every((x) => oneOf(x, ROLLED_CATEGORIES))) return bad('categories');
+      return { ok: true, command: { type: 'lootDraftCreate', draftId: c.draftId, encounter: c.encounter, referenceLevel: c.referenceLevel, categories: [...new Set(c.categories as typeof ROLLED_CATEGORIES)] } };
+    }
+    case 'lootDraftEdit': {
+      if (!isInt(c.rev, 1e9) || !isObj(c.op)) return bad('lootDraftEdit');
+      const op = parseDraftOp(c.op);
+      if (!op) return bad('op');
+      return { ok: true, command: { type: 'lootDraftEdit', rev: c.rev, op } };
+    }
+    case 'lootDraftApprove':
+      if (!isInt(c.rev, 1e9)) return bad('lootDraftApprove');
+      return { ok: true, command: { type: 'lootDraftApprove', rev: c.rev } };
+    case 'lootDraftDiscard':
+      return { ok: true, command: { type: 'lootDraftDiscard' } };
     case 'arsenalGive':
       if (!isId(c.stagedId) || !isId(c.tokenId)) return bad('arsenalGive');
       return { ok: true, command: { type: 'arsenalGive', stagedId: c.stagedId, tokenId: c.tokenId } };

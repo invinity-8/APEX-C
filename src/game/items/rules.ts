@@ -41,6 +41,11 @@ export interface ItemRules {
   speedCap: number;
   /** Flat bonus damage per weapon hit from modifiers (all elements together). */
   flatDamageCap: number;
+  /** APEX 0.7 – additional families: spell attack, spell save DC, per-ability score, thorns (sum of all items). */
+  spellAttackCap: number;
+  spellDcCap: number;
+  abilityCap: number;
+  thornsCap: number;
   /** Economy: Arcane Fragments needed for one Orb of Renewal. */
   fragmentsPerOrb: number;
   /** APEX 0.7 – Arcane Transmutation: fragments per random Orb and the relative weights of the outcomes. */
@@ -62,6 +67,10 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   maxHpCap: 20,
   speedCap: 10,
   flatDamageCap: 6,
+  spellAttackCap: 1,
+  spellDcCap: 1,
+  abilityCap: 1,
+  thornsCap: 4,
   fragmentsPerOrb: 10,
   fragmentsPerRandomOrb: 10,
   transmuteWeightRenewal: 65,
@@ -81,6 +90,10 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   maxHpCap: [0, 60],
   speedCap: [0, 30],
   flatDamageCap: [0, 12],
+  spellAttackCap: [0, 2],
+  spellDcCap: [0, 1],
+  abilityCap: [0, 2],
+  thornsCap: [0, 8],
   fragmentsPerOrb: [2, 100],
   fragmentsPerRandomOrb: [2, 100],
   transmuteWeightRenewal: [0, 1000],

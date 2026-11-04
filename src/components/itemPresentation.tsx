@@ -53,6 +53,7 @@ export function ItemBadges({ item }: { item: Item }) {
         </span>
       )}
       {m.itemLevel !== undefined && <span className="ml-1 text-[10px] text-marble-500">ilvl {m.itemLevel}</span>}
+      {item.quest && <span className="ml-1.5 rounded border border-gold-400/40 px-1 text-[10px] uppercase tracking-wider text-gold-300">Quest</span>}
     </>
   );
 }

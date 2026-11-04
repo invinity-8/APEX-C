@@ -32,6 +32,14 @@ export type ModEffect =
   | { type: 'speed' }
   | { type: 'bane'; creature: Creature }
   | { type: 'critDamage' }
+  /** APEX 0.7: spell attack rolls (bounded, tiny, rare). */
+  | { type: 'spellAttack' }
+  /** APEX 0.7: spell save DC (extremely rare, capped at +1 overall). */
+  | { type: 'spellDc' }
+  /** APEX 0.7: +1 to one ability score (capped per ability, never above 20 from items). */
+  | { type: 'ability'; ability: SaveAbility }
+  /** APEX 0.7: retaliatory damage – see the trigger in the text. */
+  | { type: 'thorns' }
   /** APEX 0.7: applies only in a narrow situation the GM adjudicates – shown, never added automatically. */
   | { type: 'situational' }
   /** APEX 0.7: no mechanical effect at all. */
@@ -230,6 +238,64 @@ export const MODIFIERS: ModDef[] = [
     effect: { type: 'speed' },
     text: '+{v} ft walking speed',
     description: 'Character-sheet walking speed only. It never changes arena movement points (those stay a GM decision).',
+  },
+  // ---------- APEX 0.7 – additional families (rare, capped; see ITEMIZATION_BALANCE.md §14)
+  {
+    id: 'spell-attack',
+    name: 'Channeling',
+    affix: 'prefix',
+    family: 'spell-attack',
+    tags: ['jewellery', 'weapon'],
+    tiers: [t(1, 14, 1, 1, 60)],
+    effect: { type: 'spellAttack' },
+    text: '+{v} to spell attack rolls',
+    description: 'Bounded accuracy: at most +1 from all equipped items.',
+  },
+  {
+    id: 'spell-dc',
+    name: 'Commanding',
+    affix: 'prefix',
+    family: 'spell-dc',
+    tags: ['jewellery'],
+    tiers: [t(1, 22, 1, 1, 15)],
+    effect: { type: 'spellDc' },
+    text: '+{v} to your spell save DC',
+    description: 'Extremely rare. At most +1 from all equipped items.',
+  },
+  ...SAVES.map(
+    ([a, label]): ModDef => ({
+      id: `attr-${a}`,
+      name: `of ${label === 'Strength' ? 'Might' : label === 'Dexterity' ? 'Grace' : label === 'Constitution' ? 'Vigour' : label === 'Intelligence' ? 'Insight' : label === 'Wisdom' ? 'the Sage' : 'Majesty'}`,
+      affix: 'suffix',
+      family: 'attribute',
+      tags: ['jewellery', 'belt', 'head', 'hands'],
+      tiers: [t(1, 16, 1, 1, 25)],
+      effect: { type: 'ability', ability: a },
+      text: `+{v} ${label}`,
+      description: 'At most +1 per ability from all equipped items, and never above 20 through items.',
+    }),
+  ),
+  {
+    id: 'thorns',
+    name: 'of Thorns',
+    affix: 'suffix',
+    family: 'thorns',
+    tags: ['armour', 'shield'],
+    tiers: [t(1, 8, 1, 2, 120), t(2, 18, 2, 3, 50)],
+    effect: { type: 'thorns' },
+    text: 'Thorns: once per turn, when a creature within 5 ft hits you with a melee attack, it takes {v} piercing damage',
+    description: 'Total from all items at most 4. Thorns damage never triggers thorns (no recursion); the GM applies it.',
+  },
+  {
+    id: 'skill-acrobatics',
+    name: 'of the Tumbler',
+    affix: 'suffix',
+    family: 'skill',
+    tags: ['feet', 'hands', 'cloak'],
+    tiers: [t(1, 1, 1, 1, 300), t(2, 15, 2, 2, 120)],
+    effect: { type: 'skill', skill: 'Acrobatics' },
+    text: '+{v} to Acrobatics',
+    description: 'At most +2 per skill from all equipped modifiers.',
   },
   // ---------- APEX 0.7 flavour: low impact, common – more variety, fewer "perfect" rares
   {

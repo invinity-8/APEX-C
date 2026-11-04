@@ -1,6 +1,7 @@
 import type { Equipment, ItemEquip } from './equipment.js';
 import type { ItemRules, Rarity } from './items/rules.js';
 import type { CurrencyId } from './items/currency.js';
+import type { LootDraft } from './items/lootDraft.js';
 import type { BeastForm } from './beasts.js';
 import type { CharacterCosmetics } from './cosmetics.js';
 /**
@@ -115,6 +116,10 @@ export interface Item {
   modVersion?: number;
   /** Where the item came from (GM grant, merchant, trade …). */
   source?: ItemOrigin;
+  /** APEX 0.7: quest item details (`gmNotes` is stripped from player views). */
+  quest?: { image?: string; gmNotes?: string };
+  /** APEX 0.7: currency bundle from an approved loot draft (Arsenal tray only – giving it credits the purse). */
+  grant?: { currency: CurrencyId; amount: number };
   /** Bound items cannot be transferred or traded. */
   bound?: boolean;
   /** GM restriction (quest item …): players cannot salvage or delete it. */
@@ -370,7 +375,8 @@ export interface GameState {
   /** APEX 0.7: GM-defined Wild Shape forms (in addition to the SRD beasts). */
   customBeasts?: BeastForm[];
   /** APEX 0.6: GM Arsenal – generated items waiting to be handed out (GM-only). */
-  arsenal?: { staged: Item[] };
+  /** GM-only: the Arsenal tray and (APEX 0.7) the current loot draft. */
+  arsenal?: { staged: Item[]; draft?: LootDraft };
   /** APEX 0.6: item audit trail (GM-only, bounded). */
   itemAudit?: ItemAuditEntry[];
   nextAuditId?: number;
@@ -382,7 +388,7 @@ export interface ItemAuditEntry {
   phase: Phase;
   /** 'GM' or the acting character's name. */
   by: string;
-  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine' | 'augment' | 'ascend' | 'transmute' | 'activate';
+  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine' | 'augment' | 'ascend' | 'transmute' | 'activate' | 'draft';
   tokenId?: string;
   itemId?: string;
   itemName?: string;

@@ -83,6 +83,11 @@ export function validateMods(base: BaseItem, itemLevel: number, mods: RolledMod[
 
 /** Player-facing copy: unidentified items lose their modifiers (and anything derived from them). */
 export function redactItem(item: Item): Item {
+  if (item.quest?.gmNotes) {
+    const { gmNotes: _n, ...quest } = item.quest; // GM notes never reach players
+    void _n;
+    item = { ...item, quest };
+  }
   if (item.identified !== false) return item;
   const { mods: _m, modVersion: _v, ...rest } = item;
   void _m;
