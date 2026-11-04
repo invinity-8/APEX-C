@@ -557,6 +557,8 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
     case 'invUpdateItem': {
       const item = findItem(cmd.itemId, cmd.rev);
       if (typeof item === 'string') return fail(prev, item);
+      // quest items: players may move them and keep notes, but not rewrite or duplicate them
+      if (item.quest && actor.role !== 'gm' && (cmd.name !== undefined || cmd.description !== undefined || cmd.quantity !== undefined || cmd.weightKg !== undefined)) return fail(prev, 'Quest items can only be changed by the Game Master.');
       if (cmd.name !== undefined) {
         const name = text(cmd.name, L.name);
         if (!name) return fail(prev, T.itemNameRequired);

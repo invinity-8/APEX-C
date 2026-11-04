@@ -112,6 +112,10 @@ breakdown shows when a cap applies.
 | `maxHpCap` | +20 | 0–60 |
 | `speedCap` (ft) | +10 | 0–30 |
 | `flatDamageCap` (per weapon, all types) | 6 | 0–12 |
+| `spellAttackCap` (APEX 0.7) | +1 | 0–2 |
+| `spellDcCap` (APEX 0.7) | +1 | 0–1 |
+| `abilityCap` (per ability score, APEX 0.7) | +1 | 0–2 |
+| `thornsCap` (damage, APEX 0.7) | 4 | 0–8 |
 
 The GM changes these with the GM-only command `setItemRules` (values are clamped to the "GM may set" range;
 `rules: null` restores the defaults). The effective rules are part of every client view, so the derived numbers
@@ -297,3 +301,67 @@ Each is labelled `situational` or `cosmetic` on the item.
   - **Not locked:** balances, identification, rerolls, Augmentation/Ascension and combining fragments into Orbs of
     Renewal.
   - The GM grants the cube like any item ("Generate & give") or puts it in a loot table.
+
+## 14. Additional modifier families & GM loot drafts (APEX 0.7)
+
+### New modifier families
+
+All of them are rare, gated by item level and capped across **all** equipped items (section 5). They never stack
+above the cap, whatever the number of items.
+
+| Id | Name | Bases | Tiers (ilvl: range, weight) | Effect and cap |
+| --- | --- | --- | --- | --- |
+| `spell-attack` | Channeling (prefix) | jewellery, weapons | 14: +1 (60) | Spell attack rolls; at most **+1** in total. |
+| `spell-dc` | Commanding (prefix) | jewellery | 22: +1 (15) | Spell save DC; extremely rare, at most **+1** in total. |
+| `attr-str` … `attr-cha` | of Might / Grace / Vigour / Insight / the Sage / Majesty (suffix) | jewellery, belts, helmets, gloves | 16: +1 (25) | +1 to one ability score; at most **+1 per ability**, and items never raise a score above **20**. |
+| `thorns` | of Thorns (suffix) | armour, shields | 8: 1–2 (120); 18: 2–3 (50) | See trigger below; at most **4** damage in total. |
+| `skill-acrobatics` | of the Tumbler (suffix) | boots, gloves, cloaks | 1: +1 (300); 15: +2 (120) | Acrobatics; skill cap applies (+2). |
+
+Already existing and unchanged: to-hit (weapons, ilvl 12/24, +2 cap), walking speed (boots, +10 ft cap), saves,
+skills, resistances (environmental damage types such as cold and fire use the same resistance families).
+
+**Thorns trigger (exact):** once per turn, when a creature **within 5 feet** hits the wearer with a **melee attack**,
+that creature takes the thorns value as **piercing** damage. Thorns damage is not an attack and **never triggers
+thorns** (no recursion, also not between two thorns wearers). The GM applies the damage; APEX shows the capped value.
+
+**Ability scores:** the equipment summary lists the capped bonus with the "never above 20" note. Imported character
+sheets stay the source of the ability scores; APEX does **not** recalculate them (no automatic modifier/skill update) –
+the table applies the bonus, respecting the 20 limit.
+
+### GM loot drafts
+
+*Arsenal → Loot drop* rolls a draft **on the server** (seeded; client seeds are discarded), lets the GM edit it, and
+only then creates real items:
+
+1. **Roll:** encounter type, party (reference) level 1–20 and the categories that can drop (weapons, armour &
+   shields, accessories, Seals of Revelation, Orbs of Renewal, Arcane Fragments, potions, consumables, other
+   currency). Quest and custom items are only ever added by hand.
+
+   | Encounter | Rolls | Rarity weights (normal / magic / rare) | Item level |
+   | --- | --- | --- | --- |
+   | Minion | 1 | 80 / 18 / 2 | party level |
+   | Standard | 2 | 65 / 30 / 5 | party level + 1 |
+   | Elite | 3 | 45 / 42 / 13 | party level + 3 |
+   | Boss | 5 | 25 / 50 / 25 | party level + 5, then +0 (85 %), +1 (12 %), +2 (3 %) |
+
+   Category weights: weapons 20, armour 16, accessories 18, seals 10, orbs 4, fragments 14, potions 12,
+   consumables 8, other currency 3. Magic and rare equipment is rolled **unidentified** by default.
+2. **Edit:** remove entries; change quantity, item level, rarity and the identified flag; add equipment, potions
+   (SRD Potion of Healing), consumables, currency, **custom items** and **quest items**. Every edit names the draft
+   revision – a stale edit is refused. A draft holds at most 24 entries.
+3. **Approve:** the final pool becomes real items in the Arsenal tray (modifiers rolled with a new server seed).
+   **Nothing is given automatically.** Currency entries become *currency bundles*: giving one adds the currency to
+   the purse. *Discard draft* drops it without creating anything. All steps are in the item audit log.
+
+Players never receive drafts or the tray (GM state only).
+
+### Quest items
+
+- Name, description, quantity, optional image (**https URL only**, loaded without referrer), GM notes.
+- **Not salvageable or deletable by players by default** (`locked`); the GM can allow salvage per item.
+- *Cannot be transferred* marks the item as bound. APEX has no player-to-player transfer yet; bound items are
+  refused by salvage and will be refused by future trade/merchant features.
+- **GM notes are stripped from every player view** (server-side redaction); the GM sees them in the tray and in
+  inventories.
+- Players can move quest items and add their own notes, but cannot rename them or change quantity or weight.
+

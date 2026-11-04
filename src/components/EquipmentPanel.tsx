@@ -297,6 +297,9 @@ export function BonusSummary({ b }: { b: ItemBonuses }) {
   ];
   for (const [label, l, unit] of simple) if (l.total) rows.push({ key: label, label, detail: `+${l.value}${unit}${l.total > l.value ? ` (capped, ${l.total} total)` : ''}`, title: tip(l) });
   for (const [a, l] of Object.entries(b.saves)) if (l?.total) rows.push({ key: `save-${a}`, label: `${a.toUpperCase()} saves`, detail: `+${l.value}${l.total > l.value ? ' (capped)' : ''}`, title: tip(l) });
+  for (const [label, l] of [['Spell attack', b.spellAttack], ['Spell save DC', b.spellDc]] as const) if (l.total) rows.push({ key: label, label, detail: `+${l.value}${l.total > l.value ? ` (capped, ${l.total} total)` : ''}`, title: tip(l) });
+  for (const [a, l] of Object.entries(b.abilities)) if (l?.total) rows.push({ key: `attr-${a}`, label: a.toUpperCase(), detail: `+${l.value}${l.total > l.value ? ' (capped)' : ''} · never above 20 from items`, title: tip(l) });
+  if (b.thorns.total) rows.push({ key: 'thorns', label: 'Thorns', detail: `${b.thorns.value} piercing${b.thorns.total > b.thorns.value ? ' (capped)' : ''} · melee hit within 5 ft, once per turn`, title: tip(b.thorns) });
   for (const [s, l] of Object.entries(b.skills)) if (l.total) rows.push({ key: `skill-${s}`, label: s, detail: `+${l.value}${l.total > l.value ? ' (capped)' : ''}`, title: tip(l) });
   if (!rows.length) return null;
   return (

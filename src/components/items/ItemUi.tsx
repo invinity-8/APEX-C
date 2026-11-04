@@ -243,6 +243,28 @@ export function locationOf(item: Item, eq: Equipment, containers: Array<{ id: st
   return containers.find((c) => c.id === item.container)?.name ?? containers[0]?.name ?? 'Inventory';
 }
 
+/** APEX 0.7: quest item picture, restrictions and (GM only) notes; currency bundles from loot drafts. */
+function QuestDetails({ item, gmView }: { item: Item; gmView: boolean }) {
+  if (item.grant) return <p className="mt-2 border-t border-ink-700 pt-1.5 text-marble-300">Currency bundle – giving it adds the currency to the character’s purse.</p>;
+  const q = item.quest!;
+  return (
+    <div className="mt-2 space-y-1 border-t border-ink-700 pt-1.5" data-testid="quest-details">
+      <div className="text-[10px] uppercase tracking-wider text-gold-300">
+        Quest item{item.locked ? ' · cannot be salvaged or deleted' : ''}
+        {item.bound ? ' · cannot be transferred' : ''}
+      </div>
+      {q.image && <img src={q.image} alt={item.name} referrerPolicy="no-referrer" loading="lazy" className="max-h-40 rounded border border-ink-700 object-contain" />}
+      {item.description && <p className="whitespace-pre-wrap text-marble-200">{item.description}</p>}
+      {gmView && q.gmNotes && (
+        <p className="rounded border border-amber-400/30 bg-amber-400/5 p-1.5 text-amber-200" data-testid="quest-gm-notes">
+          <span className="text-[10px] uppercase tracking-wider">GM notes (hidden from players): </span>
+          {q.gmNotes}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ItemInspect({
   item,
   inventory,
@@ -292,6 +314,7 @@ export function ItemInspect({
           </button>
         )}
       </div>
+      {(item.quest || item.grant) && <QuestDetails item={item} gmView={gmView} />}
       {baseStatLines(item).length > 0 && (
         <ul className="mt-2 border-t border-ink-700 pt-1.5 text-marble-200">
           {baseStatLines(item).map((l) => (

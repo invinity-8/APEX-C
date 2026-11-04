@@ -248,6 +248,11 @@ export interface ItemBonuses {
   speed: BonusLine;
   carry: BonusLine;
   saves: Partial<Record<SaveAbility, BonusLine>>;
+  /** APEX 0.7 */
+  spellAttack: BonusLine;
+  spellDc: BonusLine;
+  abilities: Partial<Record<SaveAbility, BonusLine>>;
+  thorns: BonusLine;
   skills: Record<string, BonusLine>;
 }
 
@@ -273,6 +278,10 @@ export function itemBonuses(worn: Array<{ slot: EquipSlot; item: Item }>, rules:
     carry: line(Infinity),
     saves: {},
     skills: {},
+    spellAttack: line(rules.spellAttackCap),
+    spellDc: line(rules.spellDcCap),
+    abilities: {},
+    thorns: line(rules.thornsCap),
   };
   for (const { item } of worn) {
     if (item.identified === false) continue;
@@ -288,6 +297,10 @@ export function itemBonuses(worn: Array<{ slot: EquipSlot; item: Item }>, rules:
       else if (e.type === 'carry') addTo(b.carry, item.name, m.value);
       else if (e.type === 'save') addTo((b.saves[e.ability] ??= line(rules.saveCap)), item.name, m.value);
       else if (e.type === 'skill') addTo((b.skills[e.skill] ??= line(rules.skillCap)), item.name, m.value);
+      else if (e.type === 'spellAttack') addTo(b.spellAttack, item.name, m.value);
+      else if (e.type === 'spellDc') addTo(b.spellDc, item.name, m.value);
+      else if (e.type === 'ability') addTo((b.abilities[e.ability] ??= line(rules.abilityCap)), item.name, m.value);
+      else if (e.type === 'thorns') addTo(b.thorns, item.name, m.value);
     }
   }
   for (const el of ELEMENTS) {
@@ -295,7 +308,7 @@ export function itemBonuses(worn: Array<{ slot: EquipSlot; item: Item }>, rules:
     finish(r);
     r.reduction = resistanceReduction(r.value, rules.resistanceCap);
   }
-  [b.ac, b.maxHp, b.initiative, b.speed, b.carry, ...Object.values(b.saves), ...Object.values(b.skills)].forEach((l) => l && finish(l));
+  [b.ac, b.maxHp, b.initiative, b.speed, b.carry, b.spellAttack, b.spellDc, b.thorns, ...Object.values(b.saves), ...Object.values(b.skills), ...Object.values(b.abilities)].forEach((l) => l && finish(l));
   return b;
 }
 

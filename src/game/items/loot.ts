@@ -22,6 +22,7 @@ import { addableMods, addMods, canRollMods, clampItemLevel, generatedName, rollM
 import { uniqueDef } from './uniques.js';
 import { addLog } from '../log.js';
 import { packBag, syncHolding } from './holding.js';
+import { clampLevel, DRAFT_LIMITS, normaliseEntry, QUEST_BASE, rollDraft, type DraftRarity, type Encounter, type LootCategory, type LootDraftEntry } from './lootDraft.js';
 import { isBagOfHolding } from './weight.js';
 import { createItem } from './instance.js';
 import { AFFIX_RULES, itemRulesOf, MODIFIER_VERSION, RARITY_LABEL } from './rules.js';
@@ -47,13 +48,23 @@ export type LootCommand =
   | { type: 'arsenalGenerateUnique'; stagedId: string; uniqueId: string; giveTo?: string }
   | { type: 'gmTimeTwist'; tokenId: string; action: 'resolve' | 'cancel' }
   | { type: 'gmRechargeItem'; tokenId: string; itemId: string }
-  | { type: 'gmSetCubeAccess'; tokenId: string; permanent: boolean };
+  | { type: 'gmSetCubeAccess'; tokenId: string; permanent: boolean }
+  // APEX 0.7 – loot drafts (see lootDraft.ts)
+  | { type: 'lootDraftCreate'; draftId: string; encounter: Encounter; referenceLevel: number; categories: LootCategory[]; seed?: number }
+  | { type: 'lootDraftEdit'; rev: number; op: DraftOp }
+  | { type: 'lootDraftApprove'; rev: number; seed?: number }
+  | { type: 'lootDraftDiscard' };
 
-export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem', 'gmSetCubeAccess']);
+export type DraftOp =
+  | { kind: 'remove'; key: string }
+  | { kind: 'set'; key: string; quantity?: number; itemLevel?: number; rarity?: DraftRarity; identified?: boolean }
+  | { kind: 'add'; entry: LootDraftEntry };
+
+export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem', 'gmSetCubeAccess', 'lootDraftCreate', 'lootDraftEdit', 'lootDraftApprove', 'lootDraftDiscard']);
 export const LOOT_PLAYER_COMMANDS = new Set<LootCommand['type']>(['itemIdentify', 'itemReroll', 'itemSalvage', 'combineFragments', 'itemAugment', 'itemAscend', 'transmuteFragments', 'itemActivate']);
 export const LOOT_COMMANDS = new Set<string>([...LOOT_GM_COMMANDS, ...LOOT_PLAYER_COMMANDS]);
 /** Commands that need a server-provided random seed. */
-export const SEEDED_COMMANDS = new Set<string>(['arsenalGenerate', 'itemReroll', 'itemAugment', 'itemAscend', 'transmuteFragments']);
+export const SEEDED_COMMANDS = new Set<string>(['arsenalGenerate', 'lootDraftCreate', 'lootDraftApprove', 'itemReroll', 'itemAugment', 'itemAscend', 'transmuteFragments']);
 
 export const MAX_STAGED = 24;
 export const MAX_AUDIT = 300;
@@ -175,7 +186,7 @@ function setBalance(t: Token, id: CurrencyId, value: number) {
 /** Shallow copy that deep-copies only what a loot command may touch. */
 function prepare(prev: GameState, tokenId?: string): GameState {
   const state: GameState = { ...prev, tokens: tokenId ? { ...prev.tokens, [tokenId]: structuredClone(prev.tokens[tokenId]) } : prev.tokens };
-  if (prev.arsenal) state.arsenal = { staged: [...prev.arsenal.staged] };
+  if (prev.arsenal) state.arsenal = { ...prev.arsenal, staged: [...prev.arsenal.staged] };
   return state;
 }
 
@@ -185,6 +196,39 @@ function generate(base: BaseItem, cmd: Extract<LootCommand, { type: 'arsenalGene
   const item = createItem(base, { id, rarity, itemLevel: cmd.itemLevel, rng, identified: cmd.identified, quantity: cmd.quantity, source: { kind: 'gm', label: 'GM Arsenal', day } });
   if (item.identified === false) item.name = base.name; // the affix name would reveal the modifiers
   item.history = [{ day, text: 'Created in the GM Arsenal' }];
+  return item;
+}
+
+const pickDefined = <T extends object>(o: T): Partial<T> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+
+/** Creates the real item for an approved draft entry (modifiers rolled with the server seed). */
+function draftItem(e: LootDraftEntry, id: string, seed: number, day: number): Item | null {
+  const source = { kind: 'loot' as const, label: 'Loot drop', day };
+  if (e.currency) {
+    return { id, name: `${currencyLabel(e.currency, e.quantity)}`, kind: 'misc', description: `Loot: ${currencyLabel(e.currency, e.quantity)} – goes straight into the purse when given.`, quantity: 1, rev: 0, grant: { currency: e.currency, amount: e.quantity }, source };
+  }
+  if (e.category === 'quest' || e.category === 'custom') {
+    const quest = e.category === 'quest';
+    return {
+      id,
+      name: e.name ?? 'Item',
+      kind: 'misc',
+      description: e.description ?? '',
+      quantity: e.quantity,
+      rev: 0,
+      ...(quest ? { baseId: QUEST_BASE, quest: { ...(e.image ? { image: e.image } : {}), ...(e.gmNotes ? { gmNotes: e.gmNotes } : {}) } } : {}),
+      ...((quest && !e.salvageable) || e.salvageable === false ? { locked: true } : {}),
+      ...(e.noTransfer ? { bound: true } : {}),
+      source,
+      history: [{ day, text: quest ? 'Quest item from a loot drop' : 'Custom item from a loot drop' }],
+    };
+  }
+  const base = baseItem(e.baseId);
+  if (!base) return null;
+  const rarity = base.equip && canRollMods(base) ? (e.rarity ?? 'normal') : 'normal';
+  const item = generate(base, { type: 'arsenalGenerate', stagedId: id, baseId: base.id, rarity, itemLevel: e.itemLevel ?? 1, identified: e.identified !== false, quantity: e.quantity }, id, seed, day);
+  item.source = source;
+  item.history = [{ day, text: 'Rolled in a GM loot drop' }];
   return item;
 }
 
@@ -261,7 +305,7 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
           audit(state, { by: 'GM', action: 'give', tokenId: t.id, itemId: item.id, itemName: item.name, detail: `Generated and given (${describe(item)})` });
         }
       } else {
-        state.arsenal = { staged: [...staged, ...made] };
+        state.arsenal = { ...state.arsenal, staged: [...staged, ...made] };
         for (const item of made) audit(state, { by: 'GM', action: 'generate', itemId: item.id, itemName: item.name, detail: describe(item) });
       }
       return { ok: true, state };
@@ -273,11 +317,20 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       if (!item) return fail(prev, 'This item is no longer in the Arsenal tray (already given?).');
       const state = prepare(prev, cmd.tokenId);
       const t = state.tokens[cmd.tokenId];
+      if (item.grant) {
+        // a currency bundle from an approved loot draft goes straight into the purse
+        const next = balanceOf(t, item.grant.currency) + item.grant.amount;
+        if (next > MAX_CURRENCY) return fail(prev, `At most ${MAX_CURRENCY} per currency.`);
+        setBalance(t, item.grant.currency, next);
+        state.arsenal = { ...state.arsenal, staged: state.arsenal!.staged.filter((i) => i.id !== cmd.stagedId) };
+        audit(state, { by: 'GM', action: 'currency', tokenId: t.id, detail: `Loot: granted ${currencyLabel(item.grant.currency, item.grant.amount)} (now ${next})` });
+        return { ok: true, state };
+      }
       const copy = structuredClone(item);
       addHistory(state, copy, `Given to ${t.name}`);
       const err = addToInventory(t, copy);
       if (err) return fail(prev, err);
-      state.arsenal = { staged: state.arsenal!.staged.filter((i) => i.id !== cmd.stagedId) };
+      state.arsenal = { ...state.arsenal, staged: state.arsenal!.staged.filter((i) => i.id !== cmd.stagedId) };
       audit(state, { by: 'GM', action: 'give', tokenId: t.id, itemId: item.id, itemName: item.name, detail: describe(item) });
       return { ok: true, state };
     }
@@ -286,8 +339,68 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       if (!item) return fail(prev, 'This item is no longer in the Arsenal tray.');
       if (item.held?.length) return fail(prev, `${item.name} still holds ${item.held.length} item(s) – give it to a character to unpack them first.`);
       const state = prepare(prev);
-      state.arsenal = { staged: state.arsenal!.staged.filter((i) => i.id !== cmd.stagedId) };
+      state.arsenal = { ...state.arsenal, staged: state.arsenal!.staged.filter((i) => i.id !== cmd.stagedId) };
       audit(state, { by: 'GM', action: 'discard', itemId: item.id, itemName: item.name, detail: describe(item) });
+      return { ok: true, state };
+    }
+    case 'lootDraftCreate': {
+      if (typeof cmd.seed !== 'number') return fail(prev, 'A loot draft needs a server seed.');
+      if (prev.arsenal?.draft) return fail(prev, 'Approve or discard the current loot draft first.');
+      const state = prepare(prev);
+      const level = clampLevel(cmd.referenceLevel);
+      const entries = rollDraft(cmd.encounter, level, cmd.categories, seededRng(cmd.seed), cmd.draftId);
+      state.arsenal = { staged: state.arsenal?.staged ?? [], draft: { id: cmd.draftId, encounter: cmd.encounter, referenceLevel: level, categories: [...cmd.categories], entries, rev: 0, createdDay: prev.day } };
+      audit(state, { by: 'GM', action: 'draft', detail: `Loot draft rolled: ${cmd.encounter}, level ${level}, ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` });
+      return { ok: true, state };
+    }
+    case 'lootDraftEdit': {
+      const d0 = prev.arsenal?.draft;
+      if (!d0) return fail(prev, 'There is no loot draft.');
+      if (d0.rev !== cmd.rev) return fail(prev, 'The loot draft was changed in the meantime – please look at it again.');
+      const entries = [...d0.entries];
+      const op = cmd.op;
+      const at = op.kind === 'add' ? -1 : entries.findIndex((e) => e.key === op.key);
+      if (op.kind !== 'add' && at < 0) return fail(prev, 'This entry is no longer in the draft.');
+      if (op.kind === 'remove') entries.splice(at, 1);
+      else {
+        if (op.kind === 'add' && entries.length >= DRAFT_LIMITS.entries) return fail(prev, `A draft holds at most ${DRAFT_LIMITS.entries} entries.`);
+        if (op.kind === 'add' && entries.some((e) => e.key === op.entry.key)) return fail(prev, 'This entry already exists.');
+        const merged: LootDraftEntry = op.kind === 'add' ? op.entry : { ...entries[at], ...pickDefined({ quantity: op.quantity, itemLevel: op.itemLevel, rarity: op.rarity, identified: op.identified }) };
+        const norm = normaliseEntry(merged, baseItem);
+        if (typeof norm === 'string') return fail(prev, norm);
+        if (op.kind === 'add') entries.push(norm);
+        else entries[at] = norm;
+      }
+      const state = prepare(prev);
+      state.arsenal = { ...state.arsenal!, draft: { ...d0, entries, rev: d0.rev + 1 } };
+      return { ok: true, state };
+    }
+    case 'lootDraftApprove': {
+      const d = prev.arsenal?.draft;
+      if (!d) return fail(prev, 'There is no loot draft.');
+      if (d.rev !== cmd.rev) return fail(prev, 'The loot draft was changed in the meantime – please look at it again.');
+      if (typeof cmd.seed !== 'number') return fail(prev, 'Approving a draft needs a server seed.');
+      if (!d.entries.length) return fail(prev, 'The draft is empty – add an entry or discard it.');
+      const staged = prev.arsenal?.staged ?? [];
+      if (staged.length + d.entries.length > MAX_STAGED) return fail(prev, `The Arsenal tray holds at most ${MAX_STAGED} items – give or discard some first.`);
+      const made: Item[] = [];
+      for (const [n, e] of d.entries.entries()) {
+        const item = draftItem(e, `${d.id}-i${n + 1}`, (cmd.seed + n * 0x9e3779b1) >>> 0, prev.day);
+        if (!item) return fail(prev, `Entry ${n + 1} can no longer be created.`);
+        if (staged.some((i) => i.id === item.id)) return fail(prev, 'This draft was already approved.');
+        made.push(item);
+      }
+      const state = prepare(prev);
+      state.arsenal = { staged: [...staged, ...made] };
+      audit(state, { by: 'GM', action: 'draft', detail: `Loot draft approved: ${made.length} item(s) moved to the Arsenal tray` });
+      for (const item of made) audit(state, { by: 'GM', action: 'generate', itemId: item.id, itemName: item.name, detail: describe(item) || (item.grant ? 'currency bundle' : 'loot') });
+      return { ok: true, state };
+    }
+    case 'lootDraftDiscard': {
+      if (!prev.arsenal?.draft) return fail(prev, 'There is no loot draft.');
+      const state = prepare(prev);
+      state.arsenal = { staged: state.arsenal?.staged ?? [] };
+      audit(state, { by: 'GM', action: 'draft', detail: 'Loot draft discarded' });
       return { ok: true, state };
     }
     case 'gmGrantCurrency': {
@@ -316,7 +429,7 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
         const copy = structuredClone(packed ?? item);
         delete copy.container;
         addHistory(state, copy, `Revoked from ${t.name}`);
-        state.arsenal = { staged: [...(state.arsenal?.staged ?? []), copy] };
+        state.arsenal = { ...state.arsenal, staged: [...(state.arsenal?.staged ?? []), copy] };
         back = ' – returned to the Arsenal tray';
       }
       audit(state, { by: 'GM', action: 'revoke', tokenId: t.id, itemId: item.id, itemName: item.name, detail: `${describe(item) || 'plain item'}${cmd.reason ? ` – ${cmd.reason}` : ''}${back}` });
@@ -464,7 +577,7 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
         const staged = state.arsenal?.staged ?? [];
         if (staged.length >= MAX_STAGED) return fail(prev, `The Arsenal tray holds at most ${MAX_STAGED} items.`);
         if (staged.some((i) => i.id === item.id)) return fail(prev, 'This item was already generated.');
-        state.arsenal = { staged: [...staged, item] };
+        state.arsenal = { ...state.arsenal, staged: [...staged, item] };
         audit(state, { by: 'GM', action: 'generate', itemId: item.id, itemName: item.name, detail: 'Unique' });
       }
       return { ok: true, state };

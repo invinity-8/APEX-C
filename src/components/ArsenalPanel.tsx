@@ -13,6 +13,7 @@ import { canRollMods } from '../game/items/generate';
 import { CUBE_BASE, MAX_COUNT, MAX_STAGED, type GenRarity } from '../game/items/loot';
 import { eligibleMods } from '../game/items/modifiers';
 import { UNIQUES } from '../game/items/uniques';
+import { CONSUMABLE_BASES, DRAFT_LIMITS, ENCOUNTER_TABLE, ENCOUNTERS, LOOT_CATEGORY_LABEL, POTION_BASE, ROLLED_CATEGORIES, type Encounter, type LootCategory, type LootDraft, type LootDraftEntry } from '../game/items/lootDraft';
 import { BeastEditor } from './BeastEditor';
 import { CosmeticGrants } from './Cosmetics';
 import { itemRulesOf, ITEM_RULE_LIMITS, MAX_ITEM_LEVEL, RARITY_LABEL } from '../game/items/rules';
@@ -51,6 +52,7 @@ export function ArsenalPanel({ state, run }: { state: GameState; run: Run }) {
         <Generator players={players} run={run} trayFull={staged.length >= MAX_STAGED} />
         <Tray staged={staged} players={players} run={run} />
       </div>
+      <LootDraftPanel draft={state.arsenal?.draft} run={run} trayFree={MAX_STAGED - staged.length} />
       <UniquesAndTwists players={players} run={run} />
       <CurrencyGrants players={players} run={run} />
       <Inventories players={players} run={run} rules={itemRulesOf(state)} />
@@ -326,6 +328,274 @@ function Tray({ staged, players, run }: { staged: Item[]; players: Token[]; run:
         })}
       </ul>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------- loot drafts (APEX 0.7)
+
+const LEVEL_KEY = 'apex.loot.partyLevel';
+const readLevel = () => {
+  try {
+    const n = Number(localStorage.getItem(LEVEL_KEY));
+    return n >= 1 && n <= 20 ? Math.floor(n) : 5;
+  } catch {
+    return 5;
+  }
+};
+
+function entryLabel(e: LootDraftEntry): string {
+  if (e.currency) return `${e.quantity} × ${CURRENCIES[e.currency].plural}`;
+  if (e.category === 'quest' || e.category === 'custom') return `${e.quantity > 1 ? `${e.quantity} × ` : ''}${e.name}`;
+  const b = baseItem(e.baseId);
+  return `${e.quantity > 1 ? `${e.quantity} × ` : ''}${b?.name ?? e.baseId}`;
+}
+
+function LootDraftPanel({ draft, run, trayFree }: { draft?: LootDraft; run: Run; trayFree: number }) {
+  const [encounter, setEncounter] = useState<Encounter>('standard');
+  const [level, setLevel] = useState(readLevel);
+  const [cats, setCats] = useState<LootCategory[]>(ROLLED_CATEGORIES.filter((c) => c !== 'currency' && c !== 'orb'));
+  const [busy, setBusy] = useState(false);
+  const act = async (cmd: Command) => {
+    setBusy(true);
+    try {
+      return await run(cmd);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const roll = () => {
+    try {
+      localStorage.setItem(LEVEL_KEY, String(level));
+    } catch {
+      /* private mode */
+    }
+    void act({ type: 'lootDraftCreate', draftId: newEntryId('drop'), encounter, referenceLevel: level, categories: cats });
+  };
+  return (
+    <section className="panel space-y-2 p-3" aria-label="Loot drop">
+      <h3 className="panel-title">Loot drop · draft &amp; approve</h3>
+      {!draft && (
+        <div className="space-y-2 text-xs text-marble-300">
+          <p className="text-marble-500">Roll a drop on the server, check and edit it, then approve it into the Arsenal tray. Nothing is given automatically; players see nothing until you give an item.</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-0.5">
+              Encounter
+              <select className={input} aria-label="Encounter type" value={encounter} onChange={(e) => setEncounter(e.target.value as Encounter)}>
+                {ENCOUNTERS.map((x) => (
+                  <option key={x} value={x}>
+                    {ENCOUNTER_TABLE[x].label} – {ENCOUNTER_TABLE[x].rolls} roll{ENCOUNTER_TABLE[x].rolls > 1 ? 's' : ''}, item level +{ENCOUNTER_TABLE[x].ilvlBonus}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-0.5">
+              Party level
+              <input className={`${input} w-20`} type="number" min={1} max={20} aria-label="Reference character level" value={level} onChange={(e) => setLevel(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} />
+            </label>
+          </div>
+          <fieldset className="flex flex-wrap gap-x-3 gap-y-1">
+            <legend className="mb-1">Categories that can drop</legend>
+            {ROLLED_CATEGORIES.map((c) => (
+              <label key={c} className="inline-flex items-center gap-1">
+                <input type="checkbox" checked={cats.includes(c)} onChange={(e) => setCats(e.target.checked ? [...cats, c] : cats.filter((x) => x !== c))} />
+                {LOOT_CATEGORY_LABEL[c]}
+              </label>
+            ))}
+          </fieldset>
+          <p className="text-[11px] text-marble-500">Rarity weights (normal / magic / rare): {ENCOUNTER_TABLE[encounter].rarity.join(' / ')}{encounter === 'boss' ? ' · boss item level +0 (85 %), +1 (12 %), +2 (3 %)' : ''}. Quest and custom items are added by hand.</p>
+          <button className="btn btn-gold" disabled={busy || !cats.length} onClick={roll}>
+            Roll loot draft
+          </button>
+        </div>
+      )}
+      {draft && <DraftEditor draft={draft} act={act} busy={busy} trayFree={trayFree} />}
+    </section>
+  );
+}
+
+function DraftEditor({ draft, act, busy, trayFree }: { draft: LootDraft; act: (c: Command) => Promise<DispatchResult>; busy: boolean; trayFree: number }) {
+  const edit = (op: Extract<Command, { type: 'lootDraftEdit' }>['op']) => act({ type: 'lootDraftEdit', rev: draft.rev, op });
+  return (
+    <div className="space-y-2 text-xs" data-draft={draft.id}>
+      <p className="text-marble-400">
+        {ENCOUNTER_TABLE[draft.encounter].label} drop · party level {draft.referenceLevel} · {draft.entries.length} entr{draft.entries.length === 1 ? 'y' : 'ies'} · not yet created
+      </p>
+      <ul className="space-y-1" aria-label="Draft entries">
+        {draft.entries.map((e) => {
+          const equipment = e.category === 'weapon' || e.category === 'armor' || e.category === 'accessory';
+          return (
+            <li key={e.key} data-entry={e.key} className="flex flex-wrap items-center gap-2 rounded border border-ink-700 bg-ink-900/50 px-2 py-1">
+              <span className="min-w-[10rem] flex-1">
+                <span className="text-[10px] uppercase tracking-wider text-marble-500">{LOOT_CATEGORY_LABEL[e.category]} · </span>
+                <span style={e.rarity ? { color: RARITY_STYLE[e.rarity].color } : undefined}>{entryLabel(e)}</span>
+                {e.category === 'quest' && <span className="ml-1 text-[10px] text-gold-300">{e.salvageable ? '' : 'no salvage'}{e.noTransfer ? ' · no transfer' : ''}</span>}
+              </span>
+              {equipment ? (
+                <>
+                  <select className={input} aria-label={`Rarity of ${entryLabel(e)}`} value={e.rarity} disabled={busy} onChange={(ev) => void edit({ kind: 'set', key: e.key, rarity: ev.target.value as GenRarity })}>
+                    {(['normal', 'magic', 'rare'] as GenRarity[]).map((r) => (
+                      <option key={r} value={r}>
+                        {RARITY_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="inline-flex items-center gap-1">
+                    ilvl
+                    <input className={`${input} w-14`} type="number" min={1} max={MAX_ITEM_LEVEL} aria-label={`Item level of ${entryLabel(e)}`} defaultValue={e.itemLevel} key={`${e.key}-${draft.rev}`} disabled={busy} onBlur={(ev) => Number(ev.target.value) !== e.itemLevel && void edit({ kind: 'set', key: e.key, itemLevel: Math.max(1, Math.min(MAX_ITEM_LEVEL, Number(ev.target.value) || 1)) })} />
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input type="checkbox" aria-label={`${entryLabel(e)} identified`} checked={e.identified !== false} disabled={busy || e.rarity === 'normal'} onChange={(ev) => void edit({ kind: 'set', key: e.key, identified: ev.target.checked })} />
+                    identified
+                  </label>
+                </>
+              ) : (
+                <label className="inline-flex items-center gap-1">
+                  qty
+                  <input className={`${input} w-16`} type="number" min={1} max={DRAFT_LIMITS.quantity} aria-label={`Quantity of ${entryLabel(e)}`} defaultValue={e.quantity} key={`${e.key}-${draft.rev}`} disabled={busy} onBlur={(ev) => Number(ev.target.value) !== e.quantity && void edit({ kind: 'set', key: e.key, quantity: Math.max(1, Math.min(DRAFT_LIMITS.quantity, Number(ev.target.value) || 1)) })} />
+                </label>
+              )}
+              <button className="btn btn-ghost px-2 py-0.5" aria-label={`Remove ${entryLabel(e)}`} disabled={busy} onClick={() => void edit({ kind: 'remove', key: e.key })}>
+                Remove
+              </button>
+            </li>
+          );
+        })}
+        {!draft.entries.length && <li className="text-marble-500">The draft is empty.</li>}
+      </ul>
+      <AddEntry onAdd={(entry) => edit({ kind: 'add', entry })} busy={busy || draft.entries.length >= DRAFT_LIMITS.entries} />
+      <div className="flex items-center gap-2 border-t border-ink-700 pt-2">
+        <button className="btn btn-gold" disabled={busy || !draft.entries.length || draft.entries.length > trayFree} onClick={() => void act({ type: 'lootDraftApprove', rev: draft.rev })}>
+          Approve final pool → Arsenal tray
+        </button>
+        {draft.entries.length > trayFree && <span className="text-amber-300">The tray has room for {trayFree} more item(s).</span>}
+        <span className="flex-1" />
+        <button className="btn btn-ghost" disabled={busy} onClick={() => void act({ type: 'lootDraftDiscard' })}>
+          Discard draft
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type AddKind = 'quest' | 'custom' | 'potion' | 'consumable' | 'seal' | 'orb' | 'fragment' | 'currency' | 'weapon' | 'armor' | 'accessory';
+const ADDABLE: AddKind[] = ['quest', 'custom', 'potion', 'consumable', 'seal', 'orb', 'fragment', 'currency', 'weapon', 'armor', 'accessory'];
+const EQUIP_BASES: Record<'weapon' | 'armor' | 'accessory', (b: BaseItem) => boolean> = {
+  weapon: (b) => b.category === 'weapon',
+  armor: (b) => b.category === 'armor' || b.category === 'shield',
+  accessory: (b) => ['ring', 'amulet', 'cloak', 'head', 'gloves', 'boots', 'belt'].includes(b.category) && canRollMods(b),
+};
+
+function AddEntry({ onAdd, busy }: { onAdd: (e: LootDraftEntry) => Promise<DispatchResult>; busy: boolean }) {
+  const [kind, setKind] = useState<AddKind>('quest');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [image, setImage] = useState('');
+  const [gmNotes, setGmNotes] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [noTransfer, setNoTransfer] = useState(false);
+  const [salvageable, setSalvageable] = useState(false);
+  const [baseId, setBaseId] = useState('');
+  const [currency, setCurrency] = useState<CurrencyId>('augment');
+  const [rarity, setRarity] = useState<GenRarity>('magic');
+  const [ilvl, setIlvl] = useState(5);
+  const named = kind === 'quest' || kind === 'custom';
+  const equipment = kind === 'weapon' || kind === 'armor' || kind === 'accessory';
+  const bases = equipment ? BASE_ITEMS.filter(EQUIP_BASES[kind]) : kind === 'consumable' ? CONSUMABLE_BASES.map((id) => baseItem(id)!).filter(Boolean) : [];
+  const chosenBase = bases.some((b) => b.id === baseId) ? baseId : bases[0]?.id;
+  const submit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const entry: LootDraftEntry = {
+      key: newEntryId('e'),
+      category: kind,
+      quantity: equipment ? 1 : quantity,
+      ...(named ? { name, ...(description.trim() ? { description } : {}) } : {}),
+      ...(kind === 'quest' ? { ...(image.trim() ? { image: image.trim() } : {}), ...(gmNotes.trim() ? { gmNotes } : {}), noTransfer, salvageable } : {}),
+      ...(kind === 'potion' ? { baseId: POTION_BASE } : {}),
+      ...(kind === 'consumable' || equipment ? { baseId: chosenBase } : {}),
+      ...(kind === 'currency' ? { currency } : {}),
+      ...(equipment ? { rarity, itemLevel: ilvl, identified: rarity === 'normal' } : {}),
+    };
+    const r = await onAdd(entry);
+    if (r.ok) {
+      setName('');
+      setDescription('');
+      setImage('');
+      setGmNotes('');
+      setQuantity(1);
+    }
+  };
+  return (
+    <form className="space-y-1.5 rounded border border-dashed border-ink-600 p-2 text-xs text-marble-300" aria-label="Add to draft" onSubmit={(e) => void submit(e)}>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-0.5">
+          Add
+          <select className={input} aria-label="Entry type" value={kind} onChange={(e) => setKind(e.target.value as AddKind)}>
+            {ADDABLE.map((k) => (
+              <option key={k} value={k}>
+                {LOOT_CATEGORY_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {(equipment || kind === 'consumable') && (
+          <select className={input} aria-label="Base item for the entry" value={chosenBase} onChange={(e) => setBaseId(e.target.value)}>
+            {bases.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {kind === 'currency' && (
+          <select className={input} aria-label="Currency for the entry" value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyId)}>
+            {CURRENCY_IDS.map((c) => (
+              <option key={c} value={c}>
+                {CURRENCIES[c].plural}
+              </option>
+            ))}
+          </select>
+        )}
+        {equipment && (
+          <>
+            <select className={input} aria-label="Rarity for the entry" value={rarity} onChange={(e) => setRarity(e.target.value as GenRarity)}>
+              {(['normal', 'magic', 'rare'] as GenRarity[]).map((r) => (
+                <option key={r} value={r}>
+                  {RARITY_LABEL[r]}
+                </option>
+              ))}
+            </select>
+            <input className={`${input} w-14`} type="number" min={1} max={MAX_ITEM_LEVEL} aria-label="Item level for the entry" value={ilvl} onChange={(e) => setIlvl(Math.max(1, Math.min(MAX_ITEM_LEVEL, Number(e.target.value) || 1)))} />
+          </>
+        )}
+        {!equipment && (
+          <label className="flex flex-col gap-0.5">
+            Quantity
+            <input className={`${input} w-16`} type="number" min={1} max={DRAFT_LIMITS.quantity} aria-label="Quantity for the entry" value={quantity} onChange={(e) => setQuantity(Math.max(1, Math.min(DRAFT_LIMITS.quantity, Number(e.target.value) || 1)))} />
+          </label>
+        )}
+      </div>
+      {named && (
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          <input className={input} placeholder="Name" aria-label="Item name" maxLength={DRAFT_LIMITS.name} value={name} onChange={(e) => setName(e.target.value)} required />
+          {kind === 'quest' && <input className={input} placeholder="Image URL (https://…, optional)" aria-label="Image URL" maxLength={DRAFT_LIMITS.image} value={image} onChange={(e) => setImage(e.target.value)} />}
+          <textarea className={`${input} sm:col-span-2`} rows={2} placeholder="Description (players see this)" aria-label="Item description" maxLength={DRAFT_LIMITS.description} value={description} onChange={(e) => setDescription(e.target.value)} />
+          {kind === 'quest' && (
+            <>
+              <textarea className={`${input} sm:col-span-2`} rows={2} placeholder="GM notes (never shown to players)" aria-label="GM notes" maxLength={DRAFT_LIMITS.gmNotes} value={gmNotes} onChange={(e) => setGmNotes(e.target.value)} />
+              <label className="inline-flex items-center gap-1">
+                <input type="checkbox" checked={noTransfer} onChange={(e) => setNoTransfer(e.target.checked)} /> Cannot be transferred
+              </label>
+              <label className="inline-flex items-center gap-1">
+                <input type="checkbox" checked={salvageable} onChange={(e) => setSalvageable(e.target.checked)} /> Salvageable (off by default)
+              </label>
+            </>
+          )}
+        </div>
+      )}
+      <button className="btn btn-ghost" type="submit" disabled={busy || (named && !name.trim())}>
+        Add to draft
+      </button>
+    </form>
   );
 }
 
