@@ -10,6 +10,10 @@
  */
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
+import type { BeastForm } from './beasts.js';
+
+/** APEX 0.7: sneaking doubles the movement-point cost of every step (= half speed). */
+export const sneakFactor = (t: { sneaking?: boolean; details?: { sneaking?: boolean } }) => (t.sneaking || t.details?.sneaking ? 2 : 1);
 import { bagItemCount, holdingRefusal, syncHolding } from './items/holding.js';
 import { isBagOfHolding } from './items/weight.js';
 import { equals, hexKey, hexesInRange, type Axial, type HexKey } from './hex.js';
@@ -37,6 +41,9 @@ export type Command =
   | LootCommand
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
+  | { type: 'setSneak'; tokenId: string; on: boolean }
+  | { type: 'gmSetBeast'; beast: BeastForm }
+  | { type: 'gmRemoveBeast'; beastId: string }
   | { type: 'adjustMovePoints'; tokenId: string; delta: number }
   | { type: 'adjustMaxMovePoints'; tokenId: string; delta: number }
   | { type: 'adjustVisionRadius'; tokenId: string; delta: number }
@@ -89,6 +96,7 @@ export type Command =
 /** Commands a player may send for their OWN character (besides 'move'). */
 export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'setAppearance',
+  'setSneak',
   'invAddItem',
   'invUpdateItem',
   'invRemoveItem',
@@ -185,10 +193,12 @@ export function validateMove(state: GameState, actor: Actor, tokenId: string, to
       reason: actor.role === 'gm' ? T.noPathGm : T.noPathPlayer,
     };
   }
-  if (result.cost > token.movePoints + 1e-9) {
-    return { ok: false, reason: T.notEnoughMp(result.cost, token.name, token.movePoints) };
+  // APEX 0.7 custom rule: sneaking halves the movement speed – every step costs double movement points.
+  const cost = result.cost * sneakFactor(token);
+  if (cost > token.movePoints + 1e-9) {
+    return { ok: false, reason: T.notEnoughMp(cost, token.name, token.movePoints) };
   }
-  return { ok: true, path: result.path, cost: result.cost };
+  return { ok: true, path: result.path, cost };
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -402,6 +412,22 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (cmd.enabled !== undefined) state.config.shrink.enabled = cmd.enabled;
       if (cmd.mode !== undefined) state.config.shrink.mode = cmd.mode;
       break;
+    case 'setSneak': {
+      // Sneaking only changes the movement cost of FUTURE steps; it never refills or refunds movement points.
+      const t = state.tokens[cmd.tokenId];
+      if (cmd.on) t.sneaking = true;
+      else delete t.sneaking;
+      return { ok: true, state };
+    }
+    case 'gmSetBeast': {
+      const list = (state.customBeasts ?? []).filter((b) => b.id !== cmd.beast.id);
+      if (list.length >= 60) return fail(prev, 'At most 60 custom beast forms.');
+      state.customBeasts = [...list, cmd.beast];
+      return { ok: true, state };
+    }
+    case 'gmRemoveBeast':
+      state.customBeasts = (state.customBeasts ?? []).filter((b) => b.id !== cmd.beastId);
+      return { ok: true, state };
     case 'setAppearance': {
       // Cosmetic only: tag, colours, marker shape, initials. Never touches rules or permissions.
       const t = state.tokens[cmd.tokenId];

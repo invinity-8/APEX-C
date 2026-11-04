@@ -15,7 +15,7 @@ const HEALTH: Palette = { deep: '#3a0f10', mid: '#8e2f2f', light: '#d0605a' };
 const ARCANE: Palette = { deep: '#141d3a', mid: '#2f4c8e', light: '#6f8fd8' };
 const VERDANT: Palette = { deep: '#14261b', mid: '#405b49', light: '#7fa489' };
 
-export function Orb({ label, halves, size = 112, testId }: { label: string; halves: Array<{ value: OrbValue | null; palette: Palette }>; size?: number; testId?: string }) {
+export function Orb({ label, halves, size = 112, testId, shield = 0 }: { label: string; halves: Array<{ value: OrbValue | null; palette: Palette }>; size?: number; testId?: string; /** APEX 0.7: temporary HP as a fraction of max HP – drawn as a separate outer ring */ shield?: number }) {
   const id = useId().replace(/:/g, '');
   const split = halves.length === 2;
   const r = 44;
@@ -68,6 +68,9 @@ export function Orb({ label, halves, size = 112, testId }: { label: string; halv
         {[0, 90, 180, 270].map((a) => (
           <rect key={a} x="48" y="1.5" width="4" height="5" rx="1" fill="#c09b58" transform={`rotate(${a} 50 50)`} />
         ))}
+      {shield > 0 && (
+          <circle data-testid="temp-hp-ring" cx="50" cy="50" r="48.5" fill="none" stroke="#6fb1e0" strokeWidth="2.5" strokeLinecap="round" pathLength={100} strokeDasharray={`${Math.min(100, Math.max(6, shield * 100))} 100`} transform="rotate(-90 50 50)" opacity=".95" />
+        )}
       </svg>
       <figcaption className="apex-orb-caption">
         {halves.map((h, i) => (
@@ -100,6 +103,14 @@ export function VitalsPanel({ game, token, canEdit }: { game: GameApi; token: To
       live = false;
     };
   }, [sheets, token.id]);
+  // HP changes go through the damage / healing rules (temporary HP first, Wild Shape beast HP separate)
+  const hpChange = async (kind: 'damage' | 'heal', amount: number) => {
+    if (!data) return;
+    const r = await sheets.ability(token.id, { action: kind, amount, expectedVersion: data.version });
+    if (r.ok) setData({ sheet: r.sheet.sheet, version: r.sheet.version });
+    else if (r.conflict) setData({ sheet: r.conflict.sheet, version: r.conflict.version });
+    else setErr(r.error);
+  };
   const adjust = useCallback(
     async (target: 'hp' | 'resource', delta: number, resourceId?: string) => {
       const r = await sheets.adjust(token.id, target, delta, resourceId);
@@ -117,6 +128,7 @@ export function VitalsPanel({ game, token, canEdit }: { game: GameApi; token: To
   if (!data) return <p className="text-xs text-marble-500">{err ?? 'Loading…'}</p>;
   const { sheet } = data;
   const hp = sheet.hitPoints;
+  const ws = sheet.wildShape;
   const orbs = effectiveOrbs(sheet);
   const primary = orbValue(sheet, orbs.primary);
   const secondary = orbValue(sheet, orbs.secondary);
@@ -127,14 +139,22 @@ export function VitalsPanel({ game, token, canEdit }: { game: GameApi; token: To
     <div className="space-y-3 text-xs" data-testid="vitals">
       <div className="flex items-start justify-around gap-2">
         <div className="flex flex-col items-center gap-1">
-          <Orb label="Health" testId="orb-health" halves={[{ value: hp ? { label: 'HP', current: hp.current, max: hp.max, fill: hp.max ? hp.current / hp.max : 0, source: { type: 'spellSlots' } } : null, palette: HEALTH }]} />
-          <span className="label">Health{hp?.temp ? ` · +${hp.temp} temp` : ''}</span>
+          {ws ? (
+            <Orb label={`${ws.formName} (Wild Shape)`} testId="orb-health" shield={hp && ws.maxHp ? hp.temp / ws.maxHp : 0} halves={[{ value: { label: ws.formName, current: ws.hp, max: ws.maxHp, fill: ws.hp / ws.maxHp, source: { type: 'spellSlots' } }, palette: VERDANT }]} />
+          ) : (
+            <Orb label="Health" testId="orb-health" shield={hp && hp.max ? hp.temp / hp.max : 0} halves={[{ value: hp ? { label: 'HP', current: hp.current, max: hp.max, fill: hp.max ? hp.current / hp.max : 0, source: { type: 'spellSlots' } } : null, palette: HEALTH }]} />
+          )}
+          <span className="label" data-testid="health-label">
+            {ws ? `🐾 ${ws.formName} ${ws.hp}/${ws.maxHp}` : 'Health'}
+            {hp?.temp ? <span className="text-[#6fb1e0]"> · 🛡 +{hp.temp} temp</span> : ''}
+          </span>
+          {ws && hp && <span className="text-[10px] text-marble-500">Own HP {hp.current}/{hp.max} (kept)</span>}
           {canEdit && hp && (
             <div className="flex gap-1">
-              <button className="btn btn-ghost h-7 w-9 px-0" aria-label="Lose 1 hit point" onClick={() => void adjust('hp', -1)}>
+              <button className="btn btn-ghost h-7 w-9 px-0" aria-label="Lose 1 hit point" onClick={() => void hpChange('damage', 1)}>
                 −1
               </button>
-              <button className="btn btn-ghost h-7 w-9 px-0" aria-label="Heal 1 hit point" onClick={() => void adjust('hp', 1)}>
+              <button className="btn btn-ghost h-7 w-9 px-0" aria-label="Heal 1 hit point" onClick={() => void hpChange('heal', 1)}>
                 +1
               </button>
             </div>

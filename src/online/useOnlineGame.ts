@@ -402,6 +402,19 @@ export function useOnlineGame(
     [accept, campaignId, perform],
   );
 
+  const uploadBeastImage = useCallback(
+    async (tokenId: string, formId: string, dataUrl: string) => {
+      try {
+        await api.uploadBeastImage(tokenId, formId, dataUrl);
+        await refresh(true);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    },
+    [refresh],
+  );
+
   const uploadPortrait = useCallback(
     async (tokenId: string, dataUrl: string) => {
       try {
@@ -431,6 +444,7 @@ export function useOnlineGame(
       load: (tokenId) => sheetCall(() => api.sheet(tokenId)),
       save: (tokenId, sheet, expectedVersion, reason) => sheetCall(() => api.saveSheet(tokenId, sheet, expectedVersion, reason)),
       adjust: (tokenId, target, delta, resourceId) => sheetCall(() => api.adjustSheet(tokenId, target, delta, resourceId)),
+      ability: (tokenId, body) => sheetCall(() => api.sheetAbility(tokenId, body)),
       party: () => api.party().then((r) => r.members, () => []),
     }),
     [sheetCall, sheetRevision],
@@ -522,10 +536,11 @@ export function useOnlineGame(
             },
             sheets,
             uploadPortrait,
+            uploadBeastImage,
             online,
           }
         : null,
-    [payload, view, online, gmState, busy, pending, dispatch, worldAction, sheets, uploadPortrait],
+    [payload, view, online, gmState, busy, pending, dispatch, worldAction, sheets, uploadPortrait, uploadBeastImage],
   );
 
   return { game, payload, error, loading: !payload && !error, refresh: refreshForce };

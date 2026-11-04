@@ -2,6 +2,8 @@
  * Demo backend: keeps the game state in this browser, runs commands locally and saves automatically.
  * It never talks to the shared online campaign.
  */
+import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform } from '../game/abilities';
+import { findBeast } from '../game/beastCatalog';
 import { SEEDED_COMMANDS } from '../game/items/loot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createDemoState } from '../data/demo';
@@ -148,6 +150,30 @@ function useDemoSheets(state: GameState): SheetApi {
       if (cur.version !== expectedVersion) return { ok: false, error: 'Changed elsewhere.', conflict: cur };
       write(tokenId, parsed.sheet, expectedVersion + 1);
       return { ok: true, sheet: payload(tokenId) };
+    },
+    ability: async (tokenId, body) => {
+      // Demo mode plays the server: the same pure rules as /api/apex?op=sheet.
+      const cur = payload(tokenId);
+      if (body.expectedVersion !== cur.version) return { ok: false, error: 'Changed elsewhere.', conflict: cur };
+      const amount = Math.max(0, Math.floor(Number(body.amount) || 0));
+      const form = typeof body.formId === 'string' ? findBeast(state.customBeasts, body.formId) : undefined;
+      const r =
+        body.action === 'wildShape'
+          ? form
+            ? transform(cur.sheet, form)
+            : ({ ok: false, error: 'Unknown beast form.' } as const)
+          : body.action === 'revert'
+            ? revert(cur.sheet)
+            : body.action === 'damage'
+              ? applyDamage(cur.sheet, amount)
+              : body.action === 'heal'
+                ? applyHealing(cur.sheet, amount)
+                : body.action === 'tempHp'
+                  ? setTempHp(cur.sheet, body.mode as 'grant' | 'replace' | 'remove', amount)
+                  : convertSorcery(cur.sheet, body.direction as 'toSlot' | 'toPoints', Number(body.level));
+      if (!r.ok) return { ok: false, error: r.error };
+      write(tokenId, r.sheet, cur.version + 1);
+      return { ok: true, sheet: { ...payload(tokenId), message: r.message } };
     },
     adjust: async (tokenId, target, delta, resourceId) => {
       const cur = payload(tokenId);

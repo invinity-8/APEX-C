@@ -25,6 +25,8 @@ import { migrateState, stripLegacy } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
+import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
+import { findBeast } from '../game/beastCatalog.js';
 import { buildSnapshot, isSnapshot, restoreSheetParts, sheetLevel, SHEET_PARTS, type SheetPart } from '../game/progression.js';
 import type { Actor, GameState } from '../game/types.js';
 import { phaseName } from '../game/text.js';
@@ -186,6 +188,10 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
         return ok(await uploadPortrait(user, req.body, repo));
       case 'GET portrait':
         return await portraitRedirect(user, req.query.token, repo);
+      case 'POST beast-image':
+        return ok(await uploadBeastImage(user, req.body, repo));
+      case 'GET beast-image':
+        return await beastImageRedirect(user, req.query.token, req.query.form, repo);
       case 'GET sheet':
         return ok(await getSheet(user, req.query.token, repo));
       case 'GET party':
@@ -696,6 +702,56 @@ async function uploadPortrait(user: AuthUser, body: unknown, repo: Repo) {
   throw new HttpError(409, 'The campaign was changed at the same time. Please try again.', 'conflict');
 }
 
+/**
+ * APEX 0.7: a player's own picture for one Wild Shape form (stored privately like portraits; the owner or the GM
+ * uploads it; the storage path is never sent to clients – only a cache version).
+ */
+async function uploadBeastImage(user: AuthUser, body: unknown, repo: Repo) {
+  if (!isObj(body) || !isId(body.tokenId) || typeof body.formId !== 'string' || typeof body.image !== 'string') throw new HttpError(400, 'Invalid picture upload.');
+  const tokenId = body.tokenId;
+  if (user.role !== 'gm' && !user.tokenIds.includes(tokenId)) throw new HttpError(403, 'You can only change your own pictures.', 'forbidden');
+  const stored = await repo.loadState(user.campaignId);
+  if (!stored || stored.state.tokens[tokenId]?.kind !== 'player') throw new HttpError(404, 'Character not found.');
+  const form = findBeast(stored.state.customBeasts, body.formId);
+  if (!form) throw new HttpError(404, 'Unknown beast form.');
+  const b64 = body.image.replace(/^data:image\/[a-z]+;base64,/, '');
+  if (b64.length > Math.ceil((PORTRAIT_MAX_BYTES * 4) / 3) + 8 || !/^[A-Za-z0-9+/=]+$/.test(b64)) throw new HttpError(413, 'The picture is too large (max. 1.5 MB).');
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const type = imageType(bytes);
+  if (!type) throw new HttpError(415, 'Please use a JPG, PNG or WebP picture.');
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/png' ? 'png' : 'webp';
+  const path = `${user.campaignId}/${tokenId}/beast-${form.id}-${crypto.randomUUID()}.${ext}`;
+  await repo.uploadPortrait(path, bytes, type);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const cur = await repo.loadState(user.campaignId);
+    if (!cur) break;
+    const next = structuredClone(cur.state);
+    const t = next.tokens[tokenId];
+    if (!t) break;
+    const images = { ...(t.beastImages ?? {}) };
+    const old = images[form.id]?.path;
+    if (Object.keys(images).length >= 40 && !old) throw new HttpError(400, 'At most 40 beast pictures per character.');
+    images[form.id] = { path, v: (images[form.id]?.v ?? 0) + 1 };
+    t.beastImages = images;
+    const v = await repo.saveState(user.campaignId, next, cur.version, user.id);
+    if (v === null) continue;
+    if (old) await repo.deletePortrait(old).catch(() => undefined);
+    return { tokenId, formId: form.id, v: images[form.id].v, version: v };
+  }
+  await repo.deletePortrait(path).catch(() => undefined);
+  throw new HttpError(409, 'The campaign was changed at the same time. Please try again.', 'conflict');
+}
+
+async function beastImageRedirect(user: AuthUser, tokenId: unknown, formId: unknown, repo: Repo): Promise<ApiResponse> {
+  if (!isId(tokenId) || typeof formId !== 'string') throw new HttpError(400, 'Invalid picture.');
+  const stored = await repo.loadState(user.campaignId);
+  const img = stored?.state.tokens[tokenId]?.beastImages?.[formId];
+  if (!img) throw new HttpError(404, 'No picture.');
+  const url = await repo.portraitUrl(img.path, 600);
+  if (!url) throw new HttpError(404, 'No picture.');
+  return { status: 302, body: null, headers: { location: url, 'cache-control': 'private, max-age=300' } };
+}
+
 /** Portrait download: any signed-in member of the campaign may see player-character portraits (cosmetic). */
 async function portraitRedirect(user: AuthUser, tokenId: unknown, repo: Repo): Promise<ApiResponse> {
   if (!isId(tokenId)) throw new HttpError(400, 'Invalid character.');
@@ -816,6 +872,54 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
       if (v !== null) return sheetPayload(repo, cid, tokenId, state!);
     }
     throw new HttpError(409, 'The character sheet is being changed elsewhere right now. Please try again.', 'conflict');
+  }
+  // ---- APEX 0.7 class abilities & hit points: server-validated rules, one atomic write with a version check
+  const ABILITY_ACTIONS = new Set(['wildShape', 'revert', 'damage', 'heal', 'tempHp', 'sorcery']);
+  if (typeof body.action === 'string' && ABILITY_ACTIONS.has(body.action)) {
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid sheet version.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'The character sheet changed in the meantime – the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    const parsed = cur ? parseSheet(cur.data) : null;
+    const sheet: CharacterSheet = parsed?.ok ? parsed.sheet : emptySheet();
+    const amount = (v: unknown) => {
+      if (!isInt(v, 1000) || (v as number) < 0) throw new HttpError(400, 'Invalid amount.');
+      return v as number;
+    };
+    let r: AbilityResult;
+    switch (body.action) {
+      case 'wildShape': {
+        const form = typeof body.formId === 'string' ? findBeast(state!.customBeasts, body.formId) : undefined;
+        if (!form) throw new HttpError(404, 'Unknown beast form.');
+        r = transform(sheet, form);
+        break;
+      }
+      case 'revert':
+        r = revert(sheet);
+        break;
+      case 'damage':
+        r = applyDamage(sheet, amount(body.amount));
+        break;
+      case 'heal':
+        r = applyHealing(sheet, amount(body.amount));
+        break;
+      case 'tempHp': {
+        const mode = body.mode === 'grant' || body.mode === 'replace' || body.mode === 'remove' ? body.mode : null;
+        if (!mode) throw new HttpError(400, 'Invalid temporary HP mode.');
+        r = setTempHp(sheet, mode, mode === 'remove' ? 0 : amount(body.amount));
+        break;
+      }
+      default: {
+        const dir = body.direction === 'toSlot' || body.direction === 'toPoints' ? body.direction : null;
+        if (!dir || !isInt(body.level, 9)) throw new HttpError(400, 'Invalid conversion.');
+        r = convertSorcery(sheet, dir, body.level as number);
+      }
+    }
+    if (!r.ok) throw new HttpError(422, r.error, 'rejected');
+    const v = await repo.saveSheet(cid, tokenId, r.sheet, cur?.version ?? 0, user.id);
+    if (v === null) throw new HttpError(409, 'The character sheet changed in the meantime – please try again.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    return { ...(await sheetPayload(repo, cid, tokenId, state!)), message: r.message };
   }
   throw new HttpError(400, 'Unknown sheet action.');
 }

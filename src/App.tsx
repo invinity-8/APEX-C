@@ -441,6 +441,11 @@ function MovementPill({ token }: { token: import('./game/visibility').TokenView 
       <b className="tabular-nums text-gold-200">
         {d.movePoints}/{d.maxMovePoints}
       </b>
+      {d.sneaking && (
+        <span className="text-arcane-300" data-testid="sneak-indicator" title="Sneaking: each step costs double movement points">
+          🥷 Sneaking
+        </span>
+      )}
       <span className="text-marble-500">MP{d.speedFt ? ` · ${d.speedFt} ft` : ''}</span>
     </div>
   );
