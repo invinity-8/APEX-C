@@ -298,6 +298,8 @@ export interface Announcement {
   title: string;
   text: string;
   createdAt: string;
+  /** APEX 0.7: server time after which the announcement is never shown as a popup (history only). */
+  expiresAt?: string;
   day: number;
   phase: Phase;
 }

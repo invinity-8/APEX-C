@@ -527,6 +527,25 @@ const waitText = (page, re, timeout = 10000) =>
     check('an acknowledged announcement does not reappear after reload', (await hannah.getByRole('alertdialog').count()) === 0);
     const bad = await apiFetch(hannah, 'command', { campaignId: cid, requestId: 'e2e-ann-forge', command: { type: 'announce', category: 'general', title: 'FAKE', text: '' } });
     check('players cannot broadcast announcements', bad.status === 403);
+    if (MOCK) {
+      // APEX 0.7: announcements older than 60 minutes are never delivered as missed popups
+      const jeanCtx2 = jean.context();
+      await jean.close();
+      await openGm(gm, 'announcements');
+      await gm.getByLabel('Announcement category').selectOption('general');
+      await gm.getByLabel('Announcement headline').fill('OLD NEWS FROM THE ARENA');
+      await gm.getByLabel('Announcement text').fill('This was broadcast long ago.');
+      await gm.getByRole('button', { name: /Broadcast to all players/ }).click();
+      await hannah.getByRole('alertdialog').filter({ hasText: 'OLD NEWS' }).waitFor({ timeout: 30000 }).catch(() => undefined);
+      await hannah.keyboard.press('Escape');
+      const aged = await (await fetch(BASE + '/__mock/age-announcements?minutes=90')).json();
+      jean = await jeanCtx2.newPage();
+      await jean.goto(url('/'));
+      await waitText(jean, /Playing as Aster/, 20000);
+      await jean.waitForTimeout(2500);
+      const view = (await apiFetch(jean, 'state')).body.view;
+      check('an announcement older than 60 minutes does not pop up after reconnecting', aged.aged > 0 && (await jean.getByRole('alertdialog').filter({ hasText: 'OLD NEWS' }).count()) === 0 && !!view.serverTime && view.announcements.some((a) => a.title === 'OLD NEWS FROM THE ARENA' && a.expiresAt));
+    }
     await gm.keyboard.press('Escape');
     await gm.screenshot({ path: out + '/e2e-gm-events.png', fullPage: true });
   }

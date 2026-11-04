@@ -146,6 +146,20 @@ export function previewEvent(state: GameState, ev: ArenaEvent): EventPreview {
 
 export const ANNOUNCEMENT_LIMIT = 50;
 
+/** APEX 0.7: player-facing delivery window of an announcement popup. */
+export const ANNOUNCEMENT_TTL_MS = 60 * 60_000;
+
+/** Expiry of an announcement (legacy entries without expiresAt: createdAt + TTL). */
+export function announcementExpiry(a: Pick<Announcement, 'createdAt' | 'expiresAt'>): number {
+  const e = a.expiresAt ? Date.parse(a.expiresAt) : NaN;
+  if (Number.isFinite(e)) return e;
+  const c = Date.parse(a.createdAt);
+  return Number.isFinite(c) ? c + ANNOUNCEMENT_TTL_MS : 0;
+}
+
+/** May this announcement still pop up at server time `nowMs`? */
+export const announcementDeliverable = (a: Pick<Announcement, 'createdAt' | 'expiresAt'>, nowMs: number) => announcementExpiry(a) > nowMs;
+
 export function addAnnouncement(state: GameState, a: { category: AnnouncementCategory; title: string; text: string }, now = new Date()): Announcement {
   const list = (state.announcements ??= []);
   const ann: Announcement = {
@@ -154,6 +168,7 @@ export function addAnnouncement(state: GameState, a: { category: AnnouncementCat
     title: a.title.trim().slice(0, 80),
     text: a.text.trim().slice(0, 500),
     createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + ANNOUNCEMENT_TTL_MS).toISOString(),
     day: state.day,
     phase: state.phase,
   };

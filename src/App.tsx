@@ -315,7 +315,7 @@ export default function App({ game }: { game: GameApi }) {
           Live updates are temporarily unavailable – APEX checks for changes every few seconds instead.
         </div>
       )}
-      <AnnouncementOverlay announcements={view.announcements} scope={announceScope} />
+      <AnnouncementOverlay announcements={view.announcements} scope={announceScope} serverTime={view.serverTime} />
       {isGm && state && <GmEventModal state={state} run={run} />}
       <Header
         game={game}

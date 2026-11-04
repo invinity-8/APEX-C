@@ -119,6 +119,21 @@ export function mockSupabase(): Plugin {
           apiDown = url.searchParams.get('on') === '1';
           return send(res, 200, { apiDown });
         }
+        if (url.pathname === '/age-announcements') {
+          // Test-only (APEX 0.7): pretend every announcement was broadcast N minutes ago.
+          const minutes = Math.max(0, Number(url.searchParams.get('minutes')) || 0);
+          let n = 0;
+          for (const st of repo?.states.values() ?? []) {
+            for (const a of st.state.announcements ?? []) {
+              const at = Date.now() - minutes * 60_000;
+              a.createdAt = new Date(at).toISOString();
+              a.expiresAt = new Date(at + 60 * 60_000).toISOString();
+              n++;
+            }
+            st.version += 1;
+          }
+          return send(res, 200, { aged: n });
+        }
         if (url.pathname === '/inspect') {
           // Test-only: proves what is stored (hashes, never plain passwords).
           const r = repo;
