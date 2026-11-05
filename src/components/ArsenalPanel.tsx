@@ -15,6 +15,7 @@ import { eligibleMods } from '../game/items/modifiers';
 import { UNIQUES } from '../game/items/uniques';
 import { CONSUMABLE_BASES, DRAFT_LIMITS, ENCOUNTER_TABLE, ENCOUNTERS, LOOT_CATEGORY_LABEL, POTION_BASE, ROLLED_CATEGORIES, type Encounter, type LootCategory, type LootDraft, type LootDraftEntry } from '../game/items/lootDraft';
 import { BeastEditor } from './BeastEditor';
+import { WidgetTabs } from '../workspace/WidgetTabs';
 import { GmLootRolls } from './LootRolls';
 import { MerchantAdmin } from './Merchant';
 import { DEFAULT_MERCHANT } from '../game/items/merchant';
@@ -48,24 +49,64 @@ const CATEGORY_LABEL: Partial<Record<BaseCategory, string>> = {
 export function ArsenalPanel({ state, run }: { state: GameState; run: Run }) {
   const players = Object.values(state.tokens).filter((t) => t.kind === 'player');
   const staged = state.arsenal?.staged ?? [];
+  const open = (state.lootRolls ?? []).filter((r) => r.status === 'open').length;
   return (
-    <div className="mx-auto max-w-6xl space-y-3 p-3" aria-label="GM Arsenal">
+    <div className="mx-auto max-w-7xl space-y-3 p-3" aria-label="GM Arsenal">
       <h2 className="font-display text-2xl font-black text-gold-200">Arsenal</h2>
-      <div className="grid gap-3 lg:grid-cols-[1.25fr_1fr]">
-        <Generator players={players} run={run} trayFull={staged.length >= MAX_STAGED} />
-        <Tray staged={staged} players={players} run={run} />
-      </div>
-      <LootDraftPanel draft={state.arsenal?.draft} run={run} trayFree={MAX_STAGED - staged.length} />
-      <MerchantAdmin merchant={state.merchant ?? DEFAULT_MERCHANT} staged={staged} run={run} />
-      <GmLootRolls rolls={state.lootRolls ?? []} staged={staged} players={players.map((p) => ({ id: p.id, name: p.name }))} run={run} />
-      <UniquesAndTwists players={players} run={run} />
-      <CurrencyGrants players={players} run={run} />
-      <Inventories players={players} run={run} rules={itemRulesOf(state)} />
-      <BeastEditor beasts={state.customBeasts ?? []} run={run} />
-      <CosmeticGrants players={players} run={run} />
-      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-        <AuditLog state={state} />
-        <Balance state={state} run={run} />
+      {/* APEX 0.7 consolidation: one area per task; the tray (shared by all of them) stays visible on the side */}
+      <div className="grid items-start gap-3 lg:grid-cols-[1fr_22rem]">
+        <WidgetTabs
+          id="arsenal"
+          tabs={[
+            {
+              id: 'items',
+              label: '⚒ Create items',
+              render: () => (
+                <div className="space-y-3">
+                  <Generator players={players} run={run} trayFull={staged.length >= MAX_STAGED} />
+                  <UniquesAndTwists players={players} run={run} />
+                </div>
+              ),
+            },
+            {
+              id: 'loot',
+              label: '🎲 Loot',
+              badge: open,
+              render: () => (
+                <div className="space-y-3">
+                  <LootDraftPanel draft={state.arsenal?.draft} run={run} trayFree={MAX_STAGED - staged.length} />
+                  <GmLootRolls rolls={state.lootRolls ?? []} staged={staged} players={players.map((p) => ({ id: p.id, name: p.name }))} run={run} />
+                </div>
+              ),
+            },
+            { id: 'merchant', label: `🏛 Merchant${state.merchant?.active ? ' (open)' : ''}`, render: () => <MerchantAdmin merchant={state.merchant ?? DEFAULT_MERCHANT} staged={staged} run={run} /> },
+            {
+              id: 'characters',
+              label: '👥 Characters',
+              render: () => (
+                <div className="space-y-3">
+                  <CurrencyGrants players={players} run={run} />
+                  <Inventories players={players} run={run} rules={itemRulesOf(state)} />
+                  <CosmeticGrants players={players} run={run} />
+                </div>
+              ),
+            },
+            {
+              id: 'rules',
+              label: '⚖ Rules & log',
+              render: () => (
+                <div className="space-y-3">
+                  <Balance state={state} run={run} />
+                  <BeastEditor beasts={state.customBeasts ?? []} run={run} />
+                  <AuditLog state={state} />
+                </div>
+              ),
+            },
+          ]}
+        />
+        <div className="lg:sticky lg:top-2">
+          <Tray staged={staged} players={players} run={run} />
+        </div>
       </div>
     </div>
   );
@@ -113,7 +154,7 @@ function Generator({ players, run, trayFull }: { players: Token[]; run: Run; tra
   const pool = base ? eligibleMods(base.modTags, ilvl) : [];
   return (
     <section className="panel space-y-2 p-3" aria-label="Generate item">
-      <h3 className="panel-title">1 · Generate</h3>
+      <h3 className="panel-title">Generate an item</h3>
       <div className="flex flex-wrap gap-2 text-xs">
         <input className={`${input} min-w-[10rem] flex-1`} placeholder="Search base items…" aria-label="Search base items" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className={input} aria-label="Base item category" value={cat} onChange={(e) => setCat(e.target.value as BaseCategory | 'all')}>
@@ -303,7 +344,7 @@ function Tray({ staged, players, run }: { staged: Item[]; players: Token[]; run:
   return (
     <section className="panel space-y-2 p-3" aria-label="Arsenal tray">
       <h3 className="panel-title">
-        2 · Preview &amp; give <span className="text-marble-500">({staged.length}/{MAX_STAGED})</span>
+        Tray – preview &amp; give <span className="text-marble-500">({staged.length}/{MAX_STAGED})</span>
       </h3>
       {!staged.length && <p className="text-xs text-marble-500">Generated previews appear here. Players cannot see this tray.</p>}
       <ul className="max-h-[32rem] space-y-2 overflow-y-auto">
@@ -618,7 +659,7 @@ function CurrencyGrants({ players, run }: { players: Token[]; run: Run }) {
   const key = (t: string, c: CurrencyId) => `${t}:${c}`;
   return (
     <section className="panel p-3" aria-label="Grant currency">
-      <h3 className="panel-title mb-2">3 · Magical currency</h3>
+      <h3 className="panel-title mb-2">Purse &amp; currency</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="text-marble-500">
@@ -696,7 +737,7 @@ function Inventories({ players, run, rules }: { players: Token[]; run: Run; rule
   return (
     <section className="panel space-y-2 p-3" aria-label="Inspect inventories">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="panel-title flex-1">4 · Inspect inventories</h3>
+        <h3 className="panel-title flex-1">Inventories</h3>
         <select className={input} aria-label="Inventory of" value={who} onChange={(e) => setWho(e.target.value)}>
           {players.map((p) => (
             <option key={p.id} value={p.id}>

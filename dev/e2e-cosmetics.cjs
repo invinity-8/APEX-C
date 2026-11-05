@@ -32,6 +32,7 @@ const apiFetch = (page, op, body, query = '') =>
 const waitText = (page, re, timeout = 10000) =>
   page.waitForFunction(([s, f]) => new RegExp(s, f).test(document.body.innerText), [re.source, re.flags], { timeout }).then(() => true, () => false);
 
+const tab = (p, n) => p.getByRole('tab', { name: new RegExp(n) }).click(); // Arsenal areas (APEX 0.7 consolidation)
 (async () => {
   const b = await chromium.launch();
   const gm = await newDevice(b);
@@ -56,6 +57,7 @@ const waitText = (page, re, timeout = 10000) =>
 
   // GM grants cosmetics in the Arsenal
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Characters');
   const grants = gm.getByRole('region', { name: 'Cosmetic rewards (GM)' });
   for (const n of ['Golden Laurels for Sinna', 'Gilded Frame for Sinna', 'Champion of the Arena for Sinna', 'Crimson Banner for Sinna']) {
     await grants.getByLabel(n).click(); // server-confirmed checkbox: wait for the synced state
@@ -105,21 +107,19 @@ const waitText = (page, re, timeout = 10000) =>
   check('its size is remembered; inputs and buttons stay reachable', Math.abs(w - 700) < 4 && (await hannah.getByRole('button', { name: 'Send report' }).isVisible()), String(w));
   await hannah.getByRole('button', { name: 'Close feedback' }).click();
 
-  // navigation areas as widgets
-  await hannah.getByRole('button', { name: /Map/ }).first().click();
-  await hannah.getByRole('button', { name: /☰ Widgets/ }).click();
-  await hannah.getByRole('menuitem', { name: /Character Sheet/ }).click();
-  check('Character Sheet can be added as a widget', await hannah.locator('[data-widget="character-sheet"]').waitFor({ timeout: 10000 }).then(() => true, () => false));
-  await hannah.locator('[data-widget="character-sheet"] [aria-haspopup=menu]').first().click();
-  await hannah.getByRole('menuitem', { name: 'Move to left dock' }).click();
-  check('the widget moves like any other', (await hannah.locator('[data-dock="left"] > [data-widget="character-sheet"]').count()) === 1);
-  await hannah.getByRole('button', { name: /☰ Widgets/ }).click();
-  await hannah.getByRole('menuitem', { name: /Currency Vault/ }).click();
-  check('the Currency Vault is available as a widget', await hannah.locator('[data-widget="currency-vault"] [data-currency="seal"]').waitFor({ timeout: 10000 }).then(() => true, () => false));
-  await hannah.screenshot({ path: out + '/cosmetics-widgets.png' });
-  await gm.getByRole('button', { name: /Map/ }).first().click();
-  await gm.getByRole('button', { name: /☰ Widgets/ }).click();
-  check('GM: Arsenal and Feedback can be added as widgets', (await gm.getByRole('menuitem', { name: /Arsenal/ }).count()) === 1 && (await gm.getByRole('menuitem', { name: /Feedback/ }).count()) === 1);
+  // APEX 0.7 consolidation: pages that have a navigation tab are not duplicated as widgets; related panels share one
+  const menuItems = async (p) => {
+    await p.getByRole('button', { name: /Map/ }).first().click();
+    await p.getByRole('button', { name: /☰ Widgets/ }).click();
+    const names = await p.getByRole('menuitem').allInnerTexts();
+    await p.getByRole('button', { name: /☰ Widgets/ }).click(); // close
+    const shown = await p.locator('[data-widget]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+    return [...names, ...shown].join(' | ');
+  };
+  const pMenu = await menuItems(hannah);
+  check('player widgets are consolidated (My Character, Party & Intel, Selection, Chronicle, Legend)', ['My Character', 'Party & Intel', 'Selection', 'Arena Chronicle', 'Legend'].every((n) => pMenu.includes(n)) && !/Character Sheet|Currency Vault|Inventory|Feedback|Notifications|Intelligence|Equipment/.test(pMenu), pMenu);
+  const gMenu = await menuItems(gm);
+  check('GM widgets are consolidated (no page duplicates)', ['Arena & Rules', 'Party', 'Selection', 'Events & Announcements', 'Rivals & Sites', 'Campaign', 'Arena Chronicle'].every((n) => gMenu.includes(n)) && !/Arsenal|Feedback|Character Sheet|Inventory|Currency Vault|GM Tools|Party Health/.test(gMenu), gMenu);
 
   // mobile: viewer fits the screen
   const mobile = await newDevice(b, { width: 390, height: 780 });

@@ -59,6 +59,7 @@ const waitBalance = (page, id, n, timeout = 10000) =>
   page.waitForFunction(([id, n]) => document.querySelector(`[data-testid="balance-${id}"]`)?.textContent === String(n), [id, n], { timeout }).then(() => true, () => false);
 const sinnaState = async (page) => (await apiFetch(page, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details;
 
+const tab = (p, n) => p.getByRole('tab', { name: new RegExp(n) }).click(); // Arsenal areas (APEX 0.7 consolidation)
 (async () => {
   const b = await chromium.launch();
 
@@ -99,6 +100,7 @@ const sinnaState = async (page) => (await apiFetch(page, 'state')).body.view.tok
 
   // ---------- 1–6: Arsenal ----------
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Create items');
   await gm.getByLabel('Search base items').fill('longsword');
   await gm.getByRole('option', { name: /Longsword/ }).click();
   await gm.getByRole('radio', { name: 'Rare' }).click();
@@ -139,6 +141,7 @@ const sinnaState = async (page) => (await apiFetch(page, 'state')).body.view.tok
     await gm.getByRole('button', { name: new RegExp(`^Give ${n} ${cur} to Sinna$`) }).click();
   };
   const s0 = (await gmState()).tokens.sinna.currency ?? {};
+  await tab(gm, 'Characters');
   await grant('Seals of Revelation', 2);
   await grant('Orbs of Renewal', 2);
   await grant('Arcane Fragments', 10);
@@ -175,9 +178,7 @@ const sinnaState = async (page) => (await apiFetch(page, 'state')).body.view.tok
   await row().getByRole('button', { name: /^Actions for/ }).click();
   await row().getByRole('menuitem', { name: /^Equip/ }).click();
   check('Sinna equips the sword', await row().getByText(/equipped · Main hand/).waitFor({ timeout: 10000 }).then(() => true, () => false));
-  await hannah.getByRole('button', { name: '📜 Character' }).click();
-  const eqTab = hannah.getByRole('tab', { name: /Equipment/ }).or(hannah.getByRole('button', { name: /^Equipment$/ }));
-  if (await eqTab.count()) await eqTab.first().click();
+  await hannah.getByRole('button', { name: '🎒 Inventory' }).click(); // equipment + derived statistics live on the Inventory page (APEX 0.7)
   const stats = MOCK ? await waitText(hannah, new RegExp(swordNow.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 8000) : true;
   const attack = MOCK ? await hannah.locator('[aria-label="Derived statistics"] table').innerText().catch(() => '') : '';
   check('derived attack line shows the equipped sword (to-hit/damage incl. modifiers)', !MOCK || (stats && /1d8\+2 slashing/.test(attack)), attack);
@@ -233,25 +234,31 @@ const sinnaState = async (page) => (await apiFetch(page, 'state')).body.view.tok
   check('after refresh: items, affixes and equipment unchanged', JSON.stringify(after.inventory) === JSON.stringify(before.inventory) && after.equipment.slots.main1 === sword0.id && after.inventory.length === startInv + 1);
   await gm.reload();
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Characters');
   const inv = gm.getByRole('region', { name: 'Inspect inventories' });
   await inv.getByLabel('Inventory of').selectOption('sinna');
   check('GM sees the resulting inventory', await inv.locator(`[data-gm-item="${sword0.id}"]`).isVisible());
+  await tab(gm, 'Rules & log');
   const audit = await gm.getByRole('region', { name: 'Item audit log' }).innerText();
   check('audit log records identify, reroll, salvage and combine', ['Identified', 'Rerolled', 'Salvaged', 'Combined'].every((w) => audit.includes(w)), audit.slice(0, 300));
+  await tab(gm, 'Characters');
   await inv.locator(`[data-gm-item="${sword0.id}"]`).getByRole('button', { name: 'Inspect' }).click();
   await gm.screenshot({ path: out + '/loot-7-gm-inspect.png', fullPage: true });
 
   // revoke test (accident) – a fresh item, then revoke it back into the tray
+  await tab(gm, 'Create items');
   await gm.getByLabel('Search base items').fill('leather belt');
   await gm.getByRole('option', { name: /Leather Belt/ }).click();
   await gm.getByRole('radio', { name: 'Magic' }).click();
   await gm.getByRole('button', { name: 'Generate & give' }).click();
   await gm.waitForFunction(async () => (await (await fetch('/api/apex?op=state', { headers: { 'x-apex-csrf': '1' } })).json()).state.tokens.sinna.inventory.some((i) => i.baseId === 'apex-leather-belt'), null, { timeout: 10000 });
   const belt = (await gmState()).tokens.sinna.inventory.find((i) => i.baseId === 'apex-leather-belt');
+  await tab(gm, 'Characters');
   await inv.locator(`[data-gm-item="${belt.id}"]`).getByRole('button', { name: 'Inspect' }).click();
   await inv.getByLabel('Revoke reason').fill('given by mistake');
   await inv.getByRole('button', { name: 'Revoke' }).click();
   const revoked = await gm.waitForFunction((id) => !!document.querySelector(`[data-staged="${id}"]`), belt.id, { timeout: 10000 }).then(() => true, () => false);
+  await tab(gm, 'Rules & log');
   check('GM revokes an accidental grant (back to the tray, audited)', revoked && (await gm.getByRole('region', { name: 'Item audit log' }).innerText()).includes('given by mistake'));
   await gm.getByRole('region', { name: 'Arsenal tray' }).getByRole('button', { name: 'Discard' }).first().click();
 

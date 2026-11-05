@@ -65,9 +65,13 @@ const apiFetch = (page, op, body, query = '') =>
     [op, body, query],
   );
 
+// APEX 0.7 consolidation: GM panels share widgets – section → [widget id, tab]
+const GM_SECTION = { announcements: ['events', 'Announce'], events: ['events', 'Events'], players: ['campaign', 'Players & access'], world: ['campaign', 'Worlds'] };
 const openGm = async (page, id) => {
-  const head = page.locator(`[data-widget="${id}"] .ws-handle > button[aria-expanded]`);
+  const [widget, tabName] = GM_SECTION[id] ?? [id, null];
+  const head = page.locator(`[data-widget="${widget}"] .ws-handle > button[aria-expanded]`);
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
+  if (tabName) await page.locator(`[data-widget="${widget}"]`).getByRole('tab', { name: tabName }).click();
 };
 
 const waitText = (page, re, timeout = 10000) =>
@@ -333,8 +337,7 @@ const waitText = (page, re, timeout = 10000) =>
   {
     const cid = beforeJean.body.campaignId;
     const sinnaTok = async () => (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna');
-    await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
-    await hannah.getByRole('tab', { name: 'Equipment' }).click();
+    await hannah.getByRole('button', { name: '🎒 Inventory' }).click(); // equipment lives on the Inventory page (APEX 0.7)
     for (const n of ['Breastplate', 'Shield', 'Quarterstaff']) {
       const b = hannah.locator('[data-carried]', { hasText: n }).getByRole('button', { name: /Use SRD/ });
       if (!(await b.count())) console.log('carried rows:', await hannah.locator('[data-carried]').allInnerTexts());
@@ -368,8 +371,7 @@ const waitText = (page, re, timeout = 10000) =>
     const ids = Object.values(tok.details.equipment.slots);
     check('items are never duplicated (each equipped item exists once, in one slot)', new Set(ids).size === ids.length && ids.every((id) => tok.details.inventory.filter((i) => i.id === id).length === 1));
     await hannah.reload();
-    await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
-    await hannah.getByRole('tab', { name: 'Equipment' }).click();
+    await hannah.getByRole('button', { name: '🎒 Inventory' }).click(); // equipment lives on the Inventory page (APEX 0.7)
     check('equipment persists after reload', (await ac()) === '16');
     await hannah.screenshot({ path: out + '/e2e-equipment.png', fullPage: true });
     const forged = await apiFetch(jean, 'command', { campaignId: cid, requestId: 'e2e-equip-forge', command: { type: 'unequipSlot', tokenId: 'sinna', slot: 'chest' } });
@@ -381,8 +383,8 @@ const waitText = (page, re, timeout = 10000) =>
     const cid = beforeJean.body.campaignId;
     const sheet = async () => (await apiFetch(hannah, 'sheet', null, '&token=sinna')).body.sheet;
     await hannah.getByRole('button', { name: /Map/ }).first().click();
-    const vit = hannah.locator('[data-widget="vitals"]');
-    check('players get a Health & Resources widget at the top of the right dock', (await hannah.locator('[data-dock="right"] > [data-widget]').first().getAttribute('data-widget')) === 'vitals');
+    const vit = hannah.locator('[data-widget="me"]');
+    check('players get My Character (health & resources) at the top of the right dock', (await hannah.locator('[data-dock="right"] > [data-widget]').first().getAttribute('data-widget')) === 'me');
     check('health orb shows current / max HP from the sheet (8 / 9)', /8\s*\/\s*9/.test(await vit.getByTestId('orb-health').innerText()));
     check('the main orb shows weighted spell slots (2 / 2)', /2\s*\/\s*2/.test(await vit.getByTestId('orb-resource').innerText()));
     await vit.getByRole('button', { name: 'Spend a level 1 slot' }).click();
@@ -402,7 +404,7 @@ const waitText = (page, re, timeout = 10000) =>
     check('split orb: spell slots + Wild Shape, each with its own quantity', /Spell slots/i.test(await vit.getByTestId('orb-resource').innerText()) && /Wild Shape/i.test(await vit.getByTestId('orb-resource').innerText()));
     await hannah.reload();
     await waitText(hannah, /Playing as Sinna/, 20000);
-    check('resource configuration and counts persist after reload', /Wild Shape/i.test(await hannah.locator('[data-widget="vitals"]').getByTestId('orb-resource').innerText()) && (await sheet()).orbs?.secondary?.type === 'resource');
+    check('resource configuration and counts persist after reload', /Wild Shape/i.test(await hannah.locator('[data-widget="me"]').getByTestId('orb-resource').innerText()) && (await sheet()).orbs?.secondary?.type === 'resource');
     await hannah.screenshot({ path: out + '/e2e-orbs.png' });
     // movement
     check('players see the compact movement indicator on the map', /\d+\/8/.test(await hannah.getByTestId('movement-pill').innerText()));
@@ -550,43 +552,44 @@ const waitText = (page, re, timeout = 10000) =>
   {
     await gm.getByRole('button', { name: /Map/ }).first().click();
     const order = (dock) => gm.locator(`[data-dock="${dock}"] > [data-widget]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-widget')));
-    check('GM Tools is at the top of the right dock by default', (await order('right'))[0] === 'gm-tools');
-    check('Party Health replaces the movement-points party list for the GM', (await gm.locator('[data-widget="party-health"]').count()) === 1 && (await gm.locator('[data-widget="party"]').count()) === 0);
+    check('Arena & Rules is at the top of the right dock by default', (await order('right'))[0] === 'gm-control');
+    check('the GM Party widget shows health (no movement-points list)', (await gm.locator('[data-widget="party"]').getByRole('tab', { name: 'Health' }).count()) === 1);
     check('Party Health shows Sinna’s current / max HP', await gm.locator('[data-party-member="sinna"]').innerText().then((t) => /8 \/ 9 HP/.test(t), () => false));
     const menu = async (id, item) => {
       await gm.locator(`[data-widget="${id}"] [aria-haspopup=menu]`).click();
       await gm.getByRole('menuitem', { name: item }).click();
     };
-    await menu('party-health', 'Move to left dock');
-    check('a widget moves to the left dock (keyboard-accessible menu)', (await order('left')).includes('party-health') && !(await order('right')).includes('party-health'));
+    await menu('party', 'Move to left dock');
+    check('a widget moves to the left dock (keyboard-accessible menu)', (await order('left')).includes('party') && !(await order('right')).includes('party'));
     await menu('selection', /Move down/);
     const r1 = await order('right');
     check('widgets reorder within a dock', r1.indexOf('selection') > r1.indexOf('events'));
     await gm.locator('[data-widget="events"] .ws-handle > button[aria-expanded]').click();
     check('a widget collapses (body unmounted)', (await gm.locator('[data-widget="events"] .ws-body').count()) === 0);
-    await gm.getByRole('button', { name: 'Close Sites' }).click();
-    check('a widget can be hidden', (await gm.locator('[data-widget="sites"]').count()) === 0);
-    // drag & drop: GM Tools → bottom of the left dock
-    const src = gm.locator('[data-widget="gm-tools"] .ws-handle');
+    await gm.getByRole('button', { name: 'Close Rivals & Sites' }).click();
+    check('a widget can be hidden', (await gm.locator('[data-widget="rivals"]').count()) === 0);
+    // drag & drop: Arena & Rules → bottom of the left dock
+    const src = gm.locator('[data-widget="gm-control"] .ws-handle');
     const dst = gm.locator('[data-dock="left"]');
     await src.dragTo(dst, { targetPosition: { x: 40, y: 300 } });
-    check('drag and drop moves a widget between docks', (await order('left')).includes('gm-tools'));
+    check('drag and drop moves a widget between docks', (await order('left')).includes('gm-control'));
     await gm.waitForTimeout(600); // debounced local save
     await gm.reload();
     await waitText(gm, /Game Master/, 20000);
-    check('the layout persists across reloads', (await order('left')).includes('party-health') && (await gm.locator('[data-widget="sites"]').count()) === 0);
+    check('the layout persists across reloads', (await order('left')).includes('party') && (await gm.locator('[data-widget="rivals"]').count()) === 0);
     await gm.getByRole('button', { name: /☰ Widgets/ }).click();
-    await gm.getByRole('menuitem', { name: /Sites/ }).click();
-    check('a hidden widget is restored from the Widgets menu', (await gm.locator('[data-widget="sites"]').count()) === 1);
+    await gm.getByRole('menuitem', { name: /Rivals & Sites/ }).click();
+    check('a hidden widget is restored from the Widgets menu', (await gm.locator('[data-widget="rivals"]').count()) === 1);
     await gm.getByRole('button', { name: /☰ Widgets/ }).click();
     await gm.getByRole('menuitem', { name: /Reset Layout to Default/ }).click();
-    check('Reset Layout to Default restores the default layout', (await order('right'))[0] === 'gm-tools' && (await order('left')).length === 0 && (await order('bottom'))[0] === 'chronicle');
+    check('Reset Layout to Default restores the default layout', (await order('right'))[0] === 'gm-control' && (await order('left')).length === 0 && (await order('bottom'))[0] === 'chronicle');
     // Chronicle + Legend are widgets now
     await menu('chronicle', 'Move to right dock');
     check('the Arena Chronicle moves like any widget', (await order('right')).includes('chronicle') && !(await order('bottom')).includes('chronicle'));
     await menu('chronicle', /Reset to default position/);
     check('one widget can be reset to its default position', (await order('bottom'))[0] === 'chronicle' && !(await order('right')).includes('chronicle'));
-    await gm.locator('[data-widget="legend"] .ws-handle > button[aria-expanded]').click();
+    await gm.getByRole('button', { name: /☰ Widgets/ }).click(); // hidden by default since the APEX 0.7 consolidation
+    await gm.getByRole('menuitem', { name: /Legend/ }).click();
     check('the Legend is a widget (terrain costs)', await gm.locator('[data-widget="legend"]').getByText('Terrain · Movement Cost').isVisible());
     check('the chronicle groups entries by day/night', (await gm.locator('[data-widget="chronicle"] section[aria-label^="Day"], [data-widget="chronicle"] section[aria-label^="Night"]').count()) > 0);
     const list = gm.getByTestId('chronicle-list');
@@ -604,12 +607,12 @@ const waitText = (page, re, timeout = 10000) =>
     await gm.screenshot({ path: out + '/e2e-workspace-gm.png' });
     // players: GM widgets cannot be unlocked through the stored layout
     await hannah.evaluate(() => {
-      for (const k of Object.keys(localStorage)) if (k.startsWith('apex.workspace.v1.player.')) localStorage.setItem(k, JSON.stringify({ v: 1, docks: { left: ['world', 'players', 'events'], right: ['gm-tools', 'my-character'], bottom: [] }, hidden: [], collapsed: [] }));
+      for (const k of Object.keys(localStorage)) if (k.startsWith('apex.workspace.v2.player.')) localStorage.setItem(k, JSON.stringify({ v: 1, docks: { left: ['campaign', 'rivals', 'events'], right: ['gm-control', 'me'], bottom: [] }, hidden: [], collapsed: [] }));
     });
     await hannah.reload();
     await waitText(hannah, /Playing as Sinna/, 20000);
     const hw = await hannah.locator('[data-widget]').evaluateAll((els) => els.map((e) => e.getAttribute('data-widget')));
-    check('players cannot reach GM widgets, even with a forged stored layout', hw.includes('my-character') && !hw.some((w) => ['world', 'players', 'events', 'gm-tools', 'party-health'].includes(w)));
+    check('players cannot reach GM widgets, even with a forged stored layout', hw.includes('me') && !hw.some((w) => ['campaign', 'rivals', 'events', 'gm-control'].includes(w)));
     await hannah.screenshot({ path: out + '/e2e-workspace-player.png' });
   }
 
@@ -637,7 +640,7 @@ const waitText = (page, re, timeout = 10000) =>
   {
     await gm.getByRole('button', { name: /Map/ }).first().click();
     await openGm(gm, 'world');
-    const wp = gm.locator('[data-widget="world"]');
+    const wp = gm.locator('[data-widget="campaign"]');
     const hannahWorld = async () => (await apiFetch(hannah, 'state')).body?.view?.worldName;
     const before = (await apiFetch(gm, 'state')).body.state;
     // player cannot manage worlds

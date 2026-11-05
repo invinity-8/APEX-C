@@ -111,7 +111,7 @@ export function CharacterPortrait({
 }
 
 /** Large portrait viewer: full image (no crop), closes with ✕, Escape or a click outside; focus returns to the trigger. */
-export function PortraitViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+function PortraitViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;

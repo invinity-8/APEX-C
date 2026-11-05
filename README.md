@@ -98,7 +98,7 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
 
 ## 3f. Equipment & derived statistics (v0.5)
 
-- **Paper doll** (Character → Equipment, or the player's Equipment widget): Head, Amulet, Cloak, Armor, Gloves,
+- **Paper doll** (Inventory page, next to the items): Head, Amulet, Cloak, Armor, Gloves,
   2 Rings, Boots, and **two weapon sets** (main/off hand). Drag a carried item onto a slot, or click a slot and
   choose (keyboard/touch). Items stay in the inventory; slots only reference them, one slot per item – switching
   sets or resting never duplicates anything. Inventory rows show an "equipped · slot" badge.
@@ -124,14 +124,17 @@ Online only: **Players & Access** (passwords, activation, signed-in devices, cha
   widget menu (⋯: move up/down, move to left/right/bottom dock, collapse, hide). Docks are resizable (drag the
   edge or focus it and use the arrow keys). **☰ Widgets** on the map restores hidden widgets and resets the layout.
   Hiding or collapsing a widget never deletes game data; collapsed/hidden widgets are unmounted.
-- **GM default:** GM Tools (top of the right dock) · Party Health · Selection · Events · Announcements, then
-  Character Summary, Rival Teams, Sites, Time/Arena/Settings, World Management, Players & Access (collapsed).
-  **Player default:** My Character · Party · Selection · Intelligence · Notifications (Inventory available).
+- **Consolidated in APEX 0.7** – related panels share one widget (tabs inside); pages with a navigation tab
+  (Character, Inventory & Equipment, Arsenal, Feedback, Merchant) are not duplicated as widgets.
+  **GM default:** Arena & Rules · Party (Health | selected character) · Selection · Events & Announcements ·
+  Rivals & Sites · Campaign (Worlds | Players & access), Chronicle at the bottom, Legend hidden.
+  **Player default:** My Character (vitals + summary) · Party & Intel · Selection, Chronicle (with announcements)
+  at the bottom, Legend hidden. Stored layouts from before 0.7 are not reused (layout key v2).
 - **Security:** the widget set is built from the server-provided role and data. A player's client never gets GM
   widget definitions or GM data, so editing the stored layout cannot reveal them (tested).
 - **Persistence:** per device, profile and role in `localStorage` (`apex.workspace.v1.<role>.<campaign>:<profile>`),
   written 400 ms after the last change. No Supabase request, no Realtime broadcast for any layout change.
-- **Party Health:** one request (`GET op=party`, GM: all player characters, player: own) on load and whenever a
+- **Party Health** (GM Party widget): one request (`GET op=party`, GM: all player characters, player: own) on load and whenever a
   sheet changes (existing sheet ping) – no polling.
 
 ## 3d. GM events, announcements & navigation (v0.4)

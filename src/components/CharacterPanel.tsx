@@ -15,9 +15,7 @@ import type { SheetPayload } from '../server/protocol';
 import type { DispatchResult, GameApi } from '../state/gameApi';
 import { AppearanceEditor } from './AppearanceEditor';
 import { CharacterPortrait } from './CharacterVisuals';
-import { EquipmentPanel } from './EquipmentPanel';
 import { VitalsPanel } from './ResourceOrbs';
-import { InventoryPanel } from './InventoryPanel';
 import { IdentityEditor } from './IdentityEditor';
 import { CharacterHistory } from './CharacterHistory';
 import { ClassAbilities } from './ClassAbilities';
@@ -26,14 +24,13 @@ import { Bar } from './ui';
 
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
 
-type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'equipment' | 'inventory' | 'appearance' | 'notes' | 'history';
+// APEX 0.7 consolidation: equipment and inventory live together on the Inventory page
+type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'appearance' | 'notes' | 'history';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
   { id: 'abilities', label: 'Abilities & Spells' },
   { id: 'resources', label: 'Resources' },
-  { id: 'equipment', label: 'Equipment' },
-  { id: 'inventory', label: 'Inventory' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
   { id: 'history', label: 'History' },
@@ -57,7 +54,8 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const [tab, setTabState] = useState<Tab>(() => {
     if (initialTab) return initialTab;
     try {
-      return (localStorage.getItem(TAB_KEY) as Tab) || 'overview';
+      const t = localStorage.getItem(TAB_KEY) as Tab | null;
+      return t && TABS.some((x) => x.id === t) ? t : 'overview';
     } catch {
       return 'overview';
     }
@@ -153,7 +151,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const set = (patch: Partial<CharacterSheet>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const changedElsewhere = editing && data && data.version !== baseVersion;
   const build = sheet.details.find((d) => /race, class|class & level|^class$/i.test(d.label))?.value;
-  const canEditSheet = tab !== 'inventory' && tab !== 'appearance' && tab !== 'equipment' && tab !== 'history';
+  const canEditSheet = tab !== 'appearance' && tab !== 'history';
 
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Character sheet of ${token.name}`}>
@@ -446,12 +444,6 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
         </div>
       )}
 
-      {tab === 'equipment' && (
-        <section className="panel p-3">
-          <EquipmentPanel game={game} token={token} run={run} isGm={isGm} />
-        </section>
-      )}
-      {tab === 'inventory' && <InventoryPanel token={token} run={run} busy={game.busy} rules={game.view.itemRules} isGm={isGm} game={game} embedded />}
 
       {tab === 'appearance' && (
         <div className="space-y-3">

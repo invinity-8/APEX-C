@@ -41,6 +41,7 @@ async function player(b, profile, pw, name) {
   return p;
 }
 
+const tab = (p, n) => p.getByRole('tab', { name: new RegExp(n) }).click(); // Arsenal areas (APEX 0.7 consolidation)
 (async () => {
   const b = await chromium.launch();
   const gm = await newDevice(b);
@@ -63,6 +64,7 @@ async function player(b, profile, pw, name) {
   // two items in the tray
   for (const [id, base] of [['roll-sword', 'srd-longsword'], ['roll-helm', 'apex-iron-helm']]) await cmd(gm, { type: 'arsenalGenerate', stagedId: id, baseId: base, rarity: 'magic', itemLevel: 4, identified: true });
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Loot');
   const panel = gm.getByRole('region', { name: 'Party loot rolls' });
   const st0 = await gmState();
   const sword = st0.arsenal.staged.find((i) => i.id === 'roll-sword');
