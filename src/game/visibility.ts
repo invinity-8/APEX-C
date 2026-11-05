@@ -34,6 +34,7 @@ import type { CharacterCosmetics } from './cosmetics.js';
 import type { CurrencyId } from './items/currency.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
 import { lootRollsView, type LootRoll } from './items/partyLoot.js';
+import { merchantView, type Merchant } from './items/merchant.js';
 
 // ---------------- Grundfunktionen ----------------
 
@@ -221,6 +222,8 @@ export interface ViewModel {
   customBeasts: BeastForm[];
   /** APEX 0.7: party loot rolls (public; items redacted and open choices hidden for players). */
   lootRolls: LootRoll[];
+  /** APEX 0.7: the GM Merchant – players only receive it while it is open (items redacted). */
+  merchant: Merchant | null;
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -320,6 +323,7 @@ export function buildGmView(state: GameState): ViewModel {
     itemRules: itemRulesOf(state),
     customBeasts: state.customBeasts ?? [],
     lootRolls: lootRollsView(state, 'gm'),
+    merchant: state.merchant ? structuredClone(state.merchant) : null,
   };
 }
 
@@ -443,5 +447,6 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     itemRules: itemRulesOf(state),
     customBeasts: state.customBeasts ?? [],
     lootRolls: lootRollsView(state, [viewerId]),
+    merchant: merchantView(state, redactItem),
   };
 }

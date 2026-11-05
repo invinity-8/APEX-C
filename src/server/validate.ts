@@ -8,6 +8,7 @@ import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
 import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
 import { MAX_COUNT, type DraftOp } from '../game/items/loot.js';
+import { MERCHANT_LIMITS } from '../game/items/merchant.js';
 import { LOOT_CHOICES, MAX_OPEN_ROLLS, ROLL_MINUTES } from '../game/items/partyLoot.js';
 import { DRAFT_LIMITS, ENCOUNTERS, LOOT_CATEGORIES, ROLLED_CATEGORIES, type LootDraftEntry } from '../game/items/lootDraft.js';
 import { BODY_TYPES, MARKER_STYLES } from '../game/types.js';
@@ -84,6 +85,25 @@ export function parseCommand(raw: unknown): ParseResult {
       if (!Array.isArray(c.tokenIds) || !c.tokenIds.length || c.tokenIds.length > 50 || !c.tokenIds.every(isId) || !isInt(c.minutes, ROLL_MINUTES.max) || c.minutes < ROLL_MINUTES.min) return bad('lootRollStart');
       return { ok: true, command: { type: 'lootRollStart', rollId: c.rollId, stagedIds: [...(c.stagedIds as string[])], tokenIds: [...(c.tokenIds as string[])], minutes: c.minutes } };
     }
+    case 'merchantSetup': {
+      if ((c.active !== undefined && typeof c.active !== 'boolean') || (c.name !== undefined && !isText(c.name, MERCHANT_LIMITS.name)) || (c.gold !== undefined && (!isInt(c.gold, MERCHANT_LIMITS.gold) || c.gold < 0)) || (c.buyRate !== undefined && (!isInt(c.buyRate, 100) || c.buyRate < 0))) return bad('merchantSetup');
+      return { ok: true, command: { type: 'merchantSetup', ...(c.active !== undefined ? { active: c.active as boolean } : {}), ...(c.name !== undefined ? { name: c.name as string } : {}), ...(c.gold !== undefined ? { gold: c.gold as number } : {}), ...(c.buyRate !== undefined ? { buyRate: c.buyRate as number } : {}) } };
+    }
+    case 'merchantStockAdd':
+      if (!isId(c.stagedId) || !isInt(c.price, MERCHANT_LIMITS.price) || c.price < 1 || !oneOf(c.currency, CURRENCY_IDS)) return bad('merchantStockAdd');
+      return { ok: true, command: { type: 'merchantStockAdd', stagedId: c.stagedId, price: c.price, currency: c.currency } };
+    case 'merchantStockUpdate':
+      if (!isId(c.stockId) || !isInt(c.price, MERCHANT_LIMITS.price) || c.price < 1 || !oneOf(c.currency, CURRENCY_IDS)) return bad('merchantStockUpdate');
+      return { ok: true, command: { type: 'merchantStockUpdate', stockId: c.stockId, price: c.price, currency: c.currency } };
+    case 'merchantStockRemove':
+      if (!isId(c.stockId)) return bad('merchantStockRemove');
+      return { ok: true, command: { type: 'merchantStockRemove', stockId: c.stockId } };
+    case 'merchantBuy':
+      if (!isId(c.tokenId) || !isId(c.stockId) || !isInt(c.quantity, 999) || c.quantity < 1 || !isInt(c.merchantRev, 1e9) || !isInt(c.currencyRev, 1e9)) return bad('merchantBuy');
+      return { ok: true, command: { type: 'merchantBuy', tokenId: c.tokenId, stockId: c.stockId, quantity: c.quantity, merchantRev: c.merchantRev, currencyRev: c.currencyRev } };
+    case 'merchantSell':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.quantity, 999) || c.quantity < 1 || !isInt(c.rev, 1e9) || !isInt(c.merchantRev, 1e9)) return bad('merchantSell');
+      return { ok: true, command: { type: 'merchantSell', tokenId: c.tokenId, itemId: c.itemId, quantity: c.quantity, rev: c.rev, merchantRev: c.merchantRev } };
     case 'lootRollChoose':
       if (!isId(c.rollId) || !isId(c.tokenId) || !oneOf(c.choice, LOOT_CHOICES)) return bad('lootRollChoose');
       return { ok: true, command: { type: 'lootRollChoose', rollId: c.rollId, tokenId: c.tokenId, choice: c.choice } };

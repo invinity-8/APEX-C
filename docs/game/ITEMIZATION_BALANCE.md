@@ -395,3 +395,21 @@ Players never receive drafts or the tray (GM state only).
 the level of every player character with a stored sheet (explicit *Level* entry, else the sum of *Class & Level*)
 and takes the median (lower middle for an even count; level 1 if no sheet has a level). The GM can switch this off
 and enter a level by hand. Boss drops keep the rare higher item levels (+0 / +1 / +2 at 85 / 12 / 3 %).
+
+## 16. GM Merchant & Gold Pieces (APEX 0.7)
+
+- **Gold Pieces** are a new purse currency (`gold`), next to Seals, Orbs and Fragments; the GM grants them like any
+  currency. Purse limit per currency: 99,999.
+- **Arsenal → Merchant (GM):** open/close the shop (announced in the Chronicle), name, the merchant's gold and the
+  percentage of an item's value it pays. Stock is **moved** from the Arsenal tray ("Offer") and back ("Back to
+  tray") – the merchant never creates items. Prices are per unit, in gold or any APEX currency, and can be changed at
+  any time.
+- **🏛 Merchant tab (players, only while open):** buy (whole items or part of a stack) and sell.
+  - **Reference value** = SRD price × 1 / 3 / 8 for normal / magic / rare. The merchant pays value × its rate,
+    limited by its gold; sold items join the stock at their reference value.
+  - **Not sellable:** quest items, GM-restricted and bound items, uniques, equipped items, a Bag of Holding with
+    contents, items without an SRD price.
+- **Safety:** every trade is one optimistic-locked state write (currency, stock and inventory change together).
+  Buying names the purse revision and the merchant revision, selling the item revision and the merchant revision,
+  so a double click, a retry or a stale screen is refused instead of spending or selling twice. Two players racing
+  for the last item: exactly one gets it and pays. All trades are in the item audit log (`trade`).

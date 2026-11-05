@@ -11,6 +11,7 @@
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
 import { executePartyLoot, PARTY_LOOT_COMMANDS, type PartyLootCommand } from './items/partyLoot.js';
+import { executeMerchant, MERCHANT_COMMANDS, type MerchantCommand } from './items/merchant.js';
 import type { BeastForm } from './beasts.js';
 import { cosmetic, type CosmeticKind } from './cosmetics.js';
 
@@ -42,6 +43,7 @@ export type Command =
   | { type: 'setItemRules'; rules: Partial<ItemRules> | null }
   | LootCommand
   | PartyLootCommand
+  | MerchantCommand
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'setSneak'; tokenId: string; on: boolean }
@@ -128,6 +130,8 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'itemActivate',
   'lootRollChoose',
   'lootRollClaimExpired',
+  'merchantBuy',
+  'merchantSell',
 ]);
 
 /** May the actor edit this character's sheet resources and inventory? GM: all; player: only their own character. */
@@ -220,6 +224,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   }
   if (LOOT_COMMANDS.has(cmd.type)) return executeLoot(prev, actor, cmd as LootCommand);
   if (PARTY_LOOT_COMMANDS.has(cmd.type)) return executePartyLoot(prev, actor, cmd as PartyLootCommand);
+  if (MERCHANT_COMMANDS.has(cmd.type)) return executeMerchant(prev, actor, cmd as MerchantCommand);
   if (cmd.type.startsWith('inv')) return executeInventory(prev, actor, cmd as InventoryCommand);
   if (EQUIPMENT_COMMANDS.has(cmd.type)) return executeEquipment(prev, actor, cmd as EquipmentCommand);
 

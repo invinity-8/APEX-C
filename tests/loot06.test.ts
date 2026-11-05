@@ -171,7 +171,7 @@ describe('validator', () => {
     expect(g.ok && 'seed' in g.command).toBe(false);
     expect(parseCommand({ type: 'arsenalGenerate', stagedId: 'a', baseId: 'srd-club', rarity: 'unique', itemLevel: 5, identified: true }).ok).toBe(false);
     expect(parseCommand({ type: 'arsenalGenerate', stagedId: 'a', baseId: 'srd-club', rarity: 'rare', itemLevel: 31, identified: true }).ok).toBe(false);
-    expect(parseCommand({ type: 'gmGrantCurrency', tokenId: 'sinna', currency: 'gold', amount: 5 }).ok).toBe(false);
+    expect(parseCommand({ type: 'gmGrantCurrency', tokenId: 'sinna', currency: 'platinum', amount: 5 }).ok).toBe(false);
     expect(parseCommand({ type: 'combineFragments', tokenId: 'sinna', sets: 0, currencyRev: 0 }).ok).toBe(false);
   });
 });
@@ -209,8 +209,11 @@ describe('API: the full loot loop', () => {
     // a client-supplied seed is ignored (two identical requests → different server rolls)
     expect((await cmd(gm, { type: 'arsenalGenerate', stagedId: 'sw', baseId: 'srd-longsword', rarity: 'rare', itemLevel: 12, identified: false, seed: 1 })).status).toBe(200);
     expect((await cmd(gm, { type: 'arsenalGenerate', stagedId: 'sw2', baseId: 'srd-longsword', rarity: 'rare', itemLevel: 12, identified: false, seed: 1 })).status).toBe(200);
+    expect((await cmd(gm, { type: 'arsenalGenerate', stagedId: 'sw3', baseId: 'srd-longsword', rarity: 'rare', itemLevel: 12, identified: false, seed: 1 })).status).toBe(200);
     const tray = repo.states.get(CID)!.state.arsenal!.staged;
-    expect(JSON.stringify(tray[0].mods)).not.toBe(JSON.stringify(tray[1].mods));
+    // with the client seed honoured all three would be identical; two rare rolls may coincide by chance, three practically never
+    expect(new Set(tray.map((i) => JSON.stringify(i.mods))).size).toBeGreaterThan(1);
+    expect((await cmd(gm, { type: 'arsenalDiscard', stagedId: 'sw3' })).status).toBe(200);
     expect((await cmd(gm, { type: 'arsenalGive', stagedId: 'sw', tokenId: 'sinna' })).status).toBe(200);
     expect((await cmd(gm, { type: 'arsenalGive', stagedId: 'sw2', tokenId: 'sinna' })).status).toBe(200);
     for (const [currency, amount] of [['seal', 2], ['orb', 2], ['fragment', 10]]) expect((await cmd(gm, { type: 'gmGrantCurrency', tokenId: 'sinna', currency, amount })).status).toBe(200);
@@ -255,6 +258,6 @@ describe('API: the full loot loop', () => {
     expect(me.inventory.map((i) => i.id)).toEqual(['sw']);
     expect(me.equipment!.slots.main1).toBe('sw');
     const gmState = ((await call("GET", "state", null, gm)).body as GmPayload).state!;
-    expect(gmState.itemAudit!.map((a) => a.action)).toEqual(['generate', 'generate', 'give', 'give', 'currency', 'currency', 'currency', 'identify', 'reroll', 'salvage', 'combine']);
+    expect(gmState.itemAudit!.map((a) => a.action)).toEqual(['generate', 'generate', 'generate', 'discard', 'give', 'give', 'currency', 'currency', 'currency', 'identify', 'reroll', 'salvage', 'combine']);
   });
 });

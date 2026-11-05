@@ -20,6 +20,13 @@ export function CurrencyIcon({ id, size = 20 }: { id: CurrencyId; size?: number 
   const c = CURRENCIES[id].color;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="shrink-0">
+      {id === 'gold' && (
+        <>
+          <circle cx="12" cy="12" r="8.5" fill="#3b2c0a" stroke={c} strokeWidth="1.6" />
+          <circle cx="12" cy="12" r="5.6" fill="none" stroke={c} strokeWidth=".9" opacity=".75" />
+          <path d="M9.6 14.4l2.4-5.2 2.4 5.2M10.4 12.8h3.2" fill="none" stroke={c} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
       {id === 'seal' && (
         <>
           <circle cx="12" cy="12" r="9" fill="#3a2a10" stroke={c} strokeWidth="1.6" />
@@ -69,6 +76,7 @@ export function CubeIcon({ size = 28, locked = false }: { size?: number; locked?
 }
 
 const VAULT_GROUPS: Array<{ label: string; ids: CurrencyId[] }> = [
+  { label: 'Coin', ids: ['gold'] },
   { label: 'Orbs & seals', ids: ['seal', 'orb', 'augment', 'ascend'] },
   { label: 'Materials', ids: ['fragment'] },
 ];

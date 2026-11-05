@@ -16,6 +16,8 @@ import { UNIQUES } from '../game/items/uniques';
 import { CONSUMABLE_BASES, DRAFT_LIMITS, ENCOUNTER_TABLE, ENCOUNTERS, LOOT_CATEGORY_LABEL, POTION_BASE, ROLLED_CATEGORIES, type Encounter, type LootCategory, type LootDraft, type LootDraftEntry } from '../game/items/lootDraft';
 import { BeastEditor } from './BeastEditor';
 import { GmLootRolls } from './LootRolls';
+import { MerchantAdmin } from './Merchant';
+import { DEFAULT_MERCHANT } from '../game/items/merchant';
 import { CosmeticGrants } from './Cosmetics';
 import { itemRulesOf, ITEM_RULE_LIMITS, MAX_ITEM_LEVEL, RARITY_LABEL } from '../game/items/rules';
 import { newEntryId } from '../game/sheet';
@@ -54,6 +56,7 @@ export function ArsenalPanel({ state, run }: { state: GameState; run: Run }) {
         <Tray staged={staged} players={players} run={run} />
       </div>
       <LootDraftPanel draft={state.arsenal?.draft} run={run} trayFree={MAX_STAGED - staged.length} />
+      <MerchantAdmin merchant={state.merchant ?? DEFAULT_MERCHANT} staged={staged} run={run} />
       <GmLootRolls rolls={state.lootRolls ?? []} staged={staged} players={players.map((p) => ({ id: p.id, name: p.name }))} run={run} />
       <UniquesAndTwists players={players} run={run} />
       <CurrencyGrants players={players} run={run} />
