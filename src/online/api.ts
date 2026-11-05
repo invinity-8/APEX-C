@@ -76,6 +76,9 @@ async function request<T>(
 }
 
 export const api = {
+  sceneList: (offset = 0) => request<{ scenes: import('../server/scenes').SceneSummary[]; nextOffset: number | null }>('GET', 'scenes', { offset: String(offset) }),
+  scenePreview: (id: string) => request<{ scene: import('../server/scenes').SceneDefinition }>('GET', 'scenes', { id }),
+  sceneCreate: (name: string, category: import('../server/scenes').SceneCategory) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { name, category }),
   profiles: () => request<{ profiles: PublicProfile[] }>('GET', 'profiles'),
   login: (profile: string, password: string) => request<{ ok: true; profile: string }>('POST', 'login', {}, { profile, password }),
   setup: (code: string, password: string) => request<{ ok: true; profile: string }>('POST', 'setup', {}, { code, password }),

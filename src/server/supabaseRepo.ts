@@ -118,6 +118,29 @@ const toArchive = (r: Record<string, unknown>): ArchiveInfo => ({
 const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
 export class SupabaseRepo implements Repo {
+  readonly sceneCatalog: import('./scenes.js').SceneCatalog = {
+    list: async (campaignId, offset) => {
+      const { data, error } = await this.db.from('apex_scenes')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at')
+        .eq('campaign_id', campaignId).order('created_at', { ascending: false }).order('id').range(offset, offset + 49);
+      if (error) throw new Error(`scene list: ${error.message}`);
+      return data as import('./scenes.js').SceneSummary[];
+    },
+    get: async (campaignId, id) => {
+      const { data, error } = await this.db.from('apex_scenes')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,metadata')
+        .eq('campaign_id', campaignId).eq('id', id).maybeSingle();
+      if (error) throw new Error(`scene preview: ${error.message}`);
+      return data as import('./scenes.js').SceneDefinition | null;
+    },
+    create: async (campaignId, scene) => {
+      const { data, error } = await this.db.from('apex_scenes')
+        .insert({ campaign_id: campaignId, ...scene, is_draft: true, is_legacy_arena: false })
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,metadata').single();
+      if (error) throw new Error(`scene create: ${error.message}`);
+      return data as import('./scenes.js').SceneDefinition;
+    },
+  };
   private db: SupabaseClient;
 
   constructor(env: ServerEnv) {

@@ -63,6 +63,7 @@ import type {
 } from './protocol.js';
 import { WorldConflictError, type FeedbackRow, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
 import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
+import { sceneRequest } from './scenes.js';
 import { isId, isInt, isObj, parseCommand } from './validate.js';
 
 export interface ApiRequest {
@@ -162,6 +163,7 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
 
     // One round trip: session + profile + password flag + campaign (and presence touch).
     const user = await authenticate(req, repo);
+    if (req.op === 'scenes') return await sceneRequest(user, req.method, req.query, req.body, repo.sceneCatalog);
     switch (`${req.method} ${req.op}`) {
       case 'GET session':
         return ok(sessionInfo(user));

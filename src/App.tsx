@@ -29,6 +29,7 @@ import { LootRollDock } from './components/LootRolls';
 import { MerchantShop } from './components/Merchant';
 import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
+import { SceneDirector } from './components/SceneDirector';
 
 type View = 'map' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
 
@@ -284,6 +285,7 @@ export default function App({ game }: { game: GameApi }) {
             id="gm-campaign"
             tabs={[
               { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
+              { id: 'scenes', label: 'Scene Director', render: () => <SceneDirector /> },
               { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
             ]}
           />
