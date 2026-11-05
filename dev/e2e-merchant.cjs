@@ -41,6 +41,7 @@ async function player(b, profile, pw, name) {
   return p;
 }
 
+const arsenalTab = (p, n) => p.getByRole('tab', { name: new RegExp(n) }).click(); // Arsenal areas (APEX 0.7 consolidation)
 (async () => {
   const b = await chromium.launch();
   const gm = await newDevice(b);
@@ -68,6 +69,7 @@ async function player(b, profile, pw, name) {
 
   // GM: open the shop and offer both items through the UI
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await arsenalTab(gm, 'Merchant');
   const admin = gm.getByRole('region', { name: 'Merchant settings' });
   await admin.getByLabel('Merchant name').fill('Marcus the Sutler');
   await admin.getByLabel('Merchant gold').fill('40');

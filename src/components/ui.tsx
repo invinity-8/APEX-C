@@ -102,34 +102,3 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
   );
 }
 
-/** Panel template (APEX 0.5 design system): stone slab with a carved widget header. */
-export function Panel({ title, actions, children, className = '', bodyClassName = 'p-3' }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
-  return (
-    <section className={`panel ${className}`}>
-      {(title || actions) && (
-        <div className="widget-header">
-          {title && <h2 className="panel-title flex-1 truncate">{title}</h2>}
-          {actions}
-        </div>
-      )}
-      <div className={bodyClassName}>{children}</div>
-    </section>
-  );
-}
-
-/** Small square icon button used in widget headers. */
-export function IconButton({ label, onClick, children, pressed, disabled }: { label: string; onClick: () => void; children: ReactNode; pressed?: boolean; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[12px] text-marble-500 transition-colors hover:bg-ink-700 hover:text-gold-200 disabled:opacity-30"
-    >
-      {children}
-    </button>
-  );
-}

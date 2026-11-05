@@ -282,7 +282,7 @@ function RestingKeep({ keep, onChange }: { keep: EquipSlot[]; onChange: (k: Equi
 }
 
 /** Character-wide bonuses from equipped item modifiers (active set only), each with its sources and cap. */
-export function BonusSummary({ b }: { b: ItemBonuses }) {
+function BonusSummary({ b }: { b: ItemBonuses }) {
   const rows: Array<{ key: string; label: string; detail: string; title: string }> = [];
   const tip = (l: BonusLine) => l.steps.map((s) => (s.op === 'cap' ? s.label : `${s.label} +${s.value}`)).join(' · ');
   for (const el of ELEMENTS) {
@@ -517,7 +517,7 @@ export type Worn = Partial<Record<'head' | 'cloak' | 'chest' | 'gloves' | 'boots
  * Equipment figure (APEX 0.6): a neutral, well-proportioned silhouette (≈ 7.5 heads tall) with layered
  * equipment overlays that appear only for what is actually worn in the active set / preset. Original artwork.
  */
-export function HeroFigure({ worn, body = 'masculine' }: { worn: Worn; body?: BodyType }) {
+function HeroFigure({ worn, body = 'masculine' }: { worn: Worn; body?: BodyType }) {
   const gold = '#c09b58';
   return (
     <svg viewBox="0 0 160 320" className="h-full w-full" role="img" aria-label={`Figure wearing: ${Object.entries(worn).filter(([, v]) => v).map(([k]) => k).join(', ') || 'nothing'}`}>

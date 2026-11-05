@@ -33,8 +33,6 @@ interface Props {
   token: TokenView;
   run: (cmd: Command) => Promise<DispatchResult>;
   busy: boolean;
-  /** Inside the character dashboard (no outer page padding). */
-  embedded?: boolean;
   /** Effective balance rules (fragment ratio, caps). */
   rules?: ItemRules;
   /** The GM looks at a character's inventory: extra actions (revoke, restrict). */
@@ -59,7 +57,7 @@ const FILTERS: Array<[Filter, string]> = [
   ['other', 'Other'],
 ];
 
-export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITEM_RULES, isGm = false, game }: Props) {
+export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, isGm = false, game }: Props) {
   const strength = useStrength(game, token.id);
   const details = token.details;
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
@@ -137,7 +135,7 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
   const viewFiltered = needle || filter !== 'all' || sort !== 'manual';
 
   return (
-    <div className={embedded ? 'space-y-3' : 'mx-auto max-w-5xl space-y-3 p-3'} aria-label={`Inventory of ${token.name}`}>
+    <div className="space-y-3" aria-label={`Inventory of ${token.name}`}>
       <section className="panel space-y-2 p-3">
         <h2 className="font-display text-2xl font-black text-gold-200">Inventory – {token.name}</h2>
         <form onSubmit={add} className="flex flex-wrap items-end gap-2">
@@ -194,7 +192,7 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
       </section>
 
       <div className="flex flex-wrap items-stretch gap-3">
-        <CarryGauge load={carryLoad({ inventory: items }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant === 1)} />
+        <CarryGauge load={carryLoad({ inventory: items, currency: token.details?.currency }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant === 1)} />
         <div className="min-w-0 flex-1">
       <CurrencyBar
         currency={details.currency}

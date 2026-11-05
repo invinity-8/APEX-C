@@ -32,6 +32,7 @@ const apiFetch = (page, op, body) =>
 const waitText = (page, re, timeout = 10000) =>
   page.waitForFunction(([s, f]) => new RegExp(s, f).test(document.body.innerText), [re.source, re.flags], { timeout }).then(() => true, () => false);
 
+const tab = (p, n) => p.getByRole('tab', { name: new RegExp(n) }).click(); // Arsenal areas (APEX 0.7 consolidation)
 (async () => {
   const b = await chromium.launch();
   const gm = await newDevice(b);
@@ -57,6 +58,7 @@ const waitText = (page, re, timeout = 10000) =>
 
   // GM rolls a boss drop
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Loot');
   const drop = gm.getByRole('region', { name: 'Loot drop' });
   await drop.getByLabel('Encounter type').selectOption('boss');
   await drop.getByLabel(/Party median level/).uncheck();

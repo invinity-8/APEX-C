@@ -10,8 +10,9 @@
  * Variant encumbrance (GM option): above STR × 5 lb "Encumbered" (speed −10 ft), above STR × 10 lb "Heavily
  * encumbered" (speed −20 ft, disadvantage on STR/DEX/CON ability checks, attack rolls and saves).
  * APEX shows the state; it never blocks movement automatically – the GM applies speed penalties (see the
- * movement rules). Magical currency (Seals, Orbs, Fragments) is weightless; coins on the character sheet are not
- * counted (the sheet stores them as text).
+ * movement rules). Magical currency (Seals, Orbs, Fragments) is weightless; Gold Pieces in the purse weigh
+ * 50 coins = 1 lb. Free-text items get a rough estimate from their name (weightGuess.ts). Without a Strength score
+ * on the sheet the capacity uses STR 10 and says so.
  */
 import type { Item, Token } from '../types.js';
 import { baseItem } from './bases.js';
@@ -49,24 +50,33 @@ export interface CarryLoad {
   encumberedAtKg?: number;
   heavilyAtKg?: number;
   bags: Array<{ id: string; name: string; contentsKg: number; capacityKg: number }>;
+  /** Weight of the Gold Pieces in the purse (SRD: 50 coins = 1 lb). */
+  coinsKg: number;
+  /** True when the sheet has no Strength score and APEX assumed 10. */
+  assumedStrength?: boolean;
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-export function carryLoad(t: Pick<Token, 'inventory'>, strength: number | null, carryBonusLb: number, variant: boolean): CarryLoad {
+export const ASSUMED_STRENGTH = 10;
+
+export function carryLoad(t: Pick<Token, 'inventory'> & { currency?: Token['currency'] }, strength: number | null, carryBonusLb: number, variant: boolean): CarryLoad {
   const holding = holdingContainers(t);
   let load = 0;
   for (const i of t.inventory) if (!(i.container && holding.has(i.container))) load += itemWeightKg(i) * i.quantity;
-  const loadKg = round(load);
+  const coinsKg = round(lbToKg(Math.max(0, t.currency?.gold ?? 0) / 50));
+  const loadKg = round(load + coinsKg);
   const bags = [...holding.values()].map((b) => ({ id: b.id, name: b.name, contentsKg: bagContentsKg(t, b.id), capacityKg: BAG_CAPACITY_KG }));
-  if (strength === null || !Number.isFinite(strength) || strength <= 0) return { loadKg, capacityKg: null, pct: null, state: 'ok', bags };
-  const capacityKg = round(lbToKg(strength * 15 + Math.max(0, carryBonusLb)));
+  // without a Strength score on the sheet APEX assumes an average 10, so the gauge still gives a guide value
+  const assumed = strength === null || !Number.isFinite(strength) || strength <= 0;
+  const str = assumed ? ASSUMED_STRENGTH : strength;
+  const capacityKg = round(lbToKg(str * 15 + Math.max(0, carryBonusLb)));
   const pct = capacityKg > 0 ? Math.round((loadKg / capacityKg) * 100) : null;
   let state: LoadState = loadKg > capacityKg ? 'over' : 'ok';
-  const out: CarryLoad = { loadKg, capacityKg, pct, state, bags };
+  const out: CarryLoad = { loadKg, capacityKg, pct, state, bags, coinsKg, ...(assumed ? { assumedStrength: true } : {}) };
   if (variant) {
-    out.encumberedAtKg = round(lbToKg(strength * 5));
-    out.heavilyAtKg = round(lbToKg(strength * 10));
+    out.encumberedAtKg = round(lbToKg(str * 5));
+    out.heavilyAtKg = round(lbToKg(str * 10));
     if (state !== 'over') state = loadKg > out.heavilyAtKg ? 'heavily' : loadKg > out.encumberedAtKg ? 'encumbered' : 'ok';
     out.state = state;
   }

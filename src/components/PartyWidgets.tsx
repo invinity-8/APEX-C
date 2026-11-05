@@ -2,17 +2,13 @@
  * APEX 0.5 workspace widgets:
  *  - PartyHealth: portrait, name, title, current / max HP, percentage and status per player character.
  *    One request (GET op=party) on mount and whenever a sheet changes (existing sheet ping) – no polling.
- *  - GmTools: the GM's most-used actions at the top of the right dock.
  *  - CharacterSummary: compact sheet summary of the selected (or chosen) character.
  */
 import { useEffect, useState } from 'react';
 import type { CharacterSheet } from '../game/sheet';
-import type { GameState } from '../game/types';
 import type { TokenView, ViewModel } from '../game/visibility';
 import type { GameApi } from '../state/gameApi';
-import { useWorkspace } from '../workspace/Workspace';
 import { CharacterPortrait } from './CharacterVisuals';
-import { Toggle } from './ui';
 
 type Vital = { tokenId: string; hp: { current: number; max: number; temp: number } | null };
 
@@ -73,47 +69,6 @@ export function PartyHealth({ game, view, onSelect, selectedTokenId }: { game: G
         );
       })}
     </ul>
-  );
-}
-
-export function GmTools({
-  state,
-  view,
-  onAdvance,
-  showPartyFog,
-  setShowPartyFog,
-  busy,
-}: {
-  state: GameState;
-  view: ViewModel;
-  onAdvance: () => void;
-  showPartyFog: boolean;
-  setShowPartyFog: (v: boolean) => void;
-  busy: boolean;
-}) {
-  const ws = useWorkspace();
-  const awaiting = Object.values(state.events).filter((e) => e.status === 'awaiting').length;
-  return (
-    <div className="space-y-2 text-xs">
-      <div className="grid grid-cols-2 gap-1.5">
-        <button className="btn btn-gold col-span-2" disabled={busy} onClick={onAdvance}>
-          {view.phase === 'day' ? `☾ Begin Night ${view.day}` : `☀ Begin Day ${view.day + 1}`}
-        </button>
-        <button className="btn btn-ghost" onClick={() => ws.reveal('events')}>
-          ⚡ Events{awaiting ? ` (${awaiting} waiting)` : ''}
-        </button>
-        <button className="btn btn-ghost" onClick={() => ws.reveal('announcements')}>
-          📣 Announce
-        </button>
-        <button className="btn btn-ghost" onClick={() => ws.reveal('party-health')}>
-          ♥ Party health
-        </button>
-        <button className="btn btn-ghost" onClick={() => ws.reveal('world')}>
-          🌍 World
-        </button>
-      </div>
-      <Toggle label="Show party vision on map" checked={showPartyFog} onChange={() => setShowPartyFog(!showPartyFog)} />
-    </div>
   );
 }
 

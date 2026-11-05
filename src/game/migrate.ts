@@ -4,6 +4,7 @@
  * v2 → v3 (APEX 0.7): removes the legacy Willpower resource (token.will, will-vessel items) – see stripLegacy().
  */
 import { DEFAULT_PHASE_RULES, STATE_VERSION, type GameState } from './types.js';
+import { estimateWeightKg } from './items/weightGuess.js';
 
 export function migrateState(raw: unknown): GameState {
   if (!raw || typeof raw !== 'object') throw new Error('Not a valid save file.');
@@ -53,6 +54,12 @@ export function stripLegacy(state: GameState): boolean {
       if ('willCharge' in i || 'willCapacity' in i) {
         delete i.willCharge;
         delete i.willCapacity;
+        changed = true;
+      }
+      // APEX 0.7: free-text items (imports, hand-written) get a rough weight estimate once; base items keep the SRD
+      // weight of their base, explicit weights are never touched.
+      if (i.weightKg === undefined && !i.baseId && typeof i.name === 'string') {
+        i.weightKg = estimateWeightKg(i.name);
         changed = true;
       }
     }

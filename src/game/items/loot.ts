@@ -22,6 +22,7 @@ import { addableMods, addMods, canRollMods, clampItemLevel, generatedName, rollM
 import { uniqueDef } from './uniques.js';
 import { addLog } from '../log.js';
 import { packBag, syncHolding } from './holding.js';
+import { estimateWeightKg } from './weightGuess.js';
 import { clampLevel, DRAFT_LIMITS, normaliseEntry, QUEST_BASE, rollDraft, type DraftRarity, type Encounter, type LootCategory, type LootDraftEntry } from './lootDraft.js';
 import { isBagOfHolding } from './weight.js';
 import { createItem } from './instance.js';
@@ -219,6 +220,7 @@ function draftItem(e: LootDraftEntry, id: string, seed: number, day: number): It
       ...(quest ? { baseId: QUEST_BASE, quest: { ...(e.image ? { image: e.image } : {}), ...(e.gmNotes ? { gmNotes: e.gmNotes } : {}) } } : {}),
       ...((quest && !e.salvageable) || e.salvageable === false ? { locked: true } : {}),
       ...(e.noTransfer ? { bound: true } : {}),
+      ...(quest ? {} : { weightKg: estimateWeightKg(e.name ?? '') }),
       source,
       history: [{ day, text: quest ? 'Quest item from a loot drop' : 'Custom item from a loot drop' }],
     };

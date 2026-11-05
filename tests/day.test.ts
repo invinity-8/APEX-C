@@ -178,6 +178,6 @@ describe('legacy Willpower (APEX 0.7)', () => {
     const tok = Object.values(up.tokens)[0] as unknown as Record<string, unknown>;
     expect(up.version).toBe(3);
     expect('will' in tok).toBe(false);
-    expect(up.tokens[String(tok.id)].inventory[0]).toEqual({ id: 'v', name: 'Voluntas Vial', kind: 'misc', description: 'old', quantity: 1, notes: 'mine' });
+    expect(up.tokens[String(tok.id)].inventory[0]).toEqual({ id: 'v', name: 'Voluntas Vial', kind: 'misc', description: 'old', quantity: 1, notes: 'mine', weightKg: 0 }); // 'Vial' → SRD vial (0 lb) – rough weight back-fill
   });
 });

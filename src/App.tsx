@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chronicle } from './components/ActivityLog';
 import { LegendContent } from './components/map/Legend';
 import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
-import { CharacterSummary, GmTools, PartyHealth } from './components/PartyWidgets';
+import { CharacterSummary, PartyHealth } from './components/PartyWidgets';
 import { EquipmentPanel } from './components/EquipmentPanel';
 import { VitalsPanel } from './components/ResourceOrbs';
+import { WidgetTabs } from './workspace/WidgetTabs';
 import { Workspace, type WidgetDef } from './workspace/Workspace';
 import { defaultLayout, layoutKey } from './workspace/layout';
 import { AnnouncementsPanel, EventsPanel, GmEventModal } from './components/GmEvents';
@@ -26,9 +27,7 @@ import { InventoryPanel } from './components/InventoryPanel';
 import { ArsenalPanel } from './components/ArsenalPanel';
 import { LootRollDock } from './components/LootRolls';
 import { MerchantShop } from './components/Merchant';
-import { FeedbackDialog, FeedbackInbox } from './components/Feedback';
-import { CurrencyBar } from './components/items/ItemUi';
-import type { ItemRules } from './game/items/rules';
+import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
 
 type View = 'map' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
@@ -222,74 +221,130 @@ export default function App({ game }: { game: GameApi }) {
   // Workspace widgets (APEX 0.5). The set is decided by the SERVER-provided role and data: a player's client
   // never builds GM widget definitions (and never receives GM data), so a stored layout cannot unlock them.
   // Widgets render lazily (only while expanded); stable ids keep open widgets mounted.
-  const widgets: WidgetDef[] = [
-    { id: 'chronicle', title: 'Arena Chronicle', icon: '📜', render: () => <Chronicle log={view.log} isGm={isGm} /> },
-    { id: 'legend', title: 'Legend', icon: '🗺', render: () => <LegendContent /> },
-  ];
+  // APEX 0.7 consolidation: related panels share one widget (tabs inside); pages that have a navigation tab
+  // (Character, Inventory, Arsenal, Feedback, Merchant) are not duplicated as widgets.
+  const widgets: WidgetDef[] = [];
   if (isGm && state) {
+    const partyFocus = selectedToken?.kind === 'player' ? selectedToken : (playerTokens[0] ?? null);
     widgets.push(
+      { id: 'gm-control', title: 'Arena & Rules', icon: '⚜', render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} /> },
       {
-        id: 'gm-tools',
-        title: 'GM Tools',
-        icon: '⚜',
-        render: () => <GmTools state={state} view={view} onAdvance={() => void advancePhase()} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} busy={game.pending.includes('phase') || game.pending.includes('world')} />,
+        id: 'party',
+        title: 'Party',
+        icon: '♥',
+        render: () => (
+          <WidgetTabs
+            id="gm-party"
+            tabs={[
+              { id: 'health', label: 'Health', render: () => <PartyHealth game={game} view={view} onSelect={selectAndFocus} selectedTokenId={selectedTokenId} /> },
+              { id: 'character', label: partyFocus ? partyFocus.name : 'Character', render: () => <CharacterSummary game={game} token={partyFocus} /> },
+            ]}
+          />
+        ),
       },
-      { id: 'party-health', title: 'Party Health', icon: '♥', render: () => <PartyHealth game={game} view={view} onSelect={selectAndFocus} selectedTokenId={selectedTokenId} /> },
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
-      { id: 'events', title: 'Events', icon: '⚡', badge: awaitingCount, render: () => <EventsPanel state={state} run={run} selectedHex={selectedHex} /> },
-      { id: 'announcements', title: 'Announcements', icon: '📣', render: () => <AnnouncementsPanel state={state} run={run} /> },
-      { id: 'character-summary', title: 'Character Summary', icon: '📜', render: () => <CharacterSummary game={game} token={selectedToken?.kind === 'player' ? selectedToken : (playerTokens[0] ?? null)} /> },
-      { id: 'teams', title: 'Rival Teams', icon: '⚔', render: () => <TeamsTab state={state} run={run} onSelectToken={selectAndFocus} /> },
-      { id: 'sites', title: 'Sites', icon: '🏛', render: () => <SitesList state={state} run={run} /> },
       {
-        id: 'settings',
-        title: 'Time, Arena & Settings',
-        icon: '⚙',
-        render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} />,
+        id: 'events',
+        title: 'Events & Announcements',
+        icon: '⚡',
+        badge: awaitingCount,
+        render: () => (
+          <WidgetTabs
+            id="gm-events"
+            tabs={[
+              { id: 'events', label: 'Events', badge: awaitingCount, render: () => <EventsPanel state={state} run={run} selectedHex={selectedHex} /> },
+              { id: 'announce', label: 'Announce', render: () => <AnnouncementsPanel state={state} run={run} /> },
+            ]}
+          />
+        ),
       },
-    );
-    // APEX 0.7: the navigation areas are also available as movable widgets (hidden by default – add via “Widgets”)
-    const focus = (selectedToken?.kind === 'player' ? selectedToken : null) ?? playerTokens[0] ?? null;
-    widgets.push(
-      { id: 'arsenal', title: 'Arsenal', icon: '⚔', render: () => <ArsenalPanel state={state} run={run} /> },
-      { id: 'character-sheet', title: 'Character Sheet', icon: '📜', render: () => (focus ? <CharacterPanel key={focus.id} game={game} token={focus} isGm run={run} notify={notify} /> : null) },
-      { id: 'inventory-widget', title: 'Inventory', icon: '🎒', render: () => (focus ? <InventoryPanel key={focus.id} token={focus} run={run} busy={game.busy} rules={view.itemRules} isGm game={game} embedded /> : null) },
-      { id: 'currency-vault', title: 'Currency Vault', icon: '💠', render: () => (focus ? <VaultWidget token={focus} run={run} rules={view.itemRules} /> : null) },
+      {
+        id: 'rivals',
+        title: 'Rivals & Sites',
+        icon: '⚔',
+        render: () => (
+          <WidgetTabs
+            id="gm-rivals"
+            tabs={[
+              { id: 'teams', label: 'Rival teams', render: () => <TeamsTab state={state} run={run} onSelectToken={selectAndFocus} /> },
+              { id: 'sites', label: 'Sites', render: () => <SitesList state={state} run={run} /> },
+            ]}
+          />
+        ),
+      },
     );
     if (game.online) {
       const online = game.online;
-      widgets.push(
-        { id: 'feedback-inbox', title: 'Feedback', icon: '📮', render: () => <FeedbackInbox online={online} notify={notify} /> },
-        { id: 'world', title: 'World Management', icon: '🌍', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
-        { id: 'players', title: 'Players & Access', icon: '👥', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
-      );
+      widgets.push({
+        id: 'campaign',
+        title: 'Campaign',
+        icon: '🌍',
+        render: () => (
+          <WidgetTabs
+            id="gm-campaign"
+            tabs={[
+              { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
+              { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
+            ]}
+          />
+        ),
+      });
     }
   } else {
     const me = view.tokens.find((t) => t.id === view.viewerId) ?? null;
     widgets.push(
-      { id: 'my-character', title: 'My Character', icon: '📜', render: () => <CharacterSummary game={game} token={me} /> },
-      { id: 'vitals', title: 'Health & Resources', icon: '♥', render: () => (me ? <VitalsPanel game={game} token={me} canEdit /> : null) },
-      { id: 'equipment', title: 'Equipment', icon: '🛡', render: () => (me ? <EquipmentPanel game={game} token={me} run={run} isGm={false} /> : null) },
-      { id: 'party', title: 'Party', icon: '⚑', render: () => <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} /> },
+      {
+        id: 'me',
+        title: 'My Character',
+        icon: '📜',
+        render: () =>
+          me ? (
+            <div className="space-y-3">
+              <VitalsPanel game={game} token={me} canEdit />
+              <CharacterSummary game={game} token={me} />
+            </div>
+          ) : null,
+      },
+      {
+        id: 'party',
+        title: 'Party & Intel',
+        icon: '⚑',
+        render: () => (
+          <WidgetTabs
+            id="party"
+            tabs={[
+              { id: 'party', label: 'Party', render: () => <PartyPanel view={view} selectedTokenId={selectedTokenId} onSelect={selectAndFocus} online={game.mode === 'online'} /> },
+              { id: 'intel', label: 'Intelligence', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
+            ]}
+          />
+        ),
+      },
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
-      { id: 'intel', title: 'Intelligence', icon: '👁', render: () => <IntelPanel view={view} onFocus={(q, r) => mapRef.current?.focus(hexKey({ q, r }))} /> },
-      { id: 'notifications', title: 'Notifications', icon: '📣', render: () => <AnnouncementHistory announcements={view.announcements} open /> },
-      { id: 'character-sheet', title: 'Character Sheet', icon: '📜', render: () => (me ? <CharacterPanel key={me.id} game={game} token={me} isGm={false} run={run} notify={notify} /> : null) },
-      { id: 'currency-vault', title: 'Currency Vault', icon: '💠', render: () => (me ? <VaultWidget token={me} run={run} rules={view.itemRules} /> : null) },
-      ...(game.online ? [{ id: 'feedback', title: 'Feedback', icon: '💬', render: () => <FeedbackDialog online={game.online!} area="Map" notify={notify} embedded /> }] : []),
-      { id: 'inventory', title: 'Inventory', icon: '🎒', render: () => (me ? <InventoryPanel token={me} run={run} busy={game.busy} rules={view.itemRules} game={game} embedded /> : null) },
     );
   }
+  widgets.push(
+    {
+      id: 'chronicle',
+      title: 'Arena Chronicle',
+      icon: '📜',
+      render: () => (
+        <WidgetTabs
+          id="chronicle"
+          tabs={[
+            { id: 'log', label: 'Chronicle', render: () => <Chronicle log={view.log} isGm={isGm} /> },
+            { id: 'announcements', label: 'Announcements', render: () => <AnnouncementHistory announcements={view.announcements} open /> },
+          ]}
+        />
+      ),
+    },
+    { id: 'legend', title: 'Legend', icon: '🗺', render: () => <LegendContent /> },
+  );
   const role = isGm ? 'gm' : 'player';
   const defaults = useMemo(
     () =>
       role === 'gm'
-        ? defaultLayout(
-            { right: ['gm-tools', 'party-health', 'selection', 'events', 'announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players', 'legend'], bottom: ['chronicle'] },
-            ['announcements', 'character-summary', 'teams', 'sites', 'settings', 'world', 'players', 'legend'],
-            ['arsenal', 'character-sheet', 'inventory-widget', 'currency-vault', 'feedback-inbox'],
-          )
-        : defaultLayout({ right: ['vitals', 'my-character', 'equipment', 'party', 'selection', 'intel', 'notifications', 'legend'], bottom: ['chronicle'] }, ['equipment', 'notifications', 'legend'], ['inventory', 'character-sheet', 'currency-vault', 'feedback']),
+        ? defaultLayout({ right: ['gm-control', 'party', 'selection', 'events', 'rivals', 'campaign', 'legend'], bottom: ['chronicle'] }, ['rivals', 'campaign'], ['legend'])
+        : defaultLayout({ right: ['me', 'party', 'selection', 'legend'], bottom: ['chronicle'] }, [], ['legend']),
     [role],
   );
 
@@ -400,7 +455,13 @@ export default function App({ game }: { game: GameApi }) {
           ) : screen === 'character' ? (
             <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} />
           ) : (
-            <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} rules={view.itemRules} isGm={isGm} game={game} />
+            // APEX 0.7 consolidation: one page for everything the character carries – worn equipment and inventory
+            <div className="mx-auto grid max-w-7xl items-start gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_27rem]">
+              <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} rules={view.itemRules} isGm={isGm} game={game} />
+              <section className="panel p-3 xl:sticky xl:top-2" aria-label="Equipment">
+                <EquipmentPanel game={game} token={sheetToken} run={run} isGm={isGm} />
+              </section>
+            </div>
           )}
         </div>
       )}
@@ -475,19 +536,3 @@ function MovementPill({ token }: { token: import('./game/visibility').TokenView 
   );
 }
 
-/** APEX 0.7: the Currency Vault on its own (as a workspace widget). */
-function VaultWidget({ token, run, rules }: { token: import('./game/visibility').TokenView; run: (cmd: import('./game/commands').Command) => Promise<import('./state/gameApi').DispatchResult>; rules: ItemRules }) {
-  const d = token.details;
-  if (!d) return <p className="text-xs text-marble-500">Not visible.</p>;
-  return (
-    <CurrencyBar
-      currency={d.currency}
-      currencyRev={d.currencyRev ?? 0}
-      rules={rules}
-      onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
-      onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
-      lastTransmute={d.lastTransmute}
-      transmuteUnlocked={!!d.transmuteUnlocked}
-    />
-  );
-}

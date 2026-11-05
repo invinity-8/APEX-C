@@ -55,3 +55,20 @@ that showed the removed resource falls back to the automatic choice. Hit points 
     description, notes and quantity.
   - Every following write therefore stores a state without Willpower.
   - Stored archives and snapshots are not rewritten; they are cleaned when they are read, so old worlds still load.
+
+## Rough weights for every item (APEX 0.7 finalization)
+
+Problem found in play: imported (Aurora) and hand-written items had no base item and therefore weighed 0 kg, so the
+gauge stayed near zero. Now:
+
+- **Every free-text item gets a rough estimate** from its name (`src/game/items/weightGuess.ts`): the APEX base
+  catalogue (SRD 5.1), a table of common SRD gear, packs, ammunition, foci, tools, instruments and clothes, then
+  keyword rules (sword, axe, armour …), else 0.5 lb. Pounds are converted to kg and rounded to 0.05 kg – a guide
+  value, not bookkeeping.
+- **Existing campaigns:** items without a weight are back-filled once when the server reads the state (the same
+  legacy reader that removed Willpower); explicit weights are never changed; base items keep their SRD weight.
+- **New items:** manual adds and PDF imports (`invAddItem`) get the estimate unless a weight is given; loot-draft
+  custom items too; generated/merchant items use their base item.
+- Weights stay editable per item (Inventory → Edit → Weight).
+- **Gold Pieces** in the purse count: 50 coins = 1 lb.
+- **No Strength on the sheet:** the capacity assumes STR 10 and the gauge says "STR 10 assumed".

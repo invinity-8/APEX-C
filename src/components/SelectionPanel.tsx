@@ -218,7 +218,7 @@ function TokenCard({ view, gmState, token, placeMode, setPlaceMode, run, onClear
   );
 }
 
-export function RivalControls({ team, run }: { team: NonNullable<GameState['teams'][string]>; run: (c: Command) => void }) {
+function RivalControls({ team, run }: { team: NonNullable<GameState['teams'][string]>; run: (c: Command) => void }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">

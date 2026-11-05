@@ -125,7 +125,8 @@ export function resizeDock(l: Layout, dock: Dock, px: number): Layout {
 
 // ---------------------------------------------------------------- persistence (debounced, local only)
 
-export const layoutKey = (scope: string, role: 'gm' | 'player') => `apex.workspace.v1.${role}.${scope}`;
+/** v2 (APEX 0.7 consolidation): merged widgets – older layouts are not reused, everybody starts from the tidy default. */
+export const layoutKey = (scope: string, role: 'gm' | 'player') => `apex.workspace.v2.${role}.${scope}`;
 
 export function readLayout(key: string): unknown {
   try {

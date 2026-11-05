@@ -63,7 +63,7 @@ const load = (page) => page.getByTestId('carry-load').innerText().then((t) => Nu
   const cap = () => hannah.getByTestId('carry-load').innerText().then((t) => Number(/\/\s*([\d.]+)/.exec(t)?.[1]));
   await hannah.waitForFunction(() => /\/ \d/.test(document.querySelector('[data-testid="carry-load"]')?.textContent ?? ''), null, { timeout: 10000 }).catch(() => undefined);
   const l0 = await load(hannah);
-  check('the gauge shows load / capacity in kg (STR 12 → 180 lb = 81.65 kg)', Math.abs((await cap()) - kg(180)) < 0.11 && Math.abs(l0 - (kg(65) + kg(55) + kg(15))) < 0.1, `${l0} / ${await cap()}`);
+  check('the gauge shows load / capacity in kg (STR 12 → 180 lb = 81.65 kg; free-text staff ≈ 4 lb counts)', Math.abs((await cap()) - kg(180)) < 0.11 && Math.abs(l0 - (kg(65) + kg(55) + kg(15) + kg(4))) < 0.15, `${l0} / ${await cap()}`);
   await hannah.locator('[data-item="plate"]').getByRole('button', { name: /^Actions for/ }).click();
   await hannah.locator('[data-item="plate"]').getByRole('menuitem', { name: /^Equip/ }).click();
   await hannah.locator('[data-container="equipped"] [data-item="plate"]').waitFor({ timeout: 10000 });
@@ -93,6 +93,12 @@ const load = (page) => page.getByTestId('carry-load').innerText().then((t) => Nu
   check('a custom resource is removed after confirmation; others and attributes stay', !!sheet && sheet.resources[0].name === 'Ki' && sheet.attributes[0].value === '12');
   check('no Willpower in the player state', !('will' in (await apiFetch(hannah, 'state')).body.view.tokens.find((t) => t.id === 'sinna').details));
 
+  // reported bug (APEX 0.7 finalization): free-text items used to weigh 0 kg – they now get a rough estimate
+  await hannah.getByRole('button', { name: '🎒 Inventory' }).click();
+  await hannah.getByTestId('carry-gauge').waitFor();
+  const lBefore = await load(hannah);
+  check('a hand-added "Explorer\'s Pack" gets a rough weight', (await cmd(hannah, { type: 'invAddItem', tokenId: 'sinna', itemId: 'e2e-pack', name: "Explorer's Pack" })).status === 200);
+  check('… and the gauge adds it (≈ 59 lb ≈ 26.8 kg)', await hannah.waitForFunction(([b]) => Number(document.querySelector('[data-testid="carry-load"]')?.textContent?.split('/')[0]) - b > 26, [lBefore], { timeout: 10000 }).then(() => true, () => false));
   console.log('\n' + results.join('\n'));
   const fails = results.filter((r) => !r.startsWith('PASS'));
   console.log(`\n${results.length - fails.length}/${results.length} passed`);

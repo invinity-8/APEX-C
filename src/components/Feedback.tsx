@@ -47,7 +47,7 @@ export function FeedbackButton({ online, area, notify }: { online: OnlineControl
   );
 }
 
-export function FeedbackDialog({ online, area, notify, onClose, embedded = false }: { online: OnlineControls; area: string; notify: (m: string, k?: 'error' | 'info') => void; onClose?: () => void; /** inside a workspace widget (no overlay) */ embedded?: boolean }) {
+function FeedbackDialog({ online, area, notify, onClose }: { online: OnlineControls; area: string; notify: (m: string, k?: 'error' | 'info') => void; onClose?: () => void }) {
   const sizeRef = useResizePersist('apex.feedback.size');
   const [tab, setTab] = useState<'new' | 'mine'>('new');
   const [kind, setKind] = useState<FeedbackKind>('bug');
@@ -94,12 +94,12 @@ export function FeedbackDialog({ online, area, notify, onClose, embedded = false
     }
   };
 
-  // Not embedded: render into <body> – the header (backdrop-filter) would otherwise trap `position: fixed` and squeeze
+  // Rendered into <body> – the header (backdrop-filter) would otherwise trap `position: fixed` and squeeze
   // the dialog into a thin strip above the map.
   const node = (
-    <div className={embedded ? '' : 'fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-8'} role={embedded ? 'region' : 'dialog'} aria-modal={embedded ? undefined : true} aria-label="Feedback">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-8" role="dialog" aria-modal aria-label="Feedback">
       {/* APEX 0.7: the dialog can be resized (handle bottom-right); the size is remembered on this device */}
-      <div ref={embedded ? undefined : sizeRef} className={embedded ? 'space-y-3 text-sm' : 'panel apex-resizable space-y-3 p-4 text-sm'} data-testid="feedback-panel">
+      <div ref={sizeRef} className="panel apex-resizable space-y-3 p-4 text-sm" data-testid="feedback-panel">
         <div className="flex items-center gap-2">
           <h2 className="flex-1 font-display text-xl font-bold text-gold-200">Feedback</h2>
           {onClose && <button className="btn btn-ghost" onClick={onClose} aria-label="Close feedback">
@@ -203,7 +203,7 @@ export function FeedbackDialog({ online, area, notify, onClose, embedded = false
       </div>
     </div>
   );
-  return embedded ? node : createPortal(node, document.body);
+  return createPortal(node, document.body);
 }
 
 // ---------------------------------------------------------------- GM inbox

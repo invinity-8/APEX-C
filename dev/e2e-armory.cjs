@@ -34,6 +34,7 @@ const waitText = (page, re, timeout = 10000) =>
 const waitBalance = (page, id, n) =>
   page.waitForFunction(([id, n]) => document.querySelector(`[data-testid="balance-${id}"]`)?.textContent === String(n), [id, n], { timeout: 10000 }).then(() => true, () => false);
 
+const tab = (p, n) => p.getByRole('tab', { name: new RegExp(n) }).click(); // Arsenal areas (APEX 0.7 consolidation)
 (async () => {
   const b = await chromium.launch();
   const gm = await newDevice(b);
@@ -51,6 +52,7 @@ const waitBalance = (page, id, n) =>
 
   // GM: a normal longsword, a magic ring, Niri's Timetwister, and currency – through the Arsenal UI
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Create items');
   await gm.getByLabel('Search base items').fill('longsword');
   await gm.getByRole('option', { name: /Longsword/ }).click();
   await gm.getByRole('radio', { name: 'Normal' }).click();
@@ -128,13 +130,13 @@ const waitBalance = (page, id, n) =>
   check('a second activation is refused (no duplicated turns)', (await cmd(hannah, { type: 'itemActivate', tokenId: 'sinna', itemId: niri.id, rev: 2 })).status === 422);
   await gm.reload();
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
+  await tab(gm, 'Create items');
   await gm.locator('[data-twist="sinna"]').getByRole('button', { name: 'Double turn taken' }).click();
   check('the GM resolves the double turn', await hannah.getByTestId('time-twist').waitFor({ state: 'detached', timeout: 15000 }).then(() => true, () => false));
   check('players cannot resolve or recharge', (await cmd(hannah, { type: 'gmRechargeItem', tokenId: 'sinna', itemId: niri.id })).status === 403);
 
   // body type
-  await hannah.getByRole('button', { name: '📜 Character', exact: true }).click();
-  await hannah.getByRole('tab', { name: 'Equipment' }).click();
+  await hannah.getByRole('button', { name: '🎒 Inventory' }).click(); // equipment lives on the Inventory page (APEX 0.7)
   await hannah.getByLabel('Body type').selectOption('feminine');
   check('body type changes only the silhouette', await hannah.locator('[data-body="feminine"]').waitFor({ timeout: 10000 }).then(() => true, () => false));
   await hannah.screenshot({ path: out + '/armory-feminine.png', fullPage: true });

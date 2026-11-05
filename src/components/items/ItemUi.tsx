@@ -439,8 +439,13 @@ export function CarryGauge({ load }: { load: CarryLoad }) {
           {load.loadKg.toFixed(1)}
           <span className="text-marble-400"> / {load.capacityKg === null ? '?' : load.capacityKg.toFixed(1)} kg</span>
         </span>
-        <span className="tabular-nums text-marble-400">{load.pct === null ? 'Strength missing on the sheet' : `${load.pct} %`}</span>
+        <span className="tabular-nums text-marble-400">
+          {load.pct === null ? '–' : `${load.pct} %`}
+          {load.assumedStrength && <span title="The character sheet has no Strength score – capacity assumes STR 10."> · STR 10 assumed</span>}
+        </span>
+        {load.coinsKg > 0 && <span className="text-marble-500">incl. coins {load.coinsKg.toFixed(1)} kg</span>}
         <span style={{ color: tone.color }}>{tone.label}</span>
+        <span className="text-[10px] text-marble-600">Rough guide value</span>
       </div>
     </div>
   );
