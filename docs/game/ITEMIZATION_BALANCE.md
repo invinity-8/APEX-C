@@ -365,3 +365,33 @@ Players never receive drafts or the tray (GM state only).
   inventories.
 - Players can move quest items and add their own notes, but cannot rename them or change quantity or weight.
 
+
+## 15. Party loot: Need / Distribute / Pass (APEX 0.7)
+
+*Arsenal → Party loot* puts tray items up for a public roll (`src/game/items/partyLoot.ts`).
+
+- **Start (GM):** choose tray items, the eligible characters and a deadline (1–60 min, default 5). Each item leaves
+  the tray and lives inside its roll, so it exists exactly once at every moment. The Chronicle announces the roll.
+- **Choose (players, in the 🎲 Loot rolls dock):**
+  - **Need** – the character needs it; Need always beats Distribute.
+  - **Distribute** – would take it (to share, sell or pass on) if nobody needs it.
+  - **Pass** – does not want it.
+  A choice can be changed until the roll is resolved; repeating the same choice is harmless. Before resolution,
+  players see only their own choice and how many have decided.
+- **Resolution** – automatically when everyone has chosen, by the GM at any time (*Resolve now*), or by any eligible
+  player once the deadline has passed (*Roll now*). A disconnected player or GM therefore never blocks a roll.
+  - Unanswered choices count as **Pass**.
+  - If anyone chose Need, only the Need characters roll; otherwise the Distribute characters.
+  - Each roller gets a **d100 from the server** (crypto seed, never from the client); a tie for the highest result
+    is re-rolled among the tied characters until one is ahead.
+  - The item goes to the winner **in the same state write** (optimistic locking). If the winner's inventory (or
+    purse, for currency bundles) is full, the next-highest roller gets it.
+  - If everybody passed or nobody can take it, the item returns to the Arsenal tray.
+  - All choices and dice are public afterwards (dock, Arsenal history, Chronicle entry).
+- **Cancel (GM):** returns the item to the tray. A resolved roll can never be resolved or cancelled again.
+- Limits: 12 open rolls; the 20 most recent results are kept.
+
+**Item level default:** *Loot drop* now uses the **party's median character level** by default. The server reads
+the level of every player character with a stored sheet (explicit *Level* entry, else the sum of *Class & Level*)
+and takes the median (lower middle for an even count; level 1 if no sheet has a level). The GM can switch this off
+and enter a level by hand. Boss drops keep the rare higher item levels (+0 / +1 / +2 at 85 / 12 / 3 %).

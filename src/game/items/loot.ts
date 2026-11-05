@@ -50,7 +50,7 @@ export type LootCommand =
   | { type: 'gmRechargeItem'; tokenId: string; itemId: string }
   | { type: 'gmSetCubeAccess'; tokenId: string; permanent: boolean }
   // APEX 0.7 – loot drafts (see lootDraft.ts)
-  | { type: 'lootDraftCreate'; draftId: string; encounter: Encounter; referenceLevel: number; categories: LootCategory[]; seed?: number }
+  | { type: 'lootDraftCreate'; draftId: string; encounter: Encounter; referenceLevel?: number; categories: LootCategory[]; seed?: number; partyLevel?: number }
   | { type: 'lootDraftEdit'; rev: number; op: DraftOp }
   | { type: 'lootDraftApprove'; rev: number; seed?: number }
   | { type: 'lootDraftDiscard' };
@@ -152,12 +152,12 @@ export function canSalvage(t: Pick<Token, 'equipment'>, item: Item, actor: Actor
 
 // ---------------------------------------------------------------- helpers
 
-function audit(state: GameState, e: Omit<ItemAuditEntry, 'id' | 'day' | 'phase'>) {
+export function audit(state: GameState, e: Omit<ItemAuditEntry, 'id' | 'day' | 'phase'>) {
   const id = state.nextAuditId ?? 1;
   state.nextAuditId = id + 1;
   state.itemAudit = [...(state.itemAudit ?? []), { id, day: state.day, phase: state.phase, ...e }].slice(-MAX_AUDIT);
 }
-const addHistory = (state: GameState, item: Item, text: string) => {
+export const addHistory = (state: GameState, item: Item, text: string) => {
   item.history = [...(item.history ?? []), { day: state.day, text }].slice(-MAX_HISTORY);
 };
 const byName = (state: GameState, actor: Actor) => (actor.role === 'gm' ? 'GM' : (state.tokens[actor.tokenId]?.name ?? actor.tokenId));
@@ -170,7 +170,7 @@ function revealedName(base: BaseItem, item: Item): string {
   return item.name;
 }
 
-function addToInventory(t: Token, item: Item): string | null {
+export function addToInventory(t: Token, item: Item): string | null {
   if (t.inventory.length + 1 + (item.held?.length ?? 0) > INVENTORY_LIMITS.items) return `${t.name}'s inventory is full.`;
   if (t.inventory.some((i) => i.id === item.id)) return 'An item with this id already exists.';
   t.inventory.push({ ...item, container: containersOf(t)[0].id });
@@ -178,7 +178,7 @@ function addToInventory(t: Token, item: Item): string | null {
   return null;
 }
 
-function setBalance(t: Token, id: CurrencyId, value: number) {
+export function setBalance(t: Token, id: CurrencyId, value: number) {
   t.currency = { ...(t.currency ?? {}), [id]: value };
   t.currencyRev = (t.currencyRev ?? 0) + 1;
 }
@@ -347,7 +347,8 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       if (typeof cmd.seed !== 'number') return fail(prev, 'A loot draft needs a server seed.');
       if (prev.arsenal?.draft) return fail(prev, 'Approve or discard the current loot draft first.');
       const state = prepare(prev);
-      const level = clampLevel(cmd.referenceLevel);
+      // explicit GM choice, else the party's median character level (set by the server from the sheets)
+      const level = clampLevel(cmd.referenceLevel ?? cmd.partyLevel ?? 1);
       const entries = rollDraft(cmd.encounter, level, cmd.categories, seededRng(cmd.seed), cmd.draftId);
       state.arsenal = { staged: state.arsenal?.staged ?? [], draft: { id: cmd.draftId, encounter: cmd.encounter, referenceLevel: level, categories: [...cmd.categories], entries, rev: 0, createdDay: prev.day } };
       audit(state, { by: 'GM', action: 'draft', detail: `Loot draft rolled: ${cmd.encounter}, level ${level}, ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` });

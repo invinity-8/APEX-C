@@ -59,6 +59,7 @@ const waitText = (page, re, timeout = 10000) =>
   await gm.getByRole('button', { name: '⚔ Arsenal' }).click();
   const drop = gm.getByRole('region', { name: 'Loot drop' });
   await drop.getByLabel('Encounter type').selectOption('boss');
+  await drop.getByLabel(/Party median level/).uncheck();
   await drop.getByLabel('Reference character level').fill('7');
   await drop.getByRole('button', { name: 'Roll loot draft' }).click();
   const entries = drop.getByRole('list', { name: 'Draft entries' }).locator('[data-entry]');
@@ -85,12 +86,12 @@ const waitText = (page, re, timeout = 10000) =>
   check('quest item added to the draft', await drop.getByText('Signet of the Seventh Legion').waitFor({ timeout: 10000 }).then(() => true, () => false));
   // add 9 fragments
   await add.getByLabel('Entry type').selectOption('fragment');
-  await add.getByLabel('Quantity for the entry').fill('9');
+  await add.getByLabel('Quantity for the entry').fill('13');
   await add.getByRole('button', { name: 'Add to draft' }).click();
-  check('currency added to the draft', await drop.getByText('9 × Arcane Fragments').waitFor({ timeout: 10000 }).then(() => true, () => false));
+  check('currency added to the draft', await drop.getByText('13 × Arcane Fragments').waitFor({ timeout: 10000 }).then(() => true, () => false));
   // change the quantity of the fragments, edit via UI
   st = await gmState();
-  const fragKey = st.arsenal.draft.entries.find((e) => e.quantity === 9 && e.currency === 'fragment').key;
+  const fragKey = st.arsenal.draft.entries.find((e) => e.quantity === 13 && e.currency === 'fragment').key;
   const q = drop.locator(`[data-entry="${fragKey}"]`).getByLabel(/^Quantity of/);
   await q.fill('11');
   await q.blur();

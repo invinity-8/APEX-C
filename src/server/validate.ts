@@ -8,6 +8,7 @@ import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
 import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
 import { MAX_COUNT, type DraftOp } from '../game/items/loot.js';
+import { LOOT_CHOICES, MAX_OPEN_ROLLS, ROLL_MINUTES } from '../game/items/partyLoot.js';
 import { DRAFT_LIMITS, ENCOUNTERS, LOOT_CATEGORIES, ROLLED_CATEGORIES, type LootDraftEntry } from '../game/items/lootDraft.js';
 import { BODY_TYPES, MARKER_STYLES } from '../game/types.js';
 import { parseBeast } from '../game/beasts.js';
@@ -74,9 +75,25 @@ export function parseCommand(raw: unknown): ParseResult {
       };
     }
     case 'lootDraftCreate': {
-      if (!isId(c.draftId) || c.draftId.length > 40 || !oneOf(c.encounter, ENCOUNTERS) || !isInt(c.referenceLevel, 20) || c.referenceLevel < 1) return bad('lootDraftCreate');
+      if (!isId(c.draftId) || c.draftId.length > 40 || !oneOf(c.encounter, ENCOUNTERS) || (c.referenceLevel !== undefined && (!isInt(c.referenceLevel, 20) || c.referenceLevel < 1))) return bad('lootDraftCreate');
       if (!Array.isArray(c.categories) || c.categories.length > ROLLED_CATEGORIES.length || !c.categories.every((x) => oneOf(x, ROLLED_CATEGORIES))) return bad('categories');
-      return { ok: true, command: { type: 'lootDraftCreate', draftId: c.draftId, encounter: c.encounter, referenceLevel: c.referenceLevel, categories: [...new Set(c.categories as typeof ROLLED_CATEGORIES)] } };
+      return { ok: true, command: { type: 'lootDraftCreate', draftId: c.draftId, encounter: c.encounter, ...(c.referenceLevel !== undefined ? { referenceLevel: c.referenceLevel as number } : {}), categories: [...new Set(c.categories as typeof ROLLED_CATEGORIES)] } };
+    }
+    case 'lootRollStart': {
+      if (!isId(c.rollId) || c.rollId.length > 40 || !Array.isArray(c.stagedIds) || !c.stagedIds.length || c.stagedIds.length > MAX_OPEN_ROLLS || !c.stagedIds.every(isId)) return bad('lootRollStart');
+      if (!Array.isArray(c.tokenIds) || !c.tokenIds.length || c.tokenIds.length > 50 || !c.tokenIds.every(isId) || !isInt(c.minutes, ROLL_MINUTES.max) || c.minutes < ROLL_MINUTES.min) return bad('lootRollStart');
+      return { ok: true, command: { type: 'lootRollStart', rollId: c.rollId, stagedIds: [...(c.stagedIds as string[])], tokenIds: [...(c.tokenIds as string[])], minutes: c.minutes } };
+    }
+    case 'lootRollChoose':
+      if (!isId(c.rollId) || !isId(c.tokenId) || !oneOf(c.choice, LOOT_CHOICES)) return bad('lootRollChoose');
+      return { ok: true, command: { type: 'lootRollChoose', rollId: c.rollId, tokenId: c.tokenId, choice: c.choice } };
+    case 'lootRollClaimExpired':
+      if (!isId(c.rollId) || !isId(c.tokenId)) return bad('lootRollClaimExpired');
+      return { ok: true, command: { type: 'lootRollClaimExpired', rollId: c.rollId, tokenId: c.tokenId } };
+    case 'lootRollResolve':
+    case 'lootRollCancel': {
+      if (!isId(c.rollId)) return bad(c.type);
+      return { ok: true, command: { type: c.type, rollId: c.rollId } };
     }
     case 'lootDraftEdit': {
       if (!isInt(c.rev, 1e9) || !isObj(c.op)) return bad('lootDraftEdit');

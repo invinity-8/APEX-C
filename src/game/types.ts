@@ -2,6 +2,7 @@ import type { Equipment, ItemEquip } from './equipment.js';
 import type { ItemRules, Rarity } from './items/rules.js';
 import type { CurrencyId } from './items/currency.js';
 import type { LootDraft } from './items/lootDraft.js';
+import type { LootRoll } from './items/partyLoot.js';
 import type { BeastForm } from './beasts.js';
 import type { CharacterCosmetics } from './cosmetics.js';
 /**
@@ -379,6 +380,8 @@ export interface GameState {
   /** APEX 0.6: GM Arsenal – generated items waiting to be handed out (GM-only). */
   /** GM-only: the Arsenal tray and (APEX 0.7) the current loot draft. */
   arsenal?: { staged: Item[]; draft?: LootDraft };
+  /** APEX 0.7: party loot rolls (Need / Distribute / Pass) – open ones and the recent history. */
+  lootRolls?: LootRoll[];
   /** APEX 0.6: item audit trail (GM-only, bounded). */
   itemAudit?: ItemAuditEntry[];
   nextAuditId?: number;

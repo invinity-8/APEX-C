@@ -21,6 +21,8 @@
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
 import { CHARACTER_COMMANDS, executeCommand, type Command } from '../game/commands.js';
 import { SEEDED_COMMANDS } from '../game/items/loot.js';
+import { PARTY_LOOT_SEEDED, PARTY_LOOT_TIMED } from '../game/items/partyLoot.js';
+import { medianLevel } from '../game/items/lootDraft.js';
 import { migrateState, stripLegacy } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
@@ -580,7 +582,11 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
   const cmd = parsed.command;
   // Server-side randomness: generation and rerolls get a crypto seed here – never from the client. It is set once,
   // before the optimistic-locking retry loop, so a re-validation after a write conflict yields the same roll.
-  if (SEEDED_COMMANDS.has(cmd.type)) (cmd as { seed?: number }).seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  if (SEEDED_COMMANDS.has(cmd.type) || PARTY_LOOT_SEEDED.has(cmd.type)) (cmd as { seed?: number }).seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  // Server clock for deadlines (loot rolls) – never from the client.
+  if (PARTY_LOOT_TIMED.has(cmd.type)) (cmd as { now?: number }).now = Date.now();
+  // Loot drafts default to the party's median character level, read from the stored sheets.
+  if (cmd.type === 'lootDraftCreate' && cmd.referenceLevel === undefined) cmd.partyLevel = await partyMedianLevel(user.campaignId, repo);
   const as = typeof body.as === 'string' ? body.as : undefined;
   const viewAs = as ?? (CHARACTER_COMMANDS.has(cmd.type) ? (cmd as { tokenId: string }).tokenId : undefined);
   const tracked = isRequestId(body.requestId);
@@ -632,6 +638,17 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
       throw new HttpError(409, 'The campaign was changed by someone else at the same time. Please try again.', 'conflict');
     },
   );
+}
+
+/** Median character level of the player characters that have a sheet (null levels ignored; 1 if none). */
+async function partyMedianLevel(campaignId: string, repo: Repo): Promise<number> {
+  const stored = await repo.loadState(campaignId);
+  const details = await repo.loadSheetDetails(campaignId);
+  const levels = Object.entries(details)
+    .filter(([id, d]) => stored?.state.tokens[id]?.kind === 'player' && Array.isArray(d))
+    .map(([, d]) => sheetLevel({ details: d as CharacterSheet['details'] }))
+    .filter((n): n is number => typeof n === 'number' && n >= 1 && n <= 20);
+  return medianLevel(levels);
 }
 
 /** Determines the in-game actor. Never trusts anything but the server-side profile. */
