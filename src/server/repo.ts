@@ -196,6 +196,8 @@ export interface CommandLogEntry {
 export interface Repo {
   /** Separate, bounded GM preparation API; never included in shared game state. */
   sceneCatalog?: import('./scenes.js').SceneCatalog;
+  journalStore?: import('./journals.js').JournalStore;
+  sceneRuntime?: import('./sceneRuntime.js').SceneRuntime;
   // ---- profiles & credentials
   /** Profiles of one campaign, or – with campaignId null – of all campaigns. */
   profiles(campaignId: string | null): Promise<Profile[]>;

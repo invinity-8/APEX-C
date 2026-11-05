@@ -25,6 +25,75 @@ import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from '../src/server/sche
 
 /** In-memory Repo with the same contract as SupabaseRepo – used by the security tests and the mock harness. */
 export class MemoryRepo implements Repo {
+  journalRows: Array<import('../src/server/journals').JournalEntry & { campaign_id: string }> = [];
+  readonly journalStore: import('../src/server/journals').JournalStore = {
+    list: async (user, offset) => structuredClone(this.journalRows.filter(e => e.campaign_id === user.campaignId && (e.owner_id === user.id || e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm')))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)).slice(offset, offset + 50)),
+    save: async (user, id, version, draft) => {
+      const index = this.journalRows.findIndex(e => e.campaign_id === user.campaignId && e.id === id);
+      const old = this.journalRows[index];
+      if ((version === 0 && old) || (version > 0 && (!old || old.owner_id !== user.id || old.version !== version))) return null;
+      const now = new Date().toISOString();
+      const entry = { ...structuredClone(draft), id, owner_id: user.id, campaign_id: user.campaignId, version: version + 1, created_at: old?.created_at ?? now, updated_at: now };
+      if (old) this.journalRows[index] = entry; else this.journalRows.push(entry);
+      return structuredClone(entry);
+    },
+    remove: async (user, id, version) => {
+      const index = this.journalRows.findIndex(e => e.campaign_id === user.campaignId && e.owner_id === user.id && e.id === id && e.version === version);
+      if (index < 0) return false;
+      this.journalRows.splice(index, 1); return true;
+    },
+  };
+  sceneRows: Array<import('../src/server/scenes').SceneDefinition & { campaign_id: string; published_metadata?: unknown }> = [];
+  sceneAssignments: Array<import('../src/server/sceneRuntime').SceneAssignment & { campaign_id: string }> = [];
+  sceneTransfers = new Map<string, string>();
+  onSceneChange?: (campaignId: string) => void;
+  readonly sceneRuntime: import('../src/server/sceneRuntime').SceneRuntime = {
+    assignments: async campaignId => structuredClone(this.sceneAssignments.filter(a => a.campaign_id === campaignId).slice(0, 100)),
+    assignment: async (campaignId, userId) => structuredClone(this.sceneAssignments.find(a => a.campaign_id === campaignId && a.user_id === userId) ?? null),
+    scene: async (campaignId, id) => structuredClone(this.sceneRows.find(s => s.campaign_id === campaignId && s.id === id) as import('../src/server/sceneRuntime').RuntimeScene ?? null),
+    transition: async (user, sceneId, targets, requestId) => {
+      if (!this.profileList.some(p => p.campaignId === user.campaignId && p.userId === user.id && p.role === 'gm' && p.active)) return { ok: false, error: 'GM permission required.' };
+      const stored = this.states.get(user.campaignId); if (!stored) return { ok: false, error: 'Campaign not initialized.' };
+      const key = `${user.campaignId}:${requestId}`, payload = JSON.stringify({ actor: user.id, sceneId, targets });
+      if (this.sceneTransfers.has(key)) return this.sceneTransfers.get(key) === payload ? { ok: true } : { ok: false, error: 'Request ID already used.' };
+      const scene = sceneId ? this.sceneRows.find(s => s.campaign_id === user.campaignId && s.id === sceneId) : null;
+      if (sceneId && (!scene || scene.is_draft || scene.archived)) return { ok: false, error: 'Destination unavailable.' };
+      const nodes = (scene?.published_metadata as { nodes?: { kind: string; x: number; y: number }[] })?.nodes;
+      const spawn = nodes?.find(n => n.kind === 'spawn');
+      if (scene && !scene.is_legacy_arena && !spawn) return { ok: false, error: 'Destination has no spawn.' };
+      for (const t of targets) {
+        if (!this.profileList.some(p => p.campaignId === user.campaignId && p.userId === t.userId && p.role === 'player' && p.active) || !this.memberList.some(m => m.campaignId === user.campaignId && m.userId === t.userId && m.role === 'player')) return { ok: false, error: 'Player unavailable.' };
+        const a = this.sceneAssignments.find(a => a.campaign_id === user.campaignId && a.user_id === t.userId);
+        if ((a?.revision ?? 0) !== t.revision) return { ok: false, error: 'Assignment changed.' };
+      }
+      for (const t of targets) {
+        const a = this.sceneAssignments.find(a => a.campaign_id === user.campaignId && a.user_id === t.userId);
+        const next = { campaign_id: user.campaignId, user_id: t.userId, scene_id: sceneId, revision: (a?.revision ?? 0) + 1, spawn_x: spawn?.x ?? null, spawn_y: spawn?.y ?? null };
+        if (a) Object.assign(a, next); else this.sceneAssignments.push(next);
+      }
+      this.sceneTransfers.set(key, payload); this.states.set(user.campaignId, { state: stored.state, version: stored.version + 1 }); this.onSceneChange?.(user.campaignId);
+      return { ok: true };
+    },
+  };
+  readonly sceneCatalog: import('../src/server/scenes').SceneCatalog = {
+    list: async (campaignId, offset) => {
+      if (this.states.has(campaignId) && !this.sceneRows.some(s => s.campaign_id === campaignId && s.is_legacy_arena)) this.sceneRows.push({ campaign_id: campaignId, id: crypto.randomUUID(), name: 'Arena', category: 'region', is_legacy_arena: true, is_draft: false, archived: false, revision: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: {} });
+      return this.sceneRows.filter(s => s.campaign_id === campaignId).slice(offset, offset + 50).map(({ metadata: _private, published_metadata: _published, campaign_id: _campaign, ...s }) => structuredClone(s));
+    },
+    get: async (campaignId, id) => structuredClone(this.sceneRows.find(s => s.campaign_id === campaignId && s.id === id) ?? null),
+    create: async (campaignId, scene) => {
+      const row = { ...scene, campaign_id: campaignId, id: crypto.randomUUID(), is_draft: true, is_legacy_arena: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), revision: 1, archived: false, metadata: {} };
+      this.sceneRows.push(row); return structuredClone(row);
+    },
+    update: async (campaignId, id, revision, patch) => {
+      const row = this.sceneRows.find(s => s.campaign_id === campaignId && s.id === id && s.revision === revision);
+      if (!row) return null;
+      if (patch.archived && this.sceneAssignments.some(a => a.campaign_id === campaignId && a.scene_id === id)) return null;
+      Object.assign(row, structuredClone(patch), { revision: revision + 1, updated_at: new Date().toISOString() });
+      return structuredClone(row);
+    },
+  };
   campaigns: Array<Campaign & { syncTopic?: string }> = [];
   profileList: Profile[] = [];
   credentials = new Map<string, Credential>(); // `${campaign}:${key}` → hash

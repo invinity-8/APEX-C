@@ -7,3 +7,5 @@ dist
 *.log
 handoff/
 *.tsbuildinfo
+.test-output/
+.test-tools/

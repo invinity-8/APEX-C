@@ -86,6 +86,7 @@ export interface OnlineControls {
 }
 
 export interface GameApi {
+  scene?: import('../server/sceneRuntime').SceneSnapshot;
   mode: 'demo' | 'online';
   view: ViewModel;
   /** Full state – only ever set for the Game Master. */

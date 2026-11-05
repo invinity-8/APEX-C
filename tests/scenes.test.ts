@@ -4,7 +4,7 @@ import type { AuthUser } from '../src/server/repo';
 
 const gm = { id: 'gm', role: 'gm', campaignId: 'trusted-campaign' } as AuthUser;
 const player = { ...gm, role: 'player' } as AuthUser;
-const catalog = (): SceneCatalog => ({ list: vi.fn().mockResolvedValue([]), get: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'draft' }) });
+const catalog = (): SceneCatalog => ({ list: vi.fn().mockResolvedValue([]), get: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 'draft' }), update: vi.fn().mockResolvedValue(null) });
 
 describe('GM scene preparation boundary', () => {
   it('rejects player reads, previews and writes before any storage access', async () => {

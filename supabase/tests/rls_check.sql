@@ -165,6 +165,8 @@ end $$;
 
 -- Campaign scenes are private to the server, including unpublished drafts.
 begin;
+select pg_temp.expect_denied('select * from public.apex_journals', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied_anon('select * from public.apex_journals');
 select pg_temp.expect_denied('select * from public.apex_scenes', '22222222-2222-2222-2222-222222222222');
 select pg_temp.expect_denied('select * from public.apex_scene_assignments', '22222222-2222-2222-2222-222222222222');
 select pg_temp.expect_denied_anon('select * from public.apex_scenes');

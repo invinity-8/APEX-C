@@ -1,5 +1,31 @@
 # APEX 0.8 Szenenbasis
 
+## Aktualisierung: neuer Branch und Draft-PR
+
+**Dieser Abschnitt ersetzt den darunter dokumentierten historischen Teilstand.**
+Branch: `feat/apex-0-8-campaign-engine-v2`; Draft-PR: https://github.com/invinity-8/APEX-C/pull/39. Basis: main/e9e5155. Kein Merge, keine Produktionsmigration, kein Produktionsdeployment.
+
+Mittlerweile implementiert:
+
+- Vier Szenenkategorien mit UUIDs, begrenzten Metadatenseiten, Suche in geladenen Einträgen, Sortierung, Archivfilter, Umbenennen, Duplizieren, Archivieren und Wiederherstellen. Die Arena bleibt eine unangetastete Legacy-Referenz.
+- Karteneditor mit Quadrat-/Hexraster, Skalierung, Zoom/Scroll-Pan, verschiebbaren Markern, Beschriftungen, Spawnpunkten, Wänden/Bereichen, Szenen-Zielreferenzen und sichtbaren/verborgenen Routen mit Reisezeit. Entwurfsdaten und veröffentlichte Daten sind getrennt und revisionsgeschützt. Ein Sichtbarkeitsmodus zeigt offenbarte Elemente; er ist noch keine vollständige Spieleridentitätsvorschau.
+- Atomare Zuordnung ausgewählter Spieler oder der aktiven Partei zu veröffentlichten Szenen oder Sanctuary. `apex_assign_scene` prüft GM-Rolle, Mitgliedschaften, Spawn und alle Zuordnungsrevisionen vor dem Schreiben. Idempotenz schützt wiederholte Transfers. Ein Versionsupdate nutzt die bestehenden Realtime-/Reconnect-Abläufe. Archivieren belegter Szenen wird durch einen Datenbanktrigger verhindert.
+- Veraltete Arena-Bewegungen werden nach Szenenwechseln einschließlich Verlassen/Rückkehr serverseitig abgewiesen. Eigene Charakterbearbeitung bleibt möglich. Transfers verändern das Arena-JSON und damit Inventar, Ressourcen, Gelände und Fog nicht.
+- Spieler erhalten serverseitig ausschließlich offenbarte Elemente ihrer veröffentlichten zugewiesenen Szene, ohne GM-Notizen, verborgene Knoten/Routen oder Spawn-Definitionen. Außerhalb der Arena wird deren Karten-/Orts-/Log-/Händler-/Loot-Information aus der Antwort entfernt. Autorisierte eigene Charakterdaten bleiben verfügbar.
+- Sanctuary im bestehenden Workspace mit vorhandenem Porträt, Charakter-/Inventarzugang und drei originalen CSS-Atmosphären. Die persönliche Auswahl ist eine lokale UI-Präferenz. GM-Hintergründe und freie freigegebene Bilder fehlen noch.
+- Persönliche Journale in einer separaten geschützten Tabelle mit Titel, Text, Kategorien, Tags, Datum, Ingame-Datum, Pins, explizitem Save, Versionsprüfung, Suche/Filter in geladenen Einträgen, Löschen und Markdown-Export geladener eigener Einträge. Standard privat, explizite GM-/Party-Freigabe; GM hat keinen allgemeinen Zugriff auf private Notizen. Szenenreferenzen und Bildanhänge sind noch nicht freigeschaltet. Einfache Überschriftenvorschau, vollständiger Markdowntext im Export.
+- Neue Skalen sind explizit vorbereitet: GM-Navigation, Routenreise, Stundenexploration und taktische Runden. Stundenumrechnung: `speedFt × 600 / 5280 / terrainCost` Meilen/Stunde (600 Sechs-Sekunden-Runden). Keine Umrechnung der bisherigen Arena-8-MP-Regeln. Neue Bewegung ist noch nicht implementiert.
+
+Verifikation dieses Zwischenstands: Build und 334 Tests (38 Dateien) erfolgreich. 29 isolierte Browserchecks gegen echte APEX-Handler und In-Memory-Speicher bestanden: Kartenentwurf/Spawn/Veröffentlichung, zwei live wechselnde Browser, Split-Party/Sanctuary, Wiederholung, Reconnect, unverändertes Arena-JSON, Privatsphäre und Journalpersistenz/-freigabe/-export. `dev/e2e-campaign08.cjs` benötigt den lokalen Mockserver. Playwright ist über die gebündelte Runtime verfügbar; optional `APEX_PLAYWRIGHT_MODULE` und `APEX_BROWSER_PATH` setzen.
+
+Zusätzlich wurden alle Migrationen zweimal in isoliertem PostgreSQL/WASM angewendet und die RLS-, Deployment- und neuen Szenentransaktionsprüfungen erfolgreich ausgeführt. Auth-/Realtime-Dienste sind dabei gestubbt. `scripts/verify-db-embedded.mjs` verwendet eine flüchtige Datenbank; Testinstallation: `pnpm --dir .test-tools add --save-exact @electric-sql/pglite@0.5.15` ([API-Dokumentation](https://pglite.dev/docs/api)). CI ergänzt echte isolierte PostgreSQL-17-Tests. Das ist keine Live-Supabase-/Vercel-Verifikation.
+
+Offen für 0.8: Uploads/Assetrechte/Thumbnails, Templates, GM-Hintergründe, Spielerbewegung/GM-Tokenplatzierung, Routenreisevorschläge/-bestätigung/-fortschritt, individuelle Exploration, vollständige Sicherheits-/Konkurrenz-/Lastabnahme und reale Preview-Verifikation. Spieler ohne Welt/Charakter verwenden bislang die bisherige Warteansicht. Erweiterte Kampf-, Zauber-, Initiative-, Zufallsbegegnungs-, Quest-/NPC-Kodex- und Zusammenfassungssysteme bleiben künftigen Releases vorbehalten.
+
+Die noch unveröffentlichte Version-6-Migration enthält inzwischen zusätzlich Journale, Transitionsprotokoll und RPC/Archivschutz. Rollback bleibt additiv: alte Anwendung kann die neuen Tabellen ignorieren; vor deren Entfernung Daten sichern und neue Trigger entfernen. Gemeinsame Integrationspunkte: App, Online-Hook/-API, Server-API/Repository, Mock und Campaign-Widget. Keine 0.7-Regelsysteme wurden neu gebaut. Keine Produktionslastmessung; Metadatenpages sind auf 50 Zeilen, Zuordnungslisten auf 100 Spieler begrenzt. Keine neuen Polling-Loops und keine Journal-Broadcasts.
+
+## Historischer Teilstand (vor den obigen Ergänzungen)
+
 ## Implementierungsstand, 5. November 2026
 
 Dies ist ein Teilstand von PR 1, keine abgeschlossene APEX-0.8-Auslieferung. Arbeitsbranch: `feat/apex-0-8-campaign-engine`; Basis nach Fast-forward: `e9e5155` (main). Bereits vorhandene uncommittete Schema-/SQL-Vorarbeiten wurden erhalten. Kein Push, PR, Produktionsdeployment oder Datenbankeingriff wurde ausgeführt.

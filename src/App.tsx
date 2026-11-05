@@ -30,6 +30,8 @@ import { MerchantShop } from './components/Merchant';
 import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
 import { SceneDirector } from './components/SceneDirector';
+import { PlayerJournal } from './components/PlayerJournal';
+import { PlayerScene } from './components/PlayerScene';
 
 type View = 'map' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
 
@@ -286,6 +288,7 @@ export default function App({ game }: { game: GameApi }) {
             tabs={[
               { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
               { id: 'scenes', label: 'Scene Director', render: () => <SceneDirector /> },
+              { id: 'journal', label: 'Journal', render: () => <PlayerJournal /> },
               { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
             ]}
           />
@@ -324,6 +327,7 @@ export default function App({ game }: { game: GameApi }) {
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
     );
   }
+  if (game.online && !isGm) widgets.push({ id: 'journal', title: 'Campaign Journal', icon: '📖', render: () => <PlayerJournal /> });
   widgets.push(
     {
       id: 'chronicle',
@@ -346,7 +350,7 @@ export default function App({ game }: { game: GameApi }) {
     () =>
       role === 'gm'
         ? defaultLayout({ right: ['gm-control', 'party', 'selection', 'events', 'rivals', 'campaign', 'legend'], bottom: ['chronicle'] }, ['rivals', 'campaign'], ['legend'])
-        : defaultLayout({ right: ['me', 'party', 'selection', 'legend'], bottom: ['chronicle'] }, [], ['legend']),
+        : defaultLayout({ right: ['me', 'party', 'selection', 'journal', 'legend'], bottom: ['chronicle'] }, ['journal'], ['legend']),
     [role],
   );
 
@@ -473,6 +477,7 @@ export default function App({ game }: { game: GameApi }) {
           defaults={defaults}
           storageKey={layoutKey(announceScope, role)}
           center={
+        game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> :
         <>
           <ArenaMap
             mapRef={mapRef}

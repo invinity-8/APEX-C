@@ -69,6 +69,7 @@ export function mockSupabase(): Plugin {
       }
     };
     const save = r.saveState.bind(r);
+    r.onSceneChange = campaignId => { void broadcast(campaignId, 'version'); };
     const replace = r.replaceState.bind(r);
     const saveSheet = r.saveSheet.bind(r);
     const transition = r.worldTransition.bind(r);

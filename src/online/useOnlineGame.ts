@@ -103,6 +103,7 @@ export function useOnlineGame(
   const versionRef = useRef(0);
   /** Active world id as last received – sent with every command (stale-world protection). */
   const worldRef = useRef<string | null | undefined>(undefined);
+  const sceneRevisionRef = useRef(0);
   const [worldNotice, setWorldNotice] = useState<string | null>(null);
   const activeRef = useRef(activeCharacter);
   activeRef.current = activeCharacter;
@@ -157,6 +158,7 @@ export function useOnlineGame(
       }
       worldRef.current = wid;
       setPayload(p);
+      sceneRevisionRef.current = p.role === 'player' ? p.scene?.assignmentRevision ?? 0 : 0;
       setError(null);
       markOk();
       if (p.role === 'player' && p.activeCharacter && p.activeCharacter !== activeRef.current) {
@@ -381,7 +383,7 @@ export function useOnlineGame(
       return perform(
         key,
         ACTION_LABEL[key] ?? 'This action',
-        (requestId) => api.command(campaignId, cmd, requestId, activeRef.current ?? undefined, worldRef.current),
+        (requestId) => api.command(campaignId, cmd, requestId, activeRef.current ?? undefined, worldRef.current, sceneRevisionRef.current),
         (p) => accept(p, true),
       );
     },
@@ -519,6 +521,7 @@ export function useOnlineGame(
       payload && view && online
         ? {
             mode: 'online',
+            scene: payload.role === 'player' ? payload.scene : undefined,
             view,
             gmState,
             busy,

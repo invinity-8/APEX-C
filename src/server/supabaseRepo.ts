@@ -118,17 +118,65 @@ const toArchive = (r: Record<string, unknown>): ArchiveInfo => ({
 const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
 export class SupabaseRepo implements Repo {
+  readonly sceneRuntime: import('./sceneRuntime.js').SceneRuntime = {
+    assignments: async campaignId => {
+      const { data, error } = await this.db.from('apex_scene_assignments').select('user_id,scene_id,revision,spawn_x,spawn_y').eq('campaign_id', campaignId).limit(100);
+      if (error) throw new Error(`scene assignments: ${error.message}`);
+      return data as import('./sceneRuntime.js').SceneAssignment[];
+    },
+    assignment: async (campaignId, userId) => {
+      const { data, error } = await this.db.from('apex_scene_assignments').select('user_id,scene_id,revision,spawn_x,spawn_y').eq('campaign_id', campaignId).eq('user_id', userId).maybeSingle();
+      if (error) throw new Error(`scene assignment: ${error.message}`);
+      return data as import('./sceneRuntime.js').SceneAssignment | null;
+    },
+    scene: async (campaignId, id) => {
+      const { data, error } = await this.db.from('apex_scenes').select('id,name,category,revision,is_draft,is_legacy_arena,archived,published_metadata').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
+      if (error) throw new Error(`assigned scene: ${error.message}`);
+      return data as import('./sceneRuntime.js').RuntimeScene | null;
+    },
+    transition: async (user, sceneId, targets, requestId) => {
+      const { data, error } = await this.db.rpc('apex_assign_scene', { p_campaign: user.campaignId, p_actor: user.id, p_scene: sceneId, p_targets: targets, p_request: requestId });
+      if (error) throw new Error(`scene transition: ${error.message}`);
+      return data as { ok: boolean; error?: string };
+    },
+  };
+  readonly journalStore: import('./journals.js').JournalStore = {
+    list: async (user, offset) => {
+      // IDs come exclusively from authenticated profiles, never the request.
+      const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
+      const { data, error } = await this.db.from('apex_journals').select('*')
+        .eq('campaign_id', user.campaignId).or(visibility)
+        .order('pinned', { ascending: false }).order('created_at', { ascending: false }).order('id').range(offset, offset + 49);
+      if (error) throw new Error(`journal list: ${error.message}`);
+      return data as import('./journals.js').JournalEntry[];
+    },
+    save: async (user, id, version, draft) => {
+      const row = { ...draft, updated_at: new Date().toISOString(), version: version + 1 };
+      const result = version === 0
+        ? await this.db.from('apex_journals').insert({ ...row, id, campaign_id: user.campaignId, owner_id: user.id }).select('*').single()
+        : await this.db.from('apex_journals').update(row).eq('campaign_id', user.campaignId).eq('owner_id', user.id).eq('id', id).eq('version', version).select('*').maybeSingle();
+      if (result.error?.code === '23505') return null;
+      if (result.error) throw new Error(`journal save: ${result.error.message}`);
+      return result.data as import('./journals.js').JournalEntry | null;
+    },
+    remove: async (user, id, version) => {
+      const { data, error } = await this.db.from('apex_journals').delete()
+        .eq('campaign_id', user.campaignId).eq('owner_id', user.id).eq('id', id).eq('version', version).select('id');
+      if (error) throw new Error(`journal delete: ${error.message}`);
+      return data.length === 1;
+    },
+  };
   readonly sceneCatalog: import('./scenes.js').SceneCatalog = {
     list: async (campaignId, offset) => {
       const { data, error } = await this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived')
         .eq('campaign_id', campaignId).order('created_at', { ascending: false }).order('id').range(offset, offset + 49);
       if (error) throw new Error(`scene list: ${error.message}`);
       return data as import('./scenes.js').SceneSummary[];
     },
     get: async (campaignId, id) => {
       const { data, error } = await this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,metadata')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived,metadata')
         .eq('campaign_id', campaignId).eq('id', id).maybeSingle();
       if (error) throw new Error(`scene preview: ${error.message}`);
       return data as import('./scenes.js').SceneDefinition | null;
@@ -136,9 +184,16 @@ export class SupabaseRepo implements Repo {
     create: async (campaignId, scene) => {
       const { data, error } = await this.db.from('apex_scenes')
         .insert({ campaign_id: campaignId, ...scene, is_draft: true, is_legacy_arena: false })
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,metadata').single();
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived,metadata').single();
       if (error) throw new Error(`scene create: ${error.message}`);
       return data as import('./scenes.js').SceneDefinition;
+    },
+    update: async (campaignId, id, revision, patch) => {
+      const { data, error } = await this.db.from('apex_scenes').update({ ...patch, revision: revision + 1, updated_at: new Date().toISOString() })
+        .eq('campaign_id', campaignId).eq('id', id).eq('revision', revision)
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived,metadata').maybeSingle();
+      if (error) throw new Error(`scene update: ${error.message}`);
+      return data as import('./scenes.js').SceneDefinition | null;
     },
   };
   private db: SupabaseClient;

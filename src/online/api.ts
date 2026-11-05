@@ -76,6 +76,12 @@ async function request<T>(
 }
 
 export const api = {
+  scenePlayers: () => request<{ players: { userId: string; name: string; sceneId: string | null; revision: number; inheritedArena: boolean }[] }>('GET', 'scene-runtime'),
+  sceneAssign: (sceneId: string | null, targets: { userId: string; revision: number }[], requestId: string) => request<{ ok: boolean; error?: string }>('POST', 'scene-runtime', {}, { sceneId, targets, requestId }),
+  sceneAction: (id: string, revision: number, action: string, fields: Record<string, unknown> = {}) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { ...fields, id, revision, action }),
+  journalList: (offset = 0) => request<{ entries: import('../server/journals').JournalEntry[]; nextOffset: number | null; ownerId: string }>('GET', 'journal', { offset: String(offset) }),
+  journalSave: (id: string, version: number, entry: import('../server/journals').JournalDraft) => request<{ entry: import('../server/journals').JournalEntry }>('POST', 'journal', {}, { action: 'save', id, version, entry }),
+  journalDelete: (id: string, version: number) => request<{ deleted: boolean }>('POST', 'journal', {}, { action: 'delete', id, version }),
   sceneList: (offset = 0) => request<{ scenes: import('../server/scenes').SceneSummary[]; nextOffset: number | null }>('GET', 'scenes', { offset: String(offset) }),
   scenePreview: (id: string) => request<{ scene: import('../server/scenes').SceneDefinition }>('GET', 'scenes', { id }),
   sceneCreate: (name: string, category: import('../server/scenes').SceneCategory) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { name, category }),
@@ -90,8 +96,8 @@ export const api = {
   /** since = version the client already has → the server answers {unchanged:true} instead of the full state. */
   state: (campaign: string, as?: string, since?: number, signal?: AbortSignal) =>
     request<CampaignPayload | UnchangedPayload>('GET', 'state', { campaign, as, since: since ? String(since) : undefined }, undefined, { signal }),
-  command: (campaignId: string, command: unknown, requestId: string, as?: string, worldId?: string | null) =>
-    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId, ...(worldId !== undefined ? { worldId } : {}) }),
+  command: (campaignId: string, command: unknown, requestId: string, as?: string, worldId?: string | null, sceneRevision = 0) =>
+    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId, sceneRevision, ...(worldId !== undefined ? { worldId } : {}) }),
   commandStatus: (requestId: string) =>
     request<{ state: 'ok' | 'failed' | 'pending' | 'unknown'; version: number | null; error: string | null }>('GET', 'command-status', { requestId }, undefined, { timeoutMs: 10_000 }),
   admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>, opts?: RequestOptions) =>

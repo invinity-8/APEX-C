@@ -64,6 +64,8 @@ import type {
 import { WorldConflictError, type FeedbackRow, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
 import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
 import { sceneRequest } from './scenes.js';
+import { journalRequest } from './journals.js';
+import { runtimeRequest, sceneSnapshot } from './sceneRuntime.js';
 import { isId, isInt, isObj, parseCommand } from './validate.js';
 
 export interface ApiRequest {
@@ -164,6 +166,8 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
     // One round trip: session + profile + password flag + campaign (and presence touch).
     const user = await authenticate(req, repo);
     if (req.op === 'scenes') return await sceneRequest(user, req.method, req.query, req.body, repo.sceneCatalog);
+    if (req.op === 'journal') return await journalRequest(user, req.method, req.query, req.body, repo.journalStore);
+    if (req.op === 'scene-runtime') return await runtimeRequest(user, req.method, req.query, req.body, repo);
     switch (`${req.method} ${req.op}`) {
       case 'GET session':
         return ok(sessionInfo(user));
@@ -531,7 +535,15 @@ async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?:
   if (!s) return { ...base, notice: 'The Game Master has not opened the arena yet.' };
   if (!characters.length) return { ...base, notice: 'No character has been assigned to your profile yet. Please ask your Game Master.' };
   const active = characters.find((c) => c.id === as)?.id ?? characters[0].id;
-  return { ...base, activeCharacter: active, view: toWire(buildPlayerView(s.state, active)) };
+  const scene = await sceneSnapshot(user, repo.sceneRuntime);
+  const view = buildPlayerView(s.state, active);
+  if (scene.kind !== 'arena') {
+    // Non-Arena screens keep only authorized persistent character data, never legacy map intel.
+    view.hexes = []; view.hexByKey = {}; view.sites = []; view.trackers = []; view.log = []; view.announcements = []; view.lootRolls = []; view.merchant = null;
+    view.tokens = view.tokens.filter(t => user.tokenIds.includes(t.id)).map(t => ({ ...t, pos: { q: 0, r: 0 } }));
+    view.teams = [];
+  }
+  return { ...base, activeCharacter: active, scene, view: toWire(view) };
 }
 
 // ---------------------------------------------------------------- commands
@@ -609,6 +621,11 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
     async () => {
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         const stored = await repo.loadState(user.campaignId);
+        if (user.role !== 'gm' && repo.sceneRuntime) {
+          const scene = await sceneSnapshot(user, repo.sceneRuntime);
+          const arenaOnly = !CHARACTER_COMMANDS.has(cmd.type) || ['merchantBuy', 'merchantSell', 'lootRollChoose', 'lootRollClaimExpired', 'itemActivate'].includes(cmd.type);
+          if (arenaOnly && (scene.kind !== 'arena' || (body.sceneRevision ?? 0) !== scene.assignmentRevision)) throw new HttpError(409, 'Your scene changed. Reload before acting.', 'scene_changed');
+        }
         if (!stored) throw new HttpError(409, 'The campaign has not been initialised yet.', 'not_initialised');
         // A command prepared for a world that has since been replaced (reset / new world / restore) is never applied.
         if (body.worldId !== undefined && body.worldId !== worldIdOf(stored.state)) {
