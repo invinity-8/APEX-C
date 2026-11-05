@@ -1,3 +1,4 @@
+import { stripLegacy } from '../src/game/migrate';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
 import { handleApi, resetSchemaCache, type ApiRequest } from '../src/server/api';
@@ -47,7 +48,9 @@ describe('Character appearance (cosmetic)', () => {
     expect((await call('POST', 'command', { campaignId: CID, command: { type: 'setAppearance', tokenId: 'aster', title: 'Puppet' } }, {}, hannah)).status).toBe(403);
     expect((await call('POST', 'command', { campaignId: CID, command: { type: 'setAppearance', tokenId: 'sinna', color: 'red' } }, {}, hannah)).status).toBe(400);
     expect((await call('POST', 'command', { campaignId: CID, command: { type: 'setAppearance', tokenId: 'sinna', marker: 'crown' } }, {}, hannah)).status).toBe(400);
-    const before = structuredClone(repo.states.get(CID)!.state.tokens.sinna);
+    const s0 = structuredClone(repo.states.get(CID)!.state);
+    stripLegacy(s0); // the server's legacy reader normalises on read (e.g. rough item weights)
+    const before = s0.tokens.sinna;
     await call('POST', 'command', { campaignId: CID, command: { type: 'setAppearance', tokenId: 'sinna', title: 'Game Master', marker: 'crest' } }, {}, hannah);
     const after = repo.states.get(CID)!.state.tokens.sinna;
     expect({ ...after, title: before.title, marker: before.marker, titleCustom: before.titleCustom }).toEqual(before); // nothing but cosmetics changed

@@ -11,6 +11,7 @@
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
 import { executePartyLoot, PARTY_LOOT_COMMANDS, type PartyLootCommand } from './items/partyLoot.js';
+import { estimateWeightKg } from './items/weightGuess.js';
 import { executeMerchant, MERCHANT_COMMANDS, type MerchantCommand } from './items/merchant.js';
 import type { BeastForm } from './beasts.js';
 import { cosmetic, type CosmeticKind } from './cosmetics.js';
@@ -559,7 +560,8 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
         quantity: clamp(Math.round(cmd.quantity ?? 1), 0, L.quantity),
         notes: text(cmd.notes, L.notes) || undefined,
         container: cmd.container ?? containers[0].id,
-        ...(cmd.weightKg !== undefined ? { weightKg: Math.round(cmd.weightKg * 100) / 100 } : {}),
+        // no weight given → rough estimate from the name (SRD gear table), editable afterwards
+        weightKg: cmd.weightKg !== undefined ? Math.round(cmd.weightKg * 100) / 100 : estimateWeightKg(name),
         rev: 0,
       });
       break;

@@ -49,7 +49,7 @@ describe('carry weight (kg)', () => {
     expect(carryLoad(s.tokens.sinna, 10, 0, true).state).toBe('encumbered');
     expect(carryLoad(s.tokens.sinna, 5, 0, true).state).toBe('heavily');
     expect(carryLoad(s.tokens.sinna, 3, 0, true).state).toBe('over');
-    expect(carryLoad(s.tokens.sinna, null, 0, true)).toMatchObject({ capacityKg: null, state: 'ok' });
+    expect(carryLoad(s.tokens.sinna, null, 0, true)).toMatchObject({ assumedStrength: true, state: carryLoad(s.tokens.sinna, 10, 0, true).state }); // no STR → STR 10 assumed
   });
 });
 

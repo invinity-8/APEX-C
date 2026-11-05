@@ -194,7 +194,7 @@ export function InventoryPanel({ token, run, busy, embedded, rules = DEFAULT_ITE
       </section>
 
       <div className="flex flex-wrap items-stretch gap-3">
-        <CarryGauge load={carryLoad({ inventory: items }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant === 1)} />
+        <CarryGauge load={carryLoad({ inventory: items, currency: token.details?.currency }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant === 1)} />
         <div className="min-w-0 flex-1">
       <CurrencyBar
         currency={details.currency}
