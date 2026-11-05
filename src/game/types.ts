@@ -378,7 +378,6 @@ export interface GameState {
   itemRules?: Partial<ItemRules>;
   /** APEX 0.7: GM-defined Wild Shape forms (in addition to the SRD beasts). */
   customBeasts?: BeastForm[];
-  /** APEX 0.6: GM Arsenal – generated items waiting to be handed out (GM-only). */
   /** GM-only: the Arsenal tray and (APEX 0.7) the current loot draft. */
   arsenal?: { staged: Item[]; draft?: LootDraft };
   /** APEX 0.7: party loot rolls (Need / Distribute / Pass) – open ones and the recent history. */
