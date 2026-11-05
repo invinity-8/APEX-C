@@ -3,6 +3,7 @@ import type { ItemRules, Rarity } from './items/rules.js';
 import type { CurrencyId } from './items/currency.js';
 import type { LootDraft } from './items/lootDraft.js';
 import type { LootRoll } from './items/partyLoot.js';
+import type { Merchant } from './items/merchant.js';
 import type { BeastForm } from './beasts.js';
 import type { CharacterCosmetics } from './cosmetics.js';
 /**
@@ -382,6 +383,8 @@ export interface GameState {
   arsenal?: { staged: Item[]; draft?: LootDraft };
   /** APEX 0.7: party loot rolls (Need / Distribute / Pass) – open ones and the recent history. */
   lootRolls?: LootRoll[];
+  /** APEX 0.7: the GM Merchant (stock, prices, gold). */
+  merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */
   itemAudit?: ItemAuditEntry[];
   nextAuditId?: number;
@@ -393,7 +396,7 @@ export interface ItemAuditEntry {
   phase: Phase;
   /** 'GM' or the acting character's name. */
   by: string;
-  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine' | 'augment' | 'ascend' | 'transmute' | 'activate' | 'draft';
+  action: 'generate' | 'give' | 'discard' | 'revoke' | 'currency' | 'lock' | 'identify' | 'reroll' | 'salvage' | 'combine' | 'augment' | 'ascend' | 'transmute' | 'activate' | 'draft' | 'trade';
   tokenId?: string;
   itemId?: string;
   itemName?: string;

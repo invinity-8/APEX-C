@@ -2,11 +2,13 @@
  * APEX magical currency (APEX 0.6) – original names. Balances live on the character token
  * (`token.currency`) and only ever change through server-validated commands.
  */
-export type CurrencyId = 'seal' | 'orb' | 'augment' | 'ascend' | 'fragment';
-export const CURRENCY_IDS: CurrencyId[] = ['seal', 'orb', 'augment', 'ascend', 'fragment'];
-export const MAX_CURRENCY = 9999;
+export type CurrencyId = 'gold' | 'seal' | 'orb' | 'augment' | 'ascend' | 'fragment';
+/** APEX 0.7: Gold Pieces – the coin used at the GM Merchant – live in the same server-validated purse. */
+export const CURRENCY_IDS: CurrencyId[] = ['gold', 'seal', 'orb', 'augment', 'ascend', 'fragment'];
+export const MAX_CURRENCY = 99999;
 
 export const CURRENCIES: Record<CurrencyId, { name: string; plural: string; purpose: string; color: string }> = {
+  gold: { name: 'Gold Piece', plural: 'Gold Pieces', purpose: 'Coin of the Empire – spent and earned at the merchant.', color: '#e3b341' },
   seal: { name: 'Seal of Revelation', plural: 'Seals of Revelation', purpose: 'Identifies one unidentified item.', color: '#e3c25b' },
   orb: { name: 'Orb of Renewal', plural: 'Orbs of Renewal', purpose: 'Rerolls every modifier of one identified Magic or Rare item.', color: '#7da2ff' },
   augment: { name: 'Orb of Augmentation', plural: 'Orbs of Augmentation', purpose: 'Adds one random eligible modifier to an identified Magic or Rare item with a free affix slot.', color: '#5fc6a8' },

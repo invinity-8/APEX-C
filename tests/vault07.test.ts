@@ -51,6 +51,6 @@ describe('Imperial Transmutation Cube', () => {
   });
 
   it('all currencies keep their balances and have a vault slot', () => {
-    expect(CURRENCY_IDS).toEqual(['seal', 'orb', 'augment', 'ascend', 'fragment']);
+    expect(CURRENCY_IDS).toEqual(['gold', 'seal', 'orb', 'augment', 'ascend', 'fragment']);
   });
 });

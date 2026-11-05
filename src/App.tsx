@@ -25,12 +25,13 @@ import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { ArsenalPanel } from './components/ArsenalPanel';
 import { LootRollDock } from './components/LootRolls';
+import { MerchantShop } from './components/Merchant';
 import { FeedbackDialog, FeedbackInbox } from './components/Feedback';
 import { CurrencyBar } from './components/items/ItemUi';
 import type { ItemRules } from './game/items/rules';
 import { WorldPanel } from './components/WorldPanel';
 
-type View = 'map' | 'character' | 'inventory' | 'arsenal' | 'feedback';
+type View = 'map' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
 
 interface Toast {
   id: number;
@@ -292,10 +293,12 @@ export default function App({ game }: { game: GameApi }) {
     [role],
   );
 
+  const myToken = view.tokens.find((t) => t.id === view.viewerId) ?? null;
   const tabs: Array<{ id: View; label: string }> = [
     { id: 'map', label: '🗺 Map' },
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
     { id: 'inventory', label: '🎒 Inventory' },
+    ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
     ...(isGm && game.online ? [{ id: 'feedback' as View, label: '📮 Feedback' }] : []),
   ];
@@ -388,6 +391,10 @@ export default function App({ game }: { game: GameApi }) {
             <FeedbackInbox online={game.online} notify={notify} />
           ) : screen === 'arsenal' && isGm && state ? (
             <ArsenalPanel state={state} run={run} />
+          ) : screen === 'merchant' && !isGm && view.merchant && myToken ? (
+            <MerchantShop merchant={view.merchant} me={myToken} run={run} busy={game.busy} />
+          ) : screen === 'merchant' ? (
+            <p className="p-6 text-sm text-marble-500">The merchant has closed shop.</p>
           ) : !sheetToken ? (
             <p className="p-6 text-sm text-marble-500">No character available.</p>
           ) : screen === 'character' ? (
