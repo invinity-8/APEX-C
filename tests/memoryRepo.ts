@@ -320,6 +320,11 @@ export class MemoryRepo implements Repo {
     for (const [k, v] of this.sheets) if (k.startsWith(`${campaignId}:`)) out[k.slice(campaignId.length + 1)] = structuredClone((v.data as { hitPoints?: unknown })?.hitPoints ?? null);
     return out;
   }
+  async loadSheetDetails(campaignId: string) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of this.sheets) if (k.startsWith(`${campaignId}:`)) out[k.slice(campaignId.length + 1)] = structuredClone((v.data as { details?: unknown })?.details ?? null);
+    return out;
+  }
   async saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string) {
     if (this.beforeSheetSave) {
       const f = this.beforeSheetSave;

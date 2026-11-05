@@ -282,6 +282,8 @@ export interface Repo {
   loadSheet(campaignId: string, tokenId: string): Promise<StoredSheet | null>;
   /** Hit points of every stored sheet in one query (Party Health) – token id → raw hitPoints JSON. */
   loadSheetVitals(campaignId: string): Promise<Record<string, unknown>>;
+  /** APEX 0.7: the `details` list of every sheet (level detection for the party's median level). */
+  loadSheetDetails(campaignId: string): Promise<Record<string, unknown>>;
   /** Optimistic write. expectedVersion 0 = create. Returns the new version, or null if someone else wrote first. */
   saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string): Promise<number | null>;
   backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string, userId: string): Promise<void>;

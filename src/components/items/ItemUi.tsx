@@ -375,10 +375,17 @@ export function ItemInspect({
       )}
       {base?.requirements?.str && <p className="mt-1.5 text-marble-400">Requires Strength {base.requirements.str} (otherwise −10 ft speed)</p>}
       {base?.stealthDisadvantage && <p className="text-marble-400">Disadvantage on Stealth checks</p>}
-      <p className="mt-1.5 text-marble-400">
-        Location: <span className="text-marble-200">{locationOf(item, eq, containers)}</span>
-        {item.locked && <span className="ml-2 text-amber-300">· Restricted by the GM</span>}
-      </p>
+      {/* only for owned items – tray, loot roll and merchant previews have no inventory location */}
+      {(items.has(item.id) || item.locked) && (
+        <p className="mt-1.5 text-marble-400">
+          {items.has(item.id) && (
+            <>
+              Location: <span className="text-marble-200">{locationOf(item, eq, containers)}</span>
+            </>
+          )}
+          {item.locked && <span className="ml-2 text-amber-300">· Restricted by the GM</span>}
+        </p>
+      )}
       {item.history && item.history.length > 0 && (
         <details className="mt-1 text-marble-500">
           <summary className="cursor-pointer">History</summary>

@@ -33,6 +33,7 @@ import type { BeastForm } from './beasts.js';
 import type { CharacterCosmetics } from './cosmetics.js';
 import type { CurrencyId } from './items/currency.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
+import { lootRollsView, type LootRoll } from './items/partyLoot.js';
 
 // ---------------- Grundfunktionen ----------------
 
@@ -218,6 +219,8 @@ export interface ViewModel {
   itemRules: ItemRules;
   /** APEX 0.7: GM custom Wild Shape forms (public catalogue). */
   customBeasts: BeastForm[];
+  /** APEX 0.7: party loot rolls (public; items redacted and open choices hidden for players). */
+  lootRolls: LootRoll[];
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -316,6 +319,7 @@ export function buildGmView(state: GameState): ViewModel {
     serverTime: new Date().toISOString(),
     itemRules: itemRulesOf(state),
     customBeasts: state.customBeasts ?? [],
+    lootRolls: lootRollsView(state, 'gm'),
   };
 }
 
@@ -438,5 +442,6 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     serverTime: new Date().toISOString(),
     itemRules: itemRulesOf(state),
     customBeasts: state.customBeasts ?? [],
+    lootRolls: lootRollsView(state, [viewerId]),
   };
 }

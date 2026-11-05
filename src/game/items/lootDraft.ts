@@ -91,6 +91,13 @@ export interface LootDraft {
   createdDay: number;
 }
 
+/** Median of character levels (lower middle for an even count – loot should never overshoot the party); 1 if none. */
+export function medianLevel(levels: number[]): number {
+  if (!levels.length) return 1;
+  const s = [...levels].sort((a, b) => a - b);
+  return clampLevel(s[Math.floor((s.length - 1) / 2)]);
+}
+
 export const clampLevel = (n: number) => Math.max(1, Math.min(20, Math.floor(n)));
 const clampIlvl = (n: number) => Math.max(1, Math.min(MAX_ITEM_LEVEL, Math.floor(n)));
 

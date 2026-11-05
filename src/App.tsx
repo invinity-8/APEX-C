@@ -24,6 +24,7 @@ import { PlayersPanel } from './components/PlayersPanel';
 import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { ArsenalPanel } from './components/ArsenalPanel';
+import { LootRollDock } from './components/LootRolls';
 import { FeedbackDialog, FeedbackInbox } from './components/Feedback';
 import { CurrencyBar } from './components/items/ItemUi';
 import type { ItemRules } from './game/items/rules';
@@ -331,6 +332,7 @@ export default function App({ game }: { game: GameApi }) {
         </div>
       )}
       <AnnouncementOverlay announcements={view.announcements} scope={announceScope} serverTime={view.serverTime} />
+      {!isGm && <LootRollDock rolls={view.lootRolls ?? []} viewerId={view.viewerId} serverTime={view.serverTime} run={run} />}
       {isGm && state && <GmEventModal state={state} run={run} />}
       <Header
         game={game}
