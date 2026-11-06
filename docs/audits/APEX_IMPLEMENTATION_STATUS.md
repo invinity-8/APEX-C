@@ -47,7 +47,7 @@
 
 ## Noch nicht ausgeführt
 
-- Für PR #45: erneute Migration-, Unit/API-, TypeScript-/Build- sowie isolierte RLS-/Scene-Transaktionstests sind nach dem Map-Director-Code noch ausstehend.
-- Vercel Preview für PR #45 wird nach einem initialen TypeScript-Fehler erneut gebaut; Browserzugriff leitete zur Vercel-Loginseite um. Kein GM-/Spieler-E2E und keine Screenshots.
-- Die „Production database deployed and secure“-Workflowstufe läuft nur nach Push auf `main` oder manuellem Start. Kein Produktionsdeployment und keine Produktionsmigration.
+- Map-Fokus-API-Regressionen: **6/6 fokussierte Tests bestanden** (veröffentlichte Szene, Draft/Archiv/Legacy-Ablehnung, ungültige ID, Player-Privacy). Die Tests liefen gegen den Branch-Quelltext und das unveränderte Repo-Test-Harness.
+- Vercel Preview für den aktuellen Map-Director-Commit ist `READY` (TypeScript und Production-Build bestanden). Der Browser leitet weiterhin zur Vercel-Loginseite um; kein GM-/Spieler-E2E und keine Screenshots.
+- Der vollständige Supabase-Migrations-/RLS-Workflow wurde für PR #45 noch nicht ausgeführt; die „Production database deployed and secure“-Stufe läuft nur nach Push auf `main` oder manuellem Start. Kein Produktionsdeployment und keine Produktionsmigration.
 - Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
