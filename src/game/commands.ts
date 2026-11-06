@@ -32,7 +32,7 @@ import { TERRAIN } from './terrain.js';
 import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
-import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility, Token, BodyType } from './types.js';
+import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility, Token, BodyType, NarrativeItemRequest } from './types.js';
 import { INVENTORY_LIMITS, canMerge, containerOfItem, isStackable, materializeInventory } from './inventory.js';
 
 export { fmt };
@@ -83,6 +83,8 @@ export type Command =
       equipment?: Pick<Equipment, 'slots' | 'activeSet' | 'resting' | 'restingKeep'>;
     }
   | { type: 'invAddItem'; tokenId: string; itemId: string; weightKg?: number; name: string; quantity?: number; description?: string; notes?: string; container?: string }
+  | { type: 'invRequestItem'; tokenId: string; requestId: string; name: string; quantity: number; description: string; notes?: string; weightKg?: number; container?: string }
+  | { type: 'gmReviewItemRequest'; tokenId: string; requestId: string; decision: 'approve' | 'reject'; edits?: { name?: string; description?: string; notes?: string; quantity?: number; weightKg?: number; container?: string } }
   | { type: 'invUpdateItem'; tokenId: string; itemId: string; rev: number; name?: string; quantity?: number; description?: string; notes?: string; container?: string; weightKg?: number }
   | { type: 'invRemoveItem'; tokenId: string; itemId: string; rev: number }
   | { type: 'invAddContainer'; tokenId: string; containerId: string; name: string }
@@ -107,6 +109,7 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'setSneak',
   'setCosmetics',
   'invAddItem',
+  'invRequestItem',
   'invUpdateItem',
   'invRemoveItem',
   'invAddContainer',
@@ -224,6 +227,8 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   if (LOOT_COMMANDS.has(cmd.type)) return executeLoot(prev, actor, cmd as LootCommand);
   if (PARTY_LOOT_COMMANDS.has(cmd.type)) return executePartyLoot(prev, actor, cmd as PartyLootCommand);
   if (MERCHANT_COMMANDS.has(cmd.type)) return executeMerchant(prev, actor, cmd as MerchantCommand);
+  if (cmd.type === 'invRequestItem' || cmd.type === 'gmReviewItemRequest') return executeNarrativeItemRequest(prev, cmd);
+  if (cmd.type === 'invAddItem' && actor.role !== 'gm') return fail(prev, 'New inventory items need GM approval. Submit an item request instead.');
   if (cmd.type.startsWith('inv')) return executeInventory(prev, actor, cmd as InventoryCommand);
   if (EQUIPMENT_COMMANDS.has(cmd.type)) return executeEquipment(prev, actor, cmd as EquipmentCommand);
 
@@ -515,6 +520,67 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   }
 
   refreshAllKnowledge(state);
+  return { ok: true, state };
+}
+
+function executeNarrativeItemRequest(prev: GameState, cmd: Extract<Command, { type: 'invRequestItem' | 'gmReviewItemRequest' }>): CommandResult {
+  const state = cloneOneToken(prev, cmd.tokenId);
+  const token = state.tokens[cmd.tokenId];
+  const requests = token.itemRequests ?? (token.itemRequests = []);
+  if (cmd.type === 'invRequestItem') {
+    if (requests.some(r => r.id === cmd.requestId)) return fail(prev, 'This item request was already submitted.');
+    if (requests.filter(r => r.status === 'pending').length >= 25) return fail(prev, 'There are already 25 pending requests for this character.');
+    materializeInventory(token);
+    const containers = token.containers!;
+    if (cmd.container && !containers.some(c => c.id === cmd.container)) return fail(prev, T.noSuchContainer);
+    const request: NarrativeItemRequest = {
+      id: cmd.requestId,
+      name: cmd.name.trim().slice(0, INVENTORY_LIMITS.name),
+      description: cmd.description.trim().slice(0, INVENTORY_LIMITS.description),
+      quantity: clamp(Math.round(cmd.quantity), 1, INVENTORY_LIMITS.quantity),
+      createdDay: state.day,
+      status: 'pending',
+      ...(cmd.notes?.trim() ? { notes: cmd.notes.trim().slice(0, INVENTORY_LIMITS.notes) } : {}),
+      ...(cmd.weightKg !== undefined ? { weightKg: Math.round(cmd.weightKg * 1000) / 1000 } : {}),
+      ...(cmd.container ? { container: cmd.container } : {}),
+    };
+    requests.push(request);
+    return { ok: true, state, message: 'Sent to the GM for approval.' };
+  }
+
+  const request = requests.find(r => r.id === cmd.requestId);
+  if (!request) return fail(prev, 'Item request no longer exists.');
+  const completedStatus = cmd.decision === 'approve' ? 'approved' : 'rejected';
+  if (request.status !== 'pending') return request.status === completedStatus ? { ok: true, state: prev } : fail(prev, 'Item request has already been reviewed.');
+  if (cmd.decision === 'reject') {
+    request.status = 'rejected';
+    return { ok: true, state };
+  }
+  const text = (value: string | undefined, current: string, max: number) => value === undefined ? current : value.trim().slice(0, max);
+  const name = text(cmd.edits?.name, request.name, INVENTORY_LIMITS.name);
+  if (!name) return fail(prev, T.itemNameRequired);
+  const description = text(cmd.edits?.description, request.description, INVENTORY_LIMITS.description);
+  const notes = text(cmd.edits?.notes, request.notes ?? '', INVENTORY_LIMITS.notes);
+  const quantity = clamp(Math.round(cmd.edits?.quantity ?? request.quantity), 1, INVENTORY_LIMITS.quantity);
+  const weightKg = cmd.edits?.weightKg ?? request.weightKg ?? estimateWeightKg(name);
+  materializeInventory(token);
+  const containers = token.containers!;
+  const container = cmd.edits?.container ?? request.container ?? containers[0].id;
+  if (!containers.some(c => c.id === container)) return fail(prev, T.noSuchContainer);
+  const itemId = `req-${request.id}`;
+  if (!token.inventory.some(i => i.id === itemId)) {
+    if (token.inventory.length >= INVENTORY_LIMITS.items) return fail(prev, T.inventoryFull);
+    const bagRefusal = holdingRefusal(token, { id: itemId, quantity, weightKg }, container);
+    if (bagRefusal) return fail(prev, bagRefusal);
+    token.inventory.push({ id: itemId, name, kind: 'misc', description, quantity, weightKg: Math.round(weightKg * 1000) / 1000, container, ...(notes ? { notes } : {}), rev: 0 });
+  }
+  request.status = 'approved';
+  request.name = name;
+  request.description = description;
+  request.notes = notes || undefined;
+  request.quantity = quantity;
+  request.weightKg = Math.round(weightKg * 1000) / 1000;
+  request.container = container;
   return { ok: true, state };
 }
 
