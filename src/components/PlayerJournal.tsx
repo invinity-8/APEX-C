@@ -9,6 +9,8 @@ const blank = (): JournalDraft => ({ title: '', body: '', category: 'Personal No
 const categories = ['Personal Notes', 'Quest Notes', 'Places', 'People', 'Mysteries', 'Session Recap', 'Custom'];
 export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string; name:string } } = {}) {
   const categoryList = useId();
+  const writingId = useId();
+  const [selectedReference, setSelectedReference] = useState('');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [owner, setOwner] = useState('');
   const [next, setNext] = useState<number | null>(null);
@@ -36,9 +38,27 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
   function change(patch: Partial<JournalDraft>) { setDraft(old => ({ ...old, ...patch })); setDirty(true); setNotice(''); }
-  function open(entry?: JournalEntry) {
+  function open(entry?: JournalEntry, newCategory?: string) {
     if (busy || (dirty && !window.confirm('Discard unsaved journal changes?'))) return;
-    setDraft(entry ?? blank()); setEditing({ id: entry?.id ?? crypto.randomUUID(), version: entry?.version ?? 0 }); setDirty(false); setNotice('');
+    const value = entry ?? blank();
+    if (newCategory) value.category = newCategory;
+    setDraft(value); setEditing({ id: entry?.id ?? crypto.randomUUID(), version: entry?.version ?? 0 }); setDirty(false); setNotice('');
+  }
+  async function openReference(id: string) {
+    try {
+      const entry = entries.find(item => item.id === id) ?? (await api.journalRead(id)).entry;
+      if (!['People', 'Places'].includes(entry.category)) throw new Error('This reference is unavailable.');
+      open(entry);
+    } catch { setError('This reference is private, missing, or unavailable.'); }
+  }
+  function insertReference() {
+    const target = referenceEntries.find(entry => entry.id === selectedReference);
+    if (!target) return;
+    const textarea = document.getElementById(writingId) as HTMLTextAreaElement | null;
+    const start = textarea?.selectionStart ?? draft.body.length, end = textarea?.selectionEnd ?? draft.body.length;
+    const marker = '[[ref:' + target.id + ']]';
+    change({ body: draft.body.slice(0, start) + marker + draft.body.slice(end) });
+    requestAnimationFrame(() => { textarea?.focus(); textarea?.setSelectionRange(start + marker.length, start + marker.length); });
   }
   async function save() {
     setBusy(true); setError(''); setNotice('');
@@ -94,12 +114,18 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
     try { const image=await prepareMapUpload(file); const result=await api.journalImageUpload(editing.id,image.image,image.thumbnail); change({image_id:result.id}); setNotice('Image uploaded privately. Save the entry to attach it.'); }
     catch(e) { setError(String(e)); } finally { setBusy(false); }
   }
+  const referenceEntries = entries.filter(entry => ['People', 'Places'].includes(entry.category));
+  const references = Object.fromEntries(referenceEntries.map(entry => [entry.id, entry.title]));
+  const backlinks = entries.filter(entry => entry.id !== editing.id && entry.body.includes('[[ref:' + editing.id + ']]'));
   return <section className="journal-panel" aria-label="Campaign journal">
     <h3>Campaign Journal</h3>
     <p>Personal notes stay private unless you explicitly share them. Save before changing tabs.</p>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     <div className="journal-toolbar"><button className="btn btn-ghost" disabled={busy} onClick={() => open()}>New entry</button>
+      <button className="btn btn-ghost" disabled={busy} onClick={() => open(undefined, 'People')}>New person</button>
+      <button className="btn btn-ghost" disabled={busy} onClick={() => open(undefined, 'Places')}>New place</button>
       <button className="btn btn-ghost" disabled={busy} onClick={() => void download()}>Export personal journal (.md)</button></div>
+    <nav aria-label="People and Places references"><h4>People &amp; Places</h4>{referenceEntries.length ? <ul>{referenceEntries.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => open(entry)}>{entry.category}: {entry.title}</button></li>)}</ul> : <p>No references yet. Add a person or place when you need one.</p>}</nav>
     <label>Search journal <input className="input" maxLength={200} value={search} onChange={e => setSearch(e.target.value)} /></label>
     <label>Category filter <input className="input" list={categoryList+'-filter'} placeholder="All categories" maxLength={80} value={category} onChange={e=>setCategory(e.target.value)} /></label><datalist id={categoryList+'-filter'}>{[...new Set([...categories,...entries.map(e=>e.category)])].map(c=><option key={c} value={c}/>)}</datalist>
     <label>Tag filter <input maxLength={40} value={tag} onChange={e=>setTag(e.target.value)} /></label>
@@ -117,7 +143,8 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
         <label>Scene reference <select value={draft.scene_id ?? ''} onChange={e=>change({scene_id:e.target.value||null})}><option value="">No scene</option>{sceneReference && <option value={sceneReference.id}>{sceneReference.name}</option>}{draft.scene_id && draft.scene_id!==sceneReference?.id && <option value={draft.scene_id}>Previously recorded scene</option>}</select></label>
         <label>In-game date <input className="input" maxLength={120} value={draft.game_date} onChange={e => change({ game_date: e.target.value })} /></label>
         <label>Tags (comma separated) <input className="input" value={draft.tags.join(', ')} onChange={e => change({ tags: e.target.value.split(',').map(t => t.trim()).slice(0, 20) })} /></label>
-        <label>Notes (Markdown) <textarea aria-label="Notes (Markdown)" className="input journal-writing" required maxLength={100000} value={draft.body} onChange={e => change({ body: e.target.value })} /></label>
+        <div className="flex flex-wrap items-end gap-2"><label>Link a person or place <select className="input" aria-label="Link a person or place" value={selectedReference} onChange={e => setSelectedReference(e.target.value)}><option value="">Choose a reference</option>{referenceEntries.map(entry => <option key={entry.id} value={entry.id}>{entry.category}: {entry.title}</option>)}</select></label><button type="button" className="btn btn-ghost" disabled={!selectedReference || busy} onClick={insertReference}>Insert link at cursor</button></div>
+        <label>Notes (Markdown) <textarea id={writingId} aria-label="Notes (Markdown)" className="input journal-writing" required maxLength={100000} value={draft.body} onChange={e => change({ body: e.target.value })} /></label>
         <label>Visibility <select className="input" value={draft.sharing} onChange={e => change({ sharing: e.target.value as JournalDraft['sharing'] })}><option value="private">Private</option><option value="gm">Shared with GM</option><option value="party">Shared with party</option></select></label>
         <label><input type="checkbox" checked={draft.pinned} onChange={e => change({ pinned: e.target.checked })} /> Pin entry</label>
         <label>Image attachment <input type="file" accept="image/png,image/jpeg,image/webp" disabled={editing.version===0} onChange={e=>{ void upload(e.target.files?.[0]); e.target.value=''; }} /></label>
@@ -126,6 +153,7 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
         <button className="btn btn-primary" disabled={!dirty || !draft.title.trim()}>{busy ? 'Saving…' : 'Save entry'}</button>
       </fieldset>
     </form>
-    <article className="journal-reading" aria-label="Reading preview"><JournalMarkdown body={draft.body}/>{imageUrl && <img src={imageUrl} alt="Journal attachment" loading="lazy" />}</article>
+    {backlinks.length > 0 && <aside aria-label="Journal backlinks"><h4>Backlinks in loaded entries</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul></aside>}
+    <article className="journal-reading" aria-label="Reading preview"><JournalMarkdown body={draft.body} references={references} onReference={id => void openReference(id)}/>{imageUrl && <img src={imageUrl} alt="Journal attachment" loading="lazy" />}</article>
   </section>;
 }
