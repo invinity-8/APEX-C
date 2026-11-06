@@ -221,7 +221,7 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
 
       {eq.resting && <RestingKeep keep={eq.restingKeep} onChange={(keep) => void run({ type: 'setResting', tokenId: token.id, resting: true, keep })} />}
 
-      <DerivedPanel derived={derived} eq={eq} onConfig={(c) => void run({ type: 'setEquipConfig', tokenId: token.id, ...c })} />
+      <DerivedPanel derived={derived} eq={eq} onConfig={isGm ? (c) => void run({ type: 'setEquipConfig', tokenId: token.id, ...c }) : undefined} />
 
       <section>
         <div className="label mb-1">Carried items – drag onto a slot, or use a slot’s menu</div>
@@ -241,14 +241,14 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
                   {i.name}
                   <span className="ml-1 text-marble-500">· {itemSummary(i.equip)}</span>
                 </span>
-                {s && (
+                {s && isGm && (
                   <button className="text-[11px] text-gold-300 hover:underline" onClick={() => void run({ type: 'setItemEquip', tokenId: token.id, itemId: i.id, rev: i.rev ?? 0, equip: s.equip })}>
                     Use SRD “{s.preset}”
                   </button>
                 )}
-                <button className="text-[11px] text-marble-500 hover:text-gold-200" onClick={() => setEditing(i)}>
+                {isGm && <button className="text-[11px] text-marble-500 hover:text-gold-200" onClick={() => setEditing(i)}>
                   {i.equip ? 'Edit' : 'Define…'}
-                </button>
+                </button>}
               </li>
             );
           })}
@@ -317,7 +317,7 @@ function BonusSummary({ b }: { b: ItemBonuses }) {
   );
 }
 
-function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof deriveStats> | null; eq: ReturnType<typeof equipmentOf>; onConfig: (c: { unarmoredAbility?: Ability | null; acOther?: number; acOtherLabel?: string }) => void }) {
+function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof deriveStats> | null; eq: ReturnType<typeof equipmentOf>; onConfig?: (c: { unarmoredAbility?: Ability | null; acOther?: number; acOtherLabel?: string }) => void }) {
   const [open, setOpen] = useState(false);
   if (!derived) return <p className="text-marble-500">Load or import a character sheet to calculate Armor Class and attacks.</p>;
   const { ac } = derived;
@@ -361,10 +361,10 @@ function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof de
         </table>
       )}
       <BonusSummary b={derived.bonuses} />
-      <button className="mt-1 text-[11px] text-marble-500 hover:text-gold-200" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      {onConfig && <button className="mt-1 text-[11px] text-marble-500 hover:text-gold-200" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {open ? '▾' : '▸'} Manual AC modifiers
-      </button>
-      {open && (
+      </button>}
+      {open && onConfig && (
         <div className="mt-1 grid grid-cols-2 gap-2">
           <label className="text-marble-300">
             Unarmored defence adds
@@ -624,3 +624,4 @@ function SlotIcon({ slot }: { slot: EquipSlot }) {
     </svg>
   );
 }
+
