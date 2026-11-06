@@ -141,9 +141,10 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
     } catch (e) { if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) setUncertainMotion(input); else setUncertainMotion(null); setError(String(e)); }
     finally { setBusy(false); }
   }
-  return <section className="scene-director" aria-label="Scene Director">
-    <h3>Scene Director</h3>
-    <p>Scene preparation · Players remain in the existing Arena.</p>
+  return <section className="scene-director scene-director-full" aria-label="Scene library and editor">
+    <header className="scene-director-heading"><div><p className="eyebrow">Campaign workspace</p><h1>Scenes</h1><p>Search, prepare and edit maps. Private previews never move players.</p></div><span className="chip">{scenes.length} loaded</span></header>
+    <div className="scene-director-layout">
+    <aside className="scene-director-library" aria-label="Scene library">
     <div role="group" aria-label="Scene categories">{SCENE_CATEGORIES.map(c =>
       <button key={c} disabled={busy} aria-pressed={c === category} onClick={() => setCategory(c)}>{labels[c]}</button>)}</div>
     <form onSubmit={e => { e.preventDefault(); void create(); }}>
@@ -168,7 +169,9 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
     <ul className="scene-library">{[...scenes].filter(s => libraryIds.includes(s.id)).sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : b.updated_at.localeCompare(a.updated_at)).map(s =>
       <li key={s.id}><SceneThumbnail assetId={s.thumbnail_asset_id} label={s.name} /><strong>{s.name}</strong><span>{labels[s.category]} · {s.is_legacy_arena ? 'Legacy Arena' : s.archived ? 'Archived' : s.is_draft ? 'Draft' : 'Published'}</span><small>Modified {new Date(s.updated_at).toLocaleDateString()} · Parent: {scenes.find(p => p.id === s.parent_scene_id)?.name ?? (s.parent_scene_id ? 'Linked location' : 'Campaign root')} · {players.filter(p => p.sceneId === s.id).map(p => p.name).join(', ') || 'No players assigned'}</small><button disabled={busy} onClick={() => void open(s.id)}>Private preview</button></li>)}</ul>
     {offset !== null && <button disabled={busy || libraryLoading} onClick={() => void more()}>Load more scenes</button>}
-    {preview && <aside aria-label="Private scene preview"><h4>{preview.name}</h4>
+    </aside>
+    <main className="scene-director-detail" aria-label="Scene editing workspace">
+    {preview ? <section className="scene-private-editor"><h2>{preview.name}</h2>
       <p>GM-only definition preview. Player assignments are unchanged.</p>
       <p>{labels[preview.category]} · {preview.is_draft ? 'Draft' : 'Published'}</p>
       <button disabled={busy || !!uncertain || preview.is_draft || preview.archived || !selectedPlayers.length} onClick={() => void assign(preview.id)}>Assign selected players to this scene</button>
@@ -192,7 +195,9 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
         {uncertainMotion && <button disabled={busy} onClick={() => void runMotion(uncertainMotion)}>Verify or retry previous token action</button>}
         {preview.category === 'world' && !preview.is_draft && travel?.sceneId === preview.id && parseMap(preview.metadata) && <WorldTravel key={`travel-${preview.id}`} gm sceneId={preview.id} sceneRevision={preview.published_revision ?? 0} assignmentRevision={0} map={parseMap(preview.metadata)!} travel={travel.data} onChanged={() => { api.sceneTravelState(preview.id).then(data => setTravel({ sceneId: preview.id, data })).catch(e => setError(String(e))); }} />}
       </>}
-      <button onClick={() => { generation.current++; setPreview(null); }}>Close preview</button>
-    </aside>}
+      <button className="btn btn-ghost" onClick={() => { generation.current++; setPreview(null); }}>Back to scene library</button>
+    </section> : <div className="scene-editor-empty"><span aria-hidden="true">🗺</span><h2>Select a scene to edit</h2><p>Create a draft or open a private preview from the library. Players will see only published, assigned scenes.</p></div>}
+    </main>
+    </div>
   </section>;
 }
