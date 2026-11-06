@@ -3,12 +3,13 @@ const { chromium } = require(process.env.APEX_PLAYWRIGHT_MODULE || 'playwright')
 const assert = require('node:assert/strict');
 const base = 'http://127.0.0.1:5174';
 const results = [];
-function check(name, condition) { assert.ok(condition, name); results.push(name); console.log('PASS', name); }
+function check(name, condition, detail = '') { assert.ok(condition, detail ? `${name}\n${detail}` : name); results.push(name); console.log('PASS', name); }
 async function call(page, op, body, query = '') {
-  return page.evaluate(async ([op, body, query]) => {
+  const result = await page.evaluate(async ([op, body, query]) => {
     const response = await fetch(`/api/apex?op=${op}${query}`, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', 'x-apex-csrf': '1' }, body: body ? JSON.stringify(body) : undefined });
     return { status: response.status, body: await response.json() };
   }, [op, body, query]);
+  return result;
 }
 async function expand(page, id) {
   const button = page.locator(`[data-widget="${id}"] .ws-handle > button[aria-expanded]`);
@@ -21,7 +22,7 @@ async function expand(page, id) {
     const errors = [];
     async function device(profile) {
       const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } });
-      const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message)); await page.goto(base);
+      const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message)); page.on('console', async message => { if (message.type() === 'error' && !/^Failed to load resource: the server responded with a status of \d+/.test(message.text())) { const args = await Promise.all(message.args().map(arg => arg.jsonValue().catch(() => '[unavailable]'))); errors.push(JSON.stringify({ message: message.text(), args, location: message.location() })); } }); await page.goto(base);
       if (profile !== 'gm') {
         check(`${profile} authenticates`, (await call(page, 'login', { profile, password: `${profile}-test-pass` })).status === 200);
       }
@@ -193,7 +194,7 @@ async function expand(page, id) {
     await hannah.reload();
     await hannah.getByRole('region',{name:'Character Sanctuary',exact:true}).waitFor();
     check('approved personal atmosphere persists after reconnect',await hannah.getByLabel('Sanctuary atmosphere',{exact:true}).inputValue()==='campfire');
-    check('no browser runtime errors', errors.length === 0);
+    check('no browser runtime errors', errors.length === 0, errors.slice(0, 3).join('\n'));
     console.log(`\n${results.length} browser checks passed (isolated memory storage; no live Supabase verification).`);
   } catch (error) {
     const fs = require('node:fs'); fs.mkdirSync('.test-output', { recursive: true });

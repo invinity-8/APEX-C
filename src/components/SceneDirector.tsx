@@ -42,7 +42,12 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
   const [travel, setTravel] = useState<{ sceneId: string; data: TravelSnapshot } | null>(null);
   const generation = useRef(0);
   const playerGeneration=useRef(0), previewIdRef=useRef<string|null>(null); previewIdRef.current=preview?.id??null;
-  function cache(rows:SceneSummary[]) { setScenes(old=>[...old.filter(s=>!rows.some(r=>r.id===s.id)),...rows]); }
+  function cache(rows:SceneSummary[]) {
+    setScenes(old => {
+      const uniqueRows = new Map(rows.map(row => [row.id, row]));
+      return [...old.filter(scene => !uniqueRows.has(scene.id)), ...uniqueRows.values()];
+    });
+  }
   useEffect(()=>{
     let live=true; setLibraryLoading(true);
     api.sceneList(0,{category,archived,sort,search:appliedSearch||undefined}).then(page=>{if(live){cache(page.scenes);setLibraryIds(page.scenes.map(s=>s.id));setOffset(page.nextOffset);}}).catch(e=>{if(live)setError(String(e));}).finally(()=>{if(live)setLibraryLoading(false);});
@@ -82,7 +87,7 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
     setBusy(true); setError('');
     try {
       const { scene } = await api.sceneCreate(name, category, SCENE_TEMPLATES.some(t => t.id === template && t.category === category) ? template : undefined);
-      setScenes(old => [scene, ...old]); setName(''); setPreview(scene);
+      cache([scene]); setName(''); setPreview(scene);
       // Reset pagination after insertion to keep the server's page boundaries authoritative.
       const page = await api.sceneList(0,{category,archived,sort,search:appliedSearch||undefined}); cache(page.scenes);setLibraryIds(page.scenes.map(s=>s.id));setOffset(page.nextOffset);
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
@@ -175,7 +180,7 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
         <form key={preview.id + preview.name} onSubmit={e => { e.preventDefault(); void action('rename', { name: new FormData(e.currentTarget).get('name') }); }}><label>Rename scene <input name="name" defaultValue={preview.name} maxLength={120} required /></label><button disabled={busy}>Rename</button></form>
         <button disabled={busy} onClick={() => void action('duplicate')}>Duplicate as draft</button>
         <button disabled={busy} onClick={() => void action(preview.archived ? 'restore' : 'archive')}>{preview.archived ? 'Restore scene' : 'Archive scene'}</button>
-        <SceneMapEditor key={preview.id} scene={preview} onSaved={saved} />
+        <SceneMapEditor key={`map-${preview.id}`} scene={preview} onSaved={saved} />
         {!preview.is_draft && ['battle', 'region'].includes(preview.category) && <fieldset disabled={busy || !!uncertainMotion}><legend>Tokens & movement interval</legend>
           <label>Character token <select value={placementToken} onChange={e => setPlacementToken(e.target.value)}><option value="">Select character</option>{players.flatMap(p => p.tokenIds.map(id => <option key={p.userId + id} value={id}>{p.name} · {id}</option>))}</select></label>
           <label>Token X <input type="number" value={placementX} min="0" onChange={e => setPlacementX(Number(e.target.value))} /></label>
@@ -185,7 +190,7 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
           <button disabled={!motion} onClick={() => void runMotion({ action: 'advance', interval: preview.category === 'battle' ? 'round' : 'hour', expected: preview.category === 'battle' ? motion?.round : motion?.hour, requestId: crypto.randomUUID() })}>{preview.category === 'battle' ? 'Advance tactical round' : 'Advance exploration hour'}</button>
         </fieldset>}
         {uncertainMotion && <button disabled={busy} onClick={() => void runMotion(uncertainMotion)}>Verify or retry previous token action</button>}
-        {preview.category === 'world' && !preview.is_draft && travel?.sceneId === preview.id && parseMap(preview.metadata) && <WorldTravel key={preview.id} gm sceneId={preview.id} sceneRevision={preview.published_revision ?? 0} assignmentRevision={0} map={parseMap(preview.metadata)!} travel={travel.data} onChanged={() => { api.sceneTravelState(preview.id).then(data => setTravel({ sceneId: preview.id, data })).catch(e => setError(String(e))); }} />}
+        {preview.category === 'world' && !preview.is_draft && travel?.sceneId === preview.id && parseMap(preview.metadata) && <WorldTravel key={`travel-${preview.id}`} gm sceneId={preview.id} sceneRevision={preview.published_revision ?? 0} assignmentRevision={0} map={parseMap(preview.metadata)!} travel={travel.data} onChanged={() => { api.sceneTravelState(preview.id).then(data => setTravel({ sceneId: preview.id, data })).catch(e => setError(String(e))); }} />}
       </>}
       <button onClick={() => { generation.current++; setPreview(null); }}>Close preview</button>
     </aside>}
