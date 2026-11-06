@@ -20,6 +20,15 @@ describe('personal campaign journals', () => {
     expect((await journalRequest(user, 'POST', {}, { action: 'save', id, version: 0, owner_id: 'victim', entry: draft }, store)).status).toBe(200);
     expect(store.save).toHaveBeenCalledWith(user, id, 0, draft);
   });
+  it('reads one journal reference only through the visibility-filtered store lookup', async () => {
+    const store = storage();
+    vi.mocked(store.get).mockResolvedValue(entry);
+    expect(await journalRequest(user, 'GET', { id }, null, store)).toEqual({ status: 200, body: { entry } });
+    expect(store.get).toHaveBeenCalledWith(user, id);
+    vi.mocked(store.get).mockResolvedValue(null);
+    expect((await journalRequest(user, 'GET', { id }, null, store)).status).toBe(404);
+    expect((await journalRequest(user, 'GET', { id: 'not-an-id' }, null, store)).status).toBe(400);
+  });
   it('rejects stale saves and deletes without acknowledging success', async () => {
     const store = storage(); vi.mocked(store.save).mockResolvedValue(null); vi.mocked(store.remove).mockResolvedValue(false);
     expect((await journalRequest(user, 'POST', {}, { action: 'save', id, version: 4, entry: draft }, store)).status).toBe(409);
