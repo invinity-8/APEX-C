@@ -48,6 +48,8 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   if (!scene.scene) return null;
   const { category } = scene.scene;
   const ledger = scene.motion?.budgets[me?.id ?? ''];
+  const liveEncounter = game.view.sceneEncounter?.status === 'active' ? game.view.sceneEncounter : null;
+  const liveTurn = liveEncounter && liveEncounter.turnIndex >= 0 ? liveEncounter.participants[liveEncounter.turnIndex] : null;
   const speed = (me?.details?.speedFt ?? 30) / (me?.details?.sneaking ? 2 : 1);
   const remaining = category === 'battle' ? speed - (ledger?.tacticalSpent ?? 0) : regionMilesPerHour(speed) - (ledger?.regionSpent ?? 0);
   return <div className="player-scene">
@@ -55,6 +57,15 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     {moveMode && <p>Choose a destination on the map. The server checks distance, terrain and walls.</p>}
     {message && <p role="status">{message}</p>}
     {uncertain && <button className="btn btn-ghost" disabled={pending} onClick={() => void send(uncertain)}>Verify or retry previous movement</button>}
+    {!!game.view.sceneAnnouncements.length && <section className="mx-auto my-2 w-full max-w-4xl space-y-2" aria-label="Scene announcements">
+      {game.view.sceneAnnouncements.map(item => <article key={item.id} className="rounded-lg border border-gold-700/60 bg-ink-950/90 p-3"><p className="eyebrow">Scene event</p><h2 className="font-display text-lg text-gold-200">{item.title}</h2><p className="whitespace-pre-wrap text-sm text-marble-200">{item.text}</p></article>)}
+    </section>}
+    {liveEncounter && <section className="mx-auto my-2 w-full max-w-4xl rounded-lg border border-blood-700/50 bg-ink-950/90 p-3" aria-label="Live encounter tracker">
+      <div className="flex flex-wrap items-center gap-2"><p className="eyebrow flex-1">Encounter · Round {liveEncounter.round}</p>{liveTurn && <span className="chip">Current turn: {liveTurn.name}</span>}</div>
+      <h2 className="font-display text-lg text-marble-100">{liveEncounter.title}</h2>
+      <ol className="mt-2 flex flex-wrap gap-1.5 text-xs">{liveEncounter.participants.map((participant, index) => <li key={participant.id} className={`chip ${liveEncounter.turnIndex === index ? 'border-gold-500 text-gold-200' : ''}`}>{participant.name} · {participant.initiative}</li>)}</ol>
+      {!liveTurn && <p className="mt-1 text-xs text-marble-500">The current turn is hidden by the Game Master.</p>}
+    </section>}
     <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} onDestination={moveMode ? move : undefined} />
     {category === 'world' && scene.travel && <WorldTravel sceneId={scene.scene.id} sceneRevision={scene.scene.revision} assignmentRevision={scene.assignmentRevision} map={scene.scene.map} travel={scene.travel} onChanged={() => game.online?.refresh()} />}
     <p>The Game Master controls scene transitions and the next movement interval.</p>

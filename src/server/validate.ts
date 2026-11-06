@@ -53,6 +53,12 @@ function parseDraftOp(o: Obj): DraftOp | null {
   return { kind: 'add', entry };
 }
 
+const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+function sceneParticipant(v: unknown) {
+  if (!isObj(v) || !isId(v.id) || !isText(v.name, 80) || !v.name.trim() || !isInt(v.initiative, 1000) || v.initiative < -100 || typeof v.visible !== 'boolean' || (v.tokenId !== undefined && !isId(v.tokenId))) return null;
+  return { id: v.id, name: v.name.trim().slice(0, 80), initiative: v.initiative, visible: v.visible, ...(typeof v.tokenId === 'string' ? { tokenId: v.tokenId } : {}) };
+}
+
 export type ParseResult = { ok: true; command: Command } | { ok: false; error: string };
 
 export function parseCommand(raw: unknown): ParseResult {
@@ -86,6 +92,38 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.sceneId !== undefined && (typeof c.sceneId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.sceneId))) return bad('lootRollStart');
       return { ok: true, command: { type: 'lootRollStart', rollId: c.rollId, stagedIds: [...(c.stagedIds as string[])], tokenIds: [...(c.tokenIds as string[])], minutes: c.minutes, ...(typeof c.sceneId === 'string' ? { sceneId: c.sceneId } : {}) } };
     }
+    case 'sceneAnnounce':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.announcementId) || !isText(c.title, 120) || !c.title.trim() || !isText(c.text, 1000) || !c.text.trim()) return bad('sceneAnnounce');
+      return { ok: true, command: { type: 'sceneAnnounce', sceneId: c.sceneId, publishedRevision: c.publishedRevision, announcementId: c.announcementId, title: c.title.trim(), text: c.text.trim() } };
+    case 'sceneAnnouncementDismiss':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.announcementId)) return bad('sceneAnnouncementDismiss');
+      return { ok: true, command: { type: 'sceneAnnouncementDismiss', sceneId: c.sceneId, publishedRevision: c.publishedRevision, announcementId: c.announcementId } };
+    case 'sceneEncounterStart': {
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isText(c.title, 120) || !c.title.trim() || !Array.isArray(c.participants) || !c.participants.length || c.participants.length > 50) return bad('sceneEncounterStart');
+      const participants = c.participants.map(sceneParticipant);
+      if (participants.some(p => !p) || new Set(participants.map(p => p!.id)).size !== participants.length) return bad('sceneEncounterStart participants');
+      return { ok: true, command: { type: 'sceneEncounterStart', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, title: c.title.trim(), participants: participants as NonNullable<typeof participants[number]>[] } };
+    }
+    case 'sceneEncounterAdd': {
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1) return bad('sceneEncounterAdd');
+      const participant = sceneParticipant(c.participant); if (!participant) return bad('sceneEncounterAdd participant');
+      return { ok: true, command: { type: 'sceneEncounterAdd', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participant } };
+    }
+    case 'sceneEncounterRemove':
+    case 'sceneEncounterAdvance':
+    case 'sceneEncounterEnd':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1) return bad(c.type);
+      if (c.type === 'sceneEncounterRemove') {
+        if (!isId(c.participantId)) return bad('sceneEncounterRemove');
+        return { ok: true, command: { type: c.type, sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participantId: c.participantId } };
+      }
+      return { ok: true, command: { type: c.type, sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion } };
+    case 'sceneEncounterVisibility':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1 || !isId(c.participantId) || typeof c.visible !== 'boolean') return bad('sceneEncounterVisibility');
+      return { ok: true, command: { type: 'sceneEncounterVisibility', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participantId: c.participantId, visible: c.visible } };
+    case 'sceneEncounterInitiative':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1 || !isId(c.participantId) || !isInt(c.initiative, 1000) || c.initiative < -100) return bad('sceneEncounterInitiative');
+      return { ok: true, command: { type: 'sceneEncounterInitiative', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participantId: c.participantId, initiative: c.initiative } };
     case 'merchantSetup': {
       if ((c.active !== undefined && typeof c.active !== 'boolean') || (c.name !== undefined && !isText(c.name, MERCHANT_LIMITS.name)) || (c.gold !== undefined && (!isInt(c.gold, MERCHANT_LIMITS.gold) || c.gold < 0)) || (c.buyRate !== undefined && (!isInt(c.buyRate, 100) || c.buyRate < 0))) return bad('merchantSetup');
       return { ok: true, command: { type: 'merchantSetup', ...(c.active !== undefined ? { active: c.active as boolean } : {}), ...(c.name !== undefined ? { name: c.name as string } : {}), ...(c.gold !== undefined ? { gold: c.gold as number } : {}), ...(c.buyRate !== undefined ? { buyRate: c.buyRate as number } : {}) } };

@@ -7,6 +7,7 @@ import type { DispatchResult } from '../state/gameApi';
 import { api, ApiError } from '../online/api';
 import { SceneSurface } from './SceneSurface';
 import { GmLootRolls } from './LootRolls';
+import { SceneLiveControls } from './SceneLiveControls';
 
 interface PlayerAssignment {
   userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean;
@@ -267,6 +268,13 @@ export function CampaignMapDirector({ game, enabled, openScenes, run, children }
           sceneId={focus.scene.id}
         />
       </section>}
+      {focus?.scene && focusedDefinition?.published_revision && <SceneLiveControls
+        key={`scene-live-${focus.scene.id}`}
+        game={game}
+        scene={focusedDefinition}
+        characters={markers.map(token => ({ tokenId: token.tokenId, name: token.name }))}
+        run={run}
+      />}
       {canPlace && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
         <label className="text-marble-300">Party character
           <select className="ml-2 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm" value={placementToken} onChange={event => setPlacementToken(event.target.value)}>

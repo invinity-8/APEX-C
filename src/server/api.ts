@@ -20,6 +20,7 @@
  */
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
 import { CHARACTER_COMMANDS, executeCommand, validateMove, type Command } from '../game/commands.js';
+import { SCENE_OPERATION_COMMANDS, type SceneOperationCommand } from '../game/sceneOperations.js';
 import { SEEDED_COMMANDS } from '../game/items/loot.js';
 import { PARTY_LOOT_SEEDED, PARTY_LOOT_TIMED } from '../game/items/partyLoot.js';
 import { medianLevel } from '../game/items/lootDraft.js';
@@ -668,6 +669,27 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
           const eligibleTokens = new Set(profiles.filter(profile => profile.active && profile.role === 'player' && assignedUsers.has(profile.userId))
             .flatMap(profile => profile.tokenIds).filter(tokenId => stored.state.tokens[tokenId]?.kind === 'player'));
           if (cmd.tokenIds.some(tokenId => !eligibleTokens.has(tokenId))) throw new HttpError(409, 'Every loot recipient must be assigned to the selected scene.', 'scene_changed');
+        }
+        if (user.role === 'gm' && SCENE_OPERATION_COMMANDS.has(cmd.type as SceneOperationCommand['type'])) {
+          if (!repo.sceneRuntime) throw new HttpError(503, 'Scene assignments are unavailable.', 'scene_unavailable');
+          const op = cmd as SceneOperationCommand;
+          const scene = await repo.sceneRuntime.scene(user.campaignId, op.sceneId);
+          if (!scene || scene.is_legacy_arena || scene.is_draft || scene.archived || scene.revision !== op.publishedRevision) {
+            throw new HttpError(409, 'The published scene changed. Refresh it before using live controls.', 'scene_changed');
+          }
+          const requestedTokenIds = op.type === 'sceneEncounterStart'
+            ? op.participants.flatMap(p => p.tokenId ? [p.tokenId] : [])
+            : op.type === 'sceneEncounterAdd' && op.participant.tokenId ? [op.participant.tokenId] : [];
+          if (requestedTokenIds.length) {
+            const [assignments, profiles] = await Promise.all([
+              repo.sceneRuntime.assignments(user.campaignId),
+              repo.profiles(user.campaignId),
+            ]);
+            const assignedUsers = new Set(assignments.filter(a => a.scene_id === scene.id).map(a => a.user_id));
+            const eligibleTokens = new Set(profiles.filter(p => p.active && p.role === 'player' && assignedUsers.has(p.userId))
+              .flatMap(p => p.tokenIds).filter(id => stored.state.tokens[id]?.kind === 'player'));
+            if (requestedTokenIds.some(id => !eligibleTokens.has(id))) throw new HttpError(409, 'Encounter characters must belong to active players assigned to this scene.', 'scene_changed');
+          }
         }
         if (user.role !== 'gm' && (cmd.type === 'lootRollChoose' || cmd.type === 'lootRollClaimExpired')) {
           const roll = stored.state.lootRolls?.find(candidate => candidate.id === cmd.rollId);

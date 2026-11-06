@@ -377,6 +377,14 @@ export interface WorldMeta {
   createdAt: string;
 }
 
+/** Live narrative message scoped to one published scene. */
+export interface SceneAnnouncement { id: string; sceneId: string; title: string; text: string; createdAt: string }
+export interface SceneEncounterParticipant { id: string; name: string; initiative: number; visible: boolean; tokenId?: string }
+export interface SceneEncounter {
+  id: string; sceneId: string; title: string; round: number; turnIndex: number; version: number;
+  status: 'active' | 'ended'; participants: SceneEncounterParticipant[];
+}
+
 export interface GameState {
   version: number;
   world?: WorldMeta;
@@ -401,6 +409,10 @@ export interface GameState {
   arsenal?: { staged: Item[]; draft?: LootDraft };
   /** APEX 0.7: party loot rolls (Need / Distribute / Pass) – open ones and the recent history. */
   lootRolls?: LootRoll[];
+  /** Scene-bound campaign announcements; bounded and filtered to the viewer's assigned scene. */
+  sceneAnnouncements?: SceneAnnouncement[];
+  /** One current/recent initiative tracker per scene. */
+  sceneEncounters?: Record<string, SceneEncounter>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */
   merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */

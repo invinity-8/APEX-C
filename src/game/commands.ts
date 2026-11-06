@@ -14,6 +14,7 @@ import { executePartyLoot, PARTY_LOOT_COMMANDS, type PartyLootCommand } from './
 import { estimateWeightKg } from './items/weightGuess.js';
 import { executeMerchant, MERCHANT_COMMANDS, type MerchantCommand } from './items/merchant.js';
 import type { BeastForm } from './beasts.js';
+import { executeSceneOperation, SCENE_OPERATION_COMMANDS, type SceneOperationCommand } from './sceneOperations.js';
 import { cosmetic, type CosmeticKind } from './cosmetics.js';
 
 /** APEX 0.7: sneaking doubles the movement-point cost of every step (= half speed). */
@@ -45,6 +46,7 @@ export type Command =
   | LootCommand
   | PartyLootCommand
   | MerchantCommand
+  | SceneOperationCommand
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'setSneak'; tokenId: string; on: boolean }
@@ -230,6 +232,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   if (LOOT_COMMANDS.has(cmd.type)) return executeLoot(prev, actor, cmd as LootCommand);
   if (PARTY_LOOT_COMMANDS.has(cmd.type)) return executePartyLoot(prev, actor, cmd as PartyLootCommand);
   if (MERCHANT_COMMANDS.has(cmd.type)) return executeMerchant(prev, actor, cmd as MerchantCommand);
+  if (SCENE_OPERATION_COMMANDS.has(cmd.type as SceneOperationCommand['type'])) return executeSceneOperation(prev, cmd as SceneOperationCommand);
   if (cmd.type === 'invRequestItem' || cmd.type === 'gmReviewItemRequest') return executeNarrativeItemRequest(prev, cmd);
   if (cmd.type === 'invAddItem' && actor.role !== 'gm') return fail(prev, 'New inventory items need GM approval. Submit an item request instead.');
   if (cmd.type.startsWith('inv')) return executeInventory(prev, actor, cmd as InventoryCommand);

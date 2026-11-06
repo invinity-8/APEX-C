@@ -26,6 +26,7 @@ async function battle() {
   expect(published.status).toBe(200); return (published.body as {scene:SceneDefinition}).scene;
 }
 async function assign(id:string|null,revision:number) { const r=await request('gm','scene-runtime',{sceneId:id,targets:[{userId:user('hannah').userId,revision}],requestId:crypto.randomUUID()}); expect(r.status).toBe(200); }
+async function assignPlayer(profile:string,id:string|null,revision:number) { const r=await request('gm','scene-runtime',{sceneId:id,targets:[{userId:user(profile).userId,revision}],requestId:crypto.randomUUID()}); expect(r.status).toBe(200); }
 
 describe('campaign engine API integration',()=>{
   it('keeps GM drafts independent from the published movement revision',async()=>{
@@ -54,6 +55,42 @@ describe('campaign engine API integration',()=>{
     const vote=await request('hannah','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'lootRollChoose',rollId:roll!.id,tokenId:'sinna',choice:'need'}});
     expect(vote.status).toBe(409);
     expect(repo.states.get(cid)!.state.lootRolls?.find(item=>item.id===roll!.id)?.choices).toEqual({});
+  });
+  it('scopes live scene announcements and encounter information to assigned players',async()=>{
+    const scene=await battle(), other=await battle(); await assign(scene.id,0); await assignPlayer('jean',other.id,0);
+    const revision=scene.published_revision!;
+    const announce=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneAnnounce',sceneId:scene.id,publishedRevision:revision,announcementId:'notice-live',title:'The gate opens',text:'A herald steps into the torchlight.'}});
+    expect(announce.status).toBe(200);
+    let hannah=(await request('hannah','state')).body as PlayerPayload;
+    let jean=(await request('jean','state')).body as PlayerPayload;
+    expect(hannah.view?.sceneAnnouncements.map(a=>a.id)).toContain('notice-live');
+    expect(jean.view?.sceneAnnouncements).toEqual([]);
+
+    const participants=[
+      {id:'pc-sinna',tokenId:'sinna',name:'Sinna',initiative:15,visible:true},
+      {id:'npc-hidden',name:'Hidden guard',initiative:19,visible:false},
+      {id:'npc-wolf',name:'Wolf',initiative:5,visible:true},
+    ];
+    const started=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneEncounterStart',sceneId:scene.id,publishedRevision:revision,encounterId:'encounter-live',title:'Gate skirmish',participants}});
+    expect(started.status).toBe(200);
+    hannah=(await request('hannah','state')).body as PlayerPayload;
+    jean=(await request('jean','state')).body as PlayerPayload;
+    expect(hannah.view?.sceneEncounter?.participants.map(p=>p.id)).toEqual(['pc-sinna','npc-wolf']);
+    expect(hannah.view?.sceneEncounter?.turnIndex).toBe(-1);
+    expect(jean.view?.sceneEncounter).toBeNull();
+
+    const advance=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneEncounterAdvance',sceneId:scene.id,publishedRevision:revision,encounterId:'encounter-live',expectedVersion:1}});
+    expect(advance.status).toBe(200);
+    hannah=(await request('hannah','state')).body as PlayerPayload;
+    expect(hannah.view?.sceneEncounter?.participants[hannah.view.sceneEncounter.turnIndex]?.id).toBe('pc-sinna');
+
+    const unauthorized=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneEncounterAdd',sceneId:scene.id,publishedRevision:revision,encounterId:'encounter-live',expectedVersion:2,participant:{id:`pc-${user('jean').tokenIds[0]}`,tokenId:user('jean').tokenIds[0],name:'Jean',initiative:10,visible:true}}});
+    expect(unauthorized.status).toBe(409);
+    const playerAction=await request('hannah','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneAnnounce',sceneId:scene.id,publishedRevision:revision,announcementId:'forbidden-note',title:'No',text:'No'}});
+    expect(playerAction.status).toBe(403);
+    const stale=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneAnnounce',sceneId:scene.id,publishedRevision:revision+5,announcementId:'stale-note',title:'Stale',text:'Should not appear'}});
+    expect(stale.status).toBe(409);
+    expect(repo.states.get(cid)!.state.sceneAnnouncements?.map(a=>a.id)).toEqual(['notice-live']);
   });
   it('rejects an Arena move if a transition wins the optimistic write race',async()=>{
     const original=structuredClone(repo.states.get(cid)!.state), sinna=original.tokens.sinna;

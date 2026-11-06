@@ -27,6 +27,8 @@ import type {
   Announcement,
   BodyType,
   NarrativeItemRequest,
+  SceneAnnouncement,
+  SceneEncounter,
 } from './types.js';
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
@@ -234,6 +236,10 @@ export interface ViewModel {
   lootRolls: LootRoll[];
   /** APEX 0.7: the GM Merchant – players only receive it while it is open (items redacted). */
   merchant: Merchant | null;
+  /** Scene-local announcements only. */
+  sceneAnnouncements: SceneAnnouncement[];
+  /** Scene-local encounter; hidden participants are removed from player views. */
+  sceneEncounter: SceneEncounter | null;
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -337,6 +343,8 @@ export function buildGmView(state: GameState): ViewModel {
     customBeasts: state.customBeasts ?? [],
     lootRolls: lootRollsView(state, 'gm'),
     merchant: state.merchant ? structuredClone(state.merchant) : null,
+    sceneAnnouncements: structuredClone(state.sceneAnnouncements ?? []),
+    sceneEncounter: null,
   };
 }
 
@@ -439,6 +447,16 @@ export function buildPlayerView(state: GameState, viewerId: string, sceneId?: st
       lastSeen: sightings[team.id] ? { pos: { ...sightings[team.id].pos }, day: sightings[team.id].day } : undefined,
     }));
 
+  const encounter = sceneId ? state.sceneEncounters?.[sceneId] : undefined;
+  const visibleEncounter = encounter ? {
+    ...encounter,
+    participants: encounter.participants.filter(p => p.visible || (!!p.tokenId && groupIds.has(p.tokenId))),
+    turnIndex: -1,
+  } : null;
+  if (visibleEncounter && encounter) {
+    const active = encounter.participants[encounter.turnIndex];
+    visibleEncounter.turnIndex = visibleEncounter.participants.findIndex(p => p.id === active?.id);
+  }
   return {
     role: 'player',
     worldId: state.world?.id ?? null,
@@ -461,6 +479,8 @@ export function buildPlayerView(state: GameState, viewerId: string, sceneId?: st
     customBeasts: state.customBeasts ?? [],
     lootRolls: lootRollsView(state, [viewerId], sceneId),
     merchant: merchantView(state, redactItem),
+    sceneAnnouncements: sceneId ? (state.sceneAnnouncements ?? []).filter(a => a.sceneId === sceneId).slice(-20).map(a => ({ ...a })) : [],
+    sceneEncounter: visibleEncounter,
   };
 }
 
