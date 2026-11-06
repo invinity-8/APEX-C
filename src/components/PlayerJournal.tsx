@@ -153,7 +153,7 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
         <button className="btn btn-primary" disabled={!dirty || !draft.title.trim()}>{busy ? 'Saving…' : 'Save entry'}</button>
       </fieldset>
     </form>
-    {backlinks.length > 0 && <aside aria-label="Journal backlinks"><h4>Mentioned in</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul></aside>}
+    {backlinks.length > 0 && <aside aria-label="Journal backlinks"><h4>Backlinks in loaded entries</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul></aside>}
     <article className="journal-reading" aria-label="Reading preview"><JournalMarkdown body={draft.body} references={references} onReference={id => void openReference(id)}/>{imageUrl && <img src={imageUrl} alt="Journal attachment" loading="lazy" />}</article>
   </section>;
 }
