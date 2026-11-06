@@ -110,7 +110,10 @@ describe('API: abilities, HP and beast pictures', () => {
     expect(Date.parse(first.spellEffects[0].expiresAt) - Date.parse(first.spellEffects[0].castAt)).toBe(8 * 60 * 60 * 1000);
 
     expect((await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 3 }, hannah)).status).toBe(409);
-    const refreshed = await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 4 }, hannah);
+    const forgedExtension = await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: { ...first, spellEffects: [{ ...first.spellEffects[0], expiresAt: new Date(Date.now() + 86_400_000).toISOString() }] }, expectedVersion: 4 }, hannah);
+    expect(forgedExtension.status).toBe(200);
+    expect((forgedExtension.body as SheetPayload).sheet.spellEffects[0].expiresAt).toBe(first.spellEffects[0].expiresAt);
+    const refreshed = await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 5 }, hannah);
     expect(refreshed.status).toBe(200);
     expect((refreshed.body as SheetPayload).sheet.resources.find((resource) => resource.id === 's1')?.current).toBe(1);
     expect((refreshed.body as SheetPayload).sheet.spellEffects).toHaveLength(1);

@@ -80,6 +80,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const [conflict, setConflict] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [castingSpellId, setCastingSpellId] = useState<string | null>(null);
+  const [, forceSpellExpiryRefresh] = useState(0);
   const [importing, setImporting] = useState(false);
   const details = token.details;
 
@@ -176,6 +177,13 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const canEditSheet = tab !== 'appearance' && tab !== 'history';
   const wearsArmor = details ? isWearingArmor(details) : false;
   const mageArmorEffect = wearsArmor ? null : activeMageArmor(sheet, details?.armorWornAt);
+  useEffect(() => {
+    if (!mageArmorEffect) return;
+    const delay = Date.parse(mageArmorEffect.expiresAt) - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => forceSpellExpiryRefresh((version) => version + 1), delay + 1);
+    return () => window.clearTimeout(timer);
+  }, [mageArmorEffect?.expiresAt]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Character sheet of ${token.name}`}>
