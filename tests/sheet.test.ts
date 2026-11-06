@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
 import { executeCommand } from '../src/game/commands';
 import { containersOf } from '../src/game/inventory';
-import { emptySheet, mergeSheets, parseSheet } from '../src/game/sheet';
+import { emptySheet, mergeSheets, parseSheet, spellMatchesQuery } from '../src/game/sheet';
 import { buildPlayerView } from '../src/game/visibility';
 import { mapExtraction, rowsToSheet } from '../src/sheetImport/map';
 
@@ -24,6 +24,14 @@ describe('Character sheet model', () => {
     const spell = { id: 'spell-new', name: 'Mage Armor', level: 1, prepared: true, source: 'Wizard', notes: '', school: 'Abjuration', castingTime: '1 action', range: 'Touch', components: 'V, S, M', duration: '8 hours', concentration: false, ritual: false, description: 'Target AC becomes 13 + Dexterity modifier while unarmored.' };
     const parsed = parseSheet({ ...emptySheet(), spells: [spell] });
     expect(parsed.ok && parsed.sheet.spells[0]).toEqual(spell);
+    if (parsed.ok) {
+      const restored = parsed.sheet.spells[0];
+      for (const detail of ['abjuration', 'wizard', '1 action', 'touch', 'v, s, m', '8 hours', 'unarmored']) {
+        expect(spellMatchesQuery(restored, detail)).toBe(true);
+      }
+      expect(spellMatchesQuery(restored, '   ')).toBe(true);
+      expect(spellMatchesQuery(restored, 'not present')).toBe(false);
+    }
     const bounded = parseSheet({ ...emptySheet(), spells: [{ ...spell, description: 'x'.repeat(8001) }] });
     expect(bounded.ok && bounded.sheet.spells[0].description).toHaveLength(8000);
   });

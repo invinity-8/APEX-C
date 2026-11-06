@@ -67,6 +67,18 @@ export interface SheetSpell {
   description: string;
 }
 
+/** Spellbook search includes the structured reference fields players can inspect. */
+export function spellMatchesQuery(spell: SheetSpell, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const searchable = [
+    spell.name, spell.source, spell.school, spell.castingTime, spell.range,
+    spell.components, spell.duration, spell.description, spell.notes,
+    spell.concentration ? 'concentration' : '', spell.ritual ? 'ritual' : '',
+  ];
+  return searchable.some((value) => value.toLowerCase().includes(needle));
+}
+
 /** Server-authored effects currently supported by the spell casting rules. */
 export interface ActiveSpellEffect {
   id: string;

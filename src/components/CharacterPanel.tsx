@@ -9,7 +9,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Command } from '../game/commands';
-import { emptySheet, newEntryId, type CharacterSheet, type SheetEntry, type SheetResource, type SheetSkill, type SheetSpell } from '../game/sheet';
+import { emptySheet, newEntryId, spellMatchesQuery, type CharacterSheet, type SheetEntry, type SheetResource, type SheetSkill, type SheetSpell } from '../game/sheet';
 import { activeMageArmor, isWearingArmor } from '../game/spells';
 import type { TokenView } from '../game/visibility';
 import type { SheetPayload } from '../server/protocol';
@@ -656,7 +656,7 @@ function SpellsSection({ sheet, editing, set, onToggle, onCast, castingSpellId, 
   const levels = useMemo(() => [...new Set(spells.map((s) => s.level))].sort((a, b) => a - b), [spells]);
   const slots = sheet.resources.filter((r) => /^spell slots/i.test(r.name));
   const levelOneSlots = sheet.resources.filter((r) => /^spell slots \(level 1\)$/i.test(r.name));
-  const visible = (s: SheetSpell) => (filter === 'all' || s.level === 0 || s.prepared) && (!q || [s.name, s.school, s.source, s.description].some((value) => value.toLowerCase().includes(q.toLowerCase())));
+  const visible = (s: SheetSpell) => (filter === 'all' || s.level === 0 || s.prepared) && spellMatchesQuery(s, q);
   return (
     <section className="panel p-3 lg:col-span-2">
       <div className="mb-2 flex flex-wrap items-center gap-2">
