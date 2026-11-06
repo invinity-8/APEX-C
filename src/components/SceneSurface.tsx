@@ -19,6 +19,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   useEffect(() => { let live = true; setUrl(null); if (id) api.mapImage(id).then(r => { if (live) setUrl(r.url); }).catch(() => undefined); return () => { live = false; }; }, [id]);
   if (snapshot.kind !== 'scene' || !snapshot.scene) return <p>{snapshot.kind === 'arena' ? 'Legacy Arena' : 'Character Sanctuary'}</p>;
   const { map, name: title, category } = snapshot.scene;
+  const terrainColors = { tree: '#41664b', rock: '#877c6e', obstacle: '#78553d', water: '#3d7485' } as const;
   const point = category === 'world' && snapshot.travel ? map.nodes.find(n => n.id === snapshot.travel?.partyNode) : snapshot.motion?.tokens.find(t => t.tokenId === tokenId) ?? snapshot.spawn;
   function destination(e: PointerEvent<SVGSVGElement>) {
     if (!onDestination) return;
@@ -31,7 +32,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       {url && <image href={url} width={map.width} height={map.height} preserveAspectRatio="none" />}
       <SceneGrid map={map} id={`player-grid-${snapshot.scene.id}`} />
       {map.routes.map(r => { const a = map.nodes.find(n => n.id === r.from), b = map.nodes.find(n => n.id === r.to); return a && b ? <g key={r.id}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#beab80" strokeDasharray="8 6" /><text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fill="#f3e4bd">{r.hours}h</text></g> : null; })}
-      {map.nodes.map(n => <g key={n.id}>{n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} fill={n.kind === 'wall' ? '#877566' : '#52664d'} opacity=".5" /> : <circle cx={n.x} cy={n.y} r="8" fill="#d9bd76" />}<text x={n.x + 14} y={n.y} fill="#f3e4bd">{n.label}</text></g>)}
+      {map.nodes.map(n => <g key={n.id}>{n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={n.proceduralFeature === 'water' ? 12 : 3} fill={n.proceduralFeature ? terrainColors[n.proceduralFeature] : n.kind === 'wall' ? '#877566' : '#52664d'} opacity={n.proceduralFeature === 'water' ? '.72' : '.5'} /> : <circle cx={n.x} cy={n.y} r="8" fill="#d9bd76" />}<text x={n.x + 14} y={n.y} fill="#f3e4bd">{n.label}</text></g>)}
       {point && <g><circle cx={point.x} cy={point.y} r="14" fill={color} stroke="#fff" /><text x={point.x + 18} y={point.y} fill="#fff">{category === 'world' ? 'Party' : name}</text></g>}
     </svg></div>
   </section>;

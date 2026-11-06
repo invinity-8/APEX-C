@@ -1,4 +1,5 @@
-export interface MapNode { id: string; x: number; y: number; label: string; description: string; kind: 'location' | 'spawn' | 'label' | 'wall' | 'area'; visible: boolean; width: number; height: number; targetScene: string | null; terrainCost?: number; discoverable?: boolean }
+export type ProceduralFeature = 'tree' | 'rock' | 'obstacle' | 'water';
+export interface MapNode { id: string; x: number; y: number; label: string; description: string; kind: 'location' | 'spawn' | 'label' | 'wall' | 'area'; visible: boolean; width: number; height: number; targetScene: string | null; terrainCost?: number; discoverable?: boolean; proceduralFeature?: ProceduralFeature; generatedBy?: 'forest-v1' }
 export interface MapRoute { id: string; from: string; to: string; hours: number; distance: number; visible: boolean }
 export interface SceneMap {
   width: number; height: number; grid: 'square' | 'hex' | 'none'; cell: number;
@@ -25,7 +26,10 @@ export function parseMap(value: unknown): SceneMap | null {
     if (!n || !text(n.id, 64) || !/^[\w-]{1,64}$/.test(n.id) || ids.has(n.id) || !num(n.x, 0, v.width) || !num(n.y, 0, v.height) || !text(n.label, 120) || !text(n.description, 2000) || !['location', 'spawn', 'label', 'wall', 'area'].includes(n.kind) || typeof n.visible !== 'boolean' || !num(n.width, 1, v.width) || !num(n.height, 1, v.height) || (n.targetScene !== null && (typeof n.targetScene !== 'string' || !/^[0-9a-f-]{36}$/i.test(n.targetScene)))) return null;
     if (n.terrainCost !== undefined && !num(n.terrainCost, 1, 10)) return null;
     if (n.discoverable !== undefined && typeof n.discoverable !== 'boolean') return null;
-    ids.add(n.id); nodes.push({ id: n.id, x: n.x, y: n.y, label: n.label, description: n.description, kind: n.kind, visible: n.visible, width: n.width, height: n.height, targetScene: n.targetScene, terrainCost: n.terrainCost ?? 1, discoverable: n.discoverable ?? false });
+    if (n.proceduralFeature !== undefined && !['tree', 'rock', 'obstacle', 'water'].includes(n.proceduralFeature)) return null;
+    if (n.generatedBy !== undefined && n.generatedBy !== 'forest-v1') return null;
+    if (n.generatedBy && !n.proceduralFeature) return null;
+    ids.add(n.id); nodes.push({ id: n.id, x: n.x, y: n.y, label: n.label, description: n.description, kind: n.kind, visible: n.visible, width: n.width, height: n.height, targetScene: n.targetScene, terrainCost: n.terrainCost ?? 1, discoverable: n.discoverable ?? false, ...(n.proceduralFeature ? { proceduralFeature: n.proceduralFeature } : {}), ...(n.generatedBy ? { generatedBy: n.generatedBy } : {}) });
   }
   const routes: MapRoute[] = []; const routeIds = new Set<string>();
   for (const r of v.routes) {
