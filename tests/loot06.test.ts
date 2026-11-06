@@ -138,7 +138,7 @@ describe('identify, equip, reroll, salvage, combine', () => {
   });
 
   it('salvage refuses free-text, locked and other players’ items', () => {
-    let t = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'key', name: 'Old key' }, SINNA);
+    let t = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'key', name: 'Old key' }, GM);
     expect(executeCommand(t, SINNA, { type: 'itemSalvage', tokenId: 'sinna', itemId: 'key', rev: 0 }).ok).toBe(false);
     expect(executeCommand(t, ASTER, { type: 'itemSalvage', tokenId: 'sinna', itemId: 'sw', rev: 0 }).ok).toBe(false);
     t = run(t, { type: 'gmSetItemLock', tokenId: 'sinna', itemId: 'sw', locked: true });
@@ -261,3 +261,4 @@ describe('API: the full loot loop', () => {
     expect(gmState.itemAudit!.map((a) => a.action)).toEqual(['generate', 'generate', 'generate', 'discard', 'give', 'give', 'currency', 'currency', 'currency', 'identify', 'reroll', 'salvage', 'combine']);
   });
 });
+
