@@ -410,7 +410,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   const [splitQty, setSplitQty] = useState(1);
   const rev = item.rev ?? 0;
   const slot = props.eqSlot(item.id);
-  const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o));
+  const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o, containers));
   const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number; weightKg: number }>) => run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
   const save = async (e: FormEvent) => {
     e.preventDefault();

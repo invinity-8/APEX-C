@@ -35,7 +35,7 @@ export function containersOf(t: Pick<Token, 'containers'>): InventoryContainer[]
 }
 
 /** The container an item is shown in. */
-export function containerOfItem(item: Item, containers: InventoryContainer[]): string {
+export function containerOfItem(item: Item, containers: readonly InventoryContainer[]): string {
   if (item.container && containers.some((c) => c.id === item.container)) return item.container;
   const fallback = item.kind === 'weapon' || item.kind === 'armor' ? 'equipped' : 'backpack';
   if (containers.some((c) => c.id === fallback)) return fallback;
@@ -50,9 +50,21 @@ export function materializeInventory(t: Token): void {
 
 /** Stacks may be split/merged only when nothing makes copies distinguishable (no equipment or item-system data). */
 export function isStackable(i: Item): boolean {
-  const x = i as Item & { rarity?: string; mods?: unknown[]; identified?: boolean; bound?: boolean };
-  return !i.equip && !x.rarity && !(x.mods && x.mods.length);
+  return !i.equip && !i.rarity && i.itemLevel === undefined && !(i.mods?.length) && !i.uniqueId && !i.charge && !i.quest && !i.grant;
 }
-export function canMerge(a: Item, b: Item): boolean {
-  return isStackable(a) && isStackable(b) && a.name.trim().toLowerCase() === b.name.trim().toLowerCase() && (a.description ?? '') === (b.description ?? '') && a.kind === b.kind;
+export function canMerge(a: Item, b: Item, containers: readonly InventoryContainer[] = DEFAULT_CONTAINERS): boolean {
+  return isStackable(a) && isStackable(b)
+    && containerOfItem(a, containers) === containerOfItem(b, containers)
+    && a.name.trim().toLowerCase() === b.name.trim().toLowerCase()
+    && (a.description ?? '') === (b.description ?? '')
+    && (a.notes ?? '') === (b.notes ?? '')
+    && a.kind === b.kind
+    && a.baseId === b.baseId
+    && a.itemLevel === b.itemLevel
+    && a.weightKg === b.weightKg
+    && a.identified === b.identified
+    && a.bound === b.bound
+    && a.locked === b.locked
+    && JSON.stringify(a.source) === JSON.stringify(b.source)
+    && JSON.stringify(a.history) === JSON.stringify(b.history);
 }

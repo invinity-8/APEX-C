@@ -735,7 +735,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       const into = findItem(cmd.intoItemId, cmd.intoRev);
       if (typeof into === 'string') return fail(prev, into);
       if (item === into) return fail(prev, 'An item cannot be merged into itself.');
-      if (!canMerge(item, into)) return fail(prev, 'Only identical plain items can be merged.');
+      if (!canMerge(item, into, containers)) return fail(prev, 'Only identical plain items in the same container can be merged.');
       into.quantity = clamp(into.quantity + item.quantity, 0, L.quantity);
       into.rev = (into.rev ?? 0) + 1;
       t.inventory = t.inventory.filter((i) => i !== item);
