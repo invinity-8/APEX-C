@@ -63,7 +63,7 @@ describe('equipment location sync', () => {
 
   it('worn items cannot be moved away and equipment is not "worn" by moving it', () => {
     let s = fresh([make('srd-longsword', 'sw', 'normal', [])]);
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'cape', name: 'Red festival cape' });
+    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'cape', name: 'Red festival cape' }, GM);
     expect(refuse(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'sw', rev: 0, container: 'equipped' })).toMatch(/Use “Equip”/);
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sw', slot: 'main1' });
     expect(refuse(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'sw', rev: 0, container: 'backpack' })).toMatch(/unequip it first/);
@@ -229,3 +229,4 @@ describe('Niri’s Timetwister', () => {
     expect(deriveStats(emptySheet(), s.tokens.sinna).bonuses.initiative.value).toBe(2);
   });
 });
+
