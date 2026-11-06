@@ -436,8 +436,8 @@ export function CarryGauge({ load }: { load: CarryLoad }) {
       <div className="flex flex-col justify-between text-[11px] leading-tight">
         <span className="text-[10px] uppercase tracking-wider text-marble-500">Carry weight</span>
         <span className="font-display text-base font-black tabular-nums text-marble-50" data-testid="carry-load">
-          {load.loadKg.toFixed(1)}
-          <span className="text-marble-400"> / {load.capacityKg === null ? '?' : load.capacityKg.toFixed(1)} kg</span>
+          {load.loadKg.toFixed(3)}
+          <span className="text-marble-400"> / {load.capacityKg === null ? '?' : load.capacityKg.toFixed(3)} kg</span>
         </span>
         <span className="tabular-nums text-marble-400">
           {load.pct === null ? '–' : `${load.pct} %`}
@@ -445,8 +445,8 @@ export function CarryGauge({ load }: { load: CarryLoad }) {
         </span>
         {load.coinsKg > 0 && <span className="text-marble-500">incl. coins {load.coinsKg.toFixed(1)} kg</span>}
         <span style={{ color: tone.color }}>{tone.label}</span>
-        <span className="text-[10px] text-marble-600">Rough guide value</span>
       </div>
     </div>
   );
 }
+
