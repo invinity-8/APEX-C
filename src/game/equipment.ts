@@ -37,6 +37,8 @@ export interface ItemEquip {
   /** Weapons: magic/other attack bonus, damage dice, damage type, properties, proficiency. */
   attackBonus?: number;
   damage?: string;
+  /** Alternate damage dice for a versatile weapon gripped with both hands. */
+  versatileDamage?: string;
   damageType?: string;
   properties?: WeaponProperty[];
   proficient?: boolean;
@@ -46,6 +48,8 @@ export interface ItemEquip {
 
 export interface Equipment {
   slots: Partial<Record<EquipSlot, string>>;
+  /** Equipped versatile weapon item ids currently gripped with two hands. */
+  twoHandedGrips?: string[];
   activeSet: 1 | 2;
   /** Resting / Unarmored preset: everything except the kept slots counts as taken off. */
   resting: boolean;
@@ -159,6 +163,13 @@ export function reconcileEquipment(t: Token): void {
     const m = t.inventory.find((i) => i.id === eq.slots[main]);
     if (eq.slots[off] && isTwoHanded(m?.equip)) delete eq.slots[off];
   }
+  if (eq.twoHandedGrips) {
+    const valid = new Set((['main1', 'main2'] as const).flatMap((slot) => {
+      const item = t.inventory.find((i) => i.id === eq.slots[slot]);
+      return item?.equip?.kind === 'weapon' && item.equip.properties?.includes('versatile') && !item.equip.properties.includes('two-handed') && item.equip.versatileDamage ? [item.id] : [];
+    }));
+    eq.twoHandedGrips = eq.twoHandedGrips.filter((id) => valid.has(id));
+  }
 }
 
 // ---------------------------------------------------------------- SRD suggestions (confirmed by a person)
@@ -188,17 +199,17 @@ export const WEAPON_PRESETS: Record<string, ItemEquip> = {
   Handaxe: { kind: 'weapon', damage: '1d6', damageType: 'slashing', properties: ['light', 'thrown'] },
   Javelin: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['thrown'] },
   Mace: { kind: 'weapon', damage: '1d6', damageType: 'bludgeoning', properties: [] },
-  Quarterstaff: { kind: 'weapon', damage: '1d6', damageType: 'bludgeoning', properties: ['versatile'] },
+  Quarterstaff: { kind: 'weapon', damage: '1d6', versatileDamage: '1d8', damageType: 'bludgeoning', properties: ['versatile'] },
   Sickle: { kind: 'weapon', damage: '1d4', damageType: 'slashing', properties: ['light'] },
-  Spear: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['thrown', 'versatile'] },
+  Spear: { kind: 'weapon', damage: '1d6', versatileDamage: '1d8', damageType: 'piercing', properties: ['thrown', 'versatile'] },
   Shortbow: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['ranged', 'two-handed', 'ammunition'] },
   'Light crossbow': { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['ranged', 'two-handed', 'loading', 'ammunition'] },
   Scimitar: { kind: 'weapon', damage: '1d6', damageType: 'slashing', properties: ['finesse', 'light'] },
   Shortsword: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['finesse', 'light'] },
-  Longsword: { kind: 'weapon', damage: '1d8', damageType: 'slashing', properties: ['versatile'] },
+  Longsword: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', damageType: 'slashing', properties: ['versatile'] },
   Rapier: { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['finesse'] },
-  Warhammer: { kind: 'weapon', damage: '1d8', damageType: 'bludgeoning', properties: ['versatile'] },
-  Battleaxe: { kind: 'weapon', damage: '1d8', damageType: 'slashing', properties: ['versatile'] },
+  Warhammer: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', damageType: 'bludgeoning', properties: ['versatile'] },
+  Battleaxe: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', damageType: 'slashing', properties: ['versatile'] },
   Greatsword: { kind: 'weapon', damage: '2d6', damageType: 'slashing', properties: ['heavy', 'two-handed'] },
   Greataxe: { kind: 'weapon', damage: '1d12', damageType: 'slashing', properties: ['heavy', 'two-handed'] },
   Longbow: { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['ranged', 'heavy', 'two-handed', 'ammunition'] },
@@ -224,7 +235,7 @@ export interface CalcStep {
 
 export interface DerivedStats {
   ac: { value: number | null; steps: CalcStep[]; source: 'derived' | 'imported' | 'none'; imported: number | null; note?: string };
-  attacks: Array<{ slot: EquipSlot; name: string; toHit: number | null; damage: string; steps: CalcStep[]; properties: WeaponProperty[]; extra: string[] }>;
+  attacks: Array<{ slot: EquipSlot; itemId: string; name: string; toHit: number | null; damage: string; twoHandedGrip: boolean; steps: CalcStep[]; properties: WeaponProperty[]; extra: string[] }>;
   /** APEX 0.6: character-wide bonuses from modifiers on equipped, identified items of the active set. */
   bonuses: ItemBonuses;
   abilityMods: Partial<Record<Ability, number>>;
@@ -456,10 +467,12 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     }
     const isOff = w.slot === 'off1' || w.slot === 'off2';
     const dmgMod = m !== undefined && !(isOff && m > 0) ? m + (e.attackBonus ?? 0) : (e.attackBonus ?? 0);
-    const dmg = e.damage ? `${e.damage}${dmgMod ? (dmgMod > 0 ? `+${dmgMod}` : `${dmgMod}`) : ''}${e.damageType ? ` ${e.damageType}` : ''}` : '—';
+    const twoHandedGrip = !!((w.slot === 'main1' || w.slot === 'main2') && eq.twoHandedGrips?.includes(w.item.id) && props.includes('versatile') && !props.includes('two-handed') && e.versatileDamage);
+    const damageDice = twoHandedGrip ? e.versatileDamage : e.damage;
+    const dmg = damageDice ? `${damageDice}${dmgMod ? (dmgMod > 0 ? `+${dmgMod}` : `${dmgMod}`) : ''}${e.damageType ? ` ${e.damageType}` : ''}` : '—';
     const flat = wm.flat.map((f) => ` + ${f.value} ${f.damage}`).join('');
     const extra = [...wm.banes, ...(wm.flatCapped ? [`Flat damage capped at ${rules.flatDamageCap}`] : [])];
-    attacks.push({ slot: w.slot, name: w.item.name, toHit, damage: dmg + flat + (isOff ? ' (off hand)' : ''), steps, properties: props, extra });
+    attacks.push({ slot: w.slot, itemId: w.item.id, name: w.item.name, toHit, damage: dmg + flat + (isOff ? ' (off hand)' : ''), twoHandedGrip, steps, properties: props, extra });
   }
   return { ac, attacks, bonuses, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
 }

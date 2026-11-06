@@ -327,7 +327,8 @@ export function parseCommand(raw: unknown): ParseResult {
           slots[k] = v;
         }
         if (!e.restingKeep.every((x) => oneOf(x, EQUIP_SLOTS))) return bad('equipment.restingKeep');
-        out.equipment = { slots, activeSet: e.activeSet, resting: e.resting, restingKeep: e.restingKeep as EquipSlot[] };
+        if (e.twoHandedGrips !== undefined && (!Array.isArray(e.twoHandedGrips) || e.twoHandedGrips.length > 20 || !e.twoHandedGrips.every(isId))) return bad('equipment.twoHandedGrips');
+        out.equipment = { slots, ...(e.twoHandedGrips ? { twoHandedGrips: [...new Set(e.twoHandedGrips as string[])] } : {}), activeSet: e.activeSet, resting: e.resting, restingKeep: e.restingKeep as EquipSlot[] };
       }
       if (!out.identity && !out.equipment) return bad('nothing to restore');
       return { ok: true, command: out as Command };
@@ -338,6 +339,9 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'equipItem':
       if (!isId(c.tokenId) || !isId(c.itemId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/itemId/slot');
       return { ok: true, command: { type: 'equipItem', tokenId: c.tokenId, itemId: c.itemId, slot: c.slot } };
+    case 'setWeaponGrip':
+      if (!isId(c.tokenId) || !isId(c.itemId) || typeof c.twoHanded !== 'boolean') return bad('tokenId/itemId/twoHanded');
+      return { ok: true, command: { type: 'setWeaponGrip', tokenId: c.tokenId, itemId: c.itemId, twoHanded: c.twoHanded } };
     case 'unequipSlot':
       if (!isId(c.tokenId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/slot');
       return { ok: true, command: { type: 'unequipSlot', tokenId: c.tokenId, slot: c.slot } };
@@ -468,7 +472,7 @@ const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 export function parseItemEquip(v: unknown): ItemEquip | null {
   if (!isObj(v) || !oneOf(v.kind, ITEM_KINDS)) return null;
   const out: ItemEquip = { kind: v.kind };
-  const allowedKeys = new Set(['kind', 'armorType', 'armorBase', 'acBonus', 'attackBonus', 'damage', 'damageType', 'properties', 'proficient', 'gmLocked']);
+  const allowedKeys = new Set(['kind', 'armorType', 'armorBase', 'acBonus', 'attackBonus', 'damage', 'versatileDamage', 'damageType', 'properties', 'proficient', 'gmLocked']);
   if (Object.keys(v).some((k) => !allowedKeys.has(k))) return null;
   if (v.armorType !== undefined) {
     if (!oneOf(v.armorType, ['light', 'medium', 'heavy'] as const)) return null;
@@ -487,6 +491,10 @@ export function parseItemEquip(v: unknown): ItemEquip | null {
     if (typeof v.damage !== 'string' || !/^(\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?|\d{1,2})$/i.test(v.damage.trim())) return null;
     out.damage = v.damage.trim().toLowerCase();
   }
+  if (v.versatileDamage !== undefined) {
+    if (typeof v.versatileDamage !== 'string' || !/^\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?$/i.test(v.versatileDamage.trim())) return null;
+    out.versatileDamage = v.versatileDamage.trim().toLowerCase();
+  }
   if (v.damageType !== undefined) {
     if (!isText(v.damageType, 30)) return null;
     out.damageType = v.damageType.trim();
@@ -495,6 +503,7 @@ export function parseItemEquip(v: unknown): ItemEquip | null {
     if (!Array.isArray(v.properties) || v.properties.length > 10 || !v.properties.every((p) => oneOf(p, WEAPON_PROPERTIES))) return null;
     out.properties = [...new Set(v.properties as WeaponProperty[])];
   }
+  if (out.versatileDamage !== undefined && (!out.properties?.includes('versatile') || out.properties.includes('two-handed'))) return null;
   if (v.proficient !== undefined) {
     if (typeof v.proficient !== 'boolean') return null;
     out.proficient = v.proficient;

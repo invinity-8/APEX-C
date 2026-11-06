@@ -221,7 +221,7 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
 
       {eq.resting && <RestingKeep keep={eq.restingKeep} onChange={(keep) => void run({ type: 'setResting', tokenId: token.id, resting: true, keep })} />}
 
-      <DerivedPanel derived={derived} eq={eq} onConfig={isGm ? (c) => void run({ type: 'setEquipConfig', tokenId: token.id, ...c }) : undefined} />
+      <DerivedPanel derived={derived} eq={eq} items={items} run={run} tokenId={token.id} onConfig={isGm ? (c) => void run({ type: 'setEquipConfig', tokenId: token.id, ...c }) : undefined} />
 
       <section>
         <div className="label mb-1">Carried items – drag onto a slot, or use a slot’s menu</div>
@@ -317,7 +317,7 @@ function BonusSummary({ b }: { b: ItemBonuses }) {
   );
 }
 
-function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof deriveStats> | null; eq: ReturnType<typeof equipmentOf>; onConfig?: (c: { unarmoredAbility?: Ability | null; acOther?: number; acOtherLabel?: string }) => void }) {
+function DerivedPanel({ derived, eq, items, run, tokenId, onConfig }: { derived: ReturnType<typeof deriveStats> | null; eq: ReturnType<typeof equipmentOf>; items: Map<string, Item>; run: Run; tokenId: string; onConfig?: (c: { unarmoredAbility?: Ability | null; acOther?: number; acOtherLabel?: string }) => void }) {
   const [open, setOpen] = useState(false);
   if (!derived) return <p className="text-marble-500">Load or import a character sheet to calculate Armor Class and attacks.</p>;
   const { ac } = derived;
@@ -349,7 +349,14 @@ function DerivedPanel({ derived, eq, onConfig }: { derived: ReturnType<typeof de
           <tbody>
             {derived.attacks.map((a) => (
               <tr key={a.slot} title={a.steps.map((s) => `${s.label} ${fmt(s.value)}`).join(' · ')}>
-                <td className="text-marble-50">{a.name.replace(/[[\]]/g, '')}</td>
+                <td className="text-marble-50">
+                  {a.name.replace(/[[\]]/g, '')}
+                  {(a.slot === 'main1' || a.slot === 'main2') && a.properties.includes('versatile') && !a.properties.includes('two-handed') && items.get(a.itemId)?.equip?.versatileDamage && (
+                    <button type="button" className="ml-2 text-[10px] text-gold-200 underline" aria-pressed={a.twoHandedGrip} onClick={() => void run({ type: 'setWeaponGrip', tokenId, itemId: a.itemId, twoHanded: !a.twoHandedGrip })}>
+                      {a.twoHandedGrip ? 'Two-handed grip' : 'One-handed grip'}
+                    </button>
+                  )}
+                </td>
                 <td className="text-center tabular-nums text-gold-200">{a.toHit === null ? '—' : fmt(a.toHit)}</td>
                 <td className="text-marble-300">
                   {a.damage}
@@ -461,6 +468,10 @@ function ItemEquipEditor({ item, isGm, onClose, onSave }: { item: Item; isGm: bo
                 Damage dice
                 <input className={input} placeholder="1d8" value={e.damage ?? ''} onChange={(ev) => set({ damage: ev.target.value })} />
               </label>
+              {e.properties?.includes('versatile') && <label className="text-marble-300">
+                Two-handed damage dice
+                <input className={input} placeholder="1d10" value={e.versatileDamage ?? ''} onChange={(ev) => set({ versatileDamage: ev.target.value || undefined })} />
+              </label>}
               <label className="text-marble-300">
                 Damage type
                 <input className={input} placeholder="slashing" value={e.damageType ?? ''} onChange={(ev) => set({ damageType: ev.target.value })} />
@@ -475,7 +486,10 @@ function ItemEquipEditor({ item, isGm, onClose, onSave }: { item: Item; isGm: bo
                     <input
                       type="checkbox"
                       checked={!!e.properties?.includes(p)}
-                      onChange={() => set({ properties: e.properties?.includes(p) ? e.properties.filter((x) => x !== p) : [...(e.properties ?? []), p] })}
+                      onChange={() => {
+                        const properties = e.properties?.includes(p) ? e.properties.filter((x) => x !== p) : [...(e.properties ?? []), p];
+                        set({ properties, ...(!properties.includes('versatile') || properties.includes('two-handed') ? { versatileDamage: undefined } : {}) });
+                      }}
                     />
                     {p}
                   </label>

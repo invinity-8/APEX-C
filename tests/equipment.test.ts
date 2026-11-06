@@ -80,6 +80,22 @@ describe('equipment rules (server-authoritative)', () => {
     expect(s.tokens.sinna.inventory.filter((i) => i.id === 'dg')).toHaveLength(1);
   });
 
+  it('versatile grip uses the alternate die and makes the off hand unavailable', () => {
+    let s = setup();
+    s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'qs', slot: 'main1' });
+    s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sh', slot: 'off1' });
+    expect(deriveStats(sheet, s.tokens.sinna).attacks[0].damage).toBe('1d6 bludgeoning');
+
+    s = run(s, { type: 'setWeaponGrip', tokenId: 'sinna', itemId: 'qs', twoHanded: true });
+    expect(deriveStats(sheet, s.tokens.sinna).attacks[0]).toMatchObject({ damage: '1d8 bludgeoning', twoHandedGrip: true });
+    expect(slotsUsing(s, 'sh')).toEqual([]);
+
+    s = run(s, { type: 'setWeaponGrip', tokenId: 'sinna', itemId: 'qs', twoHanded: false });
+    expect(deriveStats(sheet, s.tokens.sinna).attacks[0]).toMatchObject({ damage: '1d6 bludgeoning', twoHandedGrip: false });
+    expect(slotsUsing(s, 'sh')).toEqual([]); // the shield stays in inventory and must be re-equipped explicitly
+    expect(executeCommand(s, P, { type: 'setWeaponGrip', tokenId: 'sinna', itemId: 'dg', twoHanded: true }).ok).toBe(false);
+  });
+
   it('two-handed weapons occupy both hands', () => {
     let s = setup();
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sh', slot: 'off1' });
@@ -142,6 +158,10 @@ describe('equipment rules (server-authoritative)', () => {
     expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 0, equip: { kind: 'armor', armorBase: 99 } }).ok).toBe(false);
     expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 0, equip: { kind: 'weapon', damage: 'rm -rf' } }).ok).toBe(false);
     expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 0, equip: { kind: 'weapon', evil: 1 } }).ok).toBe(false);
+    expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'qs', rev: 0, equip: { kind: 'weapon', damage: '1d6', versatileDamage: '1d10', properties: ['versatile'] } }).ok).toBe(true);
+    expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'qs', rev: 0, equip: { kind: 'weapon', damage: '1d6', versatileDamage: '1d10' } }).ok).toBe(false);
+    expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'qs', rev: 0, equip: { kind: 'weapon', damage: '1d6', versatileDamage: '1d10', properties: ['versatile', 'two-handed'] } }).ok).toBe(false);
+    expect(parseCommand({ type: 'setWeaponGrip', tokenId: 'sinna', itemId: 'qs', twoHanded: 'true' }).ok).toBe(false);
     expect(parseCommand({ type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'tail' }).ok).toBe(false);
     expect(parseCommand({ type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 0, equip: WEAPON_PRESETS.Longsword }).ok).toBe(true);
   });

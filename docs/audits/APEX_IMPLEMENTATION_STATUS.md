@@ -9,8 +9,10 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 - **PR #47 Journalreferenzen:** People-/Places-Ziele werden als UUID-Referenzen gespeichert; die Zielauflösung läuft durch sichtbarkeitsgeprüfte Journal-Leseoperationen.
 - **Journal-Backlinks (dieser Branch):** Rückverweise kommen nicht mehr nur aus der sichtbaren Journal-Liste. Neuer Server-/Store-Pfad filtert dieselbe Kampagne nach Benutzer- und Rollenfreigabe und liefert Seiten mit 50 Einträgen. UI erlaubt „Load older backlinks“. Invalid UUIDs und fehlende Seiten werden abgewiesen. Regressionstest ergänzt.
-- **TypeScript-Konfiguration (dieser Branch):** globale `types`-Liste entfernt, Vite-Client-Typen via `src/vite-env.d.ts` auf den Client begrenzt. Lokaler TypeScript-/Produktionsbuild bestehen. Automatischer Vercel Preview-Build ist `READY`; Function-Logs enthalten keine TS2688-Meldungen. Production wurde nicht neu bereitgestellt.
-- **Automatisierte Ergebnisse:** lokal Migration Guard bestanden (12 Migrationen registriert, keine pending), 45 Testdateien / 375 Tests bestanden, TypeScript und Produktionsbuild bestanden. PR-CI Run `42261845098` für Commit `5c8bc77` bestand zusätzlich Migration Guard, Tests, TypeScript/Build sowie isolierte Migration-/RLS-/Scene-Transaktionschecks; Production-DB-Job wurde übersprungen.
+- **TypeScript-Konfiguration (dieser Branch):** globale `types`-Liste entfernt, Vite-Client-Typen via `src/vite-env.d.ts` auf den Client begrenzt. Lokaler TypeScript-/Produktionsbuild bestehen. Der aktuelle PR-Head hat wegen des Vercel-Tageslimits keinen Preview-Build; daher keine neue Function-Log-Bestätigung. Production wurde nicht neu bereitgestellt.
+- **APEX-Version:** Frontend, API und Paketversion sind für den Releasekandidaten auf `0.9.0` angehoben; Versionssynchronität ist durch `tests/foundation.test.ts` abgesichert.
+- **Versatile-Griff:** Handwechsel ist jetzt eine autorisierte `setWeaponGrip`-Aktion auf dem Charakter. Die serverseitige Regel akzeptiert nur eine ausgerüstete vielseitige Waffe mit gültigem Zweithand-Schadenswürfel; Zweihandgriff räumt den Nebenhandslot frei und die abgeleitete Angriffsübersicht zeigt den alternativen Würfel. Beim Zurückschalten wird Nebenhandausrüstung nicht automatisch wieder angelegt. Unit-/Validierungstests ergänzt; Browser-/Live-Roundtrip bleibt offen.
+- **Automatisierte Ergebnisse:** nach den aktuellen Änderungen lokal bestanden: Migration Guard (12 registrierte, keine pending), 45 Testdateien / 376 Tests, TypeScript und Produktionsbuild. PR-CI Run `42262805994` bestand auf dem vorherigen PR-Head `aced101` außerdem isolierte Migration-/RLS-/Scene-Transaktionschecks; der Production-DB-Job war übersprungen. Für den aktuellen Branch-Commit ist nach Push ein neuer CI-Lauf erforderlich.
 - **Produktionsstatus der Ausgangsbasis:** read-only `/api/apex?op=health` HTTP 200 mit `ok: true`, schemaVersion 6, migrationsComplete true und leeren Missing-/Unknown-/Error-Listen; Vercel Deployment für `df8090f` meldete READY. Das belegt den Ausgangsstand, nicht die Änderungen dieses Branches.
 
 ## Bereits gemergte Funktionen – Code vorhanden; Browserabnahme offen
@@ -25,15 +27,15 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 - **Fog / Map-Kontrollen:** Sichtbare Kartenbereiche und GM-only Quellbilder existieren. Szenegebundene Event-, Loot- und Encounter-Kontrollen sind nicht in den Map-Fokus integriert.
 - **Zauber / Charakter / Ressourcen:** Spell-Daten haben Grundfelder. Strukturierte Spell-Details, Klassen-/Preparation-Regeln, vollständige Slot- und Ressourcenquelle sowie sichere Cast-Aktionen (einschließlich Mage Armor mit Ablauf/Stacking) fehlen.
-- **Ausrüstung:** AC-/Gewichtsregeln und Waffenproperties existieren. Versatile hat einen alternativen Würfeltext, aber kein bestätigtes Griff-/Angriffsmodell, das Handbelegung und verwendeten Würfel konsistent zusammenführt.
+- **Ausrüstung:** AC-/Gewichtsregeln sowie servervalidierter Versatile-Griff und zugehöriger abgeleiteter Schadenswürfel sind implementiert. Es gibt weiterhin keinen vollständigen Angriffs-/Würfelwurf-Workflow, der Angriff, Ziel und Trefferauflösung verbindet.
 - **Encumbrance-Bewegung:** Lastzustand wird berechnet/gezeigt. Aktuelle Spielregel dokumentiert ausdrücklich keine automatische Bewegungssperre; GM entscheidet über Folgen. Keine gegenteilige Sperre wurde hinzugefügt.
 - **Journal-Kontinuität:** People/Places und Szenenreferenz/In-game-Date-Feld bestehen. Backlinks sind jetzt paginiert; referenzierte Charakter-/Szenenobjekte mit typisierten Feldern sind darüber hinaus nicht umgesetzt.
 
 ## Nicht verifiziert / blockiert
 
-- **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden, aber `playwright` fehlt in dieser Arbeitsumgebung. Der verfügbare In-App-Browser erreichte den laufenden lokalen Harness auf `localhost:5174` nicht. Keine authentifizierte Produktions- oder Preview-Sitzung wurde verwendet.
-- **Isolierte DB-Prüfung:** lokal nicht ausgeführt; PR-CI Run `42261845098` hat Migrationen, RLS, Scene runtime/motion/travel und Post-deploy SQL gegen Wegwerf-Postgres erfolgreich geprüft.
-- **Production:** keine neue Production-Bereitstellung; der Vercel Preview-Build prüft den neuen Branch separat.
+- **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden, aber `playwright` fehlt in dieser Arbeitsumgebung. Die aktuell erreichbare Preview-Alias-Seite zeigt noch `APEX 0.8.0`, Commit `55d8d3f`, also nicht den PR-Head `aced101`; der Vercel-Check des aktuellen Heads scheiterte am Tageslimit. Damit gibt es keinen aktuellen Preview für eine gültige 0.9-Rollenabnahme. Keine Produktionsdaten wurden verwendet.
+- **Isolierte DB-Prüfung:** lokal nicht ausgeführt; PR-CI Run `42262805994` hat Migrationen, RLS, Scene runtime/motion/travel und Post-deploy SQL gegen Wegwerf-Postgres erfolgreich geprüft (vor den aktuellen reinen Code-/Dokumentänderungen; keine Migration geändert).
+- **Production:** keine neue Production-Bereitstellung. Vorhandene `READY`-Vercel-Previews sind älter als der aktuelle PR-Head; der aktuelle PR-Head hat keinen nachweislich aktuellen Preview.
 - **Kenney visuell/Performance:** keine Classic-/2.5D-Screenshots und keine 39-/78-Radius-Metriken erhoben.
 - **Live-Status:** die aktuellen Codeänderungen dieses Branches sind weder gemergt noch live; nur die oben benannte `df8090f`-Produktionsbasis ist live verifiziert.
 
@@ -42,11 +44,11 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 | Priorität | Restpunkt | Abnahmekriterium |
 |---|---|---|
 | P0 | Isolierte Rollen-Browserabnahme nach Bereitstellung eines erreichbaren, kostenneutralen Playwright-/Browser-Testtreibers | GM, zwei Player, Caster und Non-caster; Scene-Draft/Publish/Assignment/Sanctuary; Journal private/GM/party; Berechtigungsablehnungen; Reconnect/Reload; keine doppelten Aktionen; Screenshots und Testdaten nur lokal isoliert |
-| P0 | Isolierte SQL-CI für den Closeout-Commit | **Erfüllt** in PR-CI Run `42261845098`: Migrationsskript, RLS, Scene runtime/motion/travel und Post-deploy checks bestanden mit Wegwerf-Postgres; keinerlei Produktionsmutation |
-| P1 | Reguläre Production-Abnahme nach Merge | Erst nach Owner-Merge und planmäßiger Release-Pipeline Produktions-Health und Function-Verarbeitung erneut kontrollieren; der PR-Preview selbst ist `READY` und TS2688-frei |
+| P0 | Isolierte SQL-CI für den Closeout-Head | Vorheriger PR-Head bestand in Run `42262805994`: Migrationsskript, RLS, Scene runtime/motion/travel und Post-deploy checks gegen Wegwerf-Postgres; aktueller Head benötigt nach Push einen neuen PR-CI-Lauf; keine Produktionsmutation |
+| P1 | Reguläre Production-Abnahme nach Merge | Erst nach Owner-Merge und planmäßiger Release-Pipeline Produktions-Health und Function-Verarbeitung erneut kontrollieren; kein Production-Deployment wurde ausgeführt |
 | P1 | Szenegebundene GM-Kontrollen | Fokus-Szene zeigt Fog, Events, Loot und Encounter; Draft bleibt privat; Apply/Publish ist explizit; Player erhält ausschließlich freigegebene Szene/Informationen |
 | P1 | Zauber- und Character-Regelmodell | Lizenziertes Spell-Datenmodell, Klassen/Vorbereitung/Slots; Mage Armor sicher castbar mit Dauer/Ablauf/Stacking; Ressourcenverbrauch, AC und Character-Ansicht haben je eine Quelle; Positiv-/Negativtests |
-| P1 | Versatile-Kampfgriff | Wechsel 1H/2H verändert Würfel und Handbelegung nachvollziehbar; serverseitige Validierung und Race-/Reload-Tests |
+| P1 | Versatile-Kampfgriff-Abnahme | Unit-/Parser-Regeln sind vorhanden; GM-/Player-Browser-Roundtrip mit konkurrierenden Änderungen, Reload und explizitem Wiederausrüsten des Schilds prüfen. Ein vollständiger Angriffs-/Trefferwurf-Workflow existiert außerhalb dieses 0.9-Korrekturschritts nicht. |
 | P1 | Inventar-/Merchant-/Loot-Browser-Roundtrip | Antrag → Bearbeitung → approve/reject → Aufnahme → stack/split → equip/drop/move → Reload; Gewicht, Besitz, Währung, Mengen und Idempotenz stimmen; mehrere Items sowie minimierte Loot-Anzeige |
 | P1 | Kenney-Visual- und Performanceabnahme | gleiche Mock-Szene/Kamera und Netzwerkbedingungen für Classic/2.5D, Radius 39 und 78; Screenshots, Latenz, Downloadbytes, Ladezeit, Reaktionszeit, Renderdauer; keine Asset-Uploads |
 | P2 | Cube-Progression-Regelentscheidung | Der bestehende Vertrag gewährt Zugang durch Cube oder GM-Permanentfreigabe, aber keine Progressionsstufen. Nur bei neuer verbindlicher Regelanforderung erweitern |
@@ -55,6 +57,6 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 - Es wurde keine Supabase-Testdatenbank oder kostenpflichtige Ressource angelegt.
 - Keine Produktionsmigration, kein Produktions-Storage-Upload oder produktiver Schreibzugriff.
-- Vercel hat für den Draft-PR automatisch einen Preview-Build erstellt (`READY`); keine Production-Bereitstellung, Promotion oder PR-Merge durchgeführt.
+- Vercel hatte mehrere ältere `READY`-Previews (letzter abrufbarer erfolgreicher Commit `55d8d3f`); der letzte Check für den aktuellen PR-Head meldet das Hobby-Tageslimit. Kein aktueller 0.9-Preview, keine Production-Bereitstellung, Promotion oder PR-Merge.
 - Keine Migration in diesem Branch: Journal-Backlinks verwenden vorhandene Journalfelder; TS-Konfiguration ist build-only.
 - **Freigabe:** APEX 0.9 noch nicht als fertig bezeichnen. Der Branch ist reviewbar und der Preview-Build ist bereit; volle Finalabnahme wartet auf CI-SQL, browserfähige isolierte Umgebung und die P1-Funktionsnachweise.
