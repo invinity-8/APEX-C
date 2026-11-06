@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import type { GameApi } from '../state/gameApi';
 import type { SceneSummary } from '../server/scenes';
 import type { SceneSnapshot } from '../server/sceneRuntime';
+import type { Command } from '../game/commands';
+import type { DispatchResult } from '../state/gameApi';
 import { api, ApiError } from '../online/api';
 import { SceneSurface } from './SceneSurface';
+import { GmLootRolls } from './LootRolls';
 
 interface PlayerAssignment {
   userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean;
@@ -24,8 +27,8 @@ function readFocus(campaignId: string): string | null {
  * Map is the GM's operational view. A selected focus is a private GM presentation
  * choice; player transfers are separate explicit actions against server revisions.
  */
-export function CampaignMapDirector({ game, enabled, openScenes, children }: {
-  game: GameApi; enabled: boolean; openScenes: () => void; children: ReactNode;
+export function CampaignMapDirector({ game, enabled, openScenes, run, children }: {
+  game: GameApi; enabled: boolean; openScenes: () => void; run: (cmd: Command) => Promise<DispatchResult>; children: ReactNode;
 }) {
   const online = game.online;
   const campaignId = online?.campaignId ?? '';
@@ -93,6 +96,8 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
     () => scenes.filter(scene => !scene.is_legacy_arena && !scene.is_draft && !scene.archived),
     [scenes],
   );
+  const focusedDefinition = focus?.scene ? scenes.find(scene => scene.id === focus.scene!.id) : undefined;
+  const liveVisibilityNodes = focus?.scene?.map.nodes.filter(node => ['location', 'label', 'wall', 'area'].includes(node.kind)) ?? [];
   const assignedHere = players.filter(player => player.sceneId === focusId);
   const focusTokenIds = [...new Set(assignedHere.flatMap(player => player.tokenIds))];
   const markers = focusTokenIds.map(tokenId => {
@@ -162,6 +167,24 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
     finally { setBusy(false); }
   }
 
+  async function setLiveVisibility(nodeId: string, visible: boolean) {
+    const scene = focusedDefinition;
+    if (!scene || scene.published_revision === undefined || busy) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const result = await api.sceneAction(scene.id, scene.revision, 'set_visibility', {
+        nodeId, visible, publishedRevision: scene.published_revision,
+      });
+      setScenes(rows => rows.map(row => row.id === scene.id ? { ...row, ...result.scene } : row));
+      setFocus(await api.sceneFocus(scene.id));
+      setNotice(visible ? 'Marker revealed on the published map. Other draft changes remain private.' : 'Marker hidden on the published map. Other draft changes remain private.');
+    } catch (e) {
+      setError(String(e));
+      void loadScenes(search);
+      void loadFocus(scene.id);
+    } finally { setBusy(false); }
+  }
+
   async function placeToken(x: number, y: number) {
     if (!focus?.scene || !placementToken || busy || !placeMode) return;
     const tokenPosition = focus.motion?.tokens.find(position => position.tokenId === placementToken);
@@ -221,6 +244,29 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
         <button className="btn btn-gold" type="button" disabled={!selection || !selectedPlayers.length} onClick={() => void transfer(selection)}>Send selected to chosen scene</button>
         <button className="btn btn-ghost" type="button" disabled={!selectedPlayers.length} onClick={() => void transfer(null)}>Send selected to Sanctuary</button>
       </fieldset>
+      {focus?.scene && <fieldset className="mt-2 rounded-md border border-ink-700 p-2 text-xs" disabled={busy || !focusedDefinition?.published_revision} aria-label="Scene visibility and fog controls">
+        <legend className="px-1 text-marble-300">Live visibility · {focus.scene.name}</legend>
+        <p className="mb-2 text-marble-500">Reveal or hide markers on the published map now. The matching draft marker is synchronized; other draft edits stay private.</p>
+        {liveVisibilityNodes.length ? <ul className="flex flex-wrap gap-1.5">
+          {liveVisibilityNodes.map(node => <li key={node.id} className="flex items-center gap-1 rounded border border-ink-700 px-2 py-1">
+            <span className="text-marble-300">{node.label}</span>
+            <span className={node.visible ? 'text-emerald-300' : 'text-marble-500'}>{node.visible ? 'Revealed' : 'Hidden'}</span>
+            <button className="btn btn-ghost px-2 py-0.5" type="button" disabled={!focusedDefinition?.published_revision} aria-label={`${node.visible ? 'Hide' : 'Reveal'} ${node.label}`} onClick={() => void setLiveVisibility(node.id, !node.visible)}>{node.visible ? 'Hide' : 'Reveal'}</button>
+          </li>)}
+        </ul> : <span className="text-marble-500">No revealable map markers.</span>}
+      </fieldset>}
+      {focus?.scene && <section className="mt-2 rounded-md border border-ink-700 p-2" aria-label="Scene loot controls">
+        <h3 className="text-xs font-bold text-marble-300">Loot · {focus.scene.name}</h3>
+        <p className="mb-2 text-xs text-marble-500">Only characters assigned to this scene can be selected for new rolls.</p>
+        <GmLootRolls
+          key={`scene-loot-${focus.scene.id}`}
+          rolls={(game.gmState?.lootRolls ?? []).filter(roll => roll.sceneId === focus.scene!.id)}
+          staged={game.gmState?.arsenal?.staged ?? []}
+          players={markers.map(token => ({ id: token.tokenId, name: token.name }))}
+          run={run}
+          sceneId={focus.scene.id}
+        />
+      </section>}
       {canPlace && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
         <label className="text-marble-300">Party character
           <select className="ml-2 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm" value={placementToken} onChange={event => setPlacementToken(event.target.value)}>

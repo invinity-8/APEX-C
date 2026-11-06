@@ -38,6 +38,23 @@ describe('campaign engine API integration',()=>{
     expect(p.scene?.scene?.revision).toBe(1); expect(JSON.stringify(p)).not.toContain('Never send this draft');
     const move=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,x:150,y:100,requestId:crypto.randomUUID()}); expect(move.status).toBe(200);
   });
+  it('scopes scene loot rolls to assigned players and rejects votes after leaving the scene',async()=>{
+    const scene=await battle(); await assign(scene.id,0);
+    const stored=repo.states.get(cid)!;
+    stored.state.arsenal={staged:[{id:'scene-potion',name:'Potion',kind:'consumable',description:'Healing draught',quantity:1}]};
+    const started=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'lootRollStart',rollId:'scene-roll',stagedIds:['scene-potion'],tokenIds:['sinna'],minutes:15,sceneId:scene.id}});
+    expect(started.status).toBe(200);
+    const roll=repo.states.get(cid)!.state.lootRolls?.find(item=>item.sceneId===scene.id); expect(roll?.status).toBe('open');
+    const hannah=(await request('hannah','state')).body as PlayerPayload;
+    expect(hannah.view?.lootRolls.map(item=>item.id)).toContain(roll!.id);
+    const jean=(await request('jean','state')).body as PlayerPayload;
+    expect(jean.view?.lootRolls.some(item=>item.id===roll!.id)).toBe(false);
+
+    await assign(null,1);
+    const vote=await request('hannah','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'lootRollChoose',rollId:roll!.id,tokenId:'sinna',choice:'need'}});
+    expect(vote.status).toBe(409);
+    expect(repo.states.get(cid)!.state.lootRolls?.find(item=>item.id===roll!.id)?.choices).toEqual({});
+  });
   it('rejects an Arena move if a transition wins the optimistic write race',async()=>{
     const original=structuredClone(repo.states.get(cid)!.state), sinna=original.tokens.sinna;
     const destination=neighbors(sinna.pos).find(to=>validateMove(original,{role:'player',tokenId:'sinna'},'sinna',to).ok); expect(destination).toBeDefined();

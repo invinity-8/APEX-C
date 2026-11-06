@@ -1,978 +1,194 @@
-/**
- * Supabase implementation of the Repo. Runs ONLY on the server (Vercel Function)
- * with the secret key, which bypasses RLS. Never import this module from client code.
- */
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { GameState } from '../game/types.js';
-import type {
-  ArchiveInfo,
-  ArchiveKind,
-  Assignment,
-  AuthBundle,
-  Campaign,
-  CommandLogEntry,
-  FeedbackRow,
-  NewFeedback,
-  SheetBackupInfo,
-  Credential,
-  DeployStatus,
-  LoginAttemptStats,
-  Member,
-  Profile,
-  ProfilePresence,
-  Repo,
-  RequestReservation,
-  Role,
-  SessionRecord,
-  SnapshotInfo,
-  StoredSheet,
-  StoredState,
-} from './repo.js';
-import { WorldConflictError } from './repo.js';
-
-/** Every database call is aborted after this many milliseconds â€“ a slow database must never hang a function. */
-export const DB_TIMEOUT_MS = 8000;
-export const PORTRAIT_BUCKET = 'apex-portraits';
-
-/** Per-request diagnostics (round trips, time spent in the database). No data, no secrets. */
-export interface RequestStats {
-  db: number;
-  dbMs: number;
-}
-export const requestStats = new AsyncLocalStorage<RequestStats>();
-
-/** fetch with a hard timeout and round-trip accounting. */
-const boundedFetch: typeof fetch = async (input, init) => {
-  const stats = requestStats.getStore();
-  const started = Date.now();
-  const timeout = AbortSignal.timeout(DB_TIMEOUT_MS);
-  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
-  try {
-    return await fetch(input, { ...init, signal });
-  } catch (e) {
-    if (timeout.aborted) throw new Error(`database timeout after ${DB_TIMEOUT_MS} ms`);
-    throw e;
-  } finally {
-    if (stats) {
-      stats.db++;
-      stats.dbMs += Date.now() - started;
-    }
-  }
-};
-
-export interface ServerEnv {
-  url: string;
-  secretKey: string;
-}
-
-/** Reads server-side configuration. The secret key must never use a VITE_ prefix. */
-export function readServerEnv(env: Record<string, string | undefined>): ServerEnv | null {
-  const url = env.SUPABASE_URL ?? env.VITE_SUPABASE_URL;
-  const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !secretKey) return null;
-  return { url, secretKey };
-}
-
-function check<T>(res: { data: T; error: { message: string } | null }, what: string): T {
-  if (res.error) throw new Error(`${what}: ${res.error.message}`);
-  return res.data;
-}
-
-type MemberRow = { campaign_id: string; user_id: string; email: string | null; role: Role; last_seen_at?: string | null };
-type SessionRow = {
-  token_hash: string;
-  campaign_id: string;
-  profile_key: string;
-  user_id: string;
-  created_at: string;
-  last_seen_at: string;
-  expires_at: string;
-  revoked_at: string | null;
-};
-
-const toMember = (r: MemberRow): Member => ({ campaignId: r.campaign_id, userId: r.user_id, email: r.email, role: r.role, lastSeenAt: r.last_seen_at ?? null });
-const toProfile = (r: Record<string, unknown>): Profile => ({
-  campaignId: r.campaign_id as string,
-  key: r.profile_key as string,
-  displayName: r.display_name as string,
-  characterName: r.character_name as string,
-  role: r.role as Role,
-  tokenIds: (r.token_ids as string[] | null) ?? [],
-  userId: r.user_id as string,
-  active: r.active === true,
-});
-const toArchive = (r: Record<string, unknown>): ArchiveInfo => ({
-  id: r.id as string,
-  name: r.name as string,
-  description: (r.description as string) ?? '',
-  kind: r.kind as ArchiveKind,
-  createdAt: r.created_at as string,
-  stateVersion: Number(r.state_version),
-  worldName: (r.world_name as string | null) ?? null,
-  seed: r.seed === null || r.seed === undefined ? null : Number(r.seed),
-  radius: r.radius === null || r.radius === undefined ? null : Number(r.radius),
-  day: r.day === null || r.day === undefined ? null : Number(r.day),
-  phase: (r.phase as string | null) ?? null,
-});
-const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-const JOURNAL_FIELDS = 'id,owner_id,title,body,category,tags,pinned,sharing,scene_id,image_id,game_date,created_at,updated_at,version';
-
-export class SupabaseRepo implements Repo {
-  readonly journalImages: import('./journalImages.js').JournalImageStore = {
-    get: async (campaignId, id) => {
-      const { data, error } = await this.db.from('apex_journal_images').select('id,entry_id,owner_id,source_path,thumbnail_path,mime').eq('campaign_id',campaignId).eq('id',id).maybeSingle();
-      if (error) throw new Error(`journal image: ${error.message}`);
-      return data as import('./journalImages.js').JournalImage | null;
-    },
-    upload: async (user, entryId, image, thumbnail) => {
-      const id = crypto.randomUUID(), base = `${user.campaignId}/${user.id}/${entryId}/${id}`, source_path = base + '/image', thumbnail_path = base + '/thumbnail';
-      const storage = this.db.storage.from('apex-journal-images');
-      try {
-        for (const [path, content] of [[source_path,image],[thumbnail_path,thumbnail]] as const) { const r = await storage.upload(path,content.bytes,{ contentType: content.mime, upsert:false, cacheControl:'60' }); if (r.error) throw new Error(r.error.message); }
-        const row = { id, entry_id:entryId, owner_id:user.id, source_path, thumbnail_path, mime:image.mime };
-        const { error } = await this.db.from('apex_journal_images').insert({ ...row, campaign_id:user.campaignId });
-        if (error) throw new Error(error.message);
-        return row;
-      } catch (error) { await storage.remove([source_path,thumbnail_path]).catch(() => undefined); throw error; }
-    },
-    url: async path => { const { data,error } = await this.db.storage.from('apex-journal-images').createSignedUrl(path,60); return error ? null : data.signedUrl; },
-  };
-  readonly sanctuary: import('./sanctuary.js').SanctuaryStore = {
-    get: async campaignId => {
-      const { data, error } = await this.db.from('apex_sanctuary_settings').select('revision,atmosphere,default_asset,backgrounds').eq('campaign_id', campaignId).maybeSingle();
-      if (error) throw new Error(`Sanctuary settings: ${error.message}`);
-      return data ? { revision: data.revision, atmosphere: data.atmosphere, defaultAsset: data.default_asset, backgrounds: data.backgrounds } as import('./sanctuary.js').SanctuarySettings : { revision: 0, atmosphere: 'hall', defaultAsset: null, backgrounds: [] };
-    },
-    save: async (campaignId, expected, settings) => {
-      const row = { atmosphere: settings.atmosphere, default_asset: settings.defaultAsset, backgrounds: settings.backgrounds, revision: expected + 1 };
-      const result = expected === 0 ? await this.db.from('apex_sanctuary_settings').insert({ campaign_id: campaignId, ...row }).select('revision').single() : await this.db.from('apex_sanctuary_settings').update(row).eq('campaign_id', campaignId).eq('revision', expected).select('revision').maybeSingle();
-      if (result.error?.code === '23505') return null;
-      if (result.error) throw new Error(`Sanctuary settings save: ${result.error.message}`);
-      return result.data ? { ...settings, revision: result.data.revision } : null;
-    },
-  };
-  readonly sceneTravel: import('./sceneTravel.js').SceneTravel = {
-    snapshot: async (user, sceneId) => {
-      const location = await this.db.from('apex_party_locations').select('node_id,revision').eq('campaign_id', user.campaignId).eq('scene_id', sceneId).maybeSingle();
-      if (location.error) throw new Error(`party location: ${location.error.message}`);
-      let query = this.db.from('apex_scene_travel').select('id,proposed_by,from_node,to_node,route_id,total_hours,elapsed_hours,status,version,scene_revision').eq('campaign_id', user.campaignId).eq('scene_id', sceneId);
-      if (user.role !== 'gm') query = query.or(`proposed_by.eq.${user.id},status.in.(traveling,complete)`);
-      const { data, error } = await query.order('created_at', { ascending: false }).order('id').limit(50);
-      if (error) throw new Error(`travel proposals: ${error.message}`);
-      return { partyNode: location.data?.node_id ?? null, revision: location.data?.revision ?? 0, proposals: (data as import('./sceneTravel.js').TravelRecord[]).map(p => ({ ...p, proposed_by: user.role === 'gm' || p.proposed_by === user.id ? p.proposed_by : '' })) };
-    },
-    action: async (user, sceneId, input) => {
-      const { data, error } = await this.db.rpc('apex_world_travel_action', { p_campaign: user.campaignId, p_actor: user.id, p_scene: sceneId, p_input: input });
-      if (error) throw new Error(`world travel: ${error.message}`);
-      return data as { ok: boolean; error?: string };
-    },
-  };
-  readonly sceneMotion: import('./sceneMotion.js').SceneMotion = {
-    snapshot: async (campaignId, sceneId, userId, tokenIds) => {
-      const { data, error } = await this.db.rpc('apex_scene_motion_state', { p_campaign: campaignId, p_scene: sceneId, p_user: userId, p_tokens: tokenIds });
-      if (error) throw new Error(`scene motion: ${error.message}`);
-      return data as import('./sceneMotion.js').MotionSnapshot;
-    },
-    write: async (user, input, cost, discovered) => {
-      const { data, error } = await this.db.rpc('apex_write_scene_motion', { p_campaign: user.campaignId, p_actor: user.id, p_input: input, p_cost: cost, p_discovered: discovered });
-      if (error) throw new Error(`scene move: ${error.message}`);
-      return data as { ok: boolean; error?: string };
-    },
-    advance: async (user, interval, expected, requestId) => {
-      const { data, error } = await this.db.rpc('apex_advance_scene_interval', { p_campaign: user.campaignId, p_actor: user.id, p_interval: interval, p_expected: expected, p_request: requestId });
-      if (error) throw new Error(`scene interval: ${error.message}`);
-      return data as { ok: boolean; error?: string };
-    },
-  };
-  /** Only the small CC0 Nature Isometric preview set is exposed; arbitrary paths are never accepted. */
-  readonly kenneyPreview = {
-    signPreviewAssets: async () => {
-      const paths = {
-        ground: 'kenney_nature-kit/Isometric/ground_grass_NE.png',
-        tree: 'kenney_nature-kit/Isometric/tree_blocks_NE.png',
-        bush: 'kenney_nature-kit/Isometric/plant_bush_NE.png',
-      };
-      const { data, error } = await this.db.storage.from('apex-asset-packs').createSignedUrls(Object.values(paths), 60);
-      if (error) throw new Error(`Kenney preview signing: ${error.message}`);
-      const byPath = new Map((data ?? []).map(item => [item.path, item.signedUrl]));
-      const assets = Object.fromEntries(Object.entries(paths).flatMap(([key, path]) => {
-        const url = byPath.get(path);
-        return url ? [[key, url]] : [];
-      }));
-      if (!assets.ground || !assets.tree || !assets.bush) throw new Error('Kenney preview assets are unavailable.');
-      return { assets, expiresIn: 60 };
-    },
-  };
-  readonly sceneAssets: import('./sceneAssets.js').SceneAssetStore = {
-    get: async (campaignId, id) => {
-      const { data, error } = await this.db.from('apex_scene_assets').select('id,scene_id,audience,source_path,thumbnail_path,width,height').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
-      if (error) throw new Error(`map asset: ${error.message}`);
-      return data as import('./sceneAssets.js').SceneAsset | null;
-    },
-    upload: async (user, sceneId, audience, image, thumbnail) => {
-      const id = crypto.randomUUID(), path = `${user.campaignId}/${sceneId}/${id}`;
-      const source_path = path + '/map', thumbnail_path = path + '/thumbnail';
-      const storage = this.db.storage.from('apex-scene-maps');
-      try {
-        for (const [key, file] of [[source_path, image], [thumbnail_path, thumbnail]] as const) {
-          const result = await storage.upload(key, file.bytes, { contentType: file.mime, upsert: false, cacheControl: '60' });
-          if (result.error) throw new Error(result.error.message);
-        }
-        const asset = { id, scene_id: sceneId, audience, source_path, thumbnail_path, width: image.width, height: image.height };
-        const { error } = await this.db.from('apex_scene_assets').insert({ ...asset, campaign_id: user.campaignId });
-        if (error) throw new Error(error.message);
-        return asset;
-      } catch (error) { await storage.remove([source_path, thumbnail_path]).catch(() => undefined); throw error; }
-    },
-    url: async path => {
-      const { data, error } = await this.db.storage.from('apex-scene-maps').createSignedUrl(path, 60);
-      return error ? null : data.signedUrl;
-    },
-  };
-  readonly sceneRuntime: import('./sceneRuntime.js').SceneRuntime = {
-    assignments: async campaignId => {
-      const { data, error } = await this.db.from('apex_scene_assignments').select('user_id,scene_id,revision,spawn_x,spawn_y').eq('campaign_id', campaignId).limit(100);
-      if (error) throw new Error(`scene assignments: ${error.message}`);
-      return data as import('./sceneRuntime.js').SceneAssignment[];
-    },
-    assignment: async (campaignId, userId) => {
-      const { data, error } = await this.db.from('apex_scene_assignments').select('user_id,scene_id,revision,spawn_x,spawn_y').eq('campaign_id', campaignId).eq('user_id', userId).maybeSingle();
-      if (error) throw new Error(`scene assignment: ${error.message}`);
-      return data as import('./sceneRuntime.js').SceneAssignment | null;
-    },
-    scene: async (campaignId, id) => {
-      const { data, error } = await this.db.from('apex_scenes').select('id,name,category,published_revision,is_draft,is_legacy_arena,archived,published_metadata').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
-      if (error) throw new Error(`assigned scene: ${error.message}`);
-      return data ? { ...data, revision: data.published_revision } as import('./sceneRuntime.js').RuntimeScene : null;
-    },
-    transition: async (user, sceneId, targets, requestId) => {
-      const { data, error } = await this.db.rpc('apex_assign_scene', { p_campaign: user.campaignId, p_actor: user.id, p_scene: sceneId, p_targets: targets, p_request: requestId });
-      if (error) throw new Error(`scene transition: ${error.message}`);
-      return data as { ok: boolean; error?: string };
-    },
-  };
-  readonly journalStore: import('./journals.js').JournalStore = {
-    backlinks: async (user, targetId, offset) => {
-      const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
-      const { data, error } = await this.db.from('apex_journals').select(JOURNAL_FIELDS)
-        .eq('campaign_id', user.campaignId).or(visibility).ilike('body', `%[[ref:${targetId}]]%`)
-        .order('pinned', { ascending: false }).order('created_at', { ascending: false }).order('id')
-        .range(offset, offset + 49);
-      if (error) throw new Error(`journal backlinks: ${error.message}`);
-      return data as import('./journals.js').JournalEntry[];
-    },
-    get: async (user, id) => {
-      const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
-      const { data, error } = await this.db.from('apex_journals').select(JOURNAL_FIELDS).eq('campaign_id', user.campaignId).eq('id', id).or(visibility).maybeSingle();
-      if (error) throw new Error(`journal entry: ${error.message}`);
-      return data as import('./journals.js').JournalEntry | null;
-    },
-    list: async (user, offset, mine = false, filters = {}) => {
-      // IDs come exclusively from authenticated profiles, never the request.
-      const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
-      let query = this.db.from('apex_journals').select(JOURNAL_FIELDS).eq('campaign_id', user.campaignId);
-      query = mine ? query.eq('owner_id', user.id) : query.or(visibility);
-      if (filters.search) query=query.textSearch('search_document',filters.search,{type:'websearch',config:'simple'});
-      if (filters.category) query=query.eq('category',filters.category);
-      if (filters.tag) query=query.contains('tags',[filters.tag]);
-      const { data, error } = await query
-        .order('pinned', { ascending: false }).order('created_at', { ascending: filters.sort==='oldest' }).order('id').range(offset, offset + 49);
-      if (error) throw new Error(`journal list: ${error.message}`);
-      return data as import('./journals.js').JournalEntry[];
-    },
-    save: async (user, id, version, draft) => {
-      const row = { ...draft, updated_at: new Date().toISOString(), version: version + 1 };
-      const result = version === 0
-        ? await this.db.from('apex_journals').insert({ ...row, id, campaign_id: user.campaignId, owner_id: user.id }).select(JOURNAL_FIELDS).single()
-        : await this.db.from('apex_journals').update(row).eq('campaign_id', user.campaignId).eq('owner_id', user.id).eq('id', id).eq('version', version).select(JOURNAL_FIELDS).maybeSingle();
-      if (result.error?.code === '23505') return null;
-      if (result.error) throw new Error(`journal save: ${result.error.message}`);
-      return result.data as import('./journals.js').JournalEntry | null;
-    },
-    remove: async (user, id, version) => {
-      const { data, error } = await this.db.from('apex_journals').delete()
-        .eq('campaign_id', user.campaignId).eq('owner_id', user.id).eq('id', id).eq('version', version).select('id');
-      if (error) throw new Error(`journal delete: ${error.message}`);
-      return data.length === 1;
-    },
-  };
-  readonly sceneCatalog: import('./scenes.js').SceneCatalog = {
-    list: async (campaignId, offset, filters={}) => {
-      let query = this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id')
-        .eq('campaign_id', campaignId);
-      if(filters.category) query=query.eq('category',filters.category);
-      if(filters.archived!==undefined) query=query.eq('archived',filters.archived);
-      if(filters.search) query=query.ilike('name','%'+filters.search.replace(/[\\%_]/g,'\\$&')+'%');
-      const { data,error }=await query.order(filters.sort==='name'?'name':'updated_at',{ascending:filters.sort==='name'}).order('id').range(offset,offset+49);
-      if (error) throw new Error(`scene list: ${error.message}`);
-      return data as import('./scenes.js').SceneSummary[];
-    },
-    get: async (campaignId, id) => {
-      const { data, error } = await this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,metadata')
-        .eq('campaign_id', campaignId).eq('id', id).maybeSingle();
-      if (error) throw new Error(`scene preview: ${error.message}`);
-      return data as import('./scenes.js').SceneDefinition | null;
-    },
-    create: async (campaignId, scene) => {
-      const { data, error } = await this.db.from('apex_scenes')
-        .insert({ campaign_id: campaignId, ...scene, is_draft: true, is_legacy_arena: false })
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,metadata').single();
-      if (error) throw new Error(`scene create: ${error.message}`);
-      return data as import('./scenes.js').SceneDefinition;
-    },
-    update: async (campaignId, id, revision, patch) => {
-      const { data, error } = await this.db.rpc('apex_update_scene', { p_campaign:campaignId, p_scene:id, p_revision:revision, p_patch:patch });
-      if (error) throw new Error(`scene update: ${error.message}`);
-      return data as import('./scenes.js').SceneDefinition | null;
-    },
-  };
-  private db: SupabaseClient;
-
-  constructor(env: ServerEnv) {
-    const opts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: boundedFetch } };
-    this.db = createClient(env.url, env.secretKey, opts);
-  }
-
-  async profiles(campaignId: string | null): Promise<Profile[]> {
-    let q = this.db.from('apex_profiles').select('*').order('sort');
-    if (campaignId) q = q.eq('campaign_id', campaignId);
-    const { data, error } = await q;
-    if (error) {
-      // Before the profiles migration is applied the welcome screen still works (all profiles inactive).
-      if (/apex_profiles|does not exist|schema cache/i.test(error.message)) return [];
-      throw new Error(`profiles: ${error.message}`);
-    }
-    return (data as Array<Record<string, unknown>>).map(toProfile);
-  }
-
-  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>): Promise<void> {
-    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (patch.active !== undefined) row.active = patch.active;
-    if (patch.tokenIds !== undefined) row.token_ids = patch.tokenIds;
-    check(await this.db.from('apex_profiles').update(row).eq('campaign_id', campaignId).eq('profile_key', key), 'update profile');
-  }
-
-  // ---------------------------------------------------------------- credentials & sessions
-
-  async credential(campaignId: string, key: string): Promise<Credential | null> {
-    const row = check(
-      await this.db.from('apex_profile_credentials').select('password_hash, updated_at').eq('campaign_id', campaignId).eq('profile_key', key).maybeSingle(),
-      'credential',
-    ) as { password_hash: string; updated_at: string } | null;
-    return row ? { passwordHash: row.password_hash, updatedAt: row.updated_at } : null;
-  }
-
-  async credentialDates(campaignId: string | null): Promise<Record<string, string>> {
-    let q = this.db.from('apex_profile_credentials').select('campaign_id, profile_key, updated_at');
-    if (campaignId) q = q.eq('campaign_id', campaignId);
-    const rows = check(await q, 'credential dates') as Array<{ campaign_id: string; profile_key: string; updated_at: string }>;
-    return Object.fromEntries(rows.map((r) => [campaignId ? r.profile_key : `${r.campaign_id}:${r.profile_key}`, r.updated_at]));
-  }
-
-  async setCredential(campaignId: string, key: string, passwordHash: string | null, byUserId: string | null): Promise<void> {
-    if (passwordHash === null) {
-      check(await this.db.from('apex_profile_credentials').delete().eq('campaign_id', campaignId).eq('profile_key', key), 'clear credential');
-      return;
-    }
-    check(
-      await this.db
-        .from('apex_profile_credentials')
-        .upsert(
-          { campaign_id: campaignId, profile_key: key, password_hash: passwordHash, updated_by: byUserId, updated_at: new Date().toISOString() },
-          { onConflict: 'campaign_id,profile_key' },
-        ),
-      'set credential',
-    );
-  }
-
-  async consumeSetupCode(codeHash: string): Promise<string | null> {
-    const rows = check(
-      await this.db
-        .from('apex_setup_codes')
-        .update({ used_at: new Date().toISOString() })
-        .eq('code_hash', codeHash)
-        .is('used_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .select('campaign_id'),
-      'setup code',
-    ) as Array<{ campaign_id: string }>;
-    return rows.length === 1 ? rows[0].campaign_id : null;
-  }
-
-  async createSession(s: Omit<SessionRecord, 'revokedAt' | 'lastSeenAt' | 'createdAt'> & { userAgent: string | null }): Promise<void> {
-    check(
-      await this.db.from('apex_sessions').insert({
-        token_hash: s.tokenHash,
-        campaign_id: s.campaignId,
-        profile_key: s.profileKey,
-        user_id: s.userId,
-        expires_at: s.expiresAt,
-        user_agent: s.userAgent,
-      }),
-      'create session',
-    );
-    if (Math.random() < 0.05) {
-      // Housekeeping: forget sessions that ended more than 30 days ago.
-      await this.db.from('apex_sessions').delete().lt('expires_at', new Date(Date.now() - 30 * 86400_000).toISOString());
-    }
-  }
-
-  async session(tokenHash: string): Promise<SessionRecord | null> {
-    const r = check(await this.db.from('apex_sessions').select('*').eq('token_hash', tokenHash).maybeSingle(), 'session') as SessionRow | null;
-    return r
-      ? {
-          tokenHash: r.token_hash,
-          campaignId: r.campaign_id,
-          profileKey: r.profile_key,
-          userId: r.user_id,
-          createdAt: r.created_at,
-          lastSeenAt: r.last_seen_at,
-          expiresAt: r.expires_at,
-          revokedAt: r.revoked_at,
-        }
-      : null;
-  }
-
-  async authBundle(tokenHash: string): Promise<AuthBundle | null> {
-    const { data, error } = await this.db.rpc('apex_authenticate', { p_token_hash: tokenHash });
-    if (error) throw new Error(`authenticate: ${error.message}`);
-    const d = data as null | {
-      session: SessionRow;
-      profile: Record<string, unknown> | null;
-      password_set: boolean;
-      campaign: { name: string; sync_topic: string };
-    };
-    if (!d || !d.profile) return null;
-    const r = d.session;
-    return {
-      session: {
-        tokenHash: r.token_hash,
-        campaignId: r.campaign_id,
-        profileKey: r.profile_key,
-        userId: r.user_id,
-        createdAt: r.created_at,
-        lastSeenAt: r.last_seen_at,
-        expiresAt: r.expires_at,
-        revokedAt: r.revoked_at,
-      },
-      profile: toProfile(d.profile),
-      passwordSet: !!d.password_set,
-      campaign: { name: d.campaign.name, syncTopic: `apex-sync-${d.campaign.sync_topic}` },
-    };
-  }
-
-  async touchSession(tokenHash: string, expiresAt: string): Promise<void> {
-    await this.db.from('apex_sessions').update({ last_seen_at: new Date().toISOString(), expires_at: expiresAt }).eq('token_hash', tokenHash);
-  }
-
-  async revokeSession(tokenHash: string): Promise<void> {
-    check(await this.db.from('apex_sessions').update({ revoked_at: new Date().toISOString() }).eq('token_hash', tokenHash).is('revoked_at', null), 'revoke session');
-  }
-
-  async revokeProfileSessions(campaignId: string, key: string, exceptHash?: string): Promise<number> {
-    let q = this.db
-      .from('apex_sessions')
-      .update({ revoked_at: new Date().toISOString() })
-      .eq('campaign_id', campaignId)
-      .eq('profile_key', key)
-      .is('revoked_at', null);
-    if (exceptHash) q = q.neq('token_hash', exceptHash);
-    const rows = check(await q.select('token_hash'), 'revoke sessions') as unknown[];
-    return rows.length;
-  }
-
-  async sessionPresence(campaignId: string): Promise<Record<string, ProfilePresence>> {
-    const rows = check(
-      await this.db
-        .from('apex_sessions')
-        .select('profile_key, last_seen_at')
-        .eq('campaign_id', campaignId)
-        .is('revoked_at', null)
-        .gt('expires_at', new Date().toISOString()),
-      'session presence',
-    ) as Array<{ profile_key: string; last_seen_at: string }>;
-    const out: Record<string, ProfilePresence> = {};
-    for (const r of rows) {
-      const p = (out[r.profile_key] ??= { sessions: 0, lastSeenAt: null });
-      p.sessions++;
-      if (!p.lastSeenAt || r.last_seen_at > p.lastSeenAt) p.lastSeenAt = r.last_seen_at;
-    }
-    return out;
-  }
-
-  async loginAttemptStats(profileKey: string, ipHash: string, sinceIso: string): Promise<LoginAttemptStats> {
-    const fails = () => this.db.from('apex_login_attempts').select('id', { count: 'exact', head: true }).eq('ok', false).gte('created_at', sinceIso);
-    const [profile, ip, global, oldest] = await Promise.all([
-      fails().eq('profile_key', profileKey),
-      fails().eq('ip_hash', ipHash),
-      fails(),
-      this.db
-        .from('apex_login_attempts')
-        .select('created_at')
-        .eq('ok', false)
-        .eq('profile_key', profileKey)
-        .gte('created_at', sinceIso)
-        .order('created_at', { ascending: true })
-        .limit(1),
-    ]);
-    const err = profile.error ?? ip.error ?? global.error ?? oldest.error;
-    if (err) throw new Error(`login attempts: ${err.message}`);
-    return {
-      profileFailures: profile.count ?? 0,
-      ipFailures: ip.count ?? 0,
-      globalFailures: global.count ?? 0,
-      oldestProfileFailure: (oldest.data as Array<{ created_at: string }>)[0]?.created_at ?? null,
-    };
-  }
-
-  async recordLoginAttempt(profileKey: string, ipHash: string, ok: boolean): Promise<void> {
-    check(await this.db.from('apex_login_attempts').insert({ profile_key: profileKey, ip_hash: ipHash, ok }), 'record login attempt');
-    if (Math.random() < 0.05) {
-      await this.db.from('apex_login_attempts').delete().lt('created_at', new Date(Date.now() - 2 * 86400_000).toISOString());
-    }
-  }
-
-  async syncTopic(campaignId: string): Promise<string> {
-    const row = check(await this.db.from('apex_campaigns').select('sync_topic').eq('id', campaignId).maybeSingle(), 'sync topic') as { sync_topic: string } | null;
-    if (!row) throw new Error('sync topic: campaign not found');
-    return `apex-sync-${row.sync_topic}`;
-  }
-
-  async rotateSyncTopic(campaignId: string): Promise<void> {
-    check(await this.db.from('apex_campaigns').update({ sync_topic: newTopic() }).eq('id', campaignId), 'rotate sync topic');
-  }
-
-  async touchMember(campaignId: string, userId: string): Promise<void> {
-    await this.db.from('apex_campaign_members').update({ last_seen_at: new Date().toISOString() }).eq('campaign_id', campaignId).eq('user_id', userId);
-  }
-
-  async deployStatus(): Promise<DeployStatus> {
-    const { data, error } = await this.db.rpc('apex_deploy_status');
-    if (error) throw new Error(`deploy status: ${error.message}`);
-    const d = data as {
-      schema_version: number | null;
-      migrations: string[];
-      campaign_seeded: boolean;
-      profiles: number;
-      realtime: boolean;
-      security_problems?: string[];
-    };
-    return {
-      schemaVersion: d.schema_version ?? null,
-      migrations: d.migrations ?? [],
-      campaignSeeded: !!d.campaign_seeded,
-      profiles: Number(d.profiles ?? 0),
-      realtime: !!d.realtime,
-      securityProblems: d.security_problems ?? null,
-    };
-  }
-
-  async campaignsById(ids: string[]): Promise<Campaign[]> {
-    if (!ids.length) return [];
-    const rows = check(await this.db.from('apex_campaigns').select('id, slug, name').in('id', ids), 'campaigns');
-    return rows as Campaign[];
-  }
-
-  async members(campaignId: string): Promise<Member[]> {
-    const rows = check(
-      await this.db.from('apex_campaign_members').select('*').eq('campaign_id', campaignId).order('created_at'),
-      'members',
-    );
-    return (rows as MemberRow[]).map(toMember);
-  }
-
-  async upsertMember(m: Member): Promise<void> {
-    check(
-      await this.db
-        .from('apex_campaign_members')
-        .upsert({ campaign_id: m.campaignId, user_id: m.userId, email: m.email, role: m.role }, { onConflict: 'campaign_id,user_id' }),
-      'upsert member',
-    );
-  }
-
-  async assignments(campaignId: string): Promise<Assignment[]> {
-    const rows = check(
-      await this.db.from('apex_character_assignments').select('campaign_id, user_id, token_id').eq('campaign_id', campaignId),
-      'assignments',
-    );
-    return (rows as Array<{ campaign_id: string; user_id: string; token_id: string }>).map((r) => ({
-      campaignId: r.campaign_id,
-      userId: r.user_id,
-      tokenId: r.token_id,
-    }));
-  }
-
-  async assignToken(campaignId: string, tokenId: string, userId: string | null): Promise<void> {
-    if (userId === null) {
-      check(await this.db.from('apex_character_assignments').delete().eq('campaign_id', campaignId).eq('token_id', tokenId), 'unassign');
-      return;
-    }
-    check(
-      await this.db
-        .from('apex_character_assignments')
-        .upsert({ campaign_id: campaignId, token_id: tokenId, user_id: userId }, { onConflict: 'campaign_id,token_id' }),
-      'assign',
-    );
-  }
-
-  async loadState(campaignId: string): Promise<StoredState | null> {
-    const row = check(
-      await this.db.from('apex_game_states').select('state, version').eq('campaign_id', campaignId).maybeSingle(),
-      'load state',
-    ) as { state: GameState; version: number } | null;
-    return row ? { state: row.state, version: Number(row.version) } : null;
-  }
-
-  async stateVersion(campaignId: string): Promise<number | null> {
-    const row = check(await this.db.from('apex_game_states').select('version').eq('campaign_id', campaignId).maybeSingle(), 'state version') as {
-      version: number;
-    } | null;
-    return row ? Number(row.version) : null;
-  }
-
-  async replaceState(campaignId: string, state: GameState, userId: string): Promise<number> {
-    const cur = await this.loadState(campaignId);
-    const version = (cur?.version ?? 0) + 1;
-    check(
-      await this.db
-        .from('apex_game_states')
-        .upsert({ campaign_id: campaignId, state, version, updated_by: userId, updated_at: new Date().toISOString() }, { onConflict: 'campaign_id' }),
-      'replace state',
-    );
-    return version;
-  }
-
-  async saveState(campaignId: string, state: GameState, expectedVersion: number, userId: string): Promise<number | null> {
-    const version = expectedVersion + 1;
-    const rows = check(
-      await this.db
-        .from('apex_game_states')
-        .update({ state, version, updated_by: userId, updated_at: new Date().toISOString() })
-        .eq('campaign_id', campaignId)
-        .eq('version', expectedVersion)
-        .select('version'),
-      'save state',
-    ) as Array<{ version: number }>;
-    return rows.length === 1 ? version : null;
-  }
-
-  async createSnapshot(campaignId: string, state: GameState, version: number, label: string, userId: string | null): Promise<void> {
-    check(
-      await this.db.from('apex_state_snapshots').insert({ campaign_id: campaignId, state, version, label, created_by: userId }),
-      'create snapshot',
-    );
-  }
-
-  async listSnapshots(campaignId: string, limit: number): Promise<SnapshotInfo[]> {
-    const rows = check(
-      await this.db
-        .from('apex_state_snapshots')
-        .select('id, version, label, created_at')
-        .eq('campaign_id', campaignId)
-        .order('id', { ascending: false })
-        .limit(limit),
-      'list snapshots',
-    ) as Array<{ id: number; version: number; label: string; created_at: string }>;
-    return rows.map((r) => ({ id: Number(r.id), version: Number(r.version), label: r.label, createdAt: r.created_at }));
-  }
-
-  async loadSnapshot(campaignId: string, id: number): Promise<GameState | null> {
-    const row = check(
-      await this.db.from('apex_state_snapshots').select('state').eq('campaign_id', campaignId).eq('id', id).maybeSingle(),
-      'load snapshot',
-    ) as { state: GameState } | null;
-    return row?.state ?? null;
-  }
-
-  async pruneSnapshots(campaignId: string, keep: number): Promise<void> {
-    const rows = check(
-      await this.db.from('apex_state_snapshots').select('id').eq('campaign_id', campaignId).order('id', { ascending: false }).range(keep, keep + 200),
-      'prune snapshots',
-    ) as Array<{ id: number }>;
-    if (rows.length) check(await this.db.from('apex_state_snapshots').delete().in('id', rows.map((r) => r.id)), 'prune snapshots');
-  }
-
-  // ---------------------------------------------------------------- world management
-
-  async worldTransition(
-    campaignId: string,
-    expectedVersion: number | null,
-    newState: GameState | null,
-    archive: { name: string; description: string; kind: ArchiveKind },
-    userId: string,
-  ): Promise<{ archiveId: string; version: number }> {
-    const { data, error } = await this.db.rpc('apex_world_transition', {
-      p_campaign: campaignId,
-      p_expected_version: expectedVersion,
-      p_new_state: newState,
-      p_archive_name: archive.name,
-      p_archive_description: archive.description,
-      p_archive_kind: archive.kind,
-      p_user: userId,
-    });
-    if (error) {
-      if (/apex:version_conflict/.test(error.message)) throw new WorldConflictError();
-      throw new Error(`world transition: ${error.message}`);
-    }
-    const d = data as { archive_id: string; version: number };
-    return { archiveId: d.archive_id, version: Number(d.version) };
-  }
-
-  async listArchives(campaignId: string): Promise<ArchiveInfo[]> {
-    const rows = check(
-      await this.db
-        .from('apex_world_archives')
-        .select('id, name, description, kind, created_at, state_version, world_name, seed, radius, day, phase')
-        .eq('campaign_id', campaignId)
-        .order('created_at', { ascending: false })
-        .limit(100),
-      'list archives',
-    ) as Array<Record<string, unknown>>;
-    return rows.map(toArchive);
-  }
-
-  async loadArchive(campaignId: string, id: string): Promise<(ArchiveInfo & { state: GameState }) | null> {
-    if (!/^[0-9a-f-]{36}$/.test(id)) return null;
-    const row = check(
-      await this.db.from('apex_world_archives').select('*').eq('campaign_id', campaignId).eq('id', id).maybeSingle(),
-      'load archive',
-    ) as Record<string, unknown> | null;
-    return row ? { ...toArchive(row), state: row.state as GameState } : null;
-  }
-
-  // ---------------------------------------------------------------- portraits
-
-  async uploadPortrait(path: string, bytes: Uint8Array, contentType: string): Promise<void> {
-    const { error } = await this.db.storage.from(PORTRAIT_BUCKET).upload(path, bytes, { contentType, upsert: false, cacheControl: '3600' });
-    if (error) throw new Error(`portrait upload: ${error.message}`);
-  }
-
-  async portraitUrl(path: string, expiresInSeconds: number): Promise<string | null> {
-    const { data, error } = await this.db.storage.from(PORTRAIT_BUCKET).createSignedUrl(path, expiresInSeconds);
-    if (error) return null;
-    return data.signedUrl;
-  }
-
-  async deletePortrait(path: string): Promise<void> {
-    await this.db.storage.from(PORTRAIT_BUCKET).remove([path]);
-  }
-
-  // ---------------------------------------------------------------- character sheets
-
-  async loadSheet(campaignId: string, tokenId: string): Promise<StoredSheet | null> {
-    const r = check(
-      await this.db.from('apex_character_sheets').select('data, version, updated_at, updated_by').eq('campaign_id', campaignId).eq('token_id', tokenId).maybeSingle(),
-      'load sheet',
-    ) as { data: unknown; version: number; updated_at: string; updated_by: string | null } | null;
-    return r ? { data: r.data, version: Number(r.version), updatedAt: r.updated_at, updatedBy: r.updated_by } : null;
-  }
-
-  async loadSheetVitals(campaignId: string): Promise<Record<string, unknown>> {
-    const rows = check(
-      await this.db.from('apex_character_sheets').select('token_id, hp:data->hitPoints').eq('campaign_id', campaignId),
-      'load sheet vitals',
-    ) as Array<{ token_id: string; hp: unknown }>;
-    return Object.fromEntries(rows.map((r) => [r.token_id, r.hp]));
-  }
-
-  async loadSheetDetails(campaignId: string): Promise<Record<string, unknown>> {
-    const rows = check(
-      await this.db.from('apex_character_sheets').select('token_id, details:data->details').eq('campaign_id', campaignId),
-      'load sheet details',
-    ) as Array<{ token_id: string; details: unknown }>;
-    return Object.fromEntries(rows.map((r) => [r.token_id, r.details]));
-  }
-
-  async saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string): Promise<number | null> {
-    const now = new Date().toISOString();
-    if (expectedVersion === 0) {
-      const { error } = await this.db
-        .from('apex_character_sheets')
-        .insert({ campaign_id: campaignId, token_id: tokenId, data, version: 1, updated_by: userId, updated_at: now });
-      if (!error) return 1;
-      if ((error as { code?: string }).code === '23505') return null; // someone created it first
-      throw new Error(`save sheet: ${error.message}`);
-    }
-    const rows = check(
-      await this.db
-        .from('apex_character_sheets')
-        .update({ data, version: expectedVersion + 1, updated_by: userId, updated_at: now })
-        .eq('campaign_id', campaignId)
-        .eq('token_id', tokenId)
-        .eq('version', expectedVersion)
-        .select('version'),
-      'save sheet',
-    ) as unknown[];
-    return rows.length === 1 ? expectedVersion + 1 : null;
-  }
-
-  async backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string, userId: string): Promise<void> {
-    check(
-      await this.db.from('apex_character_sheet_backups').insert({ campaign_id: campaignId, token_id: tokenId, data, version, reason, created_by: userId }),
-      'backup sheet',
-    );
-  }
-
-  async listSheetBackups(campaignId: string, tokenId: string, limit: number): Promise<SheetBackupInfo[]> {
-    const rows = check(
-      await this.db
-        .from('apex_character_sheet_backups')
-        .select('id, version, reason, created_at, kind:data->>kind, name:data->>name, note:data->>note, level:data->>level')
-        .eq('campaign_id', campaignId)
-        .eq('token_id', tokenId)
-        .order('id', { ascending: false })
-        .limit(limit),
-      'list sheet backups',
-    ) as Array<Record<string, unknown>>;
-    return rows.map(toBackupInfo);
-  }
-
-  async loadSheetBackup(campaignId: string, id: number) {
-    const r = check(
-      await this.db.from('apex_character_sheet_backups').select('id, token_id, data, version, reason, created_at').eq('campaign_id', campaignId).eq('id', id).maybeSingle(),
-      'load sheet backup',
-    ) as Record<string, unknown> | null;
-    if (!r) return null;
-    const d = (r.data ?? {}) as Record<string, unknown>;
-    return { ...toBackupInfo({ ...r, kind: d.kind, name: d.name, note: d.note, level: d.level }), tokenId: String(r.token_id), data: r.data };
-  }
-
-  // ---------------------------------------------------------------- feedback
-  async createFeedback(f: NewFeedback): Promise<FeedbackRow> {
-    const row = check(
-      await this.db
-        .from('apex_feedback')
-        .insert({
-          campaign_id: f.campaignId,
-          user_id: f.userId,
-          profile_key: f.profileKey,
-          token_id: f.tokenId,
-          kind: f.kind,
-          category: f.category,
-          title: f.title,
-          description: f.description,
-          steps: f.steps,
-          page: f.page,
-          app_version: f.appVersion,
-          screenshot_path: f.screenshotPath,
-        })
-        .select('*')
-        .single(),
-      'create feedback',
-    ) as Record<string, unknown>;
-    return toFeedback(row);
-  }
-
-  async listFeedback(campaignId: string, opts: { userId?: string; limit: number }): Promise<FeedbackRow[]> {
-    let q = this.db.from('apex_feedback').select('*').eq('campaign_id', campaignId);
-    if (opts.userId) q = q.or(`user_id.eq.${opts.userId},shared.eq.true`);
-    const rows = check(await q.order('created_at', { ascending: false }).limit(opts.limit), 'list feedback') as Array<Record<string, unknown>>;
-    return rows.map(toFeedback);
-  }
-
-  async updateFeedback(campaignId: string, id: string, patch: Partial<Pick<FeedbackRow, 'status' | 'gmNotes' | 'shared'>>): Promise<FeedbackRow | null> {
-    const now = new Date().toISOString();
-    const upd: Record<string, unknown> = { updated_at: now };
-    if (patch.status !== undefined) (upd.status = patch.status), (upd.status_changed_at = now);
-    if (patch.gmNotes !== undefined) upd.gm_notes = patch.gmNotes;
-    if (patch.shared !== undefined) upd.shared = patch.shared;
-    const rows = check(await this.db.from('apex_feedback').update(upd).eq('campaign_id', campaignId).eq('id', id).select('*'), 'update feedback') as Array<Record<string, unknown>>;
-    return rows[0] ? toFeedback(rows[0]) : null;
-  }
-
-  async countRecentFeedback(campaignId: string, userId: string, sinceIso: string): Promise<number> {
-    const { count, error } = await this.db.from('apex_feedback').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId).eq('user_id', userId).gte('created_at', sinceIso);
-    if (error) throw new Error(`count feedback: ${error.message}`);
-    return count ?? 0;
-  }
-
-  async reserveRequest(e: Omit<CommandLogEntry, 'ok' | 'error' | 'version'> & { requestId: string }): Promise<RequestReservation> {
-    const { error } = await this.db.from('apex_command_log').insert({
-      campaign_id: e.campaignId,
-      user_id: e.userId,
-      role: e.role,
-      command: e.command,
-      ok: false,
-      error: 'pending',
-      request_id: e.requestId,
-    });
-    if (!error) return { kind: 'reserved' };
-    if ((error as { code?: string }).code !== '23505') throw new Error(`reserve request: ${error.message}`);
-    return (await this.requestStatus(e.campaignId, e.requestId)) ?? { kind: 'existing', state: 'pending', version: null, error: null };
-  }
-
-  async finishRequest(campaignId: string, requestId: string, ok: boolean, error: string | null, version: number | null): Promise<void> {
-    check(
-      await this.db.from('apex_command_log').update({ ok, error, version }).eq('campaign_id', campaignId).eq('request_id', requestId),
-      'finish request',
-    );
-  }
-
-  async requestStatus(campaignId: string, requestId: string): Promise<RequestReservation | null> {
-    const row = check(
-      await this.db.from('apex_command_log').select('ok, error, version').eq('campaign_id', campaignId).eq('request_id', requestId).maybeSingle(),
-      'request status',
-    ) as { ok: boolean; error: string | null; version: number | null } | null;
-    if (!row) return null;
-    return {
-      kind: 'existing',
-      state: row.ok ? 'ok' : row.error === 'pending' ? 'pending' : 'failed',
-      version: row.version === null ? null : Number(row.version),
-      error: row.ok ? null : row.error,
-    };
-  }
-
-  async logCommand(e: CommandLogEntry): Promise<void> {
-    // Audit log failures must never break gameplay.
-    const { error } = await this.db.from('apex_command_log').insert({
-      campaign_id: e.campaignId,
-      user_id: e.userId,
-      role: e.role,
-      command: e.command,
-      ok: e.ok,
-      error: e.error ?? null,
-      version: e.version ?? null,
-    });
-    if (error) console.warn('[apex-api] command log failed:', error.message);
-  }
-}
-
-function toBackupInfo(r: Record<string, unknown>): SheetBackupInfo {
-  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
-  return {
-    id: Number(r.id),
-    version: Number(r.version),
-    reason: String(r.reason ?? ''),
-    createdAt: String(r.created_at),
-    kind: r.kind === 'apex-character-snapshot' ? 'snapshot' : 'backup',
-    name: str(r.name),
-    note: str(r.note),
-    level: str(r.level),
-  };
-}
-
-function toFeedback(r: Record<string, unknown>): FeedbackRow {
-  return {
-    id: String(r.id),
-    userId: String(r.user_id ?? ''),
-    profileKey: String(r.profile_key ?? ''),
-    tokenId: (r.token_id as string | null) ?? null,
-    kind: r.kind as FeedbackRow['kind'],
-    category: String(r.category ?? 'other'),
-    title: String(r.title ?? ''),
-    description: String(r.description ?? ''),
-    steps: String(r.steps ?? ''),
-    page: String(r.page ?? ''),
-    appVersion: String(r.app_version ?? ''),
-    screenshotPath: (r.screenshot_path as string | null) ?? null,
-    status: r.status as FeedbackRow['status'],
-    gmNotes: String(r.gm_notes ?? ''),
-    shared: !!r.shared,
-    createdAt: String(r.created_at),
-    updatedAt: String(r.updated_at),
-    statusChangedAt: (r.status_changed_at as string | null) ?? null,
-  };
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×­8å:-jZ.¶›­–)Ş³Rò¢ Ğ¢¢7W&6R–×ÆVÖVçFF–öâöbF†R&Wòâ'Vç2ôäÅ’öâF†R6W'fW"…fW&6VÂgVæ7F–öâĞ¢¢v—F‚F†R6V7&WB¶W’Âv†–6‚'—76W2$Å2âæWfW"–×÷'BF†—2ÖöGVÆRg&öÒ6Æ–VçB6öFRàĞ¢¢ğĞ¦–×÷'B²7–æ4Æö6Å7F÷&vRÒg&öÒvæöFS¦7–æ5ö†öö·2s°Ğ¦–×÷'B²7&VFT6Æ–VçBÂG—R7W&6T6Æ–VçBÒg&öÒt7W&6R÷7W&6RÖ§2s°Ğ¦–×÷'BG—R²vÖU7FFRÒg&öÒrââövÖR÷G—W2æ§2s°Ğ¦–×÷'BG—R°Ğ¢&6†—fT–æfòÀĞ¢&6†—fT¶–æBÀĞ¢76–væÖVçBÀĞ¢WF„'VæFÆRÀĞ¢6×–vâÀĞ¢6öÖÖæDÆötVçG'’ÀĞ¢fVVF&6µ&÷rÀĞ¢æWtfVVF&6²ÀĞ¢6†VWD&6·W–æfòÀĞ¢7&VFVçF–ÂÀĞ¢FWÆ÷•7FGW2ÀĞ¢Æöv–äGFV×E7FG2ÀĞ¢ÖVÖ&W"ÀĞ¢&öf–ÆRÀĞ¢&öf–ÆU&W6Væ6RÀĞ¢&WòÀĞ¢&WVW7E&W6W'fF–öâÀĞ¢&öÆRÀĞ¢6W76–öå&V6÷&BÀĞ¢6æ6†÷D–æfòÀĞ¢7F÷&VE6†VWBÀĞ¢7F÷&VE7FFRÀĞ§Òg&öÒrâ÷&Wòæ§2s°Ğ¦–×÷'B²v÷&ÆD6öæfÆ–7DW'&÷"Òg&öÒrâ÷&Wòæ§2s°Ğ Ğ¢ò¢¢WfW'’FF&6R6ÆÂ—2&÷'FVBgFW"F†—2Öç’Ö–ÆÆ—6V6öæG2(	26Æ÷rFF&6R×W7BæWfW"†ærgVæ7F–öââ¢ğĞ¦W‡÷'B6öç7BD%õD”ÔTõUEôÕ2Òƒ°Ğ¦W‡÷'B6öç7Bõ%E$•Eô%T4´UBÒvW‚×÷'G&—G2s°Ğ Ğ¢ò¢¢W"×&WVW7BF–væ÷7F–72‡&÷VæBG&—2ÂF–ÖR7VçB–âF†RFF&6R’âæòFFÂæò6V7&WG2â¢ğĞ¦W‡÷'B–çFW&f6R&WVW7E7FG2°Ğ¢F#¢çVÖ&W#°Ğ¢F$×3¢çVÖ&W#°Ğ§ĞĞ¦W‡÷'B6öç7B&WVW7E7FG2ÒæWr7–æ4Æö6Å7F÷&vSÅ&WVW7E7FG3â‚“°Ğ Ğ¢ò¢¢fWF6‚v—F‚†&BF–ÖV÷WBæB&÷VæB×G&—66÷VçF–ærâ¢ğĞ¦6öç7B&÷VæFVDfWF6ƒ¢G—VöbfWF6‚Ò7–æ2†–çWBÂ–æ—B’Óâ°Ğ¢6öç7B7FG2Ò&WVW7E7FG2ævWE7F÷&R‚“°Ğ¢6öç7B7F'FVBÒFFRææ÷r‚“°Ğ¢6öç7BF–ÖV÷WBÒ&÷'E6–væÂçF–ÖV÷WB„D%õD”ÔTõUEôÕ2“°Ğ¢6öç7B6–væÂÒ–æ—Còç6–væÂò&÷'E6–væÂæç’…¶–æ—Bç6–væÂÂF–ÖV÷WEÒ’¢F–ÖV÷WC°Ğ¢G'’°Ğ¢&WGW&âv—BfWF6‚†–çWBÂ²ââæ–æ—BÂ6–væÂÒ“°Ğ¢Ò6F6‚†R’°Ğ¢–b‡F–ÖV÷WBæ&÷'FVB’F‡&÷ræWrW'&÷"†FF&6RF–ÖV÷WBgFW"G´D%õD”ÔTõUEôÕ7Ò×6“°Ğ¢F‡&÷rS°Ğ¢Òf–æÆÇ’°Ğ¢–b‡7FG2’°Ğ¢7FG2æF"²³°Ğ¢7FG2æF$×2³ÒFFRææ÷r‚’Ò7F'FVC°Ğ¢ĞĞ¢ĞĞ§Ó°Ğ Ğ¦W‡÷'B–çFW&f6R6W'fW$Vçb°Ğ¢W&Ã¢7G&–æs°Ğ¢6V7&WD¶W“¢7G&–æs°Ğ§ĞĞ Ğ¢ò¢¢&VG26W'fW"×6–FR6öæf–wW&F–öââF†R6V7&WB¶W’×W7BæWfW"W6Rd•DUò&Vf—‚â¢ğĞ¦W‡÷'BgVæ7F–öâ&VE6W'fW$Vçb†Vçc¢&V6÷&CÇ7G&–ærÂ7G&–ærÂVæFVf–æVCâ“¢6W'fW$VçbÂçVÆÂ°Ğ¢6öç7BW&ÂÒVçbå5U$4UõU$ÂóòVçbåd•DUõ5U$4UõU$Ã°Ğ¢6öç7B6V7&WD¶W’ÒVçbå5U$4Uõ4T5$UEô´U’óòVçbå5U$4Uõ4U%d”4Uõ$ôÄUô´U“°Ğ¢–b‚W&ÂÇÂ6V7&WD¶W’’&WGW&âçVÆÃ°Ğ¢&WGW&â²W&ÂÂ6V7&WD¶W’Ó°Ğ§ĞĞ Ğ¦gVæ7F–öâ6†V6³ÅCâ‡&W3¢²FF¢C²W'&÷#¢²ÖW76vS¢7G&–ærÒÂçVÆÂÒÂv†C¢7G&–ær“¢B°Ğ¢–b‡&W2æW'&÷"’F‡&÷ræWrW'&÷"†G·v†GÓ¢G·&W2æW'&÷"æÖW76vWÖ“°Ğ¢&WGW&â&W2æFF°Ğ§ĞĞ Ğ§G—RÖVÖ&W%&÷rÒ²6×–våö–C¢7G&–æs²W6W%ö–C¢7G&–æs²VÖ–Ã¢7G&–ærÂçVÆÃ²&öÆS¢&öÆS²Æ7E÷6VVåöCó¢7G&–ærÂçVÆÂÓ°Ğ§G—R6W76–öå&÷rÒ°Ğ¢Fö¶Våö†6ƒ¢7G&–æs°Ğ¢6×–våö–C¢7G&–æs°Ğ¢&öf–ÆUö¶W“¢7G&–æs°Ğ¢W6W%ö–C¢7G&–æs°Ğ¢7&VFVEöC¢7G&–æs°Ğ¢Æ7E÷6VVåöC¢7G&–æs°Ğ¢W‡—&W5öC¢7G&–æs°Ğ¢&Wfö¶VEöC¢7G&–ærÂçVÆÃ°Ğ§Ó°Ğ Ğ¦6öç7BFôÖVÖ&W"Ò‡#¢ÖVÖ&W%&÷r“¢ÖVÖ&W"Óâ‡²6×–vä–C¢"æ6×–våö–BÂW6W$–C¢"çW6W%ö–BÂVÖ–Ã¢"æVÖ–ÂÂ&öÆS¢"ç&öÆRÂÆ7E6VVäC¢"æÆ7E÷6VVåöBóòçVÆÂÒ“°Ğ¦6öç7BFõ&öf–ÆRÒ‡#¢&V6÷&CÇ7G&–ærÂVæ¶æ÷vãâ“¢&öf–ÆRÓâ‡°Ğ¢6×–vä–C¢"æ6×–våö–B27G&–ærÀĞ¢¶W“¢"ç&öf–ÆUö¶W’27G&–ærÀĞ¢F—7Æ”æÖS¢"æF—7Æ•öæÖR27G&–ærÀĞ¢6†&7FW$æÖS¢"æ6†&7FW%öæÖR27G&–ærÀĞ¢&öÆS¢"ç&öÆR2&öÆRÀĞ¢Fö¶Vä–G3¢‡"çFö¶Våö–G227G&–æuµÒÂçVÆÂ’óòµÒÀĞ¢W6W$–C¢"çW6W%ö–B27G&–ærÀĞ¢7F—fS¢"æ7F—fRÓÓÒG'VRÀĞ§Ò“°Ğ¦6öç7BFô&6†—fRÒ‡#¢&V6÷&CÇ7G&–ærÂVæ¶æ÷vãâ“¢&6†—fT–æfòÓâ‡°Ğ¢–C¢"æ–B27G&–ærÀĞ¢æÖS¢"ææÖR27G&–ærÀĞ¢FW67&—F–öã¢‡"æFW67&—F–öâ27G&–ær’óòrrÀĞ¢¶–æC¢"æ¶–æB2&6†—fT¶–æBÀĞ¢7&VFVDC¢"æ7&VFVEöB27G&–ærÀĞ¢7FFUfW'6–öã¢çVÖ&W"‡"ç7FFU÷fW'6–öâ’ÀĞ¢v÷&ÆDæÖS¢‡"çv÷&ÆEöæÖR27G&–ærÂçVÆÂ’óòçVÆÂÀĞ¢6VVC¢"ç6VVBÓÓÒçVÆÂÇÂ"ç6VVBÓÓÒVæFVf–æVBòçVÆÂ¢çVÖ&W"‡"ç6VVB’ÀĞ¢&F—W3¢"ç&F—W2ÓÓÒçVÆÂÇÂ"ç&F—W2ÓÓÒVæFVf–æVBòçVÆÂ¢çVÖ&W"‡"ç&F—W2’ÀĞ¢F“¢"æF’ÓÓÒçVÆÂÇÂ"æF’ÓÓÒVæFVf–æVBòçVÆÂ¢çVÖ&W"‡"æF’’ÀĞ¢†6S¢‡"ç†6R27G&–ærÂçVÆÂ’óòçVÆÂÀĞ§Ò“°Ğ¦6öç7BæWuF÷–2Ò‚’Óâ7'—Fòç&æFöÕUT”B‚’ç&WÆ6R‚òÒörÂrr’²7'—Fòç&æFöÕUT”B‚’ç&WÆ6R‚òÒörÂrr“°Ğ¦6öç7B¤õU$äÅôd”TÄE2Òv–BÆ÷væW%ö–BÇF—FÆRÆ&öG’Æ6FVv÷'’ÇFw2Ç–ææVBÇ6†&–ærÇ66VæUö–BÆ–ÖvUö–BÆvÖUöFFRÆ7&VFVEöBÇWFFVEöBÇfW'6–öâs°Ğ Ğ¦W‡÷'B6Æ727W&6U&Wò–×ÆVÖVçG2&Wò°Ğ¢&VFöæÇ’¦÷W&æÄ–ÖvW3¢–×÷'B‚râö¦÷W&æÄ–ÖvW2æ§2r’ä¦÷W&æÄ–ÖvU7F÷&RÒ°Ğ¢vWC¢7–æ2†6×–vä–BÂ–B’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…ö¦÷W&æÅö–ÖvW2r’ç6VÆV7B‚v–BÆVçG'•ö–BÆ÷væW%ö–BÇ6÷W&6U÷F‚ÇF‡VÖ&æ–Å÷F‚ÆÖ–ÖRr’æW‚v6×–våö–BrÆ6×–vä–B’æW‚v–BrÆ–B’æÖ–&U6–ævÆR‚“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†¦÷W&æÂ–ÖvS¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2–×÷'B‚râö¦÷W&æÄ–ÖvW2æ§2r’ä¦÷W&æÄ–ÖvRÂçVÆÃ°Ğ¢ÒÀĞ¢WÆöC¢7–æ2‡W6W"ÂVçG'”–BÂ–ÖvRÂF‡VÖ&æ–Â’Óâ°Ğ¢6öç7B–BÒ7'—Fòç&æFöÕUT”B‚’Â&6RÒG·W6W"æ6×–vä–GÒòG·W6W"æ–GÒòG¶VçG'”–GÒòG¶–GÖÂ6÷W&6U÷F‚Ò&6R²rö–ÖvRrÂF‡VÖ&æ–Å÷F‚Ò&6R²r÷F‡VÖ&æ–Âs°Ğ¢6öç7B7F÷&vRÒF†—2æF"ç7F÷&vRæg&öÒ‚vW‚Ö¦÷W&æÂÖ–ÖvW2r“°Ğ¢G'’°Ğ¢f÷"†6öç7B·F‚Â6öçFVçEÒöbµ·6÷W&6U÷F‚Æ–ÖvUÒÅ·F‡VÖ&æ–Å÷F‚ÇF‡VÖ&æ–ÅÕÒ26öç7B’²6öç7B"Òv—B7F÷&vRçWÆöB‡F‚Æ6öçFVçBæ'—FW2Ç²6öçFVçEG—S¢6öçFVçBæÖ–ÖRÂW6W'C¦fÇ6RÂ66†T6öçG&öÃ¢scrÒ“²–b‡"æW'&÷"’F‡&÷ræWrW'&÷"‡"æW'&÷"æÖW76vR“²ĞĞ¢6öç7B&÷rÒ²–BÂVçG'•ö–C¦VçG'”–BÂ÷væW%ö–C§W6W"æ–BÂ6÷W&6U÷F‚ÂF‡VÖ&æ–Å÷F‚ÂÖ–ÖS¦–ÖvRæÖ–ÖRÓ°Ğ¢6öç7B²W'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…ö¦÷W&æÅö–ÖvW2r’æ–ç6W'B‡²ââç&÷rÂ6×–våö–C§W6W"æ6×–vä–BÒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†W'&÷"æÖW76vR“°Ğ¢&WGW&â&÷s°Ğ¢Ò6F6‚†W'&÷"’²v—B7F÷&vRç&VÖ÷fR…·6÷W&6U÷F‚ÇF‡VÖ&æ–Å÷F…Ò’æ6F6‚‚‚’ÓâVæFVf–æVB“²F‡&÷rW'&÷#²ĞĞ¢ÒÀĞ¢W&Ã¢7–æ2F‚Óâ²6öç7B²FFÆW'&÷"ÒÒv—BF†—2æF"ç7F÷&vRæg&öÒ‚vW‚Ö¦÷W&æÂÖ–ÖvW2r’æ7&VFU6–væVEW&Â‡F‚Ãc“²&WGW&âW'&÷"òçVÆÂ¢FFç6–væVEW&Ã²ÒÀĞ¢Ó°Ğ¢&VFöæÇ’6æ7GV'“¢–×÷'B‚râ÷6æ7GV'’æ§2r’å6æ7GV'•7F÷&RÒ°Ğ¢vWC¢7–æ26×–vä–BÓâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…÷6æ7GV'•÷6WGF–æw2r’ç6VÆV7B‚w&Wf—6–öâÆFÖ÷7†W&RÆFVfVÇEö76WBÆ&6¶w&÷VæG2r’æW‚v6×–våö–BrÂ6×–vä–B’æÖ–&U6–ævÆR‚“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†6æ7GV'’6WGF–æw3¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFFò²&Wf—6–öã¢FFç&Wf—6–öâÂFÖ÷7†W&S¢FFæFÖ÷7†W&RÂFVfVÇD76WC¢FFæFVfVÇEö76WBÂ&6¶w&÷VæG3¢FFæ&6¶w&÷VæG2Ò2–×÷'B‚râ÷6æ7GV'’æ§2r’å6æ7GV'•6WGF–æw2¢²&Wf—6–öã¢ÂFÖ÷7†W&S¢v†ÆÂrÂFVfVÇD76WC¢çVÆÂÂ&6¶w&÷VæG3¢µÒÓ°Ğ¢ÒÀĞ¢6fS¢7–æ2†6×–vä–BÂW‡V7FVBÂ6WGF–æw2’Óâ°Ğ¢6öç7B&÷rÒ²FÖ÷7†W&S¢6WGF–æw2æFÖ÷7†W&RÂFVfVÇEö76WC¢6WGF–æw2æFVfVÇD76WBÂ&6¶w&÷VæG3¢6WGF–æw2æ&6¶w&÷VæG2Â&Wf—6–öã¢W‡V7FVB²Ó°Ğ¢6öç7B&W7VÇBÒW‡V7FVBÓÓÒòv—BF†—2æF"æg&öÒ‚vW…÷6æ7GV'•÷6WGF–æw2r’æ–ç6W'B‡²6×–våö–C¢6×–vä–BÂââç&÷rÒ’ç6VÆV7B‚w&Wf—6–öâr’ç6–ævÆR‚’¢v—BF†—2æF"æg&öÒ‚vW…÷6æ7GV'•÷6WGF–æw2r’çWFFR‡&÷r’æW‚v6×–våö–BrÂ6×–vä–B’æW‚w&Wf—6–öârÂW‡V7FVB’ç6VÆV7B‚w&Wf—6–öâr’æÖ–&U6–ævÆR‚“°Ğ¢–b‡&W7VÇBæW'&÷#òæ6öFRÓÓÒs#3SRr’&WGW&âçVÆÃ°Ğ¢–b‡&W7VÇBæW'&÷"’F‡&÷ræWrW'&÷"†6æ7GV'’6WGF–æw26fS¢G·&W7VÇBæW'&÷"æÖW76vWÖ“°Ğ¢&WGW&â&W7VÇBæFFò²ââç6WGF–æw2Â&Wf—6–öã¢&W7VÇBæFFç&Wf—6–öâÒ¢çVÆÃ°Ğ¢ÒÀĞ¢Ó°Ğ¢&VFöæÇ’66VæUG&fVÃ¢–×÷'B‚râ÷66VæUG&fVÂæ§2r’å66VæUG&fVÂÒ°Ğ¢6æ6†÷C¢7–æ2‡W6W"Â66VæT–B’Óâ°Ğ¢6öç7BÆö6F–öâÒv—BF†—2æF"æg&öÒ‚vW…÷'G•öÆö6F–öç2r’ç6VÆV7B‚væöFUö–BÇ&Wf—6–öâr’æW‚v6×–våö–BrÂW6W"æ6×–vä–B’æW‚w66VæUö–BrÂ66VæT–B’æÖ–&U6–ævÆR‚“°Ğ¢–b†Æö6F–öâæW'&÷"’F‡&÷ræWrW'&÷"†'G’Æö6F–öã¢G¶Æö6F–öâæW'&÷"æÖW76vWÖ“°Ğ¢ÆWBVW'’ÒF†—2æF"æg&öÒ‚vW…÷66VæU÷G&fVÂr’ç6VÆV7B‚v–BÇ&÷÷6VEö'’Æg&öÕöæöFRÇFõöæöFRÇ&÷WFUö–BÇF÷FÅö†÷W'2ÆVÆ6VEö†÷W'2Ç7FGW2ÇfW'6–öâÇ66VæU÷&Wf—6–öâr’æW‚v6×–våö–BrÂW6W"æ6×–vä–B’æW‚w66VæUö–BrÂ66VæT–B“°Ğ¢–b‡W6W"ç&öÆRÓÒvvÒr’VW'’ÒVW'’æ÷"†&÷÷6VEö'’æWâG·W6W"æ–GÒÇ7FGW2æ–ââ‡G&fVÆ–ærÆ6ö×ÆWFR–“°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BVW'’æ÷&FW"‚v7&VFVEöBrÂ²66VæF–æs¢fÇ6RÒ’æ÷&FW"‚v–Br’æÆ–Ö—BƒS“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†G&fVÂ&÷÷6Ç3¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&â²'G”æöFS¢Æö6F–öâæFFòææöFUö–BóòçVÆÂÂ&Wf—6–öã¢Æö6F–öâæFFòç&Wf—6–öâóòÂ&÷÷6Ç3¢†FF2–×÷'B‚râ÷66VæUG&fVÂæ§2r’åG&fVÅ&V6÷&EµÒ’æÖ‡Óâ‡²ââçÂ&÷÷6VEö'“¢W6W"ç&öÆRÓÓÒvvÒrÇÂç&÷÷6VEö'’ÓÓÒW6W"æ–Bòç&÷÷6VEö'’¢rrÒ’’Ó°Ğ¢ÒÀĞ¢7F–öã¢7–æ2‡W6W"Â66VæT–BÂ–çWB’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç'2‚vW…÷v÷&ÆE÷G&fVÅö7F–öârÂ²ö6×–vã¢W6W"æ6×–vä–BÂö7F÷#¢W6W"æ–BÂ÷66VæS¢66VæT–BÂö–çWC¢–çWBÒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†v÷&ÆBG&fVÃ¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2²ö³¢&ööÆVã²W'&÷#ó¢7G&–ærÓ°Ğ¢ÒÀĞ¢Ó°Ğ¢&VFöæÇ’66VæTÖ÷F–öã¢–×÷'B‚râ÷66VæTÖ÷F–öâæ§2r’å66VæTÖ÷F–öâÒ°Ğ¢6æ6†÷C¢7–æ2†6×–vä–BÂ66VæT–BÂW6W$–BÂFö¶Vä–G2’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç'2‚vW…÷66VæUöÖ÷F–öå÷7FFRrÂ²ö6×–vã¢6×–vä–BÂ÷66VæS¢66VæT–BÂ÷W6W#¢W6W$–BÂ÷Fö¶Vç3¢Fö¶Vä–G2Ò“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†66VæRÖ÷F–öã¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2–×÷'B‚râ÷66VæTÖ÷F–öâæ§2r’äÖ÷F–öå6æ6†÷C°Ğ¢ÒÀĞ¢w&—FS¢7–æ2‡W6W"Â–çWBÂ6÷7BÂF—66÷fW&VB’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç'2‚vW…÷w&—FU÷66VæUöÖ÷F–öârÂ²ö6×–vã¢W6W"æ6×–vä–BÂö7F÷#¢W6W"æ–BÂö–çWC¢–çWBÂö6÷7C¢6÷7BÂöF—66÷fW&VC¢F—66÷fW&VBÒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†66VæRÖ÷fS¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2²ö³¢&ööÆVã²W'&÷#ó¢7G&–ærÓ°Ğ¢ÒÀĞ¢Gfæ6S¢7–æ2‡W6W"Â–çFW'fÂÂW‡V7FVBÂ&WVW7D–B’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç'2‚vW…öGfæ6U÷66VæUö–çFW'fÂrÂ²ö6×–vã¢W6W"æ6×–vä–BÂö7F÷#¢W6W"æ–BÂö–çFW'fÃ¢–çFW'fÂÂöW‡V7FVC¢W‡V7FVBÂ÷&WVW7C¢&WVW7D–BÒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†66VæR–çFW'fÃ¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2²ö³¢&ööÆVã²W'&÷#ó¢7G&–ærÓ°Ğ¢ÒÀĞ¢Ó°Ğ¢ò¢¢öæÇ’F†R6ÖÆÂ43æGW&R—6öÖWG&–2&Wf–Wr6WB—2W‡÷6VC²&&—G&'’F‡2&RæWfW"66WFVBâ¢ğĞ¢&VFöæÇ’¶VææW•&Wf–WrÒ°Ğ¢6–vå&Wf–Wt76WG3¢7–æ2‚’Óâ°Ğ¢6öç7BF‡2Ò°Ğ¢w&÷VæC¢v¶VææW•öæGW&RÖ¶—Bô—6öÖWG&–2öw&÷VæEöw&75ôäRçærrÀĞ¢G&VS¢v¶VææW•öæGW&RÖ¶—Bô—6öÖWG&–2÷G&VUö&Æö6·5ôäRçærrÀĞ¢'W6ƒ¢v¶VææW•öæGW&RÖ¶—Bô—6öÖWG&–2÷ÆçEö'W6…ôäRçærrÀĞ¢Ó°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç7F÷&vRæg&öÒ‚vW‚Ö76WB×6·2r’æ7&VFU6–væVEW&Ç2„ö&¦V7BçfÇVW2‡F‡2’Âc“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†¶VææW’&Wf–Wr6–væ–æs¢G¶W'&÷"æÖW76vWÖ“°Ğ¢6öç7B'•F‚ÒæWrÖ‚†FFóòµÒ’æÖ†—FVÒÓâ¶—FVÒçF‚Â—FVÒç6–væVEW&ÅÒ’“°Ğ¢6öç7B76WG2Òö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2‡F‡2’æfÆDÖ‚…¶¶W’ÂF…Ò’Óâ°Ğ¢6öç7BW&ÂÒ'•F‚ævWB‡F‚“°Ğ¢&WGW&âW&Âòµ¶¶W’ÂW&ÅÕÒ¢µÓ°Ğ¢Ò’“°Ğ¢–b‚76WG2æw&÷VæBÇÂ76WG2çG&VRÇÂ76WG2æ'W6‚’F‡&÷ræWrW'&÷"‚t¶VææW’&Wf–Wr76WG2&RVæf–Æ&ÆRâr“°Ğ¢&WGW&â²76WG2ÂW‡—&W4–ã¢cÓ°Ğ¢ÒÀĞ¢Ó°Ğ¢&VFöæÇ’66VæT76WG3¢–×÷'B‚râ÷66VæT76WG2æ§2r’å66VæT76WE7F÷&RÒ°Ğ¢vWC¢7–æ2†6×–vä–BÂ–B’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…÷66VæUö76WG2r’ç6VÆV7B‚v–BÇ66VæUö–BÆVF–Væ6RÇ6÷W&6U÷F‚ÇF‡VÖ&æ–Å÷F‚Çv–GF‚Æ†V–v‡Br’æW‚v6×–våö–BrÂ6×–vä–B’æW‚v–BrÂ–B’æÖ–&U6–ævÆR‚“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†Ö76WC¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2–×÷'B‚râ÷66VæT76WG2æ§2r’å66VæT76WBÂçVÆÃ°Ğ¢ÒÀĞ¢WÆöC¢7–æ2‡W6W"Â66VæT–BÂVF–Væ6RÂ–ÖvRÂF‡VÖ&æ–Â’Óâ°Ğ¢6öç7B–BÒ7'—Fòç&æFöÕUT”B‚’ÂF‚ÒG·W6W"æ6×–vä–GÒòG·66VæT–GÒòG¶–GÖ°Ğ¢6öç7B6÷W&6U÷F‚ÒF‚²röÖrÂF‡VÖ&æ–Å÷F‚ÒF‚²r÷F‡VÖ&æ–Âs°Ğ¢6öç7B7F÷&vRÒF†—2æF"ç7F÷&vRæg&öÒ‚vW‚×66VæRÖÖ2r“°Ğ¢G'’°Ğ¢f÷"†6öç7B¶¶W’Âf–ÆUÒöbµ·6÷W&6U÷F‚Â–ÖvUÒÂ·F‡VÖ&æ–Å÷F‚ÂF‡VÖ&æ–ÅÕÒ26öç7B’°Ğ¢6öç7B&W7VÇBÒv—B7F÷&vRçWÆöB†¶W’Âf–ÆRæ'—FW2Â²6öçFVçEG—S¢f–ÆRæÖ–ÖRÂW6W'C¢fÇ6RÂ66†T6öçG&öÃ¢scrÒ“°Ğ¢–b‡&W7VÇBæW'&÷"’F‡&÷ræWrW'&÷"‡&W7VÇBæW'&÷"æÖW76vR“°Ğ¢ĞĞ¢6öç7B76WBÒ²–BÂ66VæUö–C¢66VæT–BÂVF–Væ6RÂ6÷W&6U÷F‚ÂF‡VÖ&æ–Å÷F‚Âv–GFƒ¢–ÖvRçv–GF‚Â†V–v‡C¢–ÖvRæ†V–v‡BÓ°Ğ¢6öç7B²W'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…÷66VæUö76WG2r’æ–ç6W'B‡²ââæ76WBÂ6×–våö–C¢W6W"æ6×–vä–BÒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†W'&÷"æÖW76vR“°Ğ¢&WGW&â76WC°Ğ¢Ò6F6‚†W'&÷"’²v—B7F÷&vRç&VÖ÷fR…·6÷W&6U÷F‚ÂF‡VÖ&æ–Å÷F…Ò’æ6F6‚‚‚’ÓâVæFVf–æVB“²F‡&÷rW'&÷#²ĞĞ¢ÒÀĞ¢W&Ã¢7–æ2F‚Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç7F÷&vRæg&öÒ‚vW‚×66VæRÖÖ2r’æ7&VFU6–væVEW&Â‡F‚Âc“°Ğ¢&WGW&âW'&÷"òçVÆÂ¢FFç6–væVEW&Ã°Ğ¢ÒÀĞ¢Ó°Ğ¢&VFöæÇ’66VæU'VçF–ÖS¢–×÷'B‚râ÷66VæU'VçF–ÖRæ§2r’å66VæU'VçF–ÖRÒ°Ğ¢76–væÖVçG3¢7–æ26×–vä–BÓâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…÷66VæUö76–væÖVçG2r’ç6VÆV7B‚wW6W%ö–BÇ66VæUö–BÇ&Wf—6–öâÇ7vå÷‚Ç7vå÷’r’æW‚v6×–våö–BrÂ6×–vä–B’æÆ–Ö—Bƒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†66VæR76–væÖVçG3¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2–×÷'B‚râ÷66VæU'VçF–ÖRæ§2r’å66VæT76–væÖVçEµÓ°Ğ¢ÒÀĞ¢76–væÖVçC¢7–æ2†6×–vä–BÂW6W$–B’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…÷66VæUö76–væÖVçG2r’ç6VÆV7B‚wW6W%ö–BÇ66VæUö–BÇ&Wf—6–öâÇ7vå÷‚Ç7vå÷’r’æW‚v6×–våö–BrÂ6×–vä–B’æW‚wW6W%ö–BrÂW6W$–B’æÖ–&U6–ævÆR‚“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†66VæR76–væÖVçC¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2–×÷'B‚râ÷66VæU'VçF–ÖRæ§2r’å66VæT76–væÖVçBÂçVÆÃ°Ğ¢ÒÀĞ¢66VæS¢7–æ2†6×–vä–BÂ–B’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…÷66VæW2r’ç6VÆV7B‚v–BÆæÖRÆ6FVv÷'’ÇV&Æ—6†VE÷&Wf—6–öâÆ—5öG&gBÆ—5öÆVv7•ö&VæÆ&6†—fVBÇV&Æ—6†VEöÖWFFFr’æW‚v6×–våö–BrÂ6×–vä–B’æW‚v–BrÂ–B’æÖ–&U6–ævÆR‚“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†76–væVB66VæS¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFFò²ââæFFÂ&Wf—6–öã¢FFçV&Æ—6†VE÷&Wf—6–öâÒ2–×÷'B‚râ÷66VæU'VçF–ÖRæ§2r’å'VçF–ÖU66VæR¢çVÆÃ°Ğ¢ÒÀĞ¢G&ç6—F–öã¢7–æ2‡W6W"Â66VæT–BÂF&vWG2Â&WVW7D–B’Óâ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"ç'2‚vW…ö76–vå÷66VæRrÂ²ö6×–vã¢W6W"æ6×–vä–BÂö7F÷#¢W6W"æ–BÂ÷66VæS¢66VæT–BÂ÷F&vWG3¢F&vWG2Â÷&WVW7C¢&WVW7D–BÒ“°Ğ¢–b†W'&÷"’F‡&÷ræWrW'&÷"†66VæRG&ç6—F–öã¢G¶W'&÷"æÖW76vWÖ“°Ğ¢&WGW&âFF2²ö³¢&ööÆVã²W'&÷#ó¢7G&–ærÓ°Ğ¢ÒÀĞ¢Ó°Ğ¢&VFöæÇ’¦÷W&æÅ7F÷&S¢–×÷'B‚râö¦÷W&æÇ2æ§2r’ä¦÷W&æÅ7F÷&RÒ°Ğ¢&6¶Æ–æ·3¢7–æ2‡W6W"ÂF&vWD–BÂöfg6WB’Óâ°Ğ¢6öç7Bf—6–&–Æ—G’Ò÷væW%ö–BæWâG·W6W"æ–GÒÇ6†&–æræWç'G’G·W6W"ç&öÆRÓÓÒvvÒròrÇ6†&–æræWævÒr¢rwÖ°Ğ¢6öç7B²FFÂW'&÷"ÒÒv—BF†—2æF"æg&öÒ‚vW…ö¦÷W&æÇ2r’ç6VÆV7B„¤õU$äÅôd”TÄE2Ğ¢æW‚v6×–våö–BrÂW6W"æ6×–vä–B’æ÷"‡f—6–&–Æ—G’’æ–Æ–¶R‚v&öG’rÂUµ·&Vc¢G·F&vWD–GÕÕÒVĞ¢æ÷&FW"‚w–ææVBrÂ²66VæF–æs¢fÇ6RÒ’æ÷&FW"‚v7&VFVEöBrÂ²66VæF–æs¢fÇ6RÒ’æ÷&FW"‚v–BrĞ¢ç&ævR†öfg6WBÂöfg6WB²C’“°Ş´ã›h‘éì¶»§q«^v[ÛˆÏÈ
+H
+ÈNÃBˆÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^ÙØ[YWÜİ]\ÉÊCBˆ\Ù\
+ÈØ[\ZYÛ—ÚYˆØ[\ZYÛ’Yİ]K™\œÚ[Û‹\]YØNˆ\Ù\’Y\]YØ]ˆ™]È]J
+KÒTÓÔİš[™Ê
+HKÈÛÛÛ™›Xİˆ	ØØ[\ZYÛ—ÚY	ÈJKBˆ	Ü™\XÙHİ]IËBˆ
+NÃBˆ™]\›ˆ™\œÚ[ÛÃBˆCBƒBˆ\Ş[˜ÈØ]™Tİ]JØ[\ZYÛ’Yˆİš[™Ëİ]NˆØ[YTİ]K^XİY™\œÚ[Ûˆ[X™\‹\Ù\’Yˆİš[™ÊNˆ›ÛZ\ÙO[X™\ˆ[ˆÃBˆÛÛœİ™\œÚ[ÛˆH^XİY™\œÚ[Ûˆ
+ÈNÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^ÙØ[YWÜİ]\ÉÊCBˆ\]JÈİ]K™\œÚ[Û‹\]YØNˆ\Ù\’Y\]YØ]ˆ™]È]J
+KÒTÓÔİš[™Ê
+HJCBˆ™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+CBˆ™\J	İ™\œÚ[Û‰Ë^XİY™\œÚ[ÛŠCBˆœÙ[Xİ
+	İ™\œÚ[Û‰ÊKBˆ	ÜØ]™Hİ]IËBˆ
+H\È\œ˜^OÈ™\œÚ[Ûˆ[X™\ˆOÃBˆ™]\›ˆ›İÜË›[™İOOHHÈ™\œÚ[Ûˆˆ[ÃBˆCBƒBˆ\Ş[˜ÈÜ™X]TÛ˜\Úİ
+Ø[\ZYÛ’Yˆİš[™Ëİ]NˆØ[YTİ]K™\œÚ[Ûˆ[X™\‹X™[ˆİš[™Ë\Ù\’Yˆİš[™È[
+Nˆ›ÛZ\ÙO›ÚYˆÃBˆÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^Üİ]WÜÛ˜\ÚİÉÊKš[œÙ\
+ÈØ[\ZYÛ—ÚYˆØ[\ZYÛ’Yİ]K™\œÚ[Û‹X™[Ü™X]YØNˆ\Ù\’YJKBˆ	ØÜ™X]HÛ˜\Úİ	ËBˆ
+NÃBˆCBƒBˆ\Ş[˜È\İÛ˜\ÚİÊØ[\ZYÛ’Yˆİš[™Ë[Z]ˆ[X™\ŠNˆ›ÛZ\ÙOÛ˜\Úİ[™›Ö×OˆÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^Üİ]WÜÛ˜\ÚİÉÊCBˆœÙ[Xİ
+	ÚY™\œÚ[Û‹X™[Ü™X]YØ]	ÊCBˆ™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+CBˆ›Ü™\Š	ÚY	ËÈ\ØÙ[™[™Îˆ˜[ÙHJCBˆ›[Z]
+[Z]
+KBˆ	Û\İÛ˜\ÚİÉËBˆ
+H\È\œ˜^OÈYˆ[X™\È™\œÚ[Ûˆ[X™\ÈX™[ˆİš[™ÎÈÜ™X]YØ]ˆİš[™ÈOÃBˆ™]\›ˆ›İÜË›X\
+
+ŠHOˆ
+ÈYˆ[X™\Š‹šY
+K™\œÚ[Ûˆ[X™\Š‹™\œÚ[ÛŠKX™[ˆ‹›X™[Ü™X]Y]ˆ‹˜Ü™X]YØ]JJNÃBˆCBƒBˆ\Ş[˜ÈØYÛ˜\Úİ
+Ø[\ZYÛ’Yˆİš[™ËYˆ[X™\ŠNˆ›ÛZ\ÙOØ[YTİ]H[ˆÃBˆÛÛœİ›İÈHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^Üİ]WÜÛ˜\ÚİÉÊKœÙ[Xİ
+	Üİ]IÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	ÚY	ËY
+K›X^X™TÚ[™ÛJ
+KBˆ	ÛØYÛ˜\Úİ	ËBˆ
+H\ÈÈİ]NˆØ[YTİ]HH[ÃBˆ™]\›ˆ›İÏËœİ]HÏÈ[ÃBˆCBƒBˆ\Ş[˜È[™TÛ˜\ÚİÊØ[\ZYÛ’Yˆİš[™ËÙY\ˆ[X™\ŠNˆ›ÛZ\ÙO›ÚYˆÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^Üİ]WÜÛ˜\ÚİÉÊKœÙ[Xİ
+	ÚY	ÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K›Ü™\Š	ÚY	ËÈ\ØÙ[™[™Îˆ˜[ÙHJKœ˜[™ÙJÙY\ÙY\
+ÈŒ
+KBˆ	Ü[™HÛ˜\ÚİÉËBˆ
+H\È\œ˜^OÈYˆ[X™\ˆOÃBˆYˆ
+›İÜË›[™İ
+HÚXÚÊ]ØZ]\Ë™‹™œ›ÛJ	Ø\^Üİ]WÜÛ˜\ÚİÉÊK™[]J
+Kš[Š	ÚY	Ë›İÜË›X\
+
+ŠHOˆ‹šY
+JK	Ü[™HÛ˜\ÚİÉÊNÃBˆCBƒBˆËÈKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHÛÜ›X[˜YÙ[Y[BƒBˆ\Ş[˜ÈÛÜ›˜[œÚ][ÛŠBˆØ[\ZYÛ’Yˆİš[™ËBˆ^XİY™\œÚ[Ûˆ[X™\ˆ[Bˆ™]Ôİ]NˆØ[YTİ]H[Bˆ\˜Ú]™NˆÈ˜[YNˆİš[™ÎÈ\ØÜš\[Ûˆİš[™ÎÈÚ[™ˆ\˜Ú]™RÚ[™KBˆ\Ù\’Yˆİš[™ËBˆ
+Nˆ›ÛZ\ÙOÈ\˜Ú]™RYˆİš[™ÎÈ™\œÚ[Ûˆ[X™\ˆOˆÃBˆÛÛœİÈ]K\œ›ÜˆHH]ØZ]\Ë™‹œœÊ	Ø\^İÛÜ›İ˜[œÚ][Û‰ËÃBˆØØ[\ZYÛˆØ[\ZYÛ’YBˆÙ^XİYİ™\œÚ[Ûˆ^XİY™\œÚ[Û‹BˆÛ™]×Üİ]Nˆ™]Ôİ]KBˆØ\˜Ú]™WÛ˜[YNˆ\˜Ú]™K›˜[YKBˆØ\˜Ú]™WÙ\ØÜš\[Ûˆ\˜Ú]™K™\ØÜš\[Û‹BˆØ\˜Ú]™WÚÚ[™ˆ\˜Ú]™KšÚ[™Bˆİ\Ù\ˆ\Ù\’YBˆJNÃBˆYˆ
+\œ›ÜŠHÃBˆYˆ
+Ø\^™\œÚ[Û—ØÛÛ™›XİË\İ
+\œ›Ü‹›Y\ÜØYÙJJH›İÈ™]ÈÛÜ›ÛÛ™›Xİ\œ›ÜŠ
+NÃBˆ›İÈ™]È\œ›ÜŠÛÜ›˜[œÚ][Ûˆ	Ù\œ›Ü‹›Y\ÜØYÙ_X
+NÃBˆCBˆÛÛœİH]H\ÈÈ\˜Ú]™WÚYˆİš[™ÎÈ™\œÚ[Ûˆ[X™\ˆNÃBˆ™]\›ˆÈ\˜Ú]™RYˆ˜\˜Ú]™WÚY™\œÚ[Ûˆ[X™\Š™\œÚ[ÛŠHNÃBˆCBƒBˆ\Ş[˜È\İ\˜Ú]™\ÊØ[\ZYÛ’Yˆİš[™ÊNˆ›ÛZ\ÙO\˜Ú]™R[™›Ö×OˆÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^İÛÜ›Ø\˜Ú]™\ÉÊCBˆœÙ[Xİ
+	ÚY˜[YK\ØÜš\[Û‹Ú[™Ü™X]YØ]İ]Wİ™\œÚ[Û‹ÛÜ›Û˜[YKÙYY˜Y]\Ë^K\ÙIÊCBˆ™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+CBˆ›Ü™\Š	ØÜ™X]YØ]	ËÈ\ØÙ[™[™Îˆ˜[ÙHJCBˆ›[Z]
+L
+KBˆ	Û\İ\˜Ú]™\ÉËBˆ
+H\È\œ˜^O™XÛÜ™İš[™Ë[šÛ›İÛÃBˆ™]\›ˆ›İÜË›X\
+Ğ\˜Ú]™JNÃBˆCBƒBˆ\Ş[˜ÈØY\˜Ú]™JØ[\ZYÛ’Yˆİš[™ËYˆİš[™ÊNˆ›ÛZ\ÙO
+\˜Ú]™R[™›È	ˆÈİ]NˆØ[YTİ]HJH[ˆÃBˆYˆ
+K×–ÌNXKY‹W^ÌÍŸIË\İ
+Y
+JH™]\›ˆ[ÃBˆÛÛœİ›İÈHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^İÛÜ›Ø\˜Ú]™\ÉÊKœÙ[Xİ
+	Ê‰ÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	ÚY	ËY
+K›X^X™TÚ[™ÛJ
+KBˆ	ÛØY\˜Ú]™IËBˆ
+H\È™XÛÜ™İš[™Ë[šÛ›İÛˆ[ÃBˆ™]\›ˆ›İÈÈÈ‹‹Ğ\˜Ú]™J›İÊKİ]Nˆ›İËœİ]H\ÈØ[YTİ]HHˆ[ÃBˆCBƒBˆËÈKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHÜ˜Z]ÃBƒBˆ\Ş[˜È\ØYÜ˜Z]
+]ˆİš[™Ë]\ÎˆZ[\œ˜^KÛÛ[\Nˆİš[™ÊNˆ›ÛZ\ÙO›ÚYˆÃBˆÛÛœİÈ\œ›ÜˆHH]ØZ]\Ë™‹œİÜ˜YÙK™œ›ÛJÔ•RUĞ•PÒÑU
+K\ØY
+]]\ËÈÛÛ[\K\Ù\ˆ˜[ÙKØXÚPÛÛ›Ûˆ	ÌÍŒ	ÈJNÃBˆYˆ
+\œ›ÜŠH›İÈ™]È\œ›ÜŠÜ˜Z]\ØYˆ	Ù\œ›Ü‹›Y\ÜØYÙ_X
+NÃBˆCBƒBˆ\Ş[˜ÈÜ˜Z]\›
+]ˆİš[™Ë^\™\Ò[”ÙXÛÛ™Îˆ[X™\ŠNˆ›ÛZ\ÙOİš[™È[ˆÃBˆÛÛœİÈ]K\œ›ÜˆHH]ØZ]\Ë™‹œİÜ˜YÙK™œ›ÛJÔ•RUĞ•PÒÑU
+K˜Ü™X]TÚYÛ™Y\›
+]^\™\Ò[”ÙXÛÛ™ÊNÃBˆYˆ
+\œ›ÜŠH™]\›ˆ[ÃBˆ™]\›ˆ]KœÚYÛ™Y\›ÃBˆCBƒBˆ\Ş[˜È[]TÜ˜Z]
+]ˆİš[™ÊNˆ›ÛZ\ÙO›ÚYˆÃBˆ]ØZ]\Ë™‹œİÜ˜YÙK™œ›ÛJÔ•RUĞ•PÒÑU
+Kœ™[[İ™JÜ]JNÃBˆCBƒBˆËÈKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHÚ\˜Xİ\ˆÚY]ÃBƒBˆ\Ş[˜ÈØYÚY]
+Ø[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™ÊNˆ›ÛZ\ÙOİÜ™YÚY][ˆÃBˆÛÛœİˆHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]ÉÊKœÙ[Xİ
+	Ù]K™\œÚ[Û‹\]YØ]\]YØIÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	İÚÙ[—ÚY	ËÚÙ[’Y
+K›X^X™TÚ[™ÛJ
+KBˆ	ÛØYÚY]	ËBˆ
+H\ÈÈ]Nˆ[šÛ›İÛÈ™\œÚ[Ûˆ[X™\È\]YØ]ˆİš[™ÎÈ\]YØNˆİš[™È[H[ÃBˆ™]\›ˆˆÈÈ]Nˆ‹™]K™\œÚ[Ûˆ[X™\Š‹™\œÚ[ÛŠK\]Y]ˆ‹\]YØ]\]YNˆ‹\]YØHHˆ[ÃBˆCBƒBˆ\Ş[˜ÈØYÚY]š][ÊØ[\ZYÛ’Yˆİš[™ÊNˆ›ÛZ\ÙO™XÛÜ™İš[™Ë[šÛ›İÛˆÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]ÉÊKœÙ[Xİ
+	İÚÙ[—ÚY™]KOš]Ú[ÉÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+KBˆ	ÛØYÚY]š][ÉËBˆ
+H\È\œ˜^OÈÚÙ[—ÚYˆİš[™ÎÈˆ[šÛ›İÛˆOÃBˆ™]\›ˆØš™Xİ™œ›ÛQ[šY\Ê›İÜË›X\
+
+ŠHOˆÜ‹ÚÙ[—ÚY‹šJJNÃBˆCBƒBˆ\Ş[˜ÈØYÚY]]Z[ÊØ[\ZYÛ’Yˆİš[™ÊNˆ›ÛZ\ÙO™XÛÜ™İš[™Ë[šÛ›İÛˆÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]ÉÊKœÙ[Xİ
+	İÚÙ[—ÚY]Z[Î™]KO™]Z[ÉÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+KBˆ	ÛØYÚY]]Z[ÉËBˆ
+H\È\œ˜^OÈÚÙ[—ÚYˆİš[™ÎÈ]Z[Îˆ[šÛ›İÛˆOÃBˆ™]\›ˆØš™Xİ™œ›ÛQ[šY\Ê›İÜË›X\
+
+ŠHOˆÜ‹ÚÙ[—ÚY‹™]Z[×JJNÃBˆCBƒBˆ\Ş[˜ÈØ]™TÚY]
+Ø[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë]Nˆ[šÛ›İÛ‹^XİY™\œÚ[Ûˆ[X™\‹\Ù\’Yˆİš[™ÊNˆ›ÛZ\ÙO[X™\ˆ[ˆÃBˆÛÛœİ›İÈH™]È]J
+KÒTÓÔİš[™Ê
+NÃBˆYˆ
+^XİY™\œÚ[ÛˆOOH
+HÃBˆÛÛœİÈ\œ›ÜˆHH]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]ÉÊCBˆš[œÙ\
+ÈØ[\ZYÛ—ÚYˆØ[\ZYÛ’YÚÙ[—ÚYˆÚÙ[’Y]K™\œÚ[ÛˆK\]YØNˆ\Ù\’Y\]YØ]ˆ›İÈJNÃBˆYˆ
+Y\œ›ÜŠH™]\›ˆNÃBˆYˆ
+
+\œ›Üˆ\ÈÈÛÙOÎˆİš[™ÈJK˜ÛÙHOOH	ÌŒÍLIÊH™]\›ˆ[ÈËÈÛÛY[Û™HÜ™X]Y]š\œİBˆ›İÈ™]È\œ›ÜŠØ]™HÚY]ˆ	Ù\œ›Ü‹›Y\ÜØYÙ_X
+NÃBˆCBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]ÉÊCBˆ\]JÈ]K™\œÚ[Ûˆ^XİY™\œÚ[Ûˆ
+ÈK\]YØNˆ\Ù\’Y\]YØ]ˆ›İÈJCBˆ™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+CBˆ™\J	İÚÙ[—ÚY	ËÚÙ[’Y
+CBˆ™\J	İ™\œÚ[Û‰Ë^XİY™\œÚ[ÛŠCBˆœÙ[Xİ
+	İ™\œÚ[Û‰ÊKBˆ	ÜØ]™HÚY]	ËBˆ
+H\È[šÛ›İÛ–×NÃBˆ™]\›ˆ›İÜË›[™İOOHHÈ^XİY™\œÚ[Ûˆ
+ÈHˆ[ÃBˆCBƒBˆ\Ş[˜È˜XÚİ\ÚY]
+Ø[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë]Nˆ[šÛ›İÛ‹™\œÚ[Ûˆ[X™\‹™X\ÛÛˆİš[™Ë\Ù\’Yˆİš[™ÊNˆ›ÛZ\ÙO›ÚYˆÃBˆÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]Ø˜XÚİ\ÉÊKš[œÙ\
+ÈØ[\ZYÛ—ÚYˆØ[\ZYÛ’YÚÙ[—ÚYˆÚÙ[’Y]K™\œÚ[Û‹™X\ÛÛ‹Ü™X]YØNˆ\Ù\’YJKBˆ	Ø˜XÚİ\ÚY]	ËBˆ
+NÃBˆCBƒBˆ\Ş[˜È\İÚY]˜XÚİ\ÊØ[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë[Z]ˆ[X™\ŠNˆ›ÛZ\ÙOÚY]˜XÚİ\[™›Ö×OˆÃBˆÛÛœİ›İÜÈHÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]Ø˜XÚİ\ÉÊCBˆœÙ[Xİ
+	ÚY™\œÚ[Û‹™X\ÛÛ‹Ü™X]YØ]Ú[™™]KOšÚ[™˜[YN™]KO›˜[YK›İN™]KO››İK]™[™]KO›]™[	ÊCBˆ™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+CBˆ™\J	İÚÙ[—ÚY	ËÚÙ[’Y
+CBˆ›Ü™\Š	ÚY	ËÈ\ØÙ[™[™Îˆ˜[ÙHJCBˆ›[Z]
+[Z]
+KBˆ	Û\İÚY]˜XÚİ\ÉËBˆ
+H\È\œ˜^O™XÛÜ™İš[™Ë[šÛ›İÛÃBˆ™]\›ˆ›İÜË›X\
+Ğ˜XÚİ\[™›ÊNÃBˆCBƒBˆ\Ş[˜ÈØYÚY]˜XÚİ\
+Ø[\ZYÛ’Yˆİš[™ËYˆ[X™\ŠHÃBˆÛÛœİˆHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÚ\˜Xİ\—ÜÚY]Ø˜XÚİ\ÉÊKœÙ[Xİ
+	ÚYÚÙ[—ÚY]K™\œÚ[Û‹™X\ÛÛ‹Ü™X]YØ]	ÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	ÚY	ËY
+K›X^X™TÚ[™ÛJ
+KBˆ	ÛØYÚY]˜XÚİ\	ËBˆ
+H\È™XÛÜ™İš[™Ë[šÛ›İÛˆ[ÃBˆYˆ
+\ŠH™]\›ˆ[ÃBˆÛÛœİH
+‹™]HÏÈßJH\È™XÛÜ™İš[™Ë[šÛ›İÛÃBˆ™]\›ˆÈ‹‹Ğ˜XÚİ\[™›ÊÈ‹‹œ‹Ú[™ˆšÚ[™˜[YNˆ›˜[YK›İNˆ››İK]™[ˆ›]™[JKÚÙ[’Yˆİš[™Ê‹ÚÙ[—ÚY
+K]Nˆ‹™]HNÃBˆCBƒBˆËÈKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKH™YY˜XÚÃBˆ\Ş[˜ÈÜ™X]Q™YY˜XÚÊˆ™]Ñ™YY˜XÚÊNˆ›ÛZ\ÙO™YY˜XÚÔ›İÏˆÃBˆÛÛœİ›İÈHÚXÚÊBˆ]ØZ]\Ë™ƒBˆ™œ›ÛJ	Ø\^Ù™YY˜XÚÉÊCBˆš[œÙ\
+ÃBˆØ[\ZYÛ—ÚYˆ‹˜Ø[\ZYÛ’YBˆ\Ù\—ÚYˆ‹\Ù\’YBˆ›Ùš[WÚÙ^Nˆ‹œ›Ùš[RÙ^KBˆÚÙ[—ÚYˆ‹ÚÙ[’YBˆÚ[™ˆ‹šÚ[™BˆØ]YÛÜNˆ‹˜Ø]YÛÜKBˆ]Nˆ‹]KBˆ\ØÜš\[Ûˆ‹™\ØÜš\[Û‹Bˆİ\Îˆ‹œİ\ËBˆYÙNˆ‹œYÙKBˆ\İ™\œÚ[Ûˆ‹˜\™\œÚ[Û‹BˆØÜ™Y[œÚİÜ]ˆ‹œØÜ™Y[œÚİ]BˆJCBˆœÙ[Xİ
+	Ê‰ÊCBˆœÚ[™ÛJ
+KBˆ	ØÜ™X]H™YY˜XÚÉËBˆ
+H\È™XÛÜ™İš[™Ë[šÛ›İÛÃBˆ™]\›ˆÑ™YY˜XÚÊ›İÊNÃBˆCBƒBˆ\Ş[˜È\İ™YY˜XÚÊØ[\ZYÛ’Yˆİš[™ËÜÎˆÈ\Ù\’YÎˆİš[™ÎÈ[Z]ˆ[X™\ˆJNˆ›ÛZ\ÙO™YY˜XÚÔ›İÖ×OˆÃBˆ]HH\Ë™‹™œ›ÛJ	Ø\^Ù™YY˜XÚÉÊKœÙ[Xİ
+	Ê‰ÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+NÃBˆYˆ
+ÜË\Ù\’Y
+HHHK›ÜŠ\Ù\—ÚY™\K‰ÛÜË\Ù\’YKÚ\™Y™\KYX
+NÃBˆÛÛœİ›İÜÈHÚXÚÊ]ØZ]K›Ü™\Š	ØÜ™X]YØ]	ËÈ\ØÙ[™[™Îˆ˜[ÙHJK›[Z]
+ÜË›[Z]
+K	Û\İ™YY˜XÚÉÊH\È\œ˜^O™XÛÜ™İš[™Ë[šÛ›İÛÃBˆ™]\›ˆ›İÜË›X\
+Ñ™YY˜XÚÊNÃBˆCBƒBˆ\Ş[˜È\]Q™YY˜XÚÊØ[\ZYÛ’Yˆİš[™ËYˆİš[™Ë]Úˆ\X[XÚÏ™YY˜XÚÔ›İË	Üİ]\ÉÈ	ÙÛS›İ\ÉÈ	ÜÚ\™Y	ÏŠNˆ›ÛZ\ÙO™YY˜XÚÔ›İÈ[ˆÃBˆÛÛœİ›İÈH™]È]J
+KÒTÓÔİš[™Ê
+NÃBˆÛÛœİ\ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈ\]YØ]ˆ›İÈNÃBˆYˆ
+]Úœİ]\ÈOOH[™Yš[™Y
+H
+\œİ]\ÈH]Úœİ]\ÊK
+\œİ]\×ØÚ[™ÙYØ]H›İÊNÃBˆYˆ
+]Ú™ÛS›İ\ÈOOH[™Yš[™Y
+H\™ÛWÛ›İ\ÈH]Ú™ÛS›İ\ÎÃBˆYˆ
+]ÚœÚ\™YOOH[™Yš[™Y
+H\œÚ\™YH]ÚœÚ\™YÃBˆÛÛœİ›İÜÈHÚXÚÊ]ØZ]\Ë™‹™œ›ÛJ	Ø\^Ù™YY˜XÚÉÊK\]J\
+K™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	ÚY	ËY
+KœÙ[Xİ
+	Ê‰ÊK	İ\]H™YY˜XÚÉÊH\È\œ˜^O™XÛÜ™İš[™Ë[šÛ›İÛÃBˆ™]\›ˆ›İÜÖÌHÈÑ™YY˜XÚÊ›İÜÖÌJHˆ[ÃBˆCBƒBˆ\Ş[˜ÈÛİ[™XÙ[™YY˜XÚÊØ[\ZYÛ’Yˆİš[™Ë\Ù\’Yˆİš[™ËÚ[˜ÙR\ÛÎˆİš[™ÊNˆ›ÛZ\ÙO[X™\ˆÃBˆÛÛœİÈÛİ[\œ›ÜˆHH]ØZ]\Ë™‹™œ›ÛJ	Ø\^Ù™YY˜XÚÉÊKœÙ[Xİ
+	ÚY	ËÈÛİ[ˆ	Ù^Xİ	ËXYˆYHJK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	İ\Ù\—ÚY	Ë\Ù\’Y
+K™İJ	ØÜ™X]YØ]	ËÚ[˜ÙR\ÛÊNÃBˆYˆ
+\œ›ÜŠH›İÈ™]È\œ›ÜŠÛİ[™YY˜XÚÎˆ	Ù\œ›Ü‹›Y\ÜØYÙ_X
+NÃBˆ™]\›ˆÛİ[ÏÈÃBˆCBƒBˆ\Ş[˜È™\Ù\™T™\]Y\İ
+NˆÛZ]ÛÛ[X[™ÙÑ[K	ÛÚÉÈ	Ù\œ›Ü‰È	İ™\œÚ[Û‰Ïˆ	ˆÈ™\]Y\İYˆİš[™ÈJNˆ›ÛZ\ÙO™\]Y\İ™\Ù\˜][ÛˆÃBˆÛÛœİÈ\œ›ÜˆHH]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÛÛ[X[™ÛÙÉÊKš[œÙ\
+ÃBˆØ[\ZYÛ—ÚYˆK˜Ø[\ZYÛ’YBˆ\Ù\—ÚYˆK\Ù\’YBˆ›ÛNˆKœ›ÛKBˆÛÛ[X[™ˆK˜ÛÛ[X[™BˆÚÎˆ˜[ÙKBˆ\œ›Üˆ	Ü[™[™ÉËBˆ™\]Y\İÚYˆKœ™\]Y\İYBˆJNÃBˆYˆ
+Y\œ›ÜŠH™]\›ˆÈÚ[™ˆ	Ü™\Ù\™Y	ÈNÃBˆYˆ
+
+\œ›Üˆ\ÈÈÛÙOÎˆİš[™ÈJK˜ÛÙHOOH	ÌŒÍLIÊH›İÈ™]È\œ›ÜŠ™\Ù\™H™\]Y\İˆ	Ù\œ›Ü‹›Y\ÜØYÙ_X
+NÃBˆ™]\›ˆ
+]ØZ]\Ëœ™\]Y\İİ]\ÊK˜Ø[\ZYÛ’YKœ™\]Y\İY
+JHÏÈÈÚ[™ˆ	Ù^\İ[™ÉËİ]Nˆ	Ü[™[™ÉË™\œÚ[Ûˆ[\œ›Üˆ[NÃBˆCBƒBˆ\Ş[˜Èš[š\Ú™\]Y\İ
+Ø[\ZYÛ’Yˆİš[™Ë™\]Y\İYˆİš[™ËÚÎˆ›ÛÛX[‹\œ›Üˆİš[™È[™\œÚ[Ûˆ[X™\ˆ[
+Nˆ›ÛZ\ÙO›ÚYˆÃBˆÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÛÛ[X[™ÛÙÉÊK\]JÈÚË\œ›Ü‹™\œÚ[ÛˆJK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	Ü™\]Y\İÚY	Ë™\]Y\İY
+KBˆ	Ùš[š\Ú™\]Y\İ	ËBˆ
+NÃBˆCBƒBˆ\Ş[˜È™\]Y\İİ]\ÊØ[\ZYÛ’Yˆİš[™Ë™\]Y\İYˆİš[™ÊNˆ›ÛZ\ÙO™\]Y\İ™\Ù\˜][Ûˆ[ˆÃBˆÛÛœİ›İÈHÚXÚÊBˆ]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÛÛ[X[™ÛÙÉÊKœÙ[Xİ
+	ÛÚË\œ›Ü‹™\œÚ[Û‰ÊK™\J	ØØ[\ZYÛ—ÚY	ËØ[\ZYÛ’Y
+K™\J	Ü™\]Y\İÚY	Ë™\]Y\İY
+K›X^X™TÚ[™ÛJ
+KBˆ	Ü™\]Y\İİ]\ÉËBˆ
+H\ÈÈÚÎˆ›ÛÛX[È\œ›Üˆİš[™È[È™\œÚ[Ûˆ[X™\ˆ[H[ÃBˆYˆ
+\›İÊH™]\›ˆ[ÃBˆ™]\›ˆÃBˆÚ[™ˆ	Ù^\İ[™ÉËBˆİ]Nˆ›İË›ÚÈÈ	ÛÚÉÈˆ›İË™\œ›ÜˆOOH	Ü[™[™ÉÈÈ	Ü[™[™ÉÈˆ	Ù˜Z[Y	ËBˆ™\œÚ[Ûˆ›İË™\œÚ[ÛˆOOH[È[ˆ[X™\Š›İË™\œÚ[ÛŠKBˆ\œ›Üˆ›İË›ÚÈÈ[ˆ›İË™\œ›Ü‹BˆNÃBˆCBƒBˆ\Ş[˜ÈÙĞÛÛ[X[™
+NˆÛÛ[X[™ÙÑ[JNˆ›ÛZ\ÙO›ÚYˆÃBˆËÈ]Y]ÙÈ˜Z[\™\È]\İ™]™\ˆœ™XZÈØ[Y\^KƒBˆÛÛœİÈ\œ›ÜˆHH]ØZ]\Ë™‹™œ›ÛJ	Ø\^ØÛÛ[X[™ÛÙÉÊKš[œÙ\
+ÃBˆØ[\ZYÛ—ÚYˆK˜Ø[\ZYÛ’YBˆ\Ù\—ÚYˆK\Ù\’YBˆ›ÛNˆKœ›ÛKBˆÛÛ[X[™ˆK˜ÛÛ[X[™BˆÚÎˆK›ÚËBˆ\œ›ÜˆK™\œ›ÜˆÏÈ[Bˆ™\œÚ[ÛˆK™\œÚ[ÛˆÏÈ[BˆJNÃBˆYˆ
+\œ›ÜŠHÛÛœÛÛKØ\›Š	ÖØ\^X\WHÛÛ[X[™ÙÈ˜Z[Y‰Ë\œ›Ü‹›Y\ÜØYÙJNÃBˆCBŸCBƒB™[˜İ[ÛˆĞ˜XÚİ\[™›Êˆ™XÛÜ™İš[™Ë[šÛ›İÛŠNˆÚY]˜XÚİ\[™›ÈÃBˆÛÛœİİˆH
+ˆ[šÛ›İÛŠHOˆ
+\[ÙˆˆOOH	Üİš[™ÉÈ	‰ˆˆÈˆˆ[
+NÃBˆ™]\›ˆÃBˆYˆ[X™\Š‹šY
+KBˆ™\œÚ[Ûˆ[X™\Š‹™\œÚ[ÛŠKBˆ™X\ÛÛˆİš[™Ê‹œ™X\ÛÛˆÏÈ	ÉÊKBˆÜ™X]Y]ˆİš[™Ê‹˜Ü™X]YØ]
+KBˆÚ[™ˆ‹šÚ[™OOH	Ø\^XÚ\˜Xİ\‹\Û˜\Úİ	ÈÈ	ÜÛ˜\Úİ	Èˆ	Ø˜XÚİ\	ËBˆ˜[YNˆİŠ‹›˜[YJKBˆ›İNˆİŠ‹››İJKBˆ]™[ˆİŠ‹›]™[
+KBˆNÃBŸCBƒB™[˜İ[ÛˆÑ™YY˜XÚÊˆ™XÛÜ™İš[™Ë[šÛ›İÛŠNˆ™YY˜XÚÔ›İÈÃBˆ™]\›ˆÃBˆYˆİš[™Ê‹šY
+KBˆ\Ù\’Yˆİš[™Ê‹\Ù\—ÚYÏÈ	ÉÊKBˆ›Ùš[RÙ^Nˆİš[™Ê‹œ›Ùš[WÚÙ^HÏÈ	ÉÊKBˆÚÙ[’Yˆ
+‹ÚÙ[—ÚY\Èİš[™È[
+HÏÈ[BˆÚ[™ˆ‹šÚ[™\È™YY˜XÚÔ›İÖÉÚÚ[™	×KBˆØ]YÛÜNˆİš[™Ê‹˜Ø]YÛÜHÏÈ	Ûİ\‰ÊKBˆ]Nˆİš[™Ê‹]HÏÈ	ÉÊKBˆ\ØÜš\[Ûˆİš[™Ê‹™\ØÜš\[ÛˆÏÈ	ÉÊKBˆİ\Îˆİš[™Ê‹œİ\ÈÏÈ	ÉÊKBˆYÙNˆİš[™Ê‹œYÙHÏÈ	ÉÊKBˆ\™\œÚ[Ûˆİš[™Ê‹˜\İ™\œÚ[ÛˆÏÈ	ÉÊKBˆØÜ™Y[œÚİ]ˆ
+‹œØÜ™Y[œÚİÜ]\Èİš[™È[
+HÏÈ[Bˆİ]\Îˆ‹œİ]\È\È™YY˜XÚÔ›İÖÉÜİ]\É×KBˆÛS›İ\Îˆİš[™Ê‹™ÛWÛ›İ\ÈÏÈ	ÉÊKBˆÚ\™YˆH\‹œÚ\™YBˆÜ™X]Y]ˆİš[™Ê‹˜Ü™X]YØ]
+KBˆ\]Y]ˆİš[™Ê‹\]YØ]
+KBˆİ]\ĞÚ[™ÙY]ˆ
+‹œİ]\×ØÚ[™ÙYØ]\Èİš[™È[
+HÏÈ[BˆNÃBŸCB

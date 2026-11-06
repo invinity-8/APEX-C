@@ -483,7 +483,7 @@ export default function App({ game }: { game: GameApi }) {
           defaults={defaults}
           storageKey={layoutKey(announceScope, role)}
           center={
-        <CampaignMapDirector game={game} enabled={isGm && !!game.online} openScenes={() => setScreen('scenes')}>
+        <CampaignMapDirector game={game} enabled={isGm && !!game.online} openScenes={() => setScreen('scenes')} run={run}>
           {game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> :
         <>
           <ArenaMap

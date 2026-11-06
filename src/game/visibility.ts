@@ -360,7 +360,7 @@ function trackersOf(state: GameState): TrackerView[] {
  * coordinates), hidden sites, GM notes, rivals out of sight, events before they
  * happen, GM-only log entries.
  */
-export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
+export function buildPlayerView(state: GameState, viewerId: string, sceneId?: string | null): ViewModel {
   const group = groupOf(state, viewerId);
   const groupIds = new Set(group.map((t) => t.id));
 
@@ -459,7 +459,7 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     serverTime: new Date().toISOString(),
     itemRules: itemRulesOf(state),
     customBeasts: state.customBeasts ?? [],
-    lootRolls: lootRollsView(state, [viewerId]),
+    lootRolls: lootRollsView(state, [viewerId], sceneId),
     merchant: merchantView(state, redactItem),
   };
 }

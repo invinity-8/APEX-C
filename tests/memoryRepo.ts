@@ -1,599 +1,284 @@
-import type { GameState } from '../src/game/types';
-import { WorldConflictError, type ArchiveInfo, type ArchiveKind } from '../src/server/repo';
-import type {
-  Assignment,
-  AuthBundle,
-  Campaign,
-  CommandLogEntry,
-  FeedbackRow,
-  NewFeedback,
-  SheetBackupInfo,
-  Credential,
-  DeployStatus,
-  LoginAttemptStats,
-  Member,
-  Profile,
-  ProfilePresence,
-  Repo,
-  RequestReservation,
-  SessionRecord,
-  SnapshotInfo,
-  StoredSheet,
-  StoredState,
-} from '../src/server/repo';
-import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from '../src/server/schema';
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×~ûÑ:-jZ.¶›­–)Ş³V–×÷'BG—R²vÖU7FFRÒg&öÒrââ÷7&2övÖR÷G—W2s°Ğ¦–×÷'B²v÷&ÆD6öæfÆ–7DW'&÷"ÂG—R&6†—fT–æfòÂG—R&6†—fT¶–æBÒg&öÒrââ÷7&2÷6W'fW"÷&Wòs°Ğ¦–×÷'BG—R°Ğ¢76–væÖVçBÀĞ¢WF„'VæFÆRÀĞ¢6×–vâÀĞ¢6öÖÖæDÆötVçG'’ÀĞ¢fVVF&6µ&÷rÀĞ¢æWtfVVF&6²ÀĞ¢6†VWD&6·W–æfòÀĞ¢7&VFVçF–ÂÀĞ¢FWÆ÷•7FGW2ÀĞ¢Æöv–äGFV×E7FG2ÀĞ¢ÖVÖ&W"ÀĞ¢&öf–ÆRÀĞ¢&öf–ÆU&W6Væ6RÀĞ¢&WòÀĞ¢&WVW7E&W6W'fF–öâÀĞ¢6W76–öå&V6÷&BÀĞ¢6æ6†÷D–æfòÀĞ¢7F÷&VE6†VWBÀĞ¢7F÷&VE7FFRÀĞ§Òg&öÒrââ÷7&2÷6W'fW"÷&Wòs°Ğ¦–×÷'B²U…T5DTEôÔ”u$D”ôå2Â$UT•$TEõ44„TÔõdU%4”ôâÒg&öÒrââ÷7&2÷6W'fW"÷66†VÖs°Ğ Ğ¢ò¢¢–âÖÖVÖ÷'’&Wòv—F‚F†R6ÖR6öçG&7B27W&6U&Wò(	2W6VB'’F†R6V7W&—G’FW7G2æBF†RÖö6²†&æW72â¢ğĞ¦W‡÷'B6Æ72ÖVÖ÷'•&Wò–×ÆVÖVçG2&Wò°Ğ¢¦÷W&æÄ–ÖvU&÷w3¢'&“Æ–×÷'B‚rââ÷7&2÷6W'fW"ö¦÷W&æÄ–ÖvW2r’ä¦÷W&æÄ–ÖvRb²6×–våö–C§7G&–ærÓâÒµÓ°Ğ¢&VFöæÇ’¦÷W&æÄ–ÖvW3¢–×÷'B‚rââ÷7&2÷6W'fW"ö¦÷W&æÄ–ÖvW2r’ä¦÷W&æÄ–ÖvU7F÷&RÒ°Ğ¢vWC¢7–æ2†6×–vä–BÆ–B’Óâ7G'V7GW&VD6ÆöæR‡F†—2æ¦÷W&æÄ–ÖvU&÷w2æf–æB†’Óâ’æ6×–våö–BÓÓÒ6×–vä–Bbb’æ–BÓÓÒ–B’óòçVÆÂ’ÀĞ¢WÆöC¢7–æ2‡W6W"ÆVçG'”–BÆ–ÖvRÇF‡VÖ&æ–Â’Óâ°Ğ¢6öç7B–BÒ7'—Fòç&æFöÕUT”B‚’Â&6RÒG·W6W"æ6×–vä–GÒòG·W6W"æ–GÒòG¶VçG'”–GÒòG¶–GÖ°Ğ¢6öç7B&÷rÒ²6×–våö–C§W6W"æ6×–vä–BÂ–BÆVçG'•ö–C¦VçG'”–BÆ÷væW%ö–C§W6W"æ–BÇ6÷W&6U÷Fƒ¦&6R²r÷6÷W&6RrÇF‡VÖ&æ–Å÷Fƒ¦&6R²r÷F‡VÖ&æ–ÂrÆÖ–ÖS¦–ÖvRæÖ–ÖRÓ°Ğ¢F†—2æ¦÷W&æÄ–ÖvU&÷w2çW6‚‡&÷r“²F†—2æÖ76WD'—FW2ç6WB‡&÷rç6÷W&6U÷F‚Æ–ÖvR“²F†—2æÖ76WD'—FW2ç6WB‡&÷rçF‡VÖ&æ–Å÷F‚ÇF‡VÖ&æ–Â“²&WGW&â7G'V7GW&VD6ÆöæR‡&÷r“°Ğ¢ÒÀĞ¢W&Ã¢7–æ2F‚Óâ²6öç7B–ÖvRÒF†—2æÖ76WD'—FW2ævWB‡F‚“²&WGW&â–ÖvRòFF¢G¶–ÖvRæÖ–ÖWÓ¶&6ScBÂG´'VffW"æg&öÒ†–ÖvRæ'—FW2’çFõ7G&–ær‚v&6ScBr—Ö¢çVÆÃ²ÒÀĞ¢Ó°Ğ¢6æ7GV'•&÷w2ÒæWrÖÇ7G&–ærÂ–×÷'B‚rââ÷7&2÷6W'fW"÷6æ7GV'’r’å6æ7GV'•6WGF–æw3â‚“°Ğ¢&VFöæÇ’6æ7GV'“¢–×÷'B‚rââ÷7&2÷6W'fW"÷6æ7GV'’r’å6æ7GV'•7F÷&RÒ°Ğ¢vWC¢7–æ26×–vä–BÓâ7G'V7GW&VD6ÆöæR‡F†—2ç6æ7GV'•&÷w2ævWB†6×–vä–B’óò²&Wf—6–öã¢ÂFÖ÷7†W&S¢v†ÆÂrÂFVfVÇD76WC¢çVÆÂÂ&6¶w&÷VæG3¢µÒÒ’ÀĞ¢6fS¢7–æ2†6×–vä–BÂW‡V7FVBÂ6WGF–æw2’Óâ°Ğ¢–b‚‡F†—2ç6æ7GV'•&÷w2ævWB†6×–vä–B“òç&Wf—6–öâóò’ÓÒW‡V7FVB’&WGW&âçVÆÃ°Ğ¢6öç7B&÷rÒ²ââç7G'V7GW&VD6ÆöæR‡6WGF–æw2’Â&Wf—6–öã¢W‡V7FVB²Ó²F†—2ç6æ7GV'•&÷w2ç6WB†6×–vä–BÂ&÷r“²&WGW&â7G'V7GW&VD6ÆöæR‡&÷r“°Ğ¢ÒÀĞ¢Ó°Ğ¢v÷&ÆDÆö6F–öç2ÒæWrÖÇ7G&–ærÂ²'G”æöFS¢7G&–æs²&Wf—6–öã¢çVÖ&W"Óâ‚“°Ğ¢v÷&ÆD¦÷W&æW—3¢'&“Æ–×÷'B‚rââ÷7&2÷6W'fW"÷66VæUG&fVÂr’åG&fVÅ&V6÷&Bb²6×–våö–C¢7G&–æs²66VæUö–C¢7G&–ærÓâÒµÓ°Ğ¢&VFöæÇ’66VæUG&fVÃ¢–×÷'B‚rââ÷7&2÷6W'fW"÷66VæUG&fVÂr’å66VæUG&fVÂÒ°Ğ¢6æ6†÷C¢7–æ2‡W6W"Â66VæT–B’Óâ7G'V7GW&VD6ÆöæR‡²âââ‡F†—2çv÷&ÆDÆö6F–öç2ævWB†G·W6W"æ6×–vä–GÓ¢G·66VæT–GÖ’óò²'G”æöFS¢çVÆÂÂ&Wf—6–öã¢Ò’Â&÷÷6Ç3¢F†—2çv÷&ÆD¦÷W&æW—2æf–ÇFW"†¢Óâ¢æ6×–våö–BÓÓÒW6W"æ6×–vä–Bbb¢ç66VæUö–BÓÓÒ66VæT–Bbb‡W6W"ç&öÆRÓÓÒvvÒrÇÂ¢ç&÷÷6VEö'’ÓÓÒW6W"æ–BÇÂ²wG&fVÆ–ærrÂv6ö×ÆWFRuÒæ–æ6ÇVFW2†¢ç7FGW2’’’ç6Æ–6R‚ÓS’ç&WfW'6R‚’æÖ†¢Óâ‡²ââæ¢Â&÷÷6VEö'“¢W6W"ç&öÆRÓÓÒvvÒrÇÂ¢ç&÷÷6VEö'’ÓÓÒW6W"æ–Bò¢ç&÷÷6VEö'’¢rrÒ’’Ò’ÀĞ¢7F–öã¢7–æ2‡W6W"Â66VæT–BÂ–çWB’Óâ°Ğ¢6öç7B&öf–ÆRÒF†—2ç&öf–ÆTÆ—7Bæf–æB‡Óâæ6×–vä–BÓÓÒW6W"æ6×–vä–BbbçW6W$–BÓÓÒW6W"æ–Bbbæ7F—fR’Â7F÷&VBÒF†—2ç7FFW2ævWB‡W6W"æ6×–vä–B“°Ğ¢–b‚&öf–ÆRÇÂ7F÷&VBÇÂ‡&öf–ÆRç&öÆRÓÒvvÒrbb–çWBæ7F–öâÓÒw&÷÷6Rr’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢ttÒW&Ö—76–öâ&WV—&VBârÓ°Ğ¢6öç7B&WVW7D¶W’ÒG·W6W"æ6×–vä–GÓ¢G¶–çWBç&WVW7D–GÖÂ–ÆöBÒ¥4ôâç7G&–æv–g’‡²7F÷#¢W6W"æ–BÂ66VæT–BÂ–çWBÒ“°Ğ¢–b‡F†—2ç66VæTÖ÷F–öå&WVW7G2æ†2‡&WVW7D¶W’’’&WGW&â²ö³¢F†—2ç66VæTÖ÷F–öå&WVW7G2ævWB‡&WVW7D¶W’’ÓÓÒ–ÆöBÓ°Ğ¢6öç7B66VæRÒF†—2ç66VæU&÷w2æf–æB‡2Óâ2æ6×–våö–BÓÓÒW6W"æ6×–vä–Bbb2æ–BÓÓÒ66VæT–B“°Ğ¢–b‚66VæRÇÂ66VæRæ—5öG&gBÇÂ66VæRæ&6†—fVBÇÂ66VæRæ6FVv÷'’ÓÒwv÷&ÆBrÇÂ‡66VæRçV&Æ—6†VE÷&Wf—6–öâóò’ÓÒ–çWBç66VæU&Wf—6–öâ’&WGW&â²ö³¢fÇ6RÂW'&÷#¢uv÷&ÆB6†ævVBârÓ°Ğ¢–b‡&öf–ÆRç&öÆRÓÒvvÒrbbF†—2ç66VæT76–væÖVçG2ç6öÖR†Óâæ6×–våö–BÓÓÒW6W"æ6×–vä–BbbçW6W%ö–BÓÓÒW6W"æ–Bbbç66VæUö–BÓÓÒ66VæT–Bbbç&Wf—6–öâÓÓÒ–çWBæ76–væÖVçE&Wf—6–öâ’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢t76–væÖVçB6†ævVBârÓ°Ğ¢6öç7BÖÒ66VæRçV&Æ—6†VEöÖWFFF2–×÷'B‚rââ÷7&2ö6×–vâöÖ2r’å66VæTÖÂ¶W’ÒG·W6W"æ6×–vä–GÓ¢G·66VæT–GÖÂÆö6F–öâÒF†—2çv÷&ÆDÆö6F–öç2ævWB†¶W’“°Ğ¢6öç7B7F—fRÒF†—2çv÷&ÆD¦÷W&æW—2ç6öÖR†¢Óâ¢æ6×–våö–BÓÓÒW6W"æ6×–vä–Bbb¢ç66VæUö–BÓÓÒ66VæT–Bbb¢ç7FGW2ÓÓÒwG&fVÆ–ærr“°Ğ¢–b…²vÆö6FRrÂw&÷÷6RuÒæ–æ6ÇVFW2†–çWBæ7F–öâ27G&–ær’bb†Æö6F–öãòç&Wf—6–öâóò’ÓÒ–çWBç'G•&Wf—6–öâ’&WGW&â²ö³¢fÇ6RÂW'&÷#¢u'G’Æö6F–öâ6†ævVBârÓ°Ğ¢–b†–çWBæ7F–öâÓÓÒvÆö6FRr’°Ğ¢–b†7F—fRÇÂÖææöFW2ç6öÖR†âÓââæ–BÓÓÒ–çWBææöFT–Bbbâæ¶–æBÓÓÒvÆö6F–öâr’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢tÆö6F–öâVæf–Æ&ÆRârÓ°Ğ¢F†—2çv÷&ÆDÆö6F–öç2ç6WB†¶W’Â²'G”æöFS¢–çWBææöFT–B27G&–ærÂ&Wf—6–öã¢†Æö6F–öãòç&Wf—6–öâóò’²Ò“°Ğ¢ÒVÇ6R–b†–çWBæ7F–öâÓÓÒw&÷÷6Rr’°Ğ¢6öç7B&÷WFRÒÖç&÷WFW2æf–æB‡"Óâ"æ–BÓÓÒ–çWBç&÷WFT–Bbb"çf—6–&ÆRbb·"æg&öÒÇ"çFõÒæ–æ6ÇVFW2†Æö6F–öãòç'G”æöFRóòrr’“°Ğ¢6öç7BFW7F–æF–öâÒ&÷WFRbb‡&÷WFRæg&öÒÓÓÒÆö6F–öãòç'G”æöFRò&÷WFRçFò¢&÷WFRæg&öÒ“°Ğ¢6öç7B¶æ÷vâÒF†—2ç66VæT¶æ÷vå&÷w2ævWB†G·W6W"æ6×–vä–GÓ¢G·66VæT–GÓ¢G·W6W"æ–GÖ’óò·Ó°Ğ¢–b†7F—fRÇÂÆö6F–öâÇÂ&÷WFRÇÂFW7F–æF–öâÇÂ¶Æö6F–öâç'G”æöFRÂFW7F–æF–öåÒæWfW'’†–BÓâÖææöFW2ç6öÖR†âÓââæ–BÓÓÒ–Bbb†âçf—6–&ÆRÇÂ¶æ÷vå¶–EÒ’’’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢u&÷WFRVæf–Æ&ÆRârÓ°Ğ¢F†—2çv÷&ÆD¦÷W&æW—2çW6‚‡²6×–våö–C¢W6W"æ6×–vä–BÂ66VæUö–C¢66VæT–BÂ–C¢–çWBç&WVW7D–B27G&–ærÂ&÷÷6VEö'“¢W6W"æ–BÂg&öÕöæöFS¢Æö6F–öâç'G”æöFRÂFõöæöFS¢FW7F–æF–öâÂ&÷WFUö–C¢&÷WFRæ–BÂF÷FÅö†÷W'3¢&÷WFRæ†÷W'2ÂVÆ6VEö†÷W'3¢Â7FGW3¢w&÷÷6VBrÂfW'6–öã¢Â66VæU÷&Wf—6–öã¢66VæRçV&Æ—6†VE÷&Wf—6–öâóòÒ“°Ğ¢ÒVÇ6R°Ğ¢6öç7B¢ÒF†—2çv÷&ÆD¦÷W&æW—2æf–æB†¢Óâ¢æ6×–våö–BÓÓÒW6W"æ6×–vä–Bbb¢ç66VæUö–BÓÓÒ66VæT–Bbb¢æ–BÓÓÒ–çWBç&÷÷6Ä–Bbb¢çfW'6–öâÓÓÒ–çWBçfW'6–öâ“°Ğ¢–b‚¢’&WGW&â²ö³¢fÇ6RÂW'&÷#¢t¦÷W&æW’6†ævVBârÓ°Ğ¢–b†–çWBæ7F–öâÓÓÒv6öæf—&Òr’°Ğ¢–b†7F—fRÇÂ¢ç7FGW2ÓÒw&÷÷6VBrÇÂ¢ç66VæU÷&Wf—6–öâÓÒ‡66VæRçV&Æ—6†VE÷&Wf—6–öâóò’ÇÂÆö6F–öãòç'G”æöFRÓÒ¢æg&öÕöæöFR’&WGW&â²ö³¢fÇ6RÂW'&÷#¢u&÷÷6Â6†ævVBârÓ°Ğ¢¢ç7FGW2Ò¢çF÷FÅö†÷W'2ÓÓÒòv6ö×ÆWFRr¢wG&fVÆ–ærs°Ğ¢ÒVÇ6R–b†–çWBæ7F–öâÓÓÒw&öw&W72r’°Ğ¢–b†¢ç7FGW2ÓÒwG&fVÆ–ærrÇÂ¢ç66VæU÷&Wf—6–öâÓÒ‡66VæRçV&Æ—6†VE÷&Wf—6–öâóò’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢t¦÷W&æW’—2æ÷B7F—fR÷"F†RÖ6†ævVBârÓ°Ğ¢¢æVÆ6VEö†÷W'2ÒÖF‚æÖ–â†¢çF÷FÅö†÷W'2Â¢æVÆ6VEö†÷W'2²†–çWBæ†÷W'22çVÖ&W"’“²–b†¢æVÆ6VEö†÷W'2ãÒ¢çF÷FÅö†÷W'2’¢ç7FGW2Òv6ö×ÆWFRs°Ğ¢ÒVÇ6R–b†–çWBæ7F–öâÓÓÒv6æ6VÂr’²–b‚²w&÷÷6VBrÂwG&fVÆ–æruÒæ–æ6ÇVFW2†¢ç7FGW2’’&WGW&â²ö³¢fÇ6RÓ²¢ç7FGW2Òv6æ6VÆÆVBs²ĞĞ¢VÇ6R&WGW&â²ö³¢fÇ6RÓ°Ğ¢¢çfW'6–öâ²³°Ğ¢–b†¢ç7FGW2ÓÓÒv6ö×ÆWFRrbbÆö6F–öâ’F†—2çv÷&ÆDÆö6F–öç2ç6WB†¶W’Â²'G”æöFS¢¢çFõöæöFRÂ&Wf—6–öã¢Æö6F–öâç&Wf—6–öâ²Ò“°Ğ¢ĞĞ¢F†—2ç66VæTÖ÷F–öå&WVW7G2ç6WB‡&WVW7D¶W’Â–ÆöB“²F†—2ç7FFW2ç6WB‡W6W"æ6×–vä–BÂ²7FFS¢7F÷&VBç7FFRÂfW'6–öã¢7F÷&VBçfW'6–öâ²Ò“²F†—2æöå66VæT6†ævSòâ‡W6W"æ6×–vä–B“²&WGW&â²ö³¢G'VRÓ°Ğ¢ÒÀĞ¢Ó°Ğ¢66VæUFö¶Vå&÷w2ÒæWrÖÇ7G&–ærÂ–×÷'B‚rââ÷7&2÷6W'fW"÷66VæTÖ÷F–öâr’å66VæUFö¶Vå÷6—F–öãâ‚“°Ğ¢66VæT'VFvWE&÷w2ÒæWrÖÇ7G&–ærÂ²F7F–6Å7VçC¢çVÖ&W#²&Vv–öå7VçC¢çVÖ&W"Óâ‚“°Ğ¢66VæT6Æö6µ&÷w2ÒæWrÖÇ7G&–ærÂ²&÷VæC¢çVÖ&W#²†÷W#¢çVÖ&W"Óâ‚“°Ğ¢66VæT¶æ÷vå&÷w2ÒæWrÖÇ7G&–ærÂ&V6÷&CÇ7G&–ærÂ–×÷'B‚rââ÷7&2ö6×–vâöÖ2r’äÖæöFSãâ‚“°Ğ¢66VæTÖ÷F–öå&WVW7G2ÒæWrÖÇ7G&–ærÂ7G&–æsâ‚“°Ğ¢&VFöæÇ’66VæTÖ÷F–öã¢–×÷'B‚rââ÷7&2÷6W'fW"÷66VæTÖ÷F–öâr’å66VæTÖ÷F–öâÒ°Ğ¢6æ6†÷C¢7–æ2†6×–vä–BÂ66VæT–BÂW6W$–BÂFö¶Vä–G2’Óâ°Ğ¢6öç7BFö¶Vç2ÒFö¶Vä–G2æÖ†–BÓâF†—2ç66VæUFö¶Vå&÷w2ævWB†G¶6×–vä–GÓ¢G·66VæT–GÓ¢G¶–GÖ’’æf–ÇFW"‚‡b“¢b—2–×÷'B‚rââ÷7&2÷6W'fW"÷66VæTÖ÷F–öâr’å66VæUFö¶Vå÷6—F–öâÓâb’æÖ‡BÓâ‡²ââçBÂâââ‡F†—2ç66VæT'VFvWE&÷w2ævWB†G¶6×–vä–GÓ¢G·BçFö¶Vä–GÖ’óò²F7F–6Å7VçC¢Â&Vv–öå7VçC¢Ò’Ò’“°Ğ¢&WGW&â7G'V7GW&VD6ÆöæR‡²Fö¶Vç2Ââââ‡F†—2ç66VæT6Æö6µ&÷w2ævWB†6×–vä–B’óò²&÷VæC¢Â†÷W#¢Ò’Â¶æ÷vã¢ö&¦V7BçfÇVW2‡F†—2ç66VæT¶æ÷vå&÷w2ævWB†G¶6×–vä–GÓ¢G·66VæT–GÓ¢G·W6W$–GÖ’óò·Ò’Â'VFvWG3¢ö&¦V7Bæg&öÔVçG&–W2‡Fö¶Vä–G2æÖ†–BÓâ¶–BÂF†—2ç66VæT'VFvWE&÷w2ævWB†G¶6×–vä–GÓ¢G¶–GÖ’óò²F7F–6Å7VçC¢Â&Vv–öå7VçC¢ÕÒ’’Ò“°Ğ¢ÒÀĞ¢w&—FS¢7–æ2‡W6W"Â–çWBÂ6÷7BÂF—66÷fW&VB’Óâ°Ğ¢6öç7B&öf–ÆRÒF†—2ç&öf–ÆTÆ—7Bæf–æB‡Óâæ6×–vä–BÓÓÒW6W"æ6×–vä–BbbçW6W$–BÓÓÒW6W"æ–Bbbæ7F—fR“°Ğ¢6öç7B7FFRÒF†—2ç7FFW2ævWB‡W6W"æ6×–vä–B“²–b‚&öf–ÆRÇÂ7FFR’&WGW&â²ö³¢fÇ6RÂW'&÷#¢uVæf–Æ&ÆRârÓ°Ğ¢6öç7B&WVW7D¶W’ÒG·W6W"æ6×–vä–GÓ¢G¶–çWBç&WVW7D–GÖÂ–ÆöBÒ¥4ôâç7G&–æv–g’‡²7F÷#¢W6W"æ–BÂ–çWBÒ“°Ğ¢–b‡F†—2ç66VæTÖ÷F–öå&WVW7G2æ†2‡&WVW7D¶W’’’&WGW&â²ö³¢F†—2ç66VæTÖ÷F–öå&WVW7G2ævWB‡&WVW7D¶W’’ÓÓÒ–ÆöBÓ°Ğ¢6öç7BFö¶VâÒ7FFRç7FFRçFö¶Vç5¶–çWBçFö¶Vä–B27G&–æuÓ°Ğ¢–b‚Fö¶VâÇÂ‡&öf–ÆRç&öÆRÓÒvvÒrbb‚&öf–ÆRçFö¶Vä–G2æ–æ6ÇVFW2‡Fö¶Vâæ–B’ÇÂ–çWBæ7F–öâÓÒvÖ÷fRr’’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢tæ÷B–÷W"6†&7FW"ârÓ°Ğ¢6öç7B66VæRÒF†—2ç66VæU&÷w2æf–æB‡2Óâ2æ6×–våö–BÓÓÒW6W"æ6×–vä–Bbb2æ–BÓÓÒ–çWBç66VæT–B“°Ğ¢–b‚66VæRÇÂ66VæRæ—5öÆVv7•ö&VæÇÂ66VæRæ—5öG&gBÇÂ66VæRæ&6†—fVBÇÂ‡66VæRçV&Æ—6†VE÷&Wf—6–öâóò’ÓÒ–çWBç66VæU&Wf—6–öâ’&WGW&â²ö³¢fÇ6RÂW'&÷#¢u66VæR6†ævVBârÓ°Ğ¢6öç7B76–væÖVçBÒF†—2ç66VæT76–væÖVçG2æf–æB†Óâæ6×–våö–BÓÓÒW6W"æ6×–vä–BbbçW6W%ö–BÓÓÒW6W"æ–B“°Ğ¢–b‡&öf–ÆRç&öÆRÓÒvvÒrbb‚76–væÖVçBÇÂ76–væÖVçBç66VæUö–BÓÒ66VæRæ–BÇÂ76–væÖVçBç&Wf—6–öâÓÒ–çWBæ76–væÖVçE&Wf—6–öâ’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢t76–væÖVçB6†ævVBârÓ°Ğ¢6öç7B¶W’ÒG·W6W"æ6×–vä–GÓ¢G·66VæRæ–GÓ¢G·Fö¶Vâæ–GÖÂöÆBÒF†—2ç66VæUFö¶Vå&÷w2ævWB†¶W’“°Ğ¢–b‚†öÆCòçfW'6–öâóò’ÓÒ–çWBçFö¶VåfW'6–öâ’&WGW&â²ö³¢fÇ6RÂW'&÷#¢uFö¶Vâ6†ævVBârÓ°Ğ¢6öç7BÆVFvW$¶W’ÒG·W6W"æ6×–vä–GÓ¢G·Fö¶Vâæ–GÖÂÆVFvW"ÒF†—2ç66VæT'VFvWE&÷w2ævWB†ÆVFvW$¶W’’óò²F7F–6Å7VçC¢Â&Vv–öå7VçC¢ÒÂ6Æö6·2ÒF†—2ç66VæT6Æö6µ&÷w2ævWB‡W6W"æ6×–vä–B’óò²&÷VæC¢Â†÷W#¢Ó°Ğ¢6öç7BF7F–6ÂÒ66VæRæ6FVv÷'’ÓÓÒv&GFÆRrÂÆ–Ö—BÒ‡Fö¶Vâç7VVDgBóò3’¢‡F7F–6Âò¢còS#ƒ’ò‡Fö¶Vâç6æV¶–ærò"¢’Â7VçBÒF7F–6ÂòÆVFvW"çF7F–6Å7VçB¢ÆVFvW"ç&Vv–öå7VçC°Ğ¢–b†–çWBæ7F–öâÓÒwÆ6Rrbb‚‡F7F–6Âò6Æö6·2ç&÷VæB¢6Æö6·2æ†÷W"’ÓÒ–çWBæWö6‚ÇÂ6÷7BÃÒÇÂ7VçB²6÷7BâÆ–Ö—B²RÓb’’&WGW&â²ö³¢fÇ6RÂW'&÷#¢t–ç7Vff–6–VçBÖ÷fVÖVçB'VFvWBârÓ°Ğ¢–b†–çWBæ7F–öâÓÒwÆ6Rr’²–b‡F7F–6Â’ÆVFvW"çF7F–6Å7VçB³Ò6÷7C²VÇ6RÆVFvW"ç&Vv–öå7VçB³Ò6÷7C²ĞĞ¢F†—2ç66VæT'VFvWE&÷w2ç6WB†ÆVFvW$¶W’ÂÆVFvW"“°Ğ¢F†—2ç66VæUFö¶Vå&÷w2ç6WB†¶W’Â²Fö¶Vä–C¢Fö¶Vâæ–BÂƒ¢–çWBç‚2çVÖ&W"Â“¢–çWBç’2çVÖ&W"ÂfW'6–öã¢†öÆCòçfW'6–öâóò’²ÂââæÆVFvW"Ò“°Ğ¢6öç7B÷væW"ÒF†—2ç&öf–ÆTÆ—7Bæf–æB‡Óâæ6×–vä–BÓÓÒW6W"æ6×–vä–Bbbç&öÆRÓÓÒwÆ–W"rbbçFö¶Vä–G2æ–æ6ÇVFW2‡Fö¶Vâæ–B’“°Ğ¢–b†÷væW"’²6öç7B¶æ÷vÆVFvT¶W’ÒG·W6W"æ6×–vä–GÓ¢G·66VæRæ–GÓ¢G¶÷væW"çW6W$–GÖ²F†—2ç66VæT¶æ÷vå&÷w2ç6WB†¶æ÷vÆVFvT¶W’Â²ââçF†—2ç66VæT¶æ÷vå&÷w2ævWB†¶æ÷vÆVFvT¶W’’Âââäö&¦V7Bæg&öÔVçG&–W2†F—66÷fW&VBæÖ†âÓâ¶âæ–BÂ7G'V7GW&VD6ÆöæR†â•Ò’’Ò“²ĞĞ¢F†—2ç66VæTÖ÷F–öå&WVW7G2ç6WB‡&WVW7D¶W’Â–ÆöB“²F†—2ç7FFW2ç6WB‡W6W"æ6×–vä–BÂ²7FFS¢7FFRç7FFRÂfW'6–öã¢7FFRçfW'6–öâ²Ò“²F†—2æöå66VæT6†ævSòâ‡W6W"æ6×–vä–B“°Ğ¢&WGW&â²ö³¢G'VRÓ°Ğ¢ÒÀĞ¢Gfæ6S¢7–æ2‡W6W"Â–çFW'fÂÂW‡V7FVBÂ&WVW7D–B’Óâ°Ğ¢–b‚F†—2ç&öf–ÆTÆ—7Bç6öÖR‡Óâæ6×–vä–BÓÓÒW6W"æ6×–vä–BbbçW6W$–BÓÓÒW6W"æ–Bbbç&öÆRÓÓÒvvÒrbbæ7F—fR’’&WGW&â²ö³¢fÇ6RÓ°Ğ¢6öç7B7FFRÒF†—2ç7FFW2ævWB‡W6W"æ6×–vä–B“²–b‚7FFR’&WGW&â²ö³¢fÇ6RÓ°Ğ¢6öç7B¶W’ÒG·W6W"æ6×–vä–GÓ¢G·&WVW7D–GÖÂ–ÆöBÒ¥4ôâç7G&–æv–g’‡²7F÷#¢W6W"æ–BÂ7F–öã¢vGfæ6RrÂ–çFW'fÂÂW‡V7FVBÒ“°Ğ¢–b‡F†—2ç66VæTÖ÷F–öå&WVW7G2æ†2†¶W’’’&WGW&â²ö³¢F†—2ç66VæTÖ÷F–öå&WVW7G2ævWB†¶W’’ÓÓÒ–ÆöBÓ°Ğ¢6öç7B6Æö6·2ÒF†—2ç66VæT6Æö6µ&÷w2ævWB‡W6W"æ6×–vä–B’óò²&÷VæC¢Â†÷W#¢Ó°Ğ¢–b†6Æö6·5¶–çFW'fÅÒÓÒW‡V7FVB’&WGW&â²ö³¢fÇ6RÂW'&÷#¢t–çFW'fÂ6†ævVBârÓ°Ğ¢6Æö6·5¶–çFW'fÅÒ²³²F†—2ç66VæT6Æö6µ&÷w2ç6WB‡W6W"æ6×–vä–BÂ6Æö6·2“°Ğ¢f÷"†6öç7B¶¶W’Â'VFvWEÒöbF†—2ç66VæT'VFvWE&÷w2’–b†¶W’ç7F'G5v—F‚‡W6W"æ6×–vä–B²s¢r’’²–b†–çFW'fÂÓÓÒw&÷VæBr’'VFvWBçF7F–6Å7VçBÒ²VÇ6R'VFvWBç&Vv–öå7VçBÒ²ĞĞ¢F†—2ç66VæTÖ÷F–öå&WVW7G2ç6WB†¶W’Â–ÆöB“²F†—2ç7FFW2ç6WB‡W6W"æ6×–vä–BÂ²7FFS¢7FFRç7FFRÂfW'6–öã¢7FFRçfW'6–öâ²Ò“²F†—2æöå66VæT6†ævSòâ‡W6W"æ6×–vä–B“²&WGW&â²ö³¢G'VRÓ°Ğ¢ÒÀĞ¢Ó°Ğ¢Ö76WG3¢'&“Æ–×÷'B‚rââ÷7&2÷6W'fW"÷66VæT76WG2r’å66VæT76WBb²6×–våö–C¢7G&–ærÓâÒµÓ°Ğ¢Ö76WD'—FW2ÒæWrÖÇ7G&–ærÂ²'—FW3¢V–çC„'&“²Ö–ÖS¢7G&–ærÓâ‚“°Ğ¢&VFöæÇ’66VæT76WG3¢–×÷'B‚rââ÷7&2÷6W'fW"÷66VæT76WG2r’å66VæT76WE7F÷&RÒ°Ğ¢vWC¢7–æ2†6×–vä–BÂ–B’Óâ7G'V7GW&VD6ÆöæR‡F†—2æÖ76WG2æf–æB†Óâæ6×–våö–BÓÓÒ6×–vä–Bbbæ–BÓÓÒ–B’óòçVÆÂ’ÀĞ¢WÆöC¢7–æ2‡W6W"Â66VæT–BÂVF–Væ6RÂ–ÖvRÂF‡VÖ&æ–Â’Óâ°Ğ¢6öç7B–BÒ7'—Fòç&æFöÕUT”B‚’ÂF‚ÒG·W6W"æ6×–vä–GÒòG·66VæT–GÒòG¶–GÖ°Ğ¢6öç7B76WBÒ²–BÂ66VæUö–C¢66VæT–BÂVF–Væ6RÂv–GFƒ¢–ÖvRçv–GF‚Â†V–v‡C¢–ÖvRæ†V–v‡BÂ6÷W&6U÷Fƒ¢F‚²r÷6÷W&6RrÂF‡VÖ&æ–Å÷Fƒ¢F‚²r÷F‡VÖ&æ–ÂrÂ6×–våö–C¢W6W"æ6×–vä–BÓ°Ğ¢F†—2æÖ76WG2çW6‚†76WB“²F†—2æÖ76WD'—FW2ç6WB†76WBç6÷W&6U÷F‚Â–ÖvR“²F†—2æÖ76WD'—FW2ç6WB†76WBçF‡VÖ&æ–Å÷F‚ÂF‡VÖ&æ–Â“°Ğ¢&WGW&â7G'V7GW&VD6ÆöæR†76WB“°Ğ¢ÒÀĞ¢W&Ã¢7–æ2F‚Óâ°Ğ¢6öç7B–ÖvRÒF†—2æÖ76WD'—FW2ævWB‡F‚“²&WGW&â–ÖvRòFF¢G¶–ÖvRæÖ–ÖWÓ¶&6ScBÂG´'VffW"æg&öÒ†–ÖvRæ'—FW2’çFõ7G&–ær‚v&6ScBr—Ö¢çVÆÃ°Ğ¢ÒÀĞ¢Ó°Ğ¢¦÷W&æÅ&÷w3¢'&“Æ–×÷'B‚rââ÷7&2÷6W'fW"ö¦÷W&æÇ2r’ä¦÷W&æÄVçG'’b²6×–våö–C¢7G&–ærÓâÒµÓ°Ğ¢&VFöæÇ’¦÷W&æÅ7F÷&S¢–×÷'B‚rââ÷7&2÷6W'fW"ö¦÷W&æÇ2r’ä¦÷W&æÅ7F÷&RÒ°Ğ¢vWC¢7–æ2‡W6W"Â–B’Óâ7G'V7GW&VD6ÆöæR‡F†—2æ¦÷W&æÅ&÷w2æf–æB†RÓâRæ6×–våö–BÓÓÒW6W"æ6×–vä–BbbRæ–BÓÓÒ–Bbb†Ræ÷væW%ö–BÓÓÒW6W"æ–BÇÂRç6†&–ærÓÓÒw'G’rÇÂ‡W6W"ç&öÆRÓÓÒvvÒrbbRç6†&–ærÓÓÒvvÒr’’’óòçVÆÂ’ÀĞ¢&6¶Æ–æ·3¢7–æ2‡W6W"ÂF&vWD–BÂöfg6WB’Óâ7G'V7GW&VD6ÆöæR‡F†—2æ¦÷W&æÅ&÷w2æf–ÇFW"†RÓâRæ6×–våö–BÓÓÒW6W"æ6×–vä–Bbb†Ræ÷væW%ö–BÓÓÒW6W"æ–BÇÂRç6†&–ærÓÓÒw'G’rÇÂ‡W6W"ç&öÆRÓÓÒvvÒrbbRç6†&–ærÓÓÒvvÒr’’bbRæ&öG’æ–æ6ÇVFW2†µ·&Vc¢G·F&vWD–GÕÕÖ’Ğ¢ç6÷'B‚†Â"’ÓâçVÖ&W"†"ç–ææVB’ÒçVÖ&W"†ç–ææVB’ÇÂ"æ7&VFVEöBæÆö6ÆT6ö×&R†æ7&VFVEöB’ÇÂæûïKh‘éì¶»§q«^u\ËœÙ\ÜÚ[ÛœËœÙ]
+ËÚÙ[’\ÚÃBˆÚÙ[’\ÚˆËÚÙ[’\ÚBˆØ[\ZYÛ’YˆË˜Ø[\ZYÛ’YBˆ›Ùš[RÙ^NˆËœ›Ùš[RÙ^KBˆ\Ù\’YˆË\Ù\’YBˆ^\™\Ğ]ˆË™^\™\Ğ]BˆÜ™X]Y]ˆ›İËBˆ\İÙY[]ˆ›İËBˆ™]›ÚÙY]ˆ[BˆJNÃBˆCBˆ\Ş[˜ÈÙ\ÜÚ[ÛŠÚÙ[’\Úˆİš[™ÊHÃBˆÛÛœİÈH\ËœÙ\ÜÚ[ÛœË™Ù]
+ÚÙ[’\Ú
+NÃBˆ™]\›ˆÈÈÈ‹‹œÈHˆ[ÃBˆCBˆ\Ş[˜È]][™JÚÙ[’\Úˆİš[™ÊNˆ›ÛZ\ÙO]][™H[ˆÃBˆÛÛœİÈH\ËœÙ\ÜÚ[ÛœË™Ù]
+ÚÙ[’\Ú
+NÃBˆÛÛœİ›İÈH\Ë››İÊ
+NÃBˆYˆ
+\ÈËœ™]›ÚÙY]]Kœ\œÙJË™^\™\Ğ]
+HH›İÈ]Kœ\œÙJË˜Ü™X]Y]
+H
+ÈÌ
+ˆÌH›İÊH™]\›ˆ[ÃBˆÛÛœİH\Ëœ›Ùš[S\İ™š[™
 
-/** In-memory Repo with the same contract as SupabaseRepo â€“ used by the security tests and the mock harness. */
-export class MemoryRepo implements Repo {
-  journalImageRows: Array<import('../src/server/journalImages').JournalImage & { campaign_id:string }> = [];
-  readonly journalImages: import('../src/server/journalImages').JournalImageStore = {
-    get: async (campaignId,id) => structuredClone(this.journalImageRows.find(i => i.campaign_id === campaignId && i.id === id) ?? null),
-    upload: async (user,entryId,image,thumbnail) => {
-      const id = crypto.randomUUID(), base = `${user.campaignId}/${user.id}/${entryId}/${id}`;
-      const row = { campaign_id:user.campaignId, id,entry_id:entryId,owner_id:user.id,source_path:base+'/source',thumbnail_path:base+'/thumbnail',mime:image.mime };
-      this.journalImageRows.push(row); this.mapAssetBytes.set(row.source_path,image); this.mapAssetBytes.set(row.thumbnail_path,thumbnail); return structuredClone(row);
-    },
-    url: async path => { const image = this.mapAssetBytes.get(path); return image ? `data:${image.mime};base64,${Buffer.from(image.bytes).toString('base64')}` : null; },
-  };
-  sanctuaryRows = new Map<string, import('../src/server/sanctuary').SanctuarySettings>();
-  readonly sanctuary: import('../src/server/sanctuary').SanctuaryStore = {
-    get: async campaignId => structuredClone(this.sanctuaryRows.get(campaignId) ?? { revision: 0, atmosphere: 'hall', defaultAsset: null, backgrounds: [] }),
-    save: async (campaignId, expected, settings) => {
-      if ((this.sanctuaryRows.get(campaignId)?.revision ?? 0) !== expected) return null;
-      const row = { ...structuredClone(settings), revision: expected + 1 }; this.sanctuaryRows.set(campaignId, row); return structuredClone(row);
-    },
-  };
-  worldLocations = new Map<string, { partyNode: string; revision: number }>();
-  worldJourneys: Array<import('../src/server/sceneTravel').TravelRecord & { campaign_id: string; scene_id: string }> = [];
-  readonly sceneTravel: import('../src/server/sceneTravel').SceneTravel = {
-    snapshot: async (user, sceneId) => structuredClone({ ...(this.worldLocations.get(`${user.campaignId}:${sceneId}`) ?? { partyNode: null, revision: 0 }), proposals: this.worldJourneys.filter(j => j.campaign_id === user.campaignId && j.scene_id === sceneId && (user.role === 'gm' || j.proposed_by === user.id || ['traveling','complete'].includes(j.status))).slice(-50).reverse().map(j => ({ ...j, proposed_by: user.role === 'gm' || j.proposed_by === user.id ? j.proposed_by : '' })) }),
-    action: async (user, sceneId, input) => {
-      const profile = this.profileList.find(p => p.campaignId === user.campaignId && p.userId === user.id && p.active), stored = this.states.get(user.campaignId);
-      if (!profile || !stored || (profile.role !== 'gm' && input.action !== 'propose')) return { ok: false, error: 'GM permission required.' };
-      const requestKey = `${user.campaignId}:${input.requestId}`, payload = JSON.stringify({ actor: user.id, sceneId, input });
-      if (this.sceneMotionRequests.has(requestKey)) return { ok: this.sceneMotionRequests.get(requestKey) === payload };
-      const scene = this.sceneRows.find(s => s.campaign_id === user.campaignId && s.id === sceneId);
-      if (!scene || scene.is_draft || scene.archived || scene.category !== 'world' || (scene.published_revision ?? 0) !== input.sceneRevision) return { ok: false, error: 'World changed.' };
-      if (profile.role !== 'gm' && !this.sceneAssignments.some(a => a.campaign_id === user.campaignId && a.user_id === user.id && a.scene_id === sceneId && a.revision === input.assignmentRevision)) return { ok: false, error: 'Assignment changed.' };
-      const map = scene.published_metadata as import('../src/campaign/maps').SceneMap, key = `${user.campaignId}:${sceneId}`, location = this.worldLocations.get(key);
-      const active = this.worldJourneys.some(j => j.campaign_id === user.campaignId && j.scene_id === sceneId && j.status === 'traveling');
-      if (['locate','propose'].includes(input.action as string) && (location?.revision ?? 0) !== input.partyRevision) return { ok: false, error: 'Party location changed.' };
-      if (input.action === 'locate') {
-        if (active || !map.nodes.some(n => n.id === input.nodeId && n.kind === 'location')) return { ok: false, error: 'Location unavailable.' };
-        this.worldLocations.set(key, { partyNode: input.nodeId as string, revision: (location?.revision ?? 0) + 1 });
-      } else if (input.action === 'propose') {
-        const route = map.routes.find(r => r.id === input.routeId && r.visible && [r.from,r.to].includes(location?.partyNode ?? ''));
-        const destination = route && (route.from === location?.partyNode ? route.to : route.from);
-        const known = this.sceneKnownRows.get(`${user.campaignId}:${sceneId}:${user.id}`) ?? {};
-        if (active || !location || !route || !destination || ![location.partyNode, destination].every(id => map.nodes.some(n => n.id === id && (n.visible || !!known[id])))) return { ok: false, error: 'Route unavailable.' };
-        this.worldJourneys.push({ campaign_id: user.campaignId, scene_id: sceneId, id: input.requestId as string, proposed_by: user.id, from_node: location.partyNode, to_node: destination, route_id: route.id, total_hours: route.hours, elapsed_hours: 0, status: 'proposed', version: 1, scene_revision: scene.published_revision ?? 0 });
-      } else {
-        const j = this.worldJourneys.find(j => j.campaign_id === user.campaignId && j.scene_id === sceneId && j.id === input.proposalId && j.version === input.version);
-        if (!j) return { ok: false, error: 'Journey changed.' };
-        if (input.action === 'confirm') {
-          if (active || j.status !== 'proposed' || j.scene_revision !== (scene.published_revision ?? 0) || location?.partyNode !== j.from_node) return { ok: false, error: 'Proposal changed.' };
-          j.status = j.total_hours === 0 ? 'complete' : 'traveling';
-        } else if (input.action === 'progress') {
-          if (j.status !== 'traveling' || j.scene_revision !== (scene.published_revision ?? 0)) return { ok: false, error: 'Journey is not active or the map changed.' };
-          j.elapsed_hours = Math.min(j.total_hours, j.elapsed_hours + (input.hours as number)); if (j.elapsed_hours >= j.total_hours) j.status = 'complete';
-        } else if (input.action === 'cancel') { if (!['proposed','traveling'].includes(j.status)) return { ok: false }; j.status = 'cancelled'; }
-        else return { ok: false };
-        j.version++;
-        if (j.status === 'complete' && location) this.worldLocations.set(key, { partyNode: j.to_node, revision: location.revision + 1 });
-      }
-      this.sceneMotionRequests.set(requestKey, payload); this.states.set(user.campaignId, { state: stored.state, version: stored.version + 1 }); this.onSceneChange?.(user.campaignId); return { ok: true };
-    },
-  };
-  sceneTokenRows = new Map<string, import('../src/server/sceneMotion').SceneTokenPosition>();
-  sceneBudgetRows = new Map<string, { tacticalSpent: number; regionSpent: number }>();
-  sceneClockRows = new Map<string, { round: number; hour: number }>();
-  sceneKnownRows = new Map<string, Record<string, import('../src/campaign/maps').MapNode>>();
-  sceneMotionRequests = new Map<string, string>();
-  readonly sceneMotion: import('../src/server/sceneMotion').SceneMotion = {
-    snapshot: async (campaignId, sceneId, userId, tokenIds) => {
-      const tokens = tokenIds.map(id => this.sceneTokenRows.get(`${campaignId}:${sceneId}:${id}`)).filter((v): v is import('../src/server/sceneMotion').SceneTokenPosition => !!v).map(t => ({ ...t, ...(this.sceneBudgetRows.get(`${campaignId}:${t.tokenId}`) ?? { tacticalSpent: 0, regionSpent: 0 }) }));
-      return structuredClone({ tokens, ...(this.sceneClockRows.get(campaignId) ?? { round: 0, hour: 0 }), known: Object.values(this.sceneKnownRows.get(`${campaignId}:${sceneId}:${userId}`) ?? {}), budgets: Object.fromEntries(tokenIds.map(id => [id, this.sceneBudgetRows.get(`${campaignId}:${id}`) ?? { tacticalSpent: 0, regionSpent: 0 }])) });
-    },
-    write: async (user, input, cost, discovered) => {
-      const profile = this.profileList.find(p => p.campaignId === user.campaignId && p.userId === user.id && p.active);
-      const state = this.states.get(user.campaignId); if (!profile || !state) return { ok: false, error: 'Unavailable.' };
-      const requestKey = `${user.campaignId}:${input.requestId}`, payload = JSON.stringify({ actor: user.id, input });
-      if (this.sceneMotionRequests.has(requestKey)) return { ok: this.sceneMotionRequests.get(requestKey) === payload };
-      const token = state.state.tokens[input.tokenId as string];
-      if (!token || (profile.role !== 'gm' && (!profile.tokenIds.includes(token.id) || input.action !== 'move'))) return { ok: false, error: 'Not your character.' };
-      const scene = this.sceneRows.find(s => s.campaign_id === user.campaignId && s.id === input.sceneId);
-      if (!scene || scene.is_legacy_arena || scene.is_draft || scene.archived || (scene.published_revision ?? 0) !== input.sceneRevision) return { ok: false, error: 'Scene changed.' };
-      const assignment = this.sceneAssignments.find(a => a.campaign_id === user.campaignId && a.user_id === user.id);
-      if (profile.role !== 'gm' && (!assignment || assignment.scene_id !== scene.id || assignment.revision !== input.assignmentRevision)) return { ok: false, error: 'Assignment changed.' };
-      const key = `${user.campaignId}:${scene.id}:${token.id}`, old = this.sceneTokenRows.get(key);
-      if ((old?.version ?? 0) !== input.tokenVersion) return { ok: false, error: 'Token changed.' };
-      const ledgerKey = `${user.campaignId}:${token.id}`, ledger = this.sceneBudgetRows.get(ledgerKey) ?? { tacticalSpent: 0, regionSpent: 0 }, clocks = this.sceneClockRows.get(user.campaignId) ?? { round: 0, hour: 0 };
-      const tactical = scene.category === 'battle', limit = (token.speedFt ?? 30) * (tactical ? 1 : 600 / 5280) / (token.sneaking ? 2 : 1), spent = tactical ? ledger.tacticalSpent : ledger.regionSpent;
-      if (input.action !== 'place' && ((tactical ? clocks.round : clocks.hour) !== input.epoch || cost <= 0 || spent + cost > limit + 1e-6)) return { ok: false, error: 'Insufficient movement budget.' };
-      if (input.action !== 'place') { if (tactical) ledger.tacticalSpent += cost; else ledger.regionSpent += cost; }
-      this.sceneBudgetRows.set(ledgerKey, ledger);
-      this.sceneTokenRows.set(key, { tokenId: token.id, x: input.x as number, y: input.y as number, version: (old?.version ?? 0) + 1, ...ledger });
-      const owner = this.profileList.find(p => p.campaignId === user.campaignId && p.role === 'player' && p.tokenIds.includes(token.id));
-      if (owner) { const knowledgeKey = `${user.campaignId}:${scene.id}:${owner.userId}`; this.sceneKnownRows.set(knowledgeKey, { ...this.sceneKnownRows.get(knowledgeKey), ...Object.fromEntries(discovered.map(n => [n.id, structuredClone(n)])) }); }
-      this.sceneMotionRequests.set(requestKey, payload); this.states.set(user.campaignId, { state: state.state, version: state.version + 1 }); this.onSceneChange?.(user.campaignId);
-      return { ok: true };
-    },
-    advance: async (user, interval, expected, requestId) => {
-      if (!this.profileList.some(p => p.campaignId === user.campaignId && p.userId === user.id && p.role === 'gm' && p.active)) return { ok: false };
-      const state = this.states.get(user.campaignId); if (!state) return { ok: false };
-      const key = `${user.campaignId}:${requestId}`, payload = JSON.stringify({ actor: user.id, action: 'advance', interval, expected });
-      if (this.sceneMotionRequests.has(key)) return { ok: this.sceneMotionRequests.get(key) === payload };
-      const clocks = this.sceneClockRows.get(user.campaignId) ?? { round: 0, hour: 0 };
-      if (clocks[interval] !== expected) return { ok: false, error: 'Interval changed.' };
-      clocks[interval]++; this.sceneClockRows.set(user.campaignId, clocks);
-      for (const [key, budget] of this.sceneBudgetRows) if (key.startsWith(user.campaignId + ':')) { if (interval === 'round') budget.tacticalSpent = 0; else budget.regionSpent = 0; }
-      this.sceneMotionRequests.set(key, payload); this.states.set(user.campaignId, { state: state.state, version: state.version + 1 }); this.onSceneChange?.(user.campaignId); return { ok: true };
-    },
-  };
-  mapAssets: Array<import('../src/server/sceneAssets').SceneAsset & { campaign_id: string }> = [];
-  mapAssetBytes = new Map<string, { bytes: Uint8Array; mime: string }>();
-  readonly sceneAssets: import('../src/server/sceneAssets').SceneAssetStore = {
-    get: async (campaignId, id) => structuredClone(this.mapAssets.find(a => a.campaign_id === campaignId && a.id === id) ?? null),
-    upload: async (user, sceneId, audience, image, thumbnail) => {
-      const id = crypto.randomUUID(), path = `${user.campaignId}/${sceneId}/${id}`;
-      const asset = { id, scene_id: sceneId, audience, width: image.width, height: image.height, source_path: path + '/source', thumbnail_path: path + '/thumbnail', campaign_id: user.campaignId };
-      this.mapAssets.push(asset); this.mapAssetBytes.set(asset.source_path, image); this.mapAssetBytes.set(asset.thumbnail_path, thumbnail);
-      return structuredClone(asset);
-    },
-    url: async path => {
-      const image = this.mapAssetBytes.get(path); return image ? `data:${image.mime};base64,${Buffer.from(image.bytes).toString('base64')}` : null;
-    },
-  };
-  journalRows: Array<import('../src/server/journals').JournalEntry & { campaign_id: string }> = [];
-  readonly journalStore: import('../src/server/journals').JournalStore = {
-    get: async (user, id) => structuredClone(this.journalRows.find(e => e.campaign_id === user.campaignId && e.id === id && (e.owner_id === user.id || e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm'))) ?? null),
-    backlinks: async (user, targetId, offset) => structuredClone(this.journalRows.filter(e => e.campaign_id === user.campaignId && (e.owner_id === user.id || e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm')) && e.body.includes(`[[ref:${targetId}]]`))
-      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)).slice(offset, offset + 50)),
-    list: async (user, offset, mine = false, filters = {}) => structuredClone(this.journalRows.filter(e => e.campaign_id === user.campaignId && (e.owner_id === user.id || (!mine && (e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm')))) && (!filters.search || filters.search.toLowerCase().split(/\s+/).every(word=>`${e.title} ${e.body} ${e.category}`.toLowerCase().includes(word))) && (!filters.category || e.category===filters.category) && (!filters.tag || e.tags.includes(filters.tag)))
-      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (filters.sort==='oldest'?a.created_at.localeCompare(b.created_at):b.created_at.localeCompare(a.created_at)) || a.id.localeCompare(b.id)).slice(offset, offset + 50)),
-    save: async (user, id, version, draft) => {
-      const index = this.journalRows.findIndex(e => e.campaign_id === user.campaignId && e.id === id);
-      const old = this.journalRows[index];
-      if ((version === 0 && old) || (version > 0 && (!old || old.owner_id !== user.id || old.version !== version))) return null;
-      const now = new Date().toISOString();
-      const entry = { ...structuredClone(draft), id, owner_id: user.id, campaign_id: user.campaignId, version: version + 1, created_at: old?.created_at ?? now, updated_at: now };
-      if (old) this.journalRows[index] = entry; else this.journalRows.push(entry);
-      return structuredClone(entry);
-    },
-    remove: async (user, id, version) => {
-      const index = this.journalRows.findIndex(e => e.campaign_id === user.campaignId && e.owner_id === user.id && e.id === id && e.version === version);
-      if (index < 0) return false;
-      this.journalRows.splice(index, 1); return true;
-    },
-  };
-  sceneRows: Array<import('../src/server/scenes').SceneDefinition & { campaign_id: string; published_metadata?: unknown }> = [];
-  sceneAssignments: Array<import('../src/server/sceneRuntime').SceneAssignment & { campaign_id: string }> = [];
-  sceneTransfers = new Map<string, string>();
-  onSceneChange?: (campaignId: string) => void;
-  readonly sceneRuntime: import('../src/server/sceneRuntime').SceneRuntime = {
-    assignments: async campaignId => structuredClone(this.sceneAssignments.filter(a => a.campaign_id === campaignId).slice(0, 100)),
-    assignment: async (campaignId, userId) => structuredClone(this.sceneAssignments.find(a => a.campaign_id === campaignId && a.user_id === userId) ?? null),
-    scene: async (campaignId, id) => { const row=this.sceneRows.find(s=>s.campaign_id===campaignId && s.id===id); return row ? structuredClone({ ...row, revision:row.published_revision ?? 0 }) as import('../src/server/sceneRuntime').RuntimeScene : null; },
-    transition: async (user, sceneId, targets, requestId) => {
-      if (!this.profileList.some(p => p.campaignId === user.campaignId && p.userId === user.id && p.role === 'gm' && p.active)) return { ok: false, error: 'GM permission required.' };
-      const stored = this.states.get(user.campaignId); if (!stored) return { ok: false, error: 'Campaign not initialized.' };
-      const key = `${user.campaignId}:${requestId}`, payload = JSON.stringify({ actor: user.id, sceneId, targets });
-      if (this.sceneTransfers.has(key)) return this.sceneTransfers.get(key) === payload ? { ok: true } : { ok: false, error: 'Request ID already used.' };
-      const scene = sceneId ? this.sceneRows.find(s => s.campaign_id === user.campaignId && s.id === sceneId) : null;
-      if (sceneId && (!scene || scene.is_draft || scene.archived)) return { ok: false, error: 'Destination unavailable.' };
-      const nodes = (scene?.published_metadata as { nodes?: { kind: string; x: number; y: number }[] })?.nodes;
-      const spawn = nodes?.find(n => n.kind === 'spawn');
-      if (scene && !scene.is_legacy_arena && !spawn) return { ok: false, error: 'Destination has no spawn.' };
-      for (const t of targets) {
-        if (!this.profileList.some(p => p.campaignId === user.campaignId && p.userId === t.userId && p.role === 'player' && p.active) || !this.memberList.some(m => m.campaignId === user.campaignId && m.userId === t.userId && m.role === 'player')) return { ok: false, error: 'Player unavailable.' };
-        const a = this.sceneAssignments.find(a => a.campaign_id === user.campaignId && a.user_id === t.userId);
-        if ((a?.revision ?? 0) !== t.revision) return { ok: false, error: 'Assignment changed.' };
-      }
-      for (const t of targets) {
-        const a = this.sceneAssignments.find(a => a.campaign_id === user.campaignId && a.user_id === t.userId);
-        const next = { campaign_id: user.campaignId, user_id: t.userId, scene_id: sceneId, revision: (a?.revision ?? 0) + 1, spawn_x: spawn?.x ?? null, spawn_y: spawn?.y ?? null };
-        if (a) Object.assign(a, next); else this.sceneAssignments.push(next);
-      }
-      this.sceneTransfers.set(key, payload); this.states.set(user.campaignId, { state: stored.state, version: stored.version + 1 }); this.onSceneChange?.(user.campaignId);
-      return { ok: true };
-    },
-  };
-  readonly sceneCatalog: import('../src/server/scenes').SceneCatalog = {
-    list: async (campaignId, offset, filters={}) => {
-      if (this.states.has(campaignId) && !this.sceneRows.some(s => s.campaign_id === campaignId && s.is_legacy_arena)) this.sceneRows.push({ campaign_id: campaignId, id: crypto.randomUUID(), name: 'Arena', category: 'region', is_legacy_arena: true, is_draft: false, archived: false, revision: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: {} });
-      return this.sceneRows.filter(s => s.campaign_id === campaignId && (!filters.category || s.category===filters.category) && (filters.archived===undefined || s.archived===filters.archived) && (!filters.search || s.name.toLowerCase().includes(filters.search.toLowerCase()))).sort((a,b)=>filters.sort==='name'?a.name.localeCompare(b.name):b.updated_at.localeCompare(a.updated_at)).slice(offset,offset+50).map(({metadata:_private,published_metadata:_published,campaign_id:_campaign,...s})=>structuredClone(s));
-    },
-    get: async (campaignId, id) => structuredClone(this.sceneRows.find(s => s.campaign_id === campaignId && s.id === id) ?? null),
-    create: async (campaignId, scene) => {
-      const row = { ...scene, campaign_id: campaignId, id: crypto.randomUUID(), is_draft: true, is_legacy_arena: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), revision: 1, published_revision:0, archived: false, metadata: {} };
-      this.sceneRows.push(row); return structuredClone(row);
-    },
-    update: async (campaignId, id, revision, patch) => {
-      const row = this.sceneRows.find(s => s.campaign_id === campaignId && s.id === id && s.revision === revision);
-      if (!row) return null;
-      if (patch.archived && this.sceneAssignments.some(a => a.campaign_id === campaignId && a.scene_id === id)) return null;
-      const notify=('published_metadata' in patch) || ('name' in patch && patch.name!==row.name) || ('archived' in patch && patch.archived!==row.archived);
-      Object.assign(row, structuredClone(patch), { revision: revision + 1, updated_at: new Date().toISOString() });
-      const stored=this.states.get(campaignId); if(notify && stored) { this.states.set(campaignId,{state:stored.state,version:stored.version+1}); this.onSceneChange?.(campaignId); }
-      return structuredClone(row);
-    },
-  };
-  campaigns: Array<Campaign & { syncTopic?: string }> = [];
-  profileList: Profile[] = [];
-  credentials = new Map<string, Credential>(); // `${campaign}:${key}` â†’ hash
-  setupCodes: Array<{ campaignId: string; codeHash: string; expiresAt: number; usedAt: number | null }> = [];
-  sessions = new Map<string, SessionRecord>();
-  attempts: Array<{ profileKey: string; ipHash: string; ok: boolean; at: number }> = [];
-  memberList: Member[] = [];
-  assignmentList: Assignment[] = [];
-  states = new Map<string, StoredState>();
-  sheets = new Map<string, StoredSheet>(); // `${campaign}:${token}`
-  sheetBackups: Array<{ id: number; campaignId: string; tokenId: string; data: unknown; version: number; reason: string; createdAt: string }> = [];
-  feedback: Array<FeedbackRow & { campaignId: string }> = [];
-  snapshots: Array<SnapshotInfo & { campaignId: string; state: GameState }> = [];
-  log: CommandLogEntry[] = [];
-  /** Test hook: runs before the next optimistic write (simulates a concurrent writer). */
-  beforeSave: (() => void) | null = null;
-  /** Test hook: runs before the next sheet write. */
-  beforeSheetSave: (() => void) | null = null;
-  now = () => Date.now();
-  /** Number of repository calls (â‰ˆ database round trips in production). */
-  calls = 0;
-  /** Request-id reservations (idempotency). */
-  requests = new Map<string, { state: 'pending' | 'ok' | 'failed'; version: number | null; error: string | null }>();
+
+HOˆ˜Ø[\ZYÛ’YOOHË˜Ø[\ZYÛ’Y	‰ˆšÙ^HOOHËœ›Ùš[RÙ^JNÃBˆÛÛœİÈH\Ë˜Ø[\ZYÛœË™š[™
 
-  constructor() {
-    // Count every repository call like a database round trip.
-    return new Proxy(this, {
-      get(target, prop, receiver) {
-        const v = Reflect.get(target, prop, receiver);
-        if (typeof v === 'function' && prop !== 'constructor' && typeof prop === 'string' && !['now', 'beforeSave', 'beforeSheetSave'].includes(prop)) {
-          return (...args: unknown[]) => {
-            target.calls++;
-            return (v as (...a: unknown[]) => unknown).apply(receiver, args);
-          };
-        }
-        return v;
-      },
-    });
-  }
+
+HOˆšYOOHË˜Ø[\ZYÛ’Y
+NÃBˆYˆ
+\XÊH™]\›ˆ[ÃBˆÛÛœİ™Y›Ü™HHÈ‹‹œÈNÃBˆYˆ
+›İÈH]Kœ\œÙJË›\İÙY[]
+HˆÌÌ
+HË›\İÙY[]H™]È]J›İÊKÒTÓÔİš[™Ê
+NÃBˆËœŞ[˜ÕÜXÈÏÏHÜXËIÓX]œ˜[™ÛJ
+KÔİš[™ÊÍŠKœÛXÙJŠ_XÃBˆ™]\›ˆÃBˆÙ\ÜÚ[Ûˆ™Y›Ü™KBˆ›Ùš[NˆÈ‹‹œÚÙ[’YÎˆË‹‹œÚÙ[’Y×HKBˆ\ÜİÛÜ™Ù]ˆ\Ë˜Ü™Y[X[Ëš\Ê	ÜË˜Ø[\ZYÛ’YN‰ÜËœ›Ùš[RÙ^_X
+KBˆØ[\ZYÛˆÈ˜[YNˆË›˜[YKŞ[˜ÕÜXÎˆ\^\Ş[˜ËIØËœŞ[˜ÕÜXßXKBˆNÃBˆCBˆ\Ş[˜ÈİXÚÙ\ÜÚ[ÛŠÚÙ[’\Úˆİš[™Ë^\™\Ğ]ˆİš[™ÊHÃBˆÛÛœİÈH\ËœÙ\ÜÚ[ÛœË™Ù]
+ÚÙ[’\Ú
+NÃBˆYˆ
+ÊHØš™Xİ˜\ÜÚYÛŠËÈ\İÙY[]ˆ™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+K^\™\Ğ]JNÃBˆCBˆ\Ş[˜È™]›ÚÙTÙ\ÜÚ[ÛŠÚÙ[’\Úˆİš[™ÊHÃBˆÛÛœİÈH\ËœÙ\ÜÚ[ÛœË™Ù]
+ÚÙ[’\Ú
+NÃBˆYˆ
+È	‰ˆ\Ëœ™]›ÚÙY]
+HËœ™]›ÚÙY]H™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+NÃBˆCBˆ\Ş[˜È™]›ÚÙT›Ùš[TÙ\ÜÚ[ÛœÊØ[\ZYÛ’Yˆİš[™ËÙ^Nˆİš[™Ë^Ù\\ÚÎˆİš[™ÊHÃBˆ]ˆHÃBˆ›Üˆ
+ÛÛœİÈÙˆ\ËœÙ\ÜÚ[ÛœË˜[Y\Ê
+JHÃBˆYˆ
+Ë˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆËœ›Ùš[RÙ^HOOHÙ^H	‰ˆ\Ëœ™]›ÚÙY]	‰ˆËÚÙ[’\ÚOOH^Ù\\Ú
+HÃBˆËœ™]›ÚÙY]H™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+NÃBˆŠÊÎÃBˆCBˆCBˆ™]\›ˆÃBˆCBˆ\Ş[˜ÈÙ\ÜÚ[Û”™\Ù[˜ÙJØ[\ZYÛ’Yˆİš[™ÊHÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë›Ùš[T™\Ù[˜ÙOˆHßNÃBˆ›Üˆ
+ÛÛœİÈÙˆ\ËœÙ\ÜÚ[ÛœË˜[Y\Ê
+JHÃBˆYˆ
+Ë˜Ø[\ZYÛ’YOOHØ[\ZYÛ’YËœ™]›ÚÙY]]Kœ\œÙJË™^\™\Ğ]
+HH\Ë››İÊ
+JHÛÛ[YNÃBˆÛÛœİH
+İ]ÜËœ›Ùš[RÙ^WHÏÏHÈÙ\ÜÚ[ÛœÎˆ\İÙY[]ˆ[JNÃBˆœÙ\ÜÚ[ÛœÊÊÎÃBˆYˆ
+\›\İÙY[]Ë›\İÙY[]ˆ›\İÙY[]
+H›\İÙY[]HË›\İÙY[]ÃBˆCBˆ™]\›ˆİ]ÃBˆCBˆ\Ş[˜ÈÙÚ[][\İ]Ê›Ùš[RÙ^Nˆİš[™Ë\\Úˆİš[™ËÚ[˜ÙR\ÛÎˆİš[™ÊNˆ›ÛZ\ÙOÙÚ[][\İ]ÏˆÃBˆÛÛœİÚ[˜ÙHH]Kœ\œÙJÚ[˜ÙR\ÛÊNÃBˆÛÛœİ˜Z[ÈH\Ë˜][\Ë™š[\Š
+JHOˆXK›ÚÈ	‰ˆK˜]HÚ[˜ÙJNÃBˆÛÛœİZ[™HH˜Z[Ë™š[\Š
+JHOˆKœ›Ùš[RÙ^HOOH›Ùš[RÙ^JKœÛÜ
 
-  async profiles(campaignId: string | null) {
-    return this.profileList.filter((p) => !campaignId || p.campaignId === campaignId).map((p) => ({ ...p, tokenIds: [...p.tokenIds] }));
-  }
-  async updateProfile(campaignId: string, key: string, patch: Partial<Pick<Profile, 'tokenIds' | 'active'>>) {
-    const p = this.profileList.find((x) => x.campaignId === campaignId && x.key === key);
-    if (p) Object.assign(p, patch);
-  }
-  async credential(campaignId: string, key: string) {
-    const c = this.credentials.get(`${campaignId}:${key}`);
-    return c ? { ...c } : null;
-  }
-  async credentialDates(campaignId: string | null) {
-    const out: Record<string, string> = {};
-    for (const [k, c] of this.credentials) {
-      const [cid, key] = k.split(':');
-      if (!campaignId) out[k] = c.updatedAt;
-      else if (cid === campaignId) out[key] = c.updatedAt;
-    }
-    return out;
-  }
-  async setCredential(campaignId: string, key: string, passwordHash: string | null) {
-    if (passwordHash === null) this.credentials.delete(`${campaignId}:${key}`);
-    else this.credentials.set(`${campaignId}:${key}`, { passwordHash, updatedAt: new Date(this.now()).toISOString() });
-  }
-  async consumeSetupCode(codeHash: string) {
-    const c = this.setupCodes.find((x) => x.codeHash === codeHash && x.usedAt === null && x.expiresAt > this.now());
-    if (!c) return null;
-    c.usedAt = this.now();
-    return c.campaignId;
-  }
-  async createSession(s: Omit<SessionRecord, 'revokedAt' | 'lastSeenAt' | 'createdAt'> & { userAgent: string | null }) {
-    const now = new Date(this.now()).toISOString();
-    this.sessions.set(s.tokenHash, {
-      tokenHash: s.tokenHash,
-      campaignId: s.campaignId,
-      profileKey: s.profileKey,
-      userId: s.userId,
-      expiresAt: s.expiresAt,
-      createdAt: now,
-      lastSeenAt: now,
-      revokedAt: null,
-    });
-  }
-  async session(tokenHash: string) {
-    const s = this.sessions.get(tokenHash);
-    return s ? { ...s } : null;
-  }
-  async authBundle(tokenHash: string): Promise<AuthBundle | null> {
-    const s = this.sessions.get(tokenHash);
-    const now = this.now();
-    if (!s || s.revokedAt || Date.parse(s.expiresAt) <= now || Date.parse(s.createdAt) + 30 * 86400_000 <= now) return null;
-    const p = this.profileList.find((x) => x.campaignId === s.campaignId && x.key === s.profileKey);
-    const c = this.campaigns.find((x) => x.id === s.campaignId);
-    if (!p || !c) return null;
-    const before = { ...s };
-    if (now - Date.parse(s.lastSeenAt) > 30_000) s.lastSeenAt = new Date(now).toISOString();
-    c.syncTopic ??= `topic-${Math.random().toString(36).slice(2)}`;
-    return {
-      session: before,
-      profile: { ...p, tokenIds: [...p.tokenIds] },
-      passwordSet: this.credentials.has(`${s.campaignId}:${s.profileKey}`),
-      campaign: { name: c.name, syncTopic: `apex-sync-${c.syncTopic}` },
-    };
-  }
-  async touchSession(tokenHash: string, expiresAt: string) {
-    const s = this.sessions.get(tokenHash);
-    if (s) Object.assign(s, { lastSeenAt: new Date(this.now()).toISOString(), expiresAt });
-  }
-  async revokeSession(tokenHash: string) {
-    const s = this.sessions.get(tokenHash);
-    if (s && !s.revokedAt) s.revokedAt = new Date(this.now()).toISOString();
-  }
-  async revokeProfileSessions(campaignId: string, key: string, exceptHash?: string) {
-    let n = 0;
-    for (const s of this.sessions.values()) {
-      if (s.campaignId === campaignId && s.profileKey === key && !s.revokedAt && s.tokenHash !== exceptHash) {
-        s.revokedAt = new Date(this.now()).toISOString();
-        n++;
-      }
-    }
-    return n;
-  }
-  async sessionPresence(campaignId: string) {
-    const out: Record<string, ProfilePresence> = {};
-    for (const s of this.sessions.values()) {
-      if (s.campaignId !== campaignId || s.revokedAt || Date.parse(s.expiresAt) <= this.now()) continue;
-      const p = (out[s.profileKey] ??= { sessions: 0, lastSeenAt: null });
-      p.sessions++;
-      if (!p.lastSeenAt || s.lastSeenAt > p.lastSeenAt) p.lastSeenAt = s.lastSeenAt;
-    }
-    return out;
-  }
-  async loginAttemptStats(profileKey: string, ipHash: string, sinceIso: string): Promise<LoginAttemptStats> {
-    const since = Date.parse(sinceIso);
-    const fails = this.attempts.filter((a) => !a.ok && a.at >= since);
-    const mine = fails.filter((a) => a.profileKey === profileKey).sort((a, b) => a.at - b.at);
-    return {
-      profileFailures: mine.length,
-      ipFailures: fails.filter((a) => a.ipHash === ipHash).length,
-      globalFailures: fails.length,
-      oldestProfileFailure: mine[0] ? new Date(mine[0].at).toISOString() : null,
-    };
-  }
-  async recordLoginAttempt(profileKey: string, ipHash: string, ok: boolean) {
-    this.attempts.push({ profileKey, ipHash, ok, at: this.now() });
-  }
-  async syncTopic(campaignId: string) {
-    const c = this.campaigns.find((x) => x.id === campaignId);
-    if (!c) throw new Error('campaign not found');
-    c.syncTopic ??= `topic-${Math.random().toString(36).slice(2)}`;
-    return `apex-sync-${c.syncTopic}`;
-  }
-  async rotateSyncTopic(campaignId: string) {
-    const c = this.campaigns.find((x) => x.id === campaignId);
-    if (c) c.syncTopic = `topic-${Math.random().toString(36).slice(2)}`;
-  }
-  /** Test hook: simulated database deployment status. */
-  deploy: DeployStatus = {
-    schemaVersion: REQUIRED_SCHEMA_VERSION,
-    migrations: [...EXPECTED_MIGRATIONS],
-    campaignSeeded: true,
-    profiles: 5,
-    realtime: true,
-    securityProblems: [],
-  };
-  async deployStatus() {
-    return { ...this.deploy, migrations: [...this.deploy.migrations] };
-  }
-  async campaignsById(ids: string[]) {
-    return this.campaigns.filter((c) => ids.includes(c.id)).map(({ id, slug, name }) => ({ id, slug, name }));
-  }
-  async members(campaignId: string) {
-    return this.memberList.filter((m) => m.campaignId === campaignId).map((m) => ({ ...m }));
-  }
-  async upsertMember(m: Member) {
-    this.memberList = this.memberList.filter((x) => !(x.campaignId === m.campaignId && x.userId === m.userId));
-    this.memberList.push({ ...m });
-    if(m.role==='player' && !this.sceneAssignments.some(a=>a.campaign_id===m.campaignId && a.user_id===m.userId)) this.sceneAssignments.push({campaign_id:m.campaignId,user_id:m.userId,scene_id:null,revision:0,spawn_x:null,spawn_y:null});
-  }
-  async touchMember(campaignId: string, userId: string) {
-    const m = this.memberList.find((x) => x.campaignId === campaignId && x.userId === userId);
-    if (m) m.lastSeenAt = new Date(this.now()).toISOString();
-  }
-  async assignments(campaignId: string) {
-    return this.assignmentList.filter((a) => a.campaignId === campaignId);
-  }
-  async assignToken(campaignId: string, tokenId: string, userId: string | null) {
-    this.assignmentList = this.assignmentList.filter((a) => !(a.campaignId === campaignId && a.tokenId === tokenId));
-    if (userId) this.assignmentList.push({ campaignId, tokenId, userId });
-  }
-  async loadState(campaignId: string) {
-    const s = this.states.get(campaignId);
-    return s ? { state: structuredClone(s.state), version: s.version } : null;
-  }
-  async stateVersion(campaignId: string) {
-    return this.states.get(campaignId)?.version ?? null;
-  }
-  async replaceState(campaignId: string, state: GameState) {
-    const version = (this.states.get(campaignId)?.version ?? 0) + 1;
-    this.states.set(campaignId, { state: structuredClone(state), version });
-    return version;
-  }
-  async saveState(campaignId: string, state: GameState, expectedVersion: number) {
-    if (this.beforeSave) {
-      const f = this.beforeSave;
-      this.beforeSave = null;
-      f();
-    }
-    const cur = this.states.get(campaignId);
-    if (!cur || cur.version !== expectedVersion) return null;
-    this.states.set(campaignId, { state: structuredClone(state), version: expectedVersion + 1 });
-    return expectedVersion + 1;
-  }
-  async createSnapshot(campaignId: string, state: GameState, version: number, label: string) {
-    this.snapshots.push({ id: this.snapshots.length + 1, campaignId, state: structuredClone(state), version, label, createdAt: new Date().toISOString() });
-  }
-  async listSnapshots(campaignId: string, limit: number) {
-    return this.snapshots
-      .filter((s) => s.campaignId === campaignId)
-      .reverse()
-      .slice(0, limit)
-      .map(({ id, version, label, createdAt }) => ({ id, version, label, createdAt }));
-  }
-  async loadSnapshot(campaignId: string, id: number) {
-    return this.snapshots.find((s) => s.campaignId === campaignId && s.id === id)?.state ?? null;
-  }
-  async pruneSnapshots() {}
-  archives: Array<ArchiveInfo & { campaignId: string; state: GameState }> = [];
-  /** Test hook: fail the next world transition (simulated database error). */
-  failNextTransition: Error | null = null;
-  async worldTransition(
-    campaignId: string,
-    expectedVersion: number | null,
-    newState: GameState | null,
-    archive: { name: string; description: string; kind: ArchiveKind },
-  ) {
-    if (this.failNextTransition) {
-      const e = this.failNextTransition;
-      this.failNextTransition = null;
-      throw e;
-    }
-    const cur = this.states.get(campaignId);
-    if (!cur) throw new Error('apex:no_world');
-    if (expectedVersion !== null && cur.version !== expectedVersion) throw new WorldConflictError();
-    const id = `00000000-0000-4000-8000-${String(this.archives.length + 1).padStart(12, '0')}`;
-    this.archives.unshift({
-      id,
-      campaignId,
-      name: archive.name.trim().slice(0, 120) || 'Archived world',
-      description: archive.description.slice(0, 2000),
-      kind: archive.kind,
-      createdAt: new Date(this.now()).toISOString(),
-      stateVersion: cur.version,
-      worldName: cur.state.world?.name ?? null,
-      seed: cur.state.config.seed,
-      radius: cur.state.config.mapRadius,
-      day: cur.state.day,
-      phase: cur.state.phase,
-      state: structuredClone(cur.state),
-    });
-    let version = cur.version;
-    if (newState) {
-      version = cur.version + 1;
-      this.states.set(campaignId, { state: structuredClone(newState), version });
-    }
-    return { archiveId: id, version };
-  }
-  async listArchives(campaignId: string) {
-    return this.archives.filter((a) => a.campaignId === campaignId).map(({ state: _s, campaignId: _c, ...info }) => info);
-  }
-  async loadArchive(campaignId: string, id: string) {
-    const a = this.archives.find((x) => x.campaignId === campaignId && x.id === id);
-    if (!a) return null;
-    const { campaignId: _c, ...rest } = a;
-    return structuredClone(rest);
-  }
-  portraits = new Map<string, { bytes: Uint8Array; contentType: string }>();
-  async uploadPortrait(path: string, bytes: Uint8Array, contentType: string) {
-    if (this.portraits.has(path)) throw new Error('portrait upload: exists');
-    this.portraits.set(path, { bytes, contentType });
-  }
-  async portraitUrl(path: string) {
-    return this.portraits.has(path) ? `/__mock/portrait?path=${encodeURIComponent(path)}` : null;
-  }
-  async deletePortrait(path: string) {
-    this.portraits.delete(path);
-  }
-  async loadSheet(campaignId: string, tokenId: string) {
-    const s = this.sheets.get(`${campaignId}:${tokenId}`);
-    return s ? structuredClone(s) : null;
-  }
-  async loadSheetVitals(campaignId: string) {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of this.sheets) if (k.startsWith(`${campaignId}:`)) out[k.slice(campaignId.length + 1)] = structuredClone((v.data as { hitPoints?: unknown })?.hitPoints ?? null);
-    return out;
-  }
-  async loadSheetDetails(campaignId: string) {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of this.sheets) if (k.startsWith(`${campaignId}:`)) out[k.slice(campaignId.length + 1)] = structuredClone((v.data as { details?: unknown })?.details ?? null);
-    return out;
-  }
-  async saveSheet(campaignId: string, tokenId: string, data: unknown, expectedVersion: number, userId: string) {
-    if (this.beforeSheetSave) {
-      const f = this.beforeSheetSave;
-      this.beforeSheetSave = null;
-      f();
-    }
-    const k = `${campaignId}:${tokenId}`;
-    const cur = this.sheets.get(k);
-    if ((cur?.version ?? 0) !== expectedVersion) return null;
-    this.sheets.set(k, { data: structuredClone(data), version: expectedVersion + 1, updatedAt: new Date(this.now()).toISOString(), updatedBy: userId });
-    return expectedVersion + 1;
-  }
-  async backupSheet(campaignId: string, tokenId: string, data: unknown, version: number, reason: string) {
-    this.sheetBackups.push({ id: this.sheetBackups.length + 1, campaignId, tokenId, data: structuredClone(data), version, reason, createdAt: new Date(this.now()).toISOString() });
-  }
-  private backupInfo(b: MemoryRepo['sheetBackups'][number]): SheetBackupInfo {
-    const d = (b.data ?? {}) as Record<string, unknown>;
-    const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
-    return { id: b.id, version: b.version, reason: b.reason, createdAt: b.createdAt, kind: d.kind === 'apex-character-snapshot' ? 'snapshot' : 'backup', name: str(d.name), note: str(d.note), level: str(d.level) };
-  }
-  async listSheetBackups(campaignId: string, tokenId: string, limit: number) {
-    return this.sheetBackups.filter((b) => b.campaignId === campaignId && b.tokenId === tokenId).reverse().slice(0, limit).map((b) => this.backupInfo(b));
-  }
-  async loadSheetBackup(campaignId: string, id: number) {
-    const b = this.sheetBackups.find((x) => x.campaignId === campaignId && x.id === id);
-    return b ? { ...this.backupInfo(b), tokenId: b.tokenId, data: structuredClone(b.data) } : null;
-  }
-  async createFeedback(f: NewFeedback) {
-    const now = new Date(this.now()).toISOString();
-    const row = { ...f, id: `fb-${this.feedback.length + 1}`, status: 'new' as const, gmNotes: '', shared: false, createdAt: now, updatedAt: now, statusChangedAt: null };
-    this.feedback.push(row);
-    const { campaignId: _c, ...out } = row;
-    void _c;
-    return structuredClone(out);
-  }
-  async listFeedback(campaignId: string, opts: { userId?: string; limit: number }) {
-    return this.feedback
-      .filter((f) => f.campaignId === campaignId && (!opts.userId || f.userId === opts.userId || f.shared))
-      .reverse()
-      .slice(0, opts.limit)
-      .map(({ campaignId: _c, ...f }) => (void _c, structuredClone(f)));
-  }
-  async updateFeedback(campaignId: string, id: string, patch: Partial<Pick<FeedbackRow, 'status' | 'gmNotes' | 'shared'>>) {
-    const f = this.feedback.find((x) => x.campaignId === campaignId && x.id === id);
-    if (!f) return null;
-    const now = new Date(this.now()).toISOString();
-    if (patch.status !== undefined) (f.status = patch.status), (f.statusChangedAt = now);
-    if (patch.gmNotes !== undefined) f.gmNotes = patch.gmNotes;
-    if (patch.shared !== undefined) f.shared = patch.shared;
-    f.updatedAt = now;
-    const { campaignId: _c, ...out } = f;
-    void _c;
-    return structuredClone(out);
-  }
-  async countRecentFeedback(campaignId: string, userId: string, sinceIso: string) {
-    return this.feedback.filter((f) => f.campaignId === campaignId && f.userId === userId && f.createdAt >= sinceIso).length;
-  }
-  async logCommand(e: CommandLogEntry) {
-    this.log.push(e);
-  }
-  async reserveRequest(e: Omit<CommandLogEntry, 'ok' | 'error' | 'version'> & { requestId: string }): Promise<RequestReservation> {
-    const k = `${e.campaignId}:${e.requestId}`;
-    const cur = this.requests.get(k);
-    if (cur) return { kind: 'existing', ...cur };
-    this.requests.set(k, { state: 'pending', version: null, error: null });
-    this.log.push({ ...e, ok: false, error: 'pending' });
-    return { kind: 'reserved' };
-  }
-  async finishRequest(campaignId: string, requestId: string, ok: boolean, error: string | null, version: number | null) {
-    this.requests.set(`${campaignId}:${requestId}`, { state: ok ? 'ok' : 'failed', version, error });
-    const entry = [...this.log].reverse().find((l) => (l as { requestId?: string }).requestId === requestId);
-    if (entry) Object.assign(entry, { ok, error: error ?? undefined, version: version ?? undefined });
-  }
-  async requestStatus(campaignId: string, requestId: string): Promise<RequestReservation | null> {
-    const cur = this.requests.get(`${campaignId}:${requestId}`);
-    return cur ? { kind: 'existing', ...cur } : null;
-  }
-}
+KŠHOˆK˜]H‹˜]
+NÃBˆ™]\›ˆÃBˆ›Ùš[Q˜Z[\™\ÎˆZ[™K›[™İBˆ\˜Z[\™\Îˆ˜Z[Ë™š[\Š
+JHOˆKš\\ÚOOH\\Ú
+K›[™İBˆÛØ˜[˜Z[\™\Îˆ˜Z[Ë›[™İBˆÛ\İ›Ùš[Q˜Z[\™NˆZ[™VÌHÈ™]È]JZ[™VÌK˜]
+KÒTÓÔİš[™Ê
+Hˆ[BˆNÃBˆCBˆ\Ş[˜È™XÛÜ™ÙÚ[][\
+›Ùš[RÙ^Nˆİš[™Ë\\Úˆİš[™ËÚÎˆ›ÛÛX[ŠHÃBˆ\Ë˜][\Ëœ\Ú
+È›Ùš[RÙ^K\\ÚÚË]ˆ\Ë››İÊ
+HJNÃBˆCBˆ\Ş[˜ÈŞ[˜ÕÜXÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆÛÛœİÈH\Ë˜Ø[\ZYÛœË™š[™
+
+
+HOˆšYOOHØ[\ZYÛ’Y
+NÃBˆYˆ
+XÊH›İÈ™]È\œ›ÜŠ	ØØ[\ZYÛˆ›İ›İ[™	ÊNÃBˆËœŞ[˜ÕÜXÈÏÏHÜXËIÓX]œ˜[™ÛJ
+KÔİš[™ÊÍŠKœÛXÙJŠ_XÃBˆ™]\›ˆ\^\Ş[˜ËIØËœŞ[˜ÕÜXßXÃBˆCBˆ\Ş[˜È›İ]TŞ[˜ÕÜXÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆÛÛœİÈH\Ë˜Ø[\ZYÛœË™š[™
+
+
+HOˆšYOOHØ[\ZYÛ’Y
+NÃBˆYˆ
+ÊHËœŞ[˜ÕÜXÈHÜXËIÓX]œ˜[™ÛJ
+KÔİš[™ÊÍŠKœÛXÙJŠ_XÃBˆCBˆÊŠˆ\İÛÚÎˆÚ[][]Y]X˜\ÙH\Ş[Y[İ]\Ëˆ
+‹ÃBˆ\ŞNˆ\ŞTİ]\ÈHÃBˆØÚ[XU™\œÚ[Ûˆ‘TURT‘QÔĞÒSPWÕ‘T”ÒSÓ‹BˆZYÜ˜][ÛœÎˆË‹‹‘VPÕQÓRQÔUSÓ”×KBˆØ[\ZYÛ”ÙYYYˆYKBˆ›Ùš[\ÎˆKBˆ™X[[YNˆYKBˆÙXİ\š]T›Ø›[\Îˆ×KBˆNÃBˆ\Ş[˜È\ŞTİ]\Ê
+HÃBˆ™]\›ˆÈ‹‹\Ë™\ŞKZYÜ˜][ÛœÎˆË‹‹\Ë™\ŞK›ZYÜ˜][Ûœ×HNÃBˆCBˆ\Ş[˜ÈØ[\ZYÛœĞRY
+YÎˆİš[™Ö×JHÃBˆ™]\›ˆ\Ë˜Ø[\ZYÛœË™š[\Š
+ÊHOˆYËš[˜ÛY\ÊËšY
+JK›X\
+
+ÈYÛYË˜[YHJHOˆ
+ÈYÛYË˜[YHJJNÃBˆCBˆ\Ş[˜ÈY[X™\œÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆ™]\›ˆ\Ë›Y[X™\“\İ™š[\Š
+JHOˆK˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y
+K›X\
+
+JHOˆ
+È‹‹›HJJNÃBˆCBˆ\Ş[˜È\Ù\Y[X™\ŠNˆY[X™\ŠHÃBˆ\Ë›Y[X™\“\İH\Ë›Y[X™\“\İ™š[\Š
+
+HOˆJ˜Ø[\ZYÛ’YOOHK˜Ø[\ZYÛ’Y	‰ˆ\Ù\’YOOHK\Ù\’Y
+JNÃBˆ\Ë›Y[X™\“\İœ\Ú
+È‹‹›HJNÃBˆYŠKœ›ÛOOOIÜ^Y\‰È	‰ˆ]\ËœØÙ[™P\ÜÚYÛ›Y[ËœÛÛYJOO˜K˜Ø[\ZYÛ—ÚYOO[K˜Ø[\ZYÛ’Y	‰ˆK\Ù\—ÚYOO[K\Ù\’Y
+JH\ËœØÙ[™P\ÜÚYÛ›Y[Ëœ\Ú
+ØØ[\ZYÛ—ÚY›K˜Ø[\ZYÛ’Y\Ù\—ÚY›K\Ù\’YØÙ[™WÚY›[™]š\Ú[ÛŒÜ]Û—Ş›[Ü]Û—ŞN›[JNÃBˆCBˆ\Ş[˜ÈİXÚY[X™\ŠØ[\ZYÛ’Yˆİš[™Ë\Ù\’Yˆİš[™ÊHÃBˆÛÛœİHH\Ë›Y[X™\“\İ™š[™
+
+
+HOˆ˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆ\Ù\’YOOH\Ù\’Y
+NÃBˆYˆ
+JHK›\İÙY[]H™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+NÃBˆCBˆ\Ş[˜È\ÜÚYÛ›Y[ÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆ™]\›ˆ\Ë˜\ÜÚYÛ›Y[\İ™š[\Š
+JHOˆK˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y
+NÃBˆCBˆ\Ş[˜È\ÜÚYÛ•ÚÙ[ŠØ[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë\Ù\’Yˆİš[™È[
+HÃBˆ\Ë˜\ÜÚYÛ›Y[\İH\Ë˜\ÜÚYÛ›Y[\İ™š[\Š
+JHOˆJK˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆKÚÙ[’YOOHÚÙ[’Y
+JNÃBˆYˆ
+\Ù\’Y
+H\Ë˜\ÜÚYÛ›Y[\İœ\Ú
+ÈØ[\ZYÛ’YÚÙ[’Y\Ù\’YJNÃBˆCBˆ\Ş[˜ÈØYİ]JØ[\ZYÛ’Yˆİš[™ÊHÃBˆÛÛœİÈH\Ëœİ]\Ë™Ù]
+Ø[\ZYÛ’Y
+NÃBˆ™]\›ˆÈÈÈİ]NˆİXİ\™YÛÛ™JËœİ]JK™\œÚ[ÛˆË™\œÚ[ÛˆHˆ[ÃBˆCBˆ\Ş[˜Èİ]U™\œÚ[ÛŠØ[\ZYÛ’Yˆİš[™ÊHÃBˆ™]\›ˆ\Ëœİ]\Ë™Ù]
+Ø[\ZYÛ’Y
+OË™\œÚ[ÛˆÏÈ[ÃBˆCBˆ\Ş[˜È™\XÙTİ]JØ[\ZYÛ’Yˆİš[™Ëİ]NˆØ[YTİ]JHÃBˆÛÛœİ™\œÚ[ÛˆH
+\Ëœİ]\Ë™Ù]
+Ø[\ZYÛ’Y
+OË™\œÚ[ÛˆÏÈ
+H
+ÈNÃBˆ\Ëœİ]\ËœÙ]
+Ø[\ZYÛ’YÈİ]NˆİXİ\™YÛÛ™Jİ]JK™\œÚ[ÛˆJNÃBˆ™]\›ˆ™\œÚ[ÛÃBˆCBˆ\Ş[˜ÈØ]™Tİ]JØ[\ZYÛ’Yˆİš[™Ëİ]NˆØ[YTİ]K^XİY™\œÚ[Ûˆ[X™\ŠHÃBˆYˆ
+\Ë˜™Y›Ü™TØ]™JHÃBˆÛÛœİˆH\Ë˜™Y›Ü™TØ]™NÃBˆ\Ë˜™Y›Ü™TØ]™HH[ÃBˆŠ
+NÃBˆCBˆÛÛœİİ\ˆH\Ëœİ]\Ë™Ù]
+Ø[\ZYÛ’Y
+NÃBˆYˆ
+Xİ\ˆİ\‹™\œÚ[ÛˆOOH^XİY™\œÚ[ÛŠH™]\›ˆ[ÃBˆ\Ëœİ]\ËœÙ]
+Ø[\ZYÛ’YÈİ]NˆİXİ\™YÛÛ™Jİ]JK™\œÚ[Ûˆ^XİY™\œÚ[Ûˆ
+ÈHJNÃBˆ™]\›ˆ^XİY™\œÚ[Ûˆ
+ÈNÃBˆCBˆ\Ş[˜ÈÜ™X]TÛ˜\Úİ
+Ø[\ZYÛ’Yˆİš[™Ëİ]NˆØ[YTİ]K™\œÚ[Ûˆ[X™\‹X™[ˆİš[™ÊHÃBˆ\ËœÛ˜\ÚİËœ\Ú
+ÈYˆ\ËœÛ˜\ÚİË›[™İ
+ÈKØ[\ZYÛ’Yİ]NˆİXİ\™YÛÛ™Jİ]JK™\œÚ[Û‹X™[Ü™X]Y]ˆ™]È]J
+KÒTÓÔİš[™Ê
+HJNÃBˆCBˆ\Ş[˜È\İÛ˜\ÚİÊØ[\ZYÛ’Yˆİš[™Ë[Z]ˆ[X™\ŠHÃBˆ™]\›ˆ\ËœÛ˜\ÚİÃBˆ™š[\Š
+ÊHOˆË˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y
+CBˆœ™]™\œÙJ
+CBˆœÛXÙJ[Z]
+CBˆ›X\
+
+ÈY™\œÚ[Û‹X™[Ü™X]Y]JHOˆ
+ÈY™\œÚ[Û‹X™[Ü™X]Y]JJNÃBˆCBˆ\Ş[˜ÈØYÛ˜\Úİ
+Ø[\ZYÛ’Yˆİš[™ËYˆ[X™\ŠHÃBˆ™]\›ˆ\ËœÛ˜\ÚİË™š[™
+
+ÊHOˆË˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆËšYOOHY
+OËœİ]HÏÈ[ÃBˆCBˆ\Ş[˜È[™TÛ˜\ÚİÊ
+HßCBˆ\˜Ú]™\Îˆ\œ˜^O\˜Ú]™R[™›È	ˆÈØ[\ZYÛ’Yˆİš[™ÎÈİ]NˆØ[YTİ]HOˆH×NÃBˆÊŠˆ\İÛÚÎˆ˜Z[H™^ÛÜ›˜[œÚ][Ûˆ
+Ú[][]Y]X˜\ÙH\œ›ÜŠKˆ
+‹ÃBˆ˜Z[™^˜[œÚ][Ûˆ\œ›Üˆ[H[ÃBˆ\Ş[˜ÈÛÜ›˜[œÚ][ÛŠBˆØ[\ZYÛ’Yˆİš[™ËBˆ^XİY™\œÚ[Ûˆ[X™\ˆ[Bˆ™]Ôİ]NˆØ[YTİ]H[Bˆ\˜Ú]™NˆÈ˜[YNˆİš[™ÎÈ\ØÜš\[Ûˆİš[™ÎÈÚ[™ˆ\˜Ú]™RÚ[™KBˆ
+HÃBˆYˆ
+\Ë™˜Z[™^˜[œÚ][ÛŠHÃBˆÛÛœİHH\Ë™˜Z[™^˜[œÚ][ÛÃBˆ\Ë™˜Z[™^˜[œÚ][ÛˆH[ÃBˆ›İÈNÃBˆCBˆÛÛœİİ\ˆH\Ëœİ]\Ë™Ù]
+Ø[\ZYÛ’Y
+NÃBˆYˆ
+Xİ\ŠH›İÈ™]È\œ›ÜŠ	Ø\^››×İÛÜ›	ÊNÃBˆYˆ
+^XİY™\œÚ[ÛˆOOH[	‰ˆİ\‹™\œÚ[ÛˆOOH^XİY™\œÚ[ÛŠH›İÈ™]ÈÛÜ›ÛÛ™›Xİ\œ›ÜŠ
+NÃBˆÛÛœİYHLMNIÔİš[™Ê\Ë˜\˜Ú]™\Ë›[™İ
+ÈJKœYİ\
+L‹	Ì	Ê_XÃBˆ\Ë˜\˜Ú]™\Ë[œÚY
+ÃBˆYBˆØ[\ZYÛ’YBˆ˜[YNˆ\˜Ú]™K›˜[YKš[J
+KœÛXÙJLŒ
+H	Ğ\˜Ú]™YÛÜ›	ËBˆ\ØÜš\[Ûˆ\˜Ú]™K™\ØÜš\[Û‹œÛXÙJŒ
+KBˆÚ[™ˆ\˜Ú]™KšÚ[™BˆÜ™X]Y]ˆ™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+KBˆİ]U™\œÚ[Ûˆİ\‹™\œÚ[Û‹BˆÛÜ›˜[YNˆİ\‹œİ]KÛÜ›Ë›˜[YHÏÈ[BˆÙYYˆİ\‹œİ]K˜ÛÛ™šYËœÙYYBˆ˜Y]\Îˆİ\‹œİ]K˜ÛÛ™šYË›X\˜Y]\ËBˆ^Nˆİ\‹œİ]K™^KBˆ\ÙNˆİ\‹œİ]Kœ\ÙKBˆİ]NˆİXİ\™YÛÛ™Jİ\‹œİ]JKBˆJNÃBˆ]™\œÚ[ÛˆHİ\‹™\œÚ[ÛÃBˆYˆ
+™]Ôİ]JHÃBˆ™\œÚ[ÛˆHİ\‹™\œÚ[Ûˆ
+ÈNÃBˆ\Ëœİ]\ËœÙ]
+Ø[\ZYÛ’YÈİ]NˆİXİ\™YÛÛ™J™]Ôİ]JK™\œÚ[ÛˆJNÃBˆCBˆ™]\›ˆÈ\˜Ú]™RYˆY™\œÚ[ÛˆNÃBˆCBˆ\Ş[˜È\İ\˜Ú]™\ÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆ™]\›ˆ\Ë˜\˜Ú]™\Ë™š[\Š
+JHOˆK˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y
+K›X\
+
+Èİ]NˆÜËØ[\ZYÛ’YˆØË‹‹š[™›ÈJHOˆ[™›ÊNÃBˆCBˆ\Ş[˜ÈØY\˜Ú]™JØ[\ZYÛ’Yˆİš[™ËYˆİš[™ÊHÃBˆÛÛœİHH\Ë˜\˜Ú]™\Ë™š[™
+
+
+HOˆ˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆšYOOHY
+NÃBˆYˆ
+XJH™]\›ˆ[ÃBˆÛÛœİÈØ[\ZYÛ’YˆØË‹‹œ™\İHHNÃBˆ™]\›ˆİXİ\™YÛÛ™J™\İ
+NÃBˆCBˆÜ˜Z]ÈH™]ÈX\İš[™ËÈ]\ÎˆZ[\œ˜^NÈÛÛ[\Nˆİš[™ÈOŠ
+NÃBˆ\Ş[˜È\ØYÜ˜Z]
+]ˆİš[™Ë]\ÎˆZ[\œ˜^KÛÛ[\Nˆİš[™ÊHÃBˆYˆ
+\ËœÜ˜Z]Ëš\Ê]
+JH›İÈ™]È\œ›ÜŠ	ÜÜ˜Z]\ØYˆ^\İÉÊNÃBˆ\ËœÜ˜Z]ËœÙ]
+]È]\ËÛÛ[\HJNÃBˆCBˆ\Ş[˜ÈÜ˜Z]\›
+]ˆİš[™ÊHÃBˆ™]\›ˆ\ËœÜ˜Z]Ëš\Ê]
+HÈ××Û[ØÚËÜÜ˜Z]Ü]IÙ[˜ÛÙUT’PÛÛ\Û™[
+]
+_Xˆ[ÃBˆCBˆ\Ş[˜È[]TÜ˜Z]
+]ˆİš[™ÊHÃBˆ\ËœÜ˜Z]Ë™[]J]
+NÃBˆCBˆ\Ş[˜ÈØYÚY]
+Ø[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™ÊHÃBˆÛÛœİÈH\ËœÚY]Ë™Ù]
+	ØØ[\ZYÛ’YN‰İÚÙ[’YX
+NÃBˆ™]\›ˆÈÈİXİ\™YÛÛ™JÊHˆ[ÃBˆCBˆ\Ş[˜ÈØYÚY]š][ÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHßNÃBˆ›Üˆ
+ÛÛœİÚË—HÙˆ\ËœÚY]ÊHYˆ
+Ëœİ\ÕÚ]
+	ØØ[\ZYÛ’YN˜
+JHİ]ÚËœÛXÙJØ[\ZYÛ’Y›[™İ
+ÈJWHHİXİ\™YÛÛ™J
+‹™]H\ÈÈ]Ú[ÏÎˆ[šÛ›İÛˆJOËš]Ú[ÈÏÈ[
+NÃBˆ™]\›ˆİ]ÃBˆCBˆ\Ş[˜ÈØYÚY]]Z[ÊØ[\ZYÛ’Yˆİš[™ÊHÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHßNÃBˆ›Üˆ
+ÛÛœİÚË—HÙˆ\ËœÚY]ÊHYˆ
+Ëœİ\ÕÚ]
+	ØØ[\ZYÛ’YN˜
+JHİ]ÚËœÛXÙJØ[\ZYÛ’Y›[™İ
+ÈJWHHİXİ\™YÛÛ™J
+‹™]H\ÈÈ]Z[ÏÎˆ[šÛ›İÛˆJOË™]Z[ÈÏÈ[
+NÃBˆ™]\›ˆİ]ÃBˆCBˆ\Ş[˜ÈØ]™TÚY]
+Ø[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë]Nˆ[šÛ›İÛ‹^XİY™\œÚ[Ûˆ[X™\‹\Ù\’Yˆİš[™ÊHÃBˆYˆ
+\Ë˜™Y›Ü™TÚY]Ø]™JHÃBˆÛÛœİˆH\Ë˜™Y›Ü™TÚY]Ø]™NÃBˆ\Ë˜™Y›Ü™TÚY]Ø]™HH[ÃBˆŠ
+NÃBˆCBˆÛÛœİÈH	ØØ[\ZYÛ’YN‰İÚÙ[’YXÃBˆÛÛœİİ\ˆH\ËœÚY]Ë™Ù]
+ÊNÃBˆYˆ
+
+İ\Ë™\œÚ[ÛˆÏÈ
+HOOH^XİY™\œÚ[ÛŠH™]\›ˆ[ÃBˆ\ËœÚY]ËœÙ]
+ËÈ]NˆİXİ\™YÛÛ™J]JK™\œÚ[Ûˆ^XİY™\œÚ[Ûˆ
+ÈK\]Y]ˆ™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+K\]YNˆ\Ù\’YJNÃBˆ™]\›ˆ^XİY™\œÚ[Ûˆ
+ÈNÃBˆCBˆ\Ş[˜È˜XÚİ\ÚY]
+Ø[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë]Nˆ[šÛ›İÛ‹™\œÚ[Ûˆ[X™\‹™X\ÛÛˆİš[™ÊHÃBˆ\ËœÚY]˜XÚİ\Ëœ\Ú
+ÈYˆ\ËœÚY]˜XÚİ\Ë›[™İ
+ÈKØ[\ZYÛ’YÚÙ[’Y]NˆİXİ\™YÛÛ™J]JK™\œÚ[Û‹™X\ÛÛ‹Ü™X]Y]ˆ™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+HJNÃBˆCBˆš]˜]H˜XÚİ\[™›ÊˆY[[ÜT™\ÖÉÜÚY]˜XÚİ\É×VÛ[X™\—JNˆÚY]˜XÚİ\[™›ÈÃBˆÛÛœİH
+‹™]HÏÈßJH\È™XÛÜ™İš[™Ë[šÛ›İÛÃBˆÛÛœİİˆH
+ˆ[šÛ›İÛŠHOˆ
+\[ÙˆˆOOH	Üİš[™ÉÈ	‰ˆˆÈˆˆ[
+NÃBˆ™]\›ˆÈYˆ‹šY™\œÚ[Ûˆ‹™\œÚ[Û‹™X\ÛÛˆ‹œ™X\ÛÛ‹Ü™X]Y]ˆ‹˜Ü™X]Y]Ú[™ˆšÚ[™OOH	Ø\^XÚ\˜Xİ\‹\Û˜\Úİ	ÈÈ	ÜÛ˜\Úİ	Èˆ	Ø˜XÚİ\	Ë˜[YNˆİŠ›˜[YJK›İNˆİŠ››İJK]™[ˆİŠ›]™[
+HNÃBˆCBˆ\Ş[˜È\İÚY]˜XÚİ\ÊØ[\ZYÛ’Yˆİš[™ËÚÙ[’Yˆİš[™Ë[Z]ˆ[X™\ŠHÃBˆ™]\›ˆ\ËœÚY]˜XÚİ\Ë™š[\Š
+ŠHOˆ‹˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆ‹ÚÙ[’YOOHÚÙ[’Y
+Kœ™]™\œÙJ
+KœÛXÙJ[Z]
+K›X\
+
+ŠHOˆ\Ë˜˜XÚİ\[™›ÊŠJNÃBˆCBˆ\Ş[˜ÈØYÚY]˜XÚİ\
+Ø[\ZYÛ’Yˆİš[™ËYˆ[X™\ŠHÃBˆÛÛœİˆH\ËœÚY]˜XÚİ\Ë™š[™
+
+
+HOˆ˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆšYOOHY
+NÃBˆ™]\›ˆˆÈÈ‹‹\Ë˜˜XÚİ\[™›ÊŠKÚÙ[’Yˆ‹ÚÙ[’Y]NˆİXİ\™YÛÛ™J‹™]JHHˆ[ÃBˆCBˆ\Ş[˜ÈÜ™X]Q™YY˜XÚÊˆ™]Ñ™YY˜XÚÊHÃBˆÛÛœİ›İÈH™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+NÃBˆÛÛœİ›İÈHÈ‹‹™‹Yˆ˜‹Iİ\Ë™™YY˜XÚË›[™İ
+È_Xİ]\Îˆ	Û™]ÉÈ\ÈÛÛœİÛS›İ\Îˆ	ÉËÚ\™Yˆ˜[ÙKÜ™X]Y]ˆ›İË\]Y]ˆ›İËİ]\ĞÚ[™ÙY]ˆ[NÃBˆ\Ë™™YY˜XÚËœ\Ú
+›İÊNÃBˆÛÛœİÈØ[\ZYÛ’YˆØË‹‹›İ]HH›İÎÃBˆ›ÚYØÎÃBˆ™]\›ˆİXİ\™YÛÛ™Jİ]
+NÃBˆCBˆ\Ş[˜È\İ™YY˜XÚÊØ[\ZYÛ’Yˆİš[™ËÜÎˆÈ\Ù\’YÎˆİš[™ÎÈ[Z]ˆ[X™\ˆJHÃBˆ™]\›ˆ\Ë™™YY˜XÚÃBˆ™š[\Š
+ŠHOˆ‹˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆ
+[ÜË\Ù\’Y‹\Ù\’YOOHÜË\Ù\’Y‹œÚ\™Y
+JCBˆœ™]™\œÙJ
+CBˆœÛXÙJÜË›[Z]
+CBˆ›X\
+
+ÈØ[\ZYÛ’YˆØË‹‹™ˆJHOˆ
+›ÚYØËİXİ\™YÛÛ™JŠJJNÃBˆCBˆ\Ş[˜È\]Q™YY˜XÚÊØ[\ZYÛ’Yˆİš[™ËYˆİš[™Ë]Úˆ\X[XÚÏ™YY˜XÚÔ›İË	Üİ]\ÉÈ	ÙÛS›İ\ÉÈ	ÜÚ\™Y	ÏŠHÃBˆÛÛœİˆH\Ë™™YY˜XÚË™š[™
+
+
+HOˆ˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆšYOOHY
+NÃBˆYˆ
+YŠH™]\›ˆ[ÃBˆÛÛœİ›İÈH™]È]J\Ë››İÊ
+JKÒTÓÔİš[™Ê
+NÃBˆYˆ
+]Úœİ]\ÈOOH[™Yš[™Y
+H
+‹œİ]\ÈH]Úœİ]\ÊK
+‹œİ]\ĞÚ[™ÙY]H›İÊNÃBˆYˆ
+]Ú™ÛS›İ\ÈOOH[™Yš[™Y
+H‹™ÛS›İ\ÈH]Ú™ÛS›İ\ÎÃBˆYˆ
+]ÚœÚ\™YOOH[™Yš[™Y
+H‹œÚ\™YH]ÚœÚ\™YÃBˆ‹\]Y]H›İÎÃBˆÛÛœİÈØ[\ZYÛ’YˆØË‹‹›İ]HHÃBˆ›ÚYØÎÃBˆ™]\›ˆİXİ\™YÛÛ™Jİ]
+NÃBˆCBˆ\Ş[˜ÈÛİ[™XÙ[™YY˜XÚÊØ[\ZYÛ’Yˆİš[™Ë\Ù\’Yˆİš[™ËÚ[˜ÙR\ÛÎˆİš[™ÊHÃBˆ™]\›ˆ\Ë™™YY˜XÚË™š[\Š
+ŠHOˆ‹˜Ø[\ZYÛ’YOOHØ[\ZYÛ’Y	‰ˆ‹\Ù\’YOOH\Ù\’Y	‰ˆ‹˜Ü™X]Y]HÚ[˜ÙR\ÛÊK›[™İÃBˆCBˆ\Ş[˜ÈÙĞÛÛ[X[™
+NˆÛÛ[X[™ÙÑ[JHÃBˆ\Ë›ÙËœ\Ú
+JNÃBˆCBˆ\Ş[˜È™\Ù\™T™\]Y\İ
+NˆÛZ]ÛÛ[X[™ÙÑ[K	ÛÚÉÈ	Ù\œ›Ü‰È	İ™\œÚ[Û‰Ïˆ	ˆÈ™\]Y\İYˆİš[™ÈJNˆ›ÛZ\ÙO™\]Y\İ™\Ù\˜][ÛˆÃBˆÛÛœİÈH	ÙK˜Ø[\ZYÛ’YN‰ÙKœ™\]Y\İYXÃBˆÛÛœİİ\ˆH\Ëœ™\]Y\İË™Ù]
+ÊNÃBˆYˆ
+İ\ŠH™]\›ˆÈÚ[™ˆ	Ù^\İ[™ÉË‹‹˜İ\ˆNÃBˆ\Ëœ™\]Y\İËœÙ]
+ËÈİ]Nˆ	Ü[™[™ÉË™\œÚ[Ûˆ[\œ›Üˆ[JNÃBˆ\Ë›ÙËœ\Ú
+È‹‹™KÚÎˆ˜[ÙK\œ›Üˆ	Ü[™[™ÉÈJNÃBˆ™]\›ˆÈÚ[™ˆ	Ü™\Ù\™Y	ÈNÃBˆCBˆ\Ş[˜Èš[š\Ú™\]Y\İ
+Ø[\ZYÛ’Yˆİš[™Ë™\]Y\İYˆİš[™ËÚÎˆ›ÛÛX[‹\œ›Üˆİš[™È[™\œÚ[Ûˆ[X™\ˆ[
+HÃBˆ\Ëœ™\]Y\İËœÙ]
+	ØØ[\ZYÛ’YN‰Ü™\]Y\İYXÈİ]NˆÚÈÈ	ÛÚÉÈˆ	Ù˜Z[Y	Ë™\œÚ[Û‹\œ›ÜˆJNÃBˆÛÛœİ[HHË‹‹\Ë›Ù×Kœ™]™\œÙJ
+K™š[™
+
+
+HOˆ
+\ÈÈ™\]Y\İYÎˆİš[™ÈJKœ™\]Y\İYOOH™\]Y\İY
+NÃBˆYˆ
+[JHØš™Xİ˜\ÜÚYÛŠ[KÈÚË\œ›Üˆ\œ›ÜˆÏÈ[™Yš[™Y™\œÚ[Ûˆ™\œÚ[ÛˆÏÈ[™Yš[™YJNÃBˆCBˆ\Ş[˜È™\]Y\İİ]\ÊØ[\ZYÛ’Yˆİš[™Ë™\]Y\İYˆİš[™ÊNˆ›ÛZ\ÙO™\]Y\İ™\Ù\˜][Ûˆ[ˆÃBˆÛÛœİİ\ˆH\Ëœ™\]Y\İË™Ù]
+	ØØ[\ZYÛ’YN‰Ü™\]Y\İYX
+NÃBˆ™]\›ˆİ\ˆÈÈÚ[™ˆ	Ù^\İ[™ÉË‹‹˜İ\ˆHˆ[ÃBˆCBŸCB

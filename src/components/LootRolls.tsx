@@ -129,7 +129,7 @@ export function LootRollDock({ rolls, viewerId, serverTime, run }: { rolls: Loot
 }
 
 /** GM: start rolls from tray items, watch choices, resolve or cancel. */
-export function GmLootRolls({ rolls, staged, players, serverTime, run }: { rolls: LootRoll[]; staged: Item[]; players: Array<{ id: string; name: string }>; serverTime?: string; run: Run }) {
+export function GmLootRolls({ rolls, staged, players, serverTime, run, sceneId }: { rolls: LootRoll[]; staged: Item[]; players: Array<{ id: string; name: string }>; serverTime?: string; run: Run; sceneId?: string }) {
   const left = useCountdown(rolls, serverTime);
   const [pick, setPick] = useState<string[]>([]);
   const [who, setWho] = useState<string[]>(() => players.map((p) => p.id));
@@ -183,7 +183,7 @@ export function GmLootRolls({ rolls, staged, players, serverTime, run }: { rolls
           className="btn btn-gold"
           disabled={busy || !valid.length || !who.length}
           onClick={async () => {
-            const r = await go({ type: 'lootRollStart', rollId: `roll${Date.now().toString(36)}`, stagedIds: valid, tokenIds: who, minutes });
+            const r = await go({ type: 'lootRollStart', rollId: `roll${Date.now().toString(36)}`, stagedIds: valid, tokenIds: who, minutes, ...(sceneId ? { sceneId } : {}) });
             if (r.ok) setPick([]);
           }}
         >

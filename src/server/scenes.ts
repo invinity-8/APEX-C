@@ -19,7 +19,7 @@ export interface SceneSummary {
   archived: boolean;
   updated_at: string;
 }
-export interface SceneDefinition extends SceneSummary { metadata: Record<string, unknown> }
+export interface SceneDefinition extends SceneSummary { metadata: Record<string, unknown>; published_metadata?: unknown }
 export interface SceneCatalog {
   list(campaignId: string, offset: number, filters?:SceneFilters): Promise<SceneSummary[]>;
   get(campaignId: string, id: string): Promise<SceneDefinition | null>;
@@ -73,6 +73,23 @@ export async function sceneRequest(user: AuthUser, method: string, query: Record
       else if (input.action === 'archive') patch = { archived: true };
       else if (input.action === 'restore') patch = { archived: false };
       else if (input.action === 'rename' && typeof input.name === 'string' && input.name.trim() && input.name.trim().length <= 120) patch = { name: input.name.trim() };
+      else if (input.action === 'set_visibility') {
+        if (existing.is_draft || existing.archived || !Number.isSafeInteger(input.publishedRevision) || (input.publishedRevision as number) < 1 || input.publishedRevision !== existing.published_revision || typeof input.visible !== 'boolean' || typeof input.nodeId !== 'string' || !/^[\w-]{1,64}$/.test(input.nodeId)) {
+          return { status: 409, body: { error: 'The published scene changed. Reload it before updating visibility.' } };
+        }
+        const draft = parseMap(existing.metadata);
+        const published = parseMap(existing.published_metadata);
+        if (!draft || !published) return { status: 409, body: { error: 'The published scene map is unavailable.' } };
+        const draftNode = draft.nodes.find(node => node.id === input.nodeId);
+        const publishedNode = published.nodes.find(node => node.id === input.nodeId);
+        if (!draftNode || !publishedNode || draftNode.kind !== publishedNode.kind || !['location', 'label', 'wall', 'area'].includes(publishedNode.kind) || draftNode.visible !== publishedNode.visible) {
+          return { status: 409, body: { error: 'This marker has unpublished visibility changes. Save or publish the scene draft before changing its live visibility.' } };
+        }
+        if (draftNode.visible === input.visible) return { status: 200, body: { scene: existing } };
+        draftNode.visible = input.visible;
+        publishedNode.visible = input.visible;
+        patch = { metadata: draft, published_metadata: published };
+      }
       else if (input.action === 'save' || input.action === 'publish') {
         const map = parseMap(input.map);
         if (!map) return { status: 400, body: { error: 'Invalid map definition.' } };
