@@ -38,9 +38,8 @@ async function expand(page, id) {
     const state = await call(gm, 'state');
     if (!state.body.state) check('isolated Arena initialized', (await call(gm, 'admin', { campaignId, action: 'initCampaign', radius: 12, seed: 123, requestId: crypto.randomUUID().replaceAll('-', '') })).status === 200);
     await gm.reload(); await gm.waitForSelector('canvas');
-    await expand(gm, 'campaign');
-    await gm.locator('[data-widget="campaign"]').getByRole('tab', { name: 'Scene Director' }).click();
-    const director = gm.getByRole('region', { name: 'Scene Director', exact: true });
+    await gm.getByRole('button', { name: /Scenes/ }).click();
+    const director = gm.getByRole('region', { name: 'Scene library and editor', exact: true });
     await director.getByRole('button', { name: 'Battle Maps', exact: true }).click();
     const title = `Secret encounter ${Date.now()}`;
     await director.getByLabel('Scene name').fill(title);
@@ -50,6 +49,15 @@ async function expand(page, id) {
     const library = await call(gm, 'scenes'); const scene = library.body.scenes.find(s => s.name === title);
     check('draft exists and is unpublished', !!scene && scene.is_draft && !scene.is_legacy_arena);
     const editor = director.getByRole('region', { name: 'Map editor', exact: true });
+    await editor.getByRole('button', { name: 'Preview layout', exact: true }).click();
+    await editor.getByText(/editable features · seed/).waitFor();
+    await editor.getByRole('button', { name: 'Apply layout', exact: true }).click();
+    await editor.getByText(/Forest layout applied/).waitFor();
+    check('forest layout previews and applies as editable scene data', (await call(gm, 'scenes', null, '&id=' + scene.id)).body.scene.metadata.nodes.some(n => n.generatedBy === 'forest-v1' && n.proceduralFeature));
+    await editor.getByRole('button', { name: 'Undo generation', exact: true }).click();
+    await editor.getByText(/previous map layout was restored/).waitFor();
+    await editor.getByRole('button', { name: 'Preview layout', exact: true }).click();
+    await editor.getByRole('button', { name: 'Apply layout', exact: true }).click();
     await editor.getByRole('button', { name: 'spawn', exact: true }).click();
     await editor.getByRole('img', { name: 'Editable scene map' }).click({ position: { x: 100, y: 100 } });
     const png = await gm.evaluate(() => { const c = document.createElement('canvas'); c.width = 400; c.height = 300; const x = c.getContext('2d'); x.fillStyle = '#ff0000'; x.fillRect(0, 0, 200, 300); x.fillStyle = '#0000ff'; x.fillRect(200, 0, 200, 300); return c.toDataURL('image/png'); });
