@@ -374,6 +374,30 @@ export function parseCommand(raw: unknown): ParseResult {
       }
       return { ok: true, command: out as Command };
     }
+    case 'invRequestItem': {
+      if (!isId(c.tokenId) || !isId(c.requestId) || !isText(c.name, INVENTORY_LIMITS.name) || !isInt(c.quantity, INVENTORY_LIMITS.quantity) || (c.quantity as number) < 1 || !isText(c.description, INVENTORY_LIMITS.description)) return bad('item request');
+      const out: Record<string, unknown> = { type: 'invRequestItem', tokenId: c.tokenId, requestId: c.requestId, name: c.name, quantity: c.quantity, description: c.description };
+      if (c.notes !== undefined) { if (!isText(c.notes, INVENTORY_LIMITS.notes)) return bad('notes'); out.notes = c.notes; }
+      if (c.container !== undefined) { if (!isId(c.container)) return bad('container'); out.container = c.container; }
+      if (c.weightKg !== undefined) { if (typeof c.weightKg !== 'number' || !Number.isFinite(c.weightKg) || c.weightKg < 0 || c.weightKg > 2000) return bad('weightKg'); out.weightKg = c.weightKg; }
+      return { ok: true, command: out as Command };
+    }
+    case 'gmReviewItemRequest': {
+      if (!isId(c.tokenId) || !isId(c.requestId) || !oneOf(c.decision, ['approve', 'reject'] as const)) return bad('item request review');
+      let edits: Record<string, unknown> | undefined;
+      if (c.edits !== undefined) {
+        if (!isObj(c.edits)) return bad('edits');
+        edits = {};
+        for (const [key, max] of [['name', INVENTORY_LIMITS.name], ['description', INVENTORY_LIMITS.description], ['notes', INVENTORY_LIMITS.notes]] as const) {
+          const value = c.edits[key]; if (value !== undefined) { if (!isText(value, max)) return bad(key); edits[key] = value; }
+        }
+        if (c.edits.quantity !== undefined) { if (!isInt(c.edits.quantity, INVENTORY_LIMITS.quantity) || (c.edits.quantity as number) < 1) return bad('quantity'); edits.quantity = c.edits.quantity; }
+        if (c.edits.weightKg !== undefined) { if (typeof c.edits.weightKg !== 'number' || !Number.isFinite(c.edits.weightKg) || c.edits.weightKg < 0 || c.edits.weightKg > 2000) return bad('weightKg'); edits.weightKg = c.edits.weightKg; }
+        if (c.edits.container !== undefined) { if (!isId(c.edits.container)) return bad('container'); edits.container = c.edits.container; }
+        if (!Object.keys(edits).length) edits = undefined;
+      }
+      return { ok: true, command: { type: 'gmReviewItemRequest', tokenId: c.tokenId, requestId: c.requestId, decision: c.decision, ...(edits ? { edits } : {}) } };
+    }
     case 'invAddItem':
     case 'invUpdateItem': {
       if (!isId(c.tokenId) || !isId(c.itemId)) return bad('tokenId/itemId');
@@ -477,3 +501,4 @@ export function parseItemEquip(v: unknown): ItemEquip | null {
   }
   return out;
 }
+
