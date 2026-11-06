@@ -178,7 +178,7 @@ export function SceneDirector({ version = 0, campaignId = '' }: { version?: numb
         try { localStorage.setItem(`apex.map.gm-focus.${campaignId}`, preview.id); } catch { /* session focus still updates in the current tab */ }
         window.dispatchEvent(new CustomEvent('apex:scene-focus-changed', { detail: { campaignId, sceneId: preview.id } }));
         setNotice('GM Map focus changed. Player assignments remain unchanged.');
-      }}>Open as Map focus</button>}
+      }} >Set Map focus</button>}
       <button disabled={busy || !!uncertain || preview.is_draft || preview.archived || !selectedPlayers.length} onClick={() => void assign(preview.id)}>Assign selected players to this scene</button>
       {preview.is_legacy_arena && <p>This scene references the existing saved Arena. Its terrain and progress are preserved.</p>}
       <SanctuarySettingsPanel candidateAsset={parseMap(preview.metadata)?.playerBackgroundAsset} candidateName={preview.name} />
