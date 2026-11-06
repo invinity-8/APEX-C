@@ -51,3 +51,11 @@
 - Vercel Preview ist `READY` für den PR-Commit. Der Browser wurde auf die Vercel-Loginseite umgeleitet; kein GM-/Spieler-E2E und keine Screenshots.
 - Die „Production database deployed and secure“-Workflowstufe wurde beim PR absichtlich übersprungen (sie läuft nur nach Push auf `main` oder manuellem Start). Kein Produktionsdeployment und keine Produktionsmigration.
 - Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
+
+
+## PR #47 – Journal People/Places-Verweise
+
+- People- und Places-Einträge können ausdrücklich als Referenzseiten erstellt werden.
+- Ein ausgewählter existierender Verweis wird als `[[ref:<UUID>]]` eingefügt. Die Darstellung löst den Namen nur aus Einträgen auf, die der angemeldete Nutzer sehen darf; unzugängliche oder fehlende Ziele erscheinen ohne Namen als „Unavailable reference“.
+- Einzelne verlinkte Einträge werden über die bereits sichtbarkeitsgefilterte Journal-Store-Abfrage geladen. Kein Datenbankschema und keine Migration nötig.
+- Backlinks zeigen Verweise in den derzeit geladenen Einträgen; bei paginierten Journalen müssen ältere Einträge zuerst geladen werden. Vollständige geschützte Rollen-/Browserabnahme ist noch offen.
