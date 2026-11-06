@@ -2,7 +2,7 @@
 
 Stand: 2026-11-06
 Produktionsbasis: `df8090fad406677f26830952861c7b092f4beff0`; PRs #41–#47 sind gemergt.
-Abschlussbranch: `feat/apex-09-closeout`; PR #48 offen und bereit zur manuellen Prüfung. Commit `d166e37` enthält Szenenmitteilungen und den Initiative-Tracker; GitHub-CI folgt nach dem Push.
+Abschlussbranch: `feat/apex-09-closeout`; PR #48 offen und bereit zur manuellen Prüfung. Der aktuelle Branch-Head enthält Szenenmitteilungen und den Initiative-Tracker; GitHub-CI läuft für den gepushten Stand.
 Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Production-Deployment-Aktion durchgeführt.
 
 ## Implementiert und automatisiert geprüft
