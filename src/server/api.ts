@@ -71,6 +71,7 @@ import { motionRequest } from './sceneMotion.js';
 import { travelRequest } from './sceneTravel.js';
 import { sanctuaryRequest } from './sanctuary.js';
 import { journalImageRequest } from './journalImages.js';
+import { kenneyPreviewRequest } from './kenneyPreview.js';
 import { isId, isInt, isObj, parseCommand } from './validate.js';
 
 export interface ApiRequest {
@@ -170,6 +171,7 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
 
     // One round trip: session + profile + password flag + campaign (and presence touch).
     const user = await authenticate(req, repo);
+    if (req.op === 'kenney-preview') return await kenneyPreviewRequest(user, req.method, req.query, repo);
     if (req.op === 'scenes') return await sceneRequest(user, req.method, req.query, req.body, repo.sceneCatalog, repo.sceneAssets);
     if (req.op === 'journal') return await journalRequest(user, req.method, req.query, req.body, repo.journalStore, repo);
     if (req.op === 'scene-runtime') return await runtimeRequest(user, req.method, req.query, req.body, repo);

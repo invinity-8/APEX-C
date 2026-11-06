@@ -199,6 +199,7 @@ export interface Repo {
   journalStore?: import('./journals.js').JournalStore;
   sceneRuntime?: import('./sceneRuntime.js').SceneRuntime;
   sceneAssets?: import('./sceneAssets.js').SceneAssetStore;
+  kenneyPreview?: { signPreviewAssets(): Promise<{ assets: Record<string, string>; expiresIn: number }> };
   sceneMotion?: import('./sceneMotion.js').SceneMotion;
   sceneTravel?: import('./sceneTravel.js').SceneTravel;
   sanctuary?: import('./sanctuary.js').SanctuaryStore;

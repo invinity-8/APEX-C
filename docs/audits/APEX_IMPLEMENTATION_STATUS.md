@@ -51,3 +51,11 @@
 - Vercel Preview für den aktuellen Map-Director-Commit ist `READY` (TypeScript und Production-Build bestanden). Der Browser leitet weiterhin zur Vercel-Loginseite um; kein GM-/Spieler-E2E und keine Screenshots.
 - Der vollständige Supabase-Migrations-/RLS-Workflow wurde für PR #45 noch nicht ausgeführt; die „Production database deployed and secure“-Stufe läuft nur nach Push auf `main` oder manuellem Start. Kein Produktionsdeployment und keine Produktionsmigration.
 - Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
+
+
+## PR #46 – Kenney 2.5D Preview
+
+- **Implementiert und CI-verifiziert:** begrenzter Classic/2.5D-Schalter für generierte Forest-Szenen, private kurzlebige Kenney-Signaturen, Kampagnen-/Szenenautorisation und API-Negativtests. Details: `docs/audits/APEX_KENNEY_25D_PREVIEW.md`.
+- **Preview:** Vercel Deployment ist `READY`; die APEX-Einstiegsseite lädt in der Browserprüfung.
+- **Nicht browserverifiziert:** GM-/Spielerlogin, Kartenrendering im angemeldeten Zustand, Screenshotvergleich, Laden-/Eingabe-/Rendermessung für Radius 39 und 78. Die Preview-Anmeldung könnte die echte Kampagne erreichen; deshalb wurde sie nicht geöffnet.
+- **Daten:** keine Migration, keine Produktions-DB-Änderung, keine Bucket- oder Objektänderung. Sprite-Abruf nutzt höchstens die bestehende Storage-Bandbreite; keine Bildtransformation.
