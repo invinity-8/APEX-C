@@ -13,7 +13,7 @@ export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | '
 }
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
-export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', onDestination }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; onDestination?: (x: number, y: number) => void }) {
+export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const id = snapshot.scene?.map.playerBackgroundAsset;
   useEffect(() => { let live = true; setUrl(null); if (id) api.mapImage(id).then(r => { if (live) setUrl(r.url); }).catch(() => undefined); return () => { live = false; }; }, [id]);
@@ -21,6 +21,9 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   const { map, name: title, category } = snapshot.scene;
   const terrainColors = { tree: '#41664b', rock: '#877c6e', obstacle: '#78553d', water: '#3d7485' } as const;
   const point = category === 'world' && snapshot.travel ? map.nodes.find(n => n.id === snapshot.travel?.partyNode) : snapshot.motion?.tokens.find(t => t.tokenId === tokenId) ?? snapshot.spawn;
+  const positions = tokenLabels
+    ? (snapshot.motion?.tokens ?? []).filter(position => tokenLabels.some(token => token.tokenId === position.tokenId))
+    : point ? [{ tokenId: tokenId ?? 'party', x: point.x, y: point.y }] : [];
   function destination(e: PointerEvent<SVGSVGElement>) {
     if (!onDestination) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -33,7 +36,10 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       <SceneGrid map={map} id={`player-grid-${snapshot.scene.id}`} />
       {map.routes.map(r => { const a = map.nodes.find(n => n.id === r.from), b = map.nodes.find(n => n.id === r.to); return a && b ? <g key={r.id}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#beab80" strokeDasharray="8 6" /><text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fill="#f3e4bd">{r.hours}h</text></g> : null; })}
       {map.nodes.map(n => <g key={n.id}>{n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={n.proceduralFeature === 'water' ? 12 : 3} fill={n.proceduralFeature ? terrainColors[n.proceduralFeature] : n.kind === 'wall' ? '#877566' : '#52664d'} opacity={n.proceduralFeature === 'water' ? '.72' : '.5'} /> : <circle cx={n.x} cy={n.y} r="8" fill="#d9bd76" />}<text x={n.x + 14} y={n.y} fill="#f3e4bd">{n.label}</text></g>)}
-      {point && <g><circle cx={point.x} cy={point.y} r="14" fill={color} stroke="#fff" /><text x={point.x + 18} y={point.y} fill="#fff">{category === 'world' ? 'Party' : name}</text></g>}
+      {positions.map(position => {
+        const marker = tokenLabels?.find(token => token.tokenId === position.tokenId);
+        return <g key={position.tokenId}><circle cx={position.x} cy={position.y} r="14" fill={marker?.color ?? color} stroke="#fff" /><text x={position.x + 18} y={position.y} fill="#fff">{marker?.name ?? (category === 'world' ? 'Party' : name)}</text></g>;
+      })}
     </svg></div>
   </section>;
 }
