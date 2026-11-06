@@ -33,7 +33,7 @@ import { SceneDirector } from './components/SceneDirector';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 
-type View = 'map' | 'scenes' | 'character' | 'spells' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
+type View = 'map' | 'scenes' | 'character' | 'spells' | 'inventory' | 'journal' | 'merchant' | 'arsenal' | 'feedback';
 
 interface Toast {
   id: number;
@@ -288,7 +288,6 @@ export default function App({ game }: { game: GameApi }) {
             tabs={[
               { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
               { id: 'scenes', label: 'Scenes', render: () => <SceneQuickAccess open={() => setScreen('scenes')} /> },
-              { id: 'journal', label: 'Journal', render: () => <PlayerJournal /> },
               { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
             ]}
           />
@@ -327,7 +326,6 @@ export default function App({ game }: { game: GameApi }) {
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
     );
   }
-  if (game.online && !isGm) widgets.push({ id: 'journal', title: 'Campaign Journal', icon: '📖', render: () => <PlayerJournal sceneReference={game.scene?.scene ? {id:game.scene.scene.id,name:game.scene.scene.name}:undefined} /> });
   widgets.push(
     {
       id: 'chronicle',
@@ -360,6 +358,7 @@ export default function App({ game }: { game: GameApi }) {
     ...(isGm && game.online ? [{ id: 'scenes' as View, label: '🧭 Scenes' }] : []),
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
     { id: 'spells', label: '✨ Spells' },
+    ...(game.online ? [{ id: 'journal' as View, label: '📖 Journal' }] : []),
     { id: 'inventory', label: '🎒 Inventory' },
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
@@ -403,7 +402,7 @@ export default function App({ game }: { game: GameApi }) {
       <Header
         game={game}
         notify={notify}
-        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
+        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'journal' ? 'Journal' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
       />
       <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Main navigation">
@@ -450,7 +449,9 @@ export default function App({ game }: { game: GameApi }) {
               {toast.text}
             </div>
           )}
-          {screen === 'feedback' && isGm && game.online ? (
+          {screen === 'journal' && game.online ? (
+            <PlayerJournal sceneReference={game.scene?.scene ? { id: game.scene.scene.id, name: game.scene.scene.name } : undefined} />
+          ) : screen === 'feedback' && isGm && game.online ? (
             <FeedbackInbox online={game.online} notify={notify} />
           ) : screen === 'scenes' && isGm && game.online ? (
             <SceneDirector version={game.online.version} />
@@ -463,7 +464,7 @@ export default function App({ game }: { game: GameApi }) {
           ) : !sheetToken ? (
             <p className="p-6 text-sm text-marble-500">No character available.</p>
           ) : screen === 'character' || screen === 'spells' ? (
-            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} initialTab={screen === 'spells' ? 'spells' : undefined} />
+            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} initialTab={screen === 'spells' ? 'spells' : 'overview'} />
           ) : (
             // APEX 0.7 consolidation: one page for everything the character carries – worn equipment and inventory
             <div className="mx-auto grid max-w-7xl items-start gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_27rem]">

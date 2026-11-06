@@ -1,6 +1,6 @@
 /**
- * Character dashboard (APEX 0.4). Tabs: Overview · Attributes & Skills · Abilities & Spells ·
- * Resources · Inventory · Appearance · Notes.
+ * Character dashboard (APEX 0.4). The full Spellbook is owned by the top-level Spells page.
+ * Character focuses on overview, attributes, abilities, resources, appearance and notes.
  *
  * - APEX resources (Will, movement, vision, inventory) come from the authoritative game state.
  * - The character sheet (everything else) is persistent in Supabase with a version per sheet:
@@ -29,8 +29,7 @@ type Tab = 'overview' | 'attributes' | 'abilities' | 'spells' | 'resources' | 'a
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
-  { id: 'abilities', label: 'Abilities & Spells' },
-  { id: 'spells', label: 'Spellbook' },
+  { id: 'abilities', label: 'Abilities & Features' },
   { id: 'resources', label: 'Resources' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
