@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 type ReferenceMap = Record<string, string>;
 function inline(text: string, references: ReferenceMap, onReference?: (id: string) => void): ReactNode[] {
-  return text.split(/(\\[\\[ref:[0-9a-f-]{36}\\]\\]|\\*\\*[^*]+\\*\\*|\`[^\`]+\`|\\*[^*]+\\*)/g).map((s, i) => {
-    const reference = /^\\[\\[ref:([0-9a-f-]{36})\\]\\]$/i.exec(s);
+  return text.split(/(\[\[ref:[0-9a-f-]{36}\]\]|\*\*[^*]+\*\*|\`[^\`]+\`|\*[^*]+\*)/g).map((s, i) => {
+    const reference = /^\[\[ref:([0-9a-f-]{36})\]\]$/i.exec(s);
     if (reference) {
       const title = references[reference[1]];
       return title && onReference
@@ -14,5 +14,5 @@ function inline(text: string, references: ReferenceMap, onReference?: (id: strin
 }
 /** Text-only Markdown subset: no HTML injection or untrusted links. Full source remains portable. */
 export function JournalMarkdown({ body, references = {}, onReference }: { body: string; references?: ReferenceMap; onReference?: (id: string) => void }) {
-  return <>{body.split('\\n').map((line,i) => /^#{1,3} /.test(line) ? <h4 key={i}>{inline(line.replace(/^#{1,3} /,''), references, onReference)}</h4> : /^[-*] /.test(line) ? <p key={i}>• {inline(line.slice(2), references, onReference)}</p> : line.startsWith('> ') ? <blockquote key={i}>{inline(line.slice(2), references, onReference)}</blockquote> : <p key={i}>{inline(line || '\\u00a0', references, onReference)}</p>)}</>;
+  return <>{body.split('\n').map((line,i) => /^#{1,3} /.test(line) ? <h4 key={i}>{inline(line.replace(/^#{1,3} /,''), references, onReference)}</h4> : /^[-*] /.test(line) ? <p key={i}>• {inline(line.slice(2), references, onReference)}</p> : line.startsWith('> ') ? <blockquote key={i}>{inline(line.slice(2), references, onReference)}</blockquote> : <p key={i}>{inline(line || '\u00a0', references, onReference)}</p>)}</>;
 }
