@@ -9,7 +9,7 @@ Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, Ty
 
 - PRs #41–#47 sind gemergt. PR #47 ist kein offener Merge-Kandidat; es wird kein Ersatz dafür eröffnet.
 - Der auslösende Stand `df8090f` ist als Vercel-Production-Deployment `READY` bestätigt. `/api/apex?op=health` lieferte HTTP 200, `ok: true`, Schema 6, vollständige Migrationen und keine Fehler. Die bestätigten Migrationszeilen enden bei `20261106100000`; `apex-asset-packs` ist privat.
-- Vercel Preview für geprüften PR-Commit `d8b3c27c48b37cd89f516a62f5e3a0a5fd036914` ist `READY`; die echte Preview-Startseite liefert HTTP 200 und `/api/apex?op=version` bestätigt HTTP 200, `0.9.0`, Branch `feat/apex-09-closeout` und PR `48`. Dies ist eine Preview, kein Produktions-Deployment.
+- Vercel Preview für PR-Commit `2ca20e52ff76566128e7992a6c3412775341a54d` ist `READY`; `/api/apex?op=version` bestätigt HTTP 200, `0.9.0`, exakt diesen Commit, Branch `feat/apex-09-closeout`, Preview-Umgebung und PR `48`. Dies ist eine Preview, kein Produktions-Deployment.
 - Die ursprüngliche Function-Verarbeitung meldete TS2688 für `node` und `vite/client`. Der Branch entfernt die globale `types`-Liste und referenziert Vite-Client-Typen nur im Client-Quellbaum. TypeScript-/Buildchecks lokal und der aktuelle Vercel-Build sind grün. Der Version-Endpunkt bestätigt die aktuelle Preview-API, ersetzt jedoch keinen GM-/Player-Datenbankablauf. Production wurde nicht neu bereitgestellt.
 
 ## Akzeptanzmatrix
@@ -37,9 +37,10 @@ Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, Ty
 - `pnpm run test`: bestanden; 45 Dateien / 377 Tests.
 - `pnpm run typecheck`: bestanden.
 - `pnpm run build`: bestanden; bestehende Warnungen zu Vite-native-config-Imports und Client-Chunks über 500 kB.
+- PR-CI Run `42272548223` auf Commit `2ca20e52ff76566128e7992a6c3412775341a54d`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der Production-DB-Job wurde übersprungen.
 - Isolierte Postgres-Migrations-/RLS-/Scene-Transaktionsprüfung: CI Run `42270359126` auf Head `b0def743dd81b7779f8e1e65dfab60787524d740` bestanden; Production-DB-Job übersprungen.
 - Echter GM-/Player-Browserlauf: nicht bestanden/nicht gelaufen, weil der Harness-Playwright-Treiber fehlt und der verfügbare Browser die lokale Mock-URL nicht erreichen kann. Kein Ergebnis daraus wird als Abnahme gewertet.
-- PR-CI Run `42270359126` auf Head `b0def743dd81b7779f8e1e65dfab60787524d740`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der production-db-Deployment-Job ist korrekt übersprungen; es gab keinen Produktionsschreibzugriff.
+- PR-CI Run `42272548223` auf Commit `2ca20e52ff76566128e7992a6c3412775341a54d`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der production-db-Deployment-Job ist korrekt übersprungen; es gab keinen Produktionsschreibzugriff.
 
 ## Abschlussentscheidung
 
