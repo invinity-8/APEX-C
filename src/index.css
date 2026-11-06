@@ -1,5 +1,38 @@
 @import "tailwindcss";
 
+.journal-panel { display: grid; gap: .8rem; }
+.scene-director { display: grid; gap: .7rem; }
+.scene-director label { display: grid; gap: .3rem; margin-block: .5rem; }
+.scene-director input:not([type="checkbox"]):not([type="range"]), .scene-director select, .scene-director textarea, .journal-panel input:not([type="checkbox"]), .journal-panel select, .journal-panel textarea { background: #161a22; color: #e6d8bc; border: 1px solid #665843; border-radius: .3rem; padding: .4rem; max-width: 100%; }
+.scene-director button:not([class]) { background: #272a2e; border: 1px solid #685a42; color: #e6d8bc; padding: .35rem .6rem; border-radius: .35rem; margin: .2rem; }
+.scene-director button:disabled { opacity: .5; cursor: not-allowed; }
+.scene-library { display: grid; gap: .8rem; }
+.scene-library > li { display: grid; gap: .4rem; border: 1px solid #5e533f; border-radius: .5rem; padding: .8rem; background: #181d24; }
+.scene-library strong { color: #dfc58a; }
+.scene-thumbnail { min-height: 4rem; max-height: 8rem; display: grid; place-items: center; background: radial-gradient(ellipse, #423b32, #161c25); color: #c5aa70; overflow: hidden; border-radius: .3rem; }
+.scene-thumbnail img { width: 100%; max-height: 8rem; object-fit: cover; }
+.journal-panel label { display: grid; gap: .3rem; margin-block: .6rem; }
+.journal-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; }
+.journal-panel fieldset { border: 0; padding: 0; min-width: 0; }
+.journal-panel input:not([type="checkbox"]), .journal-panel select, .journal-panel textarea { width: 100%; max-width: 100%; }
+.journal-writing { min-height: 16rem; resize: vertical; font-family: ui-monospace, monospace; }
+.scene-editor { display: grid; gap: .7rem; }
+.scene-editor label { display: grid; gap: .25rem; margin-block: .5rem; }
+.scene-editor input:not([type="checkbox"]), .scene-editor textarea, .scene-editor select { background: #161a22; color: #e6d8bc; border: 1px solid #665843; border-radius: .3rem; padding: .4rem; max-width: 100%; }
+.scene-canvas-scroll { width: 100%; max-height: 32rem; overflow: auto; border: 1px solid #7a6246; border-radius: .4rem; }
+.scene-canvas-scroll svg { display: block; touch-action: none; }
+.sanctuary { position: relative; display: grid; place-items: center; min-height: 100%; padding: 2rem; overflow: auto; background: radial-gradient(ellipse at 50% 80%, #65543a 0, #25262c 30%, #111318 70%); }
+.sanctuary-campfire { background: radial-gradient(ellipse at 50% 80%, #9d5d2a 0, #382b25 24%, #151b22 65%); }
+.sanctuary-starlight { background: radial-gradient(ellipse at 50% 15%, #39425f 0, #1b2239 30%, #10131e 70%); }
+.sanctuary-glow { position: absolute; inset: 0; pointer-events: none; opacity: .25; background: repeating-linear-gradient(90deg, transparent 0 18%, #91867b 18% 18.4%, transparent 18.4% 21%); }
+.sanctuary-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .65; }
+.sanctuary-card { position: relative; display: grid; justify-items: center; gap: 1.1rem; max-width: 40rem; text-align: center; padding: 2rem; border: 1px solid #89754e; border-radius: 1rem; background: #14171cd9; color: #e6d8bc; }
+.sanctuary-card h1 { font-family: Georgia, serif; font-size: clamp(1.5rem, 3vw, 2.8rem); color: #e4c786; }
+.sanctuary-card .eyebrow { letter-spacing: .15em; font-size: .75rem; text-transform: uppercase; }
+.player-scene { padding: 1rem; overflow: auto; color: #e6d8bc; width: 100%; }
+.journal-reading { background: #201a16; color: #e6d8bc; border: 1px solid #7a6246; border-radius: .5rem; padding: 1rem; overflow-wrap: anywhere; }
+.journal-reading p { white-space: pre-wrap; margin-block: .3rem; }
+
 @theme {
   /* APEX 0.5 – Imperial Reforged design tokens (docs/design/APEX_VISUAL_STYLE_GUIDE.md).
      Mandatory palette: Obsidian #22272B · Forest Green #405B49 · Weathered Stone #8C806A ·

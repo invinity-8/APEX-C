@@ -10,6 +10,19 @@ import { activate, addSetupCode, seedProfiles } from './seed';
 const CID = 'c-main';
 let repo: MemoryRepo;
 
+describe('scene API authentication and privacy', () => {
+  it('requires authentication and GM authority for library and preview', async () => {
+    expect((await call('GET', 'scenes')).status).toBe(401);
+    const cookie = await login('hannah', 'hannah-pass-1');
+    expect((await as(cookie).get('scenes')).status).toBe(403);
+    expect((await as(cookie).post('scenes', { category: 'battle', name: 'Private' })).status).toBe(403);
+  });
+  it('retains CSRF protection for GM scene writes', async () => {
+    const cookie = await login('gm', 'gm-secret-pass');
+    expect((await call('POST', 'scenes', { name: 'Map', category: 'world' }, {}, { cookie, headers: { 'x-apex-csrf': undefined as unknown as string } })).status).toBe(403);
+  });
+});
+
 type Opts = { cookie?: string | null; headers?: Record<string, string>; ip?: string };
 const call = (method: string, op: string, body: unknown = null, query: Record<string, string> = {}, o: Opts = {}) =>
   handleApi(
@@ -542,7 +555,7 @@ describe('Infrastructure and deployment health', () => {
   it('reports a complete deployment without email/SMTP checks', async () => {
     const h = (await call('GET', 'health')).body as { migrationsComplete: boolean; errors: string[]; schemaVersion: number };
     expect(h.migrationsComplete).toBe(true);
-    expect(h.schemaVersion).toBe(5);
+    expect(h.schemaVersion).toBe(6);
     expect(h.errors).toEqual([]);
     expect(JSON.stringify(h)).not.toMatch(/smtp|email/i);
   });

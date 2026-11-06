@@ -27,6 +27,18 @@ jobs:
   check:
     name: Migration files are complete and ordered
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: apex-isolated-tests
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -39,6 +51,11 @@ jobs:
         run: npm test
       - name: Type check and build
         run: npm run build
+      - name: Isolated migration, RLS and scene transaction checks
+        env:
+          PSQL: psql -h 127.0.0.1 -U postgres
+          PGPASSWORD: apex-isolated-tests
+        run: bash scripts/verify-db-local.sh
 
   verify-production:
     name: Production database deployed and secure

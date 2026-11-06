@@ -162,3 +162,49 @@ do $$ declare cid uuid; v bigint; r jsonb; n int; begin
   delete from apex_world_archives;
 end $$;
 \echo 'World archive checks passed.'
+
+-- Campaign scenes are private to the server, including unpublished drafts.
+begin;
+select pg_temp.expect_denied('select * from public.apex_journals', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied_anon('select * from public.apex_journals');
+select pg_temp.expect_denied('select * from public.apex_scene_assets', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied_anon('select * from public.apex_scene_assets');
+select pg_temp.expect_denied('select * from public.apex_scenes', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied('select * from public.apex_scene_assignments', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied_anon('select * from public.apex_scenes');
+select pg_temp.expect_denied_anon('select * from public.apex_scene_assignments');
+
+do $$
+declare
+  main_id uuid;
+  other_id uuid;
+  other_scene_id uuid;
+  player_id uuid;
+begin
+  select id into strict main_id from public.apex_campaigns where slug = 'main';
+  assert (select count(*) from public.apex_scenes
+          where campaign_id = main_id and is_legacy_arena and category = 'region' and not is_draft) = 1,
+         'migration registers one Region Map for the existing Arena';
+
+  insert into public.apex_campaigns (slug, name)
+  values ('scene-check', 'Scene test') returning id into other_id;
+  select id into strict other_scene_id from public.apex_scenes
+    where campaign_id = other_id and is_legacy_arena and category = 'region';
+
+  select user_id into strict player_id from public.apex_campaign_members
+    where campaign_id = main_id and role = 'player' limit 1;
+  begin
+    insert into public.apex_scene_assignments (campaign_id, user_id, scene_id)
+    values (main_id, player_id, other_scene_id) on conflict(campaign_id,user_id) do update set scene_id = excluded.scene_id;
+    raise exception 'cross-campaign scene assignment accepted';
+  exception when foreign_key_violation then null;
+  end;
+
+  insert into public.apex_scene_assignments (campaign_id, user_id, scene_id)
+  values (main_id, player_id, null) on conflict(campaign_id,user_id) do update set scene_id = null;
+  assert exists (select 1 from public.apex_scene_assignments
+                 where campaign_id = main_id and user_id = player_id and scene_id is null),
+         'Sanctuary is persisted separately from the inherited Arena';
+end $$;
+rollback;
+\echo 'Campaign scene foundation checks passed.'

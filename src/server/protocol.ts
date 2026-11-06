@@ -44,6 +44,7 @@ export interface GmPayload {
 }
 
 export interface PlayerPayload {
+  scene?: import('./sceneRuntime.js').SceneSnapshot;
   role: 'player';
   campaignId: string;
   campaignName: string;

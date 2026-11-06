@@ -76,6 +76,26 @@ async function request<T>(
 }
 
 export const api = {
+  journalImage: (id: string) => request<{ url:string; mime:string; expiresIn:number }>('GET','journal-images',{ id }),
+  journalImageUpload: (entryId:string,image:string,thumbnail:string) => request<{ id:string }>('POST','journal-images',{}, { entryId,image,thumbnail }),
+  sanctuary: () => request<import('../server/sanctuary').SanctuarySettings>('GET', 'sanctuary'),
+  sanctuarySave: (settings: import('../server/sanctuary').SanctuarySettings) => request<import('../server/sanctuary').SanctuarySettings>('POST', 'sanctuary', {}, settings),
+  sceneTravelState: (sceneId: string) => request<import('../server/sceneTravel').TravelSnapshot>('GET', 'scene-travel', { sceneId }),
+  sceneTravelAction: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string }>('POST', 'scene-travel', {}, input),
+  sceneMove: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string }>('POST', 'scene-motion', {}, input),
+  playerScenePreview: (player: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { player }),
+  mapImage: (id: string, thumbnail = false) => request<{ url: string; expiresIn: number }>('GET', 'scene-assets', { id, thumbnail: thumbnail ? '1' : undefined }),
+  mapUpload: (sceneId: string, audience: 'gm' | 'players', image: string, thumbnail: string) => request<{ id: string; width: number; height: number }>('POST', 'scene-assets', {}, { sceneId, audience, image, thumbnail }, { timeoutMs: 30_000 }),
+  scenePlayers: () => request<{ players: { userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean }[] }>('GET', 'scene-runtime'),
+  sceneMotionState: (sceneId: string, tokenId: string) => request<import('../server/sceneMotion').MotionSnapshot>('GET', 'scene-motion', { sceneId, tokenId }),
+  sceneAssign: (sceneId: string | null, targets: { userId: string; revision: number }[], requestId: string) => request<{ ok: boolean; error?: string }>('POST', 'scene-runtime', {}, { sceneId, targets, requestId }),
+  sceneAction: (id: string, revision: number, action: string, fields: Record<string, unknown> = {}) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { ...fields, id, revision, action }),
+  journalList: (offset = 0, mine = false, filters:import('../server/journals').JournalFilters={}) => request<{ entries: import('../server/journals').JournalEntry[]; nextOffset: number | null; ownerId: string }>('GET', 'journal', { offset: String(offset), mine: mine ? '1' : undefined, ...filters }),
+  journalSave: (id: string, version: number, entry: import('../server/journals').JournalDraft) => request<{ entry: import('../server/journals').JournalEntry }>('POST', 'journal', {}, { action: 'save', id, version, entry }),
+  journalDelete: (id: string, version: number) => request<{ deleted: boolean }>('POST', 'journal', {}, { action: 'delete', id, version }),
+  sceneList: (offset=0,filters:import('../server/scenes').SceneFilters={}) => request<{scenes:import('../server/scenes').SceneSummary[];nextOffset:number|null}>('GET','scenes',{offset:String(offset),category:filters.category,search:filters.search,archived:filters.archived===undefined?undefined:filters.archived?'1':'0',sort:filters.sort}),
+  scenePreview: (id: string) => request<{ scene: import('../server/scenes').SceneDefinition }>('GET', 'scenes', { id }),
+  sceneCreate: (name: string, category: import('../server/scenes').SceneCategory, template?: string) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { name, category, template }),
   profiles: () => request<{ profiles: PublicProfile[] }>('GET', 'profiles'),
   login: (profile: string, password: string) => request<{ ok: true; profile: string }>('POST', 'login', {}, { profile, password }),
   setup: (code: string, password: string) => request<{ ok: true; profile: string }>('POST', 'setup', {}, { code, password }),
@@ -87,8 +107,8 @@ export const api = {
   /** since = version the client already has → the server answers {unchanged:true} instead of the full state. */
   state: (campaign: string, as?: string, since?: number, signal?: AbortSignal) =>
     request<CampaignPayload | UnchangedPayload>('GET', 'state', { campaign, as, since: since ? String(since) : undefined }, undefined, { signal }),
-  command: (campaignId: string, command: unknown, requestId: string, as?: string, worldId?: string | null) =>
-    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId, ...(worldId !== undefined ? { worldId } : {}) }),
+  command: (campaignId: string, command: unknown, requestId: string, as?: string, worldId?: string | null, sceneRevision = 0) =>
+    request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId, sceneRevision, ...(worldId !== undefined ? { worldId } : {}) }),
   commandStatus: (requestId: string) =>
     request<{ state: 'ok' | 'failed' | 'pending' | 'unknown'; version: number | null; error: string | null }>('GET', 'command-status', { requestId }, undefined, { timeoutMs: 10_000 }),
   admin: <T = AdminOverview>(campaignId: string, action: Record<string, unknown>, opts?: RequestOptions) =>

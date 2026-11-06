@@ -69,6 +69,7 @@ export function mockSupabase(): Plugin {
       }
     };
     const save = r.saveState.bind(r);
+    r.onSceneChange = campaignId => { void broadcast(campaignId, 'version'); };
     const replace = r.replaceState.bind(r);
     const saveSheet = r.saveSheet.bind(r);
     const transition = r.worldTransition.bind(r);
@@ -102,6 +103,7 @@ export function mockSupabase(): Plugin {
       // ---------- Test controls ----------
       server.middlewares.use('/__mock', (req, res) => {
         const url = new URL(req.url ?? '/', 'http://x');
+        if(url.pathname==='/reset' && req.method==='POST') { repo=null; apiDown=false; latencyMs=0; apiRequests=0; return send(res,200,{reset:true}); }
         if (url.pathname === '/setup-code') return send(res, 200, { code: SETUP_CODE });
         if (url.pathname === '/portrait') {
           const p = repo?.portraits.get(String(url.searchParams.get('path')));
