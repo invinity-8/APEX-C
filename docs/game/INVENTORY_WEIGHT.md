@@ -16,8 +16,10 @@
   - *Variant encumbrance* (GM: Arsenal → Balance → `encumbranceVariant = 1`): *Encumbered* above STR × 5 lb
     (speed −10 ft) and *Heavily encumbered* above STR × 10 lb (speed −20 ft, disadvantage on STR/DEX/CON ability
     checks, attack rolls and saving throws).
-- **Movement is never blocked automatically.** APEX shows the state; the GM applies speed penalties (arena movement
-  points stay a GM decision, see the movement rules).
+- **Movement enforcement:** the server blocks Arena and scene-map movement when carried weight exceeds capacity.
+  With Variant Encumbrance enabled, the server also reduces effective speed by 10 ft or 20 ft at the documented
+  thresholds and limits the remaining movement budget accordingly. The player view reports the current allowance;
+  browser/live multiplayer acceptance remains a release check.
 - The vertical gauge in the Inventory shows kg, maximum, percentage and state. It updates with every inventory
   change, because it is computed from the synchronised inventory.
 

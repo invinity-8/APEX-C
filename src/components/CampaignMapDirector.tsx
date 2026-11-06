@@ -8,6 +8,11 @@ import { SceneSurface } from './SceneSurface';
 interface PlayerAssignment {
   userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean;
 }
+export function assignmentLocation(player: Pick<PlayerAssignment, 'sceneId'>, focusId: string | null, scenes: Pick<SceneSummary, 'id' | 'name'>[]): string {
+  if (!player.sceneId) return 'Sanctuary';
+  if (focusId && player.sceneId === focusId) return 'here';
+  return scenes.find(scene => scene.id === player.sceneId)?.name ?? 'another scene';
+}
 const FOCUS_EVENT = 'apex:scene-focus-changed';
 const focusKey = (campaignId: string) => `apex.map.gm-focus.${campaignId}`;
 
@@ -210,12 +215,12 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
         {assignedHere.length ? assignedHere.map(player => <span key={player.userId} className="chip">{player.name}</span>) : <span className="text-xs text-marble-500">No players assigned</span>}
         {players.length > 0 && <button className="btn btn-ghost" type="button" onClick={() => setSelectedPlayers(selectedPlayers.length === players.length ? [] : players.map(player => player.userId))}>{selectedPlayers.length === players.length ? 'Clear selection' : 'Select party'}</button>}
       </div>}
-      {focus && players.length > 0 && <fieldset className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-marble-300" disabled={busy}>
-        <legend className="text-xs text-marble-400">Player assignments · separate from GM focus</legend>
-        {players.map(player => <label key={player.userId} className="flex items-center gap-1"><input type="checkbox" checked={selectedPlayers.includes(player.userId)} onChange={event => setSelectedPlayers(old => event.target.checked ? [...old, player.userId] : old.filter(id => id !== player.userId))} />{player.name} · {player.sceneId === focusId ? 'here' : player.sceneId ? (scenes.find(s => s.id === player.sceneId)?.name ?? 'another scene') : 'Sanctuary'}</label>)}
+      <fieldset className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-marble-300" disabled={busy} aria-label="Player assignments">
+        <legend className="text-xs text-marble-400">Player assignments · separate from GM focus{focus?.scene ? ` · focus: ${focus.scene.name}` : ' · no scene focus'}</legend>
+        {players.length > 0 ? players.map(player => <label key={player.userId} className="flex items-center gap-1"><input type="checkbox" checked={selectedPlayers.includes(player.userId)} onChange={event => setSelectedPlayers(old => event.target.checked ? [...old, player.userId] : old.filter(id => id !== player.userId))} />{player.name} · {assignmentLocation(player, focusId, scenes)}</label>) : <span role="status" className="text-marble-500">No active player assignments.</span>}
         <button className="btn btn-gold" type="button" disabled={!selection || !selectedPlayers.length} onClick={() => void transfer(selection)}>Send selected to chosen scene</button>
         <button className="btn btn-ghost" type="button" disabled={!selectedPlayers.length} onClick={() => void transfer(null)}>Send selected to Sanctuary</button>
-      </fieldset>}
+      </fieldset>
       {canPlace && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
         <label className="text-marble-300">Party character
           <select className="ml-2 rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm" value={placementToken} onChange={event => setPlacementToken(event.target.value)}>

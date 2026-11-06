@@ -152,6 +152,8 @@ export interface TokenDetails {
   /** APEX 0.7: Arcane Transmutation unlocked (cube carried or GM entitlement). */
   transmuteUnlocked?: boolean;
   cubeAccess?: boolean;
+  /** Effective server-computed arena allowance; speed encumbrance never trusts client edits. */
+  movementAllowance?: { maxMovePoints: number; remainingMovePoints: number; speedFt: number; loadState: import('./items/weight.js').LoadState };
 }
 
 export interface TokenView {

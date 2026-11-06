@@ -1,5 +1,7 @@
 import { parseMap, regionMilesPerHour, type MapNode } from '../campaign/maps.js';
 import { movementCost, snappedPoint } from '../campaign/sceneMovement.js';
+import { characterMovementLoad } from '../game/items/weight.js';
+import { emptySheet, parseSheet } from '../game/sheet.js';
 import type { AuthUser, Repo } from './repo.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
@@ -45,6 +47,17 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   const to = snappedPoint(map, { x: v.x, y: v.y });
   const checked = movementCost(map, v.action === 'place' ? to : start, to);
   if (!checked.ok) return { status: 422, body: { error: checked.error } };
+  if (v.action === 'move') {
+    const savedSheet = await repo.loadSheet(user.campaignId, token.id);
+    const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+    const movement = characterMovementLoad(state!.state, token, parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+    if (movement.load.state === 'over') return { status: 422, body: { error: `${token.name} is over carrying capacity; reduce the carried load before moving.` } };
+    const speedFt = Math.max(0, Math.min(token.speedFt ?? 30, movement.speedFt));
+    const intervalAllowance = scene.category === 'battle' ? speedFt : speedFt * 600 / 5280;
+    const baseSpent = scene.category === 'battle' ? (old?.tacticalSpent ?? 0) : (old?.regionSpent ?? 0);
+    const allowance = intervalAllowance / (token.sneaking ? 2 : 1);
+    if (baseSpent + checked.cost > allowance + 1e-9) return { status: 422, body: { error: `Encumbrance leaves ${Math.max(0, allowance - baseSpent)} movement unit(s) in this interval.` } };
+  }
   const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell))).map(n => ({ ...n, targetScene: null, discoverable: false }));
   const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: to.x, y: to.y, requestId: v.requestId };
   const result = await repo.sceneMotion.write(user, input, v.action === 'place' ? 0 : checked.cost, observed);

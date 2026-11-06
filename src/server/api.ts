@@ -19,7 +19,7 @@
  *    with optimistic locking (version check) – concurrent writes cannot overwrite each other.
  */
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
-import { CHARACTER_COMMANDS, executeCommand, type Command } from '../game/commands.js';
+import { CHARACTER_COMMANDS, executeCommand, validateMove, type Command } from '../game/commands.js';
 import { SEEDED_COMMANDS } from '../game/items/loot.js';
 import { PARTY_LOOT_SEEDED, PARTY_LOOT_TIMED } from '../game/items/partyLoot.js';
 import { medianLevel } from '../game/items/lootDraft.js';
@@ -28,6 +28,7 @@ import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { castMageArmor, isWearingArmor } from '../game/spells.js';
+import { characterMovementLoad } from '../game/items/weight.js';
 import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { buildSnapshot, isSnapshot, restoreSheetParts, sheetLevel, SHEET_PARTS, type SheetPart } from '../game/progression.js';
@@ -550,6 +551,16 @@ async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?:
   const active = characters.find((c) => c.id === as)?.id ?? characters[0].id;
   const scene = await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel);
   const view = buildPlayerView(s.state, active);
+  const savedSheet = await repo.loadSheet(user.campaignId, active);
+  const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+  const movement = characterMovementLoad(s.state, s.state.tokens[active], parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+  const ownToken = view.tokens.find(token => token.id === active);
+  if (ownToken?.details) ownToken.details.movementAllowance = {
+    maxMovePoints: movement.maxMovePoints,
+    remainingMovePoints: movement.remainingMovePoints,
+    speedFt: movement.speedFt,
+    loadState: movement.load.state,
+  };
   if (scene.kind !== 'arena') {
     // Non-Arena screens keep only authorized persistent character data, never legacy map intel.
     view.hexes = []; view.hexByKey = {}; view.sites = []; view.trackers = []; view.log = []; view.announcements = [];
@@ -652,6 +663,19 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
         } catch (e) {
           await log(false, (e as Error).message);
           throw e;
+        }
+        if (cmd.type === 'move') {
+          const token = stored.state.tokens[cmd.tokenId];
+          if (token) {
+            const savedSheet = await repo.loadSheet(user.campaignId, token.id);
+            const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+            const movement = characterMovementLoad(stored.state, token, parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+            if (movement.load.state === 'over') throw new HttpError(422, `${token.name} is over carrying capacity; reduce the carried load before moving.`, 'rejected');
+            const check = validateMove(stored.state, actor, token.id, cmd.to);
+            if (check.ok && check.cost > movement.remainingMovePoints + 1e-9) {
+              throw new HttpError(422, `Encumbrance leaves only ${movement.remainingMovePoints} movement point(s) today.`, 'rejected');
+            }
+          }
         }
         const res = executeCommand(stored.state, actor, cmd);
         if (!res.ok) {

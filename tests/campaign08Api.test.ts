@@ -8,6 +8,8 @@ import type { PlayerPayload } from '../src/server/protocol';
 import type { SceneDefinition } from '../src/server/scenes';
 import { neighbors } from '../src/game/hex';
 import { validateMove } from '../src/game/commands';
+import { emptySheet } from '../src/game/sheet';
+import { lbToKg } from '../src/game/items/weight';
 import type { JournalEntry } from '../src/server/journals';
 
 const cid='campaign-08'; let repo:MemoryRepo; let cookies:Record<string,string>;
@@ -43,6 +45,45 @@ describe('campaign engine API integration',()=>{
     const result=await request('hannah','command',{campaignId:cid,sceneRevision:0,command:{type:'move',tokenId:'sinna',to:destination}});
     expect(result.status).toBe(409); expect(repo.states.get(cid)!.state.tokens.sinna.pos).toEqual(sinna.pos);
     expect(((await request('hannah','state')).body as PlayerPayload).scene?.kind).toBe('sanctuary');
+  });
+  it('rejects an Arena move server-side when the character exceeds carrying capacity',async()=>{
+    const stored=repo.states.get(cid)!;
+    const sinna=stored.state.tokens.sinna;
+    const originalPosition=structuredClone(sinna.pos);
+    sinna.inventory=[{ id:'overload', name:'Stone crate', kind:'misc', description:'', quantity:1, weightKg:70 }];
+    sinna.equipment=undefined;
+    const sheet=emptySheet(); sheet.attributes.push({ id:'str', name:'Strength', value:'10', modifier:'0' });
+    expect(await repo.saveSheet(cid,'sinna',sheet,0,user('gm').userId)).toBe(1);
+    const destination=neighbors(sinna.pos).find(to=>validateMove(stored.state,{role:'player',tokenId:'sinna'},'sinna',to).ok);
+    expect(destination).toBeDefined();
+    const response=await request('hannah','command',{campaignId:cid,command:{type:'move',tokenId:'sinna',to:destination}});
+    expect(response.status).toBe(422);
+    expect((response.body as {error:string}).error).toMatch(/over carrying capacity/i);
+    expect(repo.states.get(cid)!.state.tokens.sinna.pos).toEqual(originalPosition);
+  });
+  it('rejects a scene-map move server-side when the assigned character exceeds carrying capacity',async()=>{
+    const scene=await battle(); await assign(scene.id,0);
+    const stored=repo.states.get(cid)!;
+    stored.state.tokens.sinna.inventory=[{ id:'overload', name:'Stone crate', kind:'misc', description:'', quantity:1, weightKg:70 }];
+    const sheet=emptySheet(); sheet.attributes.push({ id:'str', name:'Strength', value:'10', modifier:'0' });
+    expect(await repo.saveSheet(cid,'sinna',sheet,0,user('gm').userId)).toBe(1);
+    const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,x:150,y:100,requestId:crypto.randomUUID()});
+    expect(response.status).toBe(422);
+    expect((response.body as {error:string}).error).toMatch(/over carrying capacity/i);
+    expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)).toBeUndefined();
+  });
+  it('enforces variant encumbrance speed limits for scene-map movement',async()=>{
+    const scene=await battle(); await assign(scene.id,0);
+    const stored=repo.states.get(cid)!;
+    stored.state.itemRules={encumbranceVariant:1};
+    stored.state.tokens.sinna.inventory=[{ id:'load', name:'Heavy pack', kind:'misc', description:'', quantity:1, weightKg:lbToKg(60) }];
+    stored.state.tokens.sinna.speedFt=30;
+    const sheet=emptySheet(); sheet.attributes.push({ id:'str', name:'Strength', value:'10', modifier:'0' });
+    expect(await repo.saveSheet(cid,'sinna',sheet,0,user('gm').userId)).toBe(1);
+    const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,x:350,y:100,requestId:crypto.randomUUID()});
+    expect(response.status).toBe(422);
+    expect((response.body as {error:string}).error).toMatch(/encumbrance leaves 20/i);
+    expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)).toBeUndefined();
   });
   it('falls back to Sanctuary for missing or invalid assignments',async()=>{
     repo.sceneAssignments=repo.sceneAssignments.filter(a=>a.user_id!==user('hannah').userId);

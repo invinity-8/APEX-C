@@ -537,22 +537,29 @@ function SceneQuickAccess({ open }: { open: () => void }) {
 function MovementPill({ token }: { token: import('./game/visibility').TokenView | null }) {
   const d = token?.details;
   if (!d) return null;
-  const pct = d.maxMovePoints ? d.movePoints / d.maxMovePoints : 0;
+  const allowance = d.movementAllowance;
+  const max = allowance?.maxMovePoints ?? d.maxMovePoints;
+  const remaining = allowance?.remainingMovePoints ?? d.movePoints;
+  const pct = max ? remaining / max : 0;
+  const blocked = allowance?.loadState === 'over';
   return (
-    <div className="apex-move-pill" role="status" aria-label={`Movement: ${d.movePoints} of ${d.maxMovePoints} points left today`} data-testid="movement-pill">
+    <div className="apex-move-pill" role="status" aria-label={blocked ? 'Movement blocked: over carrying capacity' : `Movement: ${remaining} of ${max} points left today`} data-testid="movement-pill">
       <span className="text-marble-500">Movement</span>
       <span className="h-1.5 w-20 overflow-hidden rounded-full bg-ink-700">
         <span className="block h-full rounded-full bg-gold-400 transition-[width] duration-500" style={{ width: `${pct * 100}%` }} />
       </span>
       <b className="tabular-nums text-gold-200">
-        {d.movePoints}/{d.maxMovePoints}
+        {blocked ? 'Blocked' : `${remaining}/${max}`}
       </b>
+      {allowance?.loadState === 'encumbered' && <span className="text-amber-200" title="Variant encumbrance reduces movement speed">Encumbered</span>}
+      {allowance?.loadState === 'heavily' && <span className="text-orange-200" title="Heavy encumbrance reduces movement speed further">Heavily encumbered</span>}
+      {blocked && <span className="text-red-300" title="Reduce carried weight below capacity to move">Over capacity</span>}
       {d.sneaking && (
         <span className="text-arcane-300" data-testid="sneak-indicator" title="Sneaking: each step costs double movement points">
           🥷 Sneaking
         </span>
       )}
-      <span className="text-marble-500">MP{d.speedFt ? ` · ${d.speedFt} ft` : ''}</span>
+      <span className="text-marble-500">MP{allowance?.speedFt ? ` · ${allowance.speedFt} ft` : d.speedFt ? ` · ${d.speedFt} ft` : ''}</span>
     </div>
   );
 }
