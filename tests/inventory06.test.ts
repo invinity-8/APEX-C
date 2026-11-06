@@ -51,8 +51,9 @@ describe('inventory usability (APEX 0.6)', () => {
 
   it('equipment-defined items are not stackable; other players cannot touch the inventory', () => {
     let s = setup();
-    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'b', rev: 0, equip: { kind: 'weapon', damage: '1d4' } });
+    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'b', rev: 0, equip: { kind: 'weapon', damage: '1d4' } }, { role: 'gm' });
     expect(executeCommand(s, P, { type: 'invSplitStack', tokenId: 'sinna', itemId: 'b', rev: 1, quantity: 1, newItemId: 'z' }).ok).toBe(false);
     expect(executeCommand(s, { role: 'player', tokenId: 'aster' }, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'a', rev: 0, container: 'pockets' }).ok).toBe(false);
   });
 });
+
