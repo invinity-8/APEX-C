@@ -90,6 +90,55 @@ describe('API: abilities, HP and beast pictures', () => {
     expect(s.resources.find((x) => x.id === 's1')!.current).toBe(4);
   });
 
+  it('Mage Armor cast is server-validated, versioned, consumes a slot once, and refreshes instead of stacking', async () => {
+    const spell = { id: 'mage-armor', name: 'Mage Armor', level: 1, prepared: true, source: 'Wizard', notes: '', school: 'Abjuration', castingTime: '1 action', range: 'Touch', components: 'V, S, M', duration: '8 hours', concentration: false, ritual: false, description: '' };
+    const initial = (await sheet(hannah)).sheet;
+    const saved = await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: { ...initial, spells: [spell] }, expectedVersion: 1 }, hannah);
+    expect(saved.status).toBe(200);
+    expect((await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 2 }, jean)).status).toBe(403);
+
+    // Ordinary client sheet saves cannot create or extend server-managed effects.
+    const forged = await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: { ...initial, spells: [spell], spellEffects: [{ id: 'mage-armor', kind: 'mageArmor', spellId: 'mage-armor', castAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString() }] }, expectedVersion: 2 }, hannah);
+    expect(forged.status).toBe(200);
+    expect((forged.body as SheetPayload).sheet.spellEffects).toEqual([]);
+
+    const cast = await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 3 }, hannah);
+    expect(cast.status).toBe(200);
+    const first = (cast.body as SheetPayload).sheet;
+    expect(first.resources.find((resource) => resource.id === 's1')?.current).toBe(2);
+    expect(first.spellEffects).toHaveLength(1);
+    expect(Date.parse(first.spellEffects[0].expiresAt) - Date.parse(first.spellEffects[0].castAt)).toBe(8 * 60 * 60 * 1000);
+
+    expect((await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 3 }, hannah)).status).toBe(409);
+    const refreshed = await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 4 }, hannah);
+    expect(refreshed.status).toBe(200);
+    expect((refreshed.body as SheetPayload).sheet.resources.find((resource) => resource.id === 's1')?.current).toBe(1);
+    expect((refreshed.body as SheetPayload).sheet.spellEffects).toHaveLength(1);
+  });
+
+  it('Mage Armor refuses unprepared spells, empty slots and worn armor without spending resources', async () => {
+    const spell = { id: 'mage-armor', name: 'Mage Armor', level: 1, prepared: false, source: 'Wizard', notes: '' };
+    const initial = (await sheet(hannah)).sheet;
+    await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: { ...initial, spells: [spell] }, expectedVersion: 1 }, hannah);
+    const unprepared = await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 2 }, hannah);
+    expect(unprepared.status).toBe(422);
+    expect((await sheet(hannah)).sheet.resources[0].current).toBe(3);
+
+    const ready = { ...spell, prepared: true };
+    await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: { ...initial, spells: [ready], resources: [{ id: 's1', name: 'Spell slots (level 1)', current: 0, max: 4 }] }, expectedVersion: 2 }, hannah);
+    expect((await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 3 }, hannah)).status).toBe(422);
+
+    const campaign = repo.states.get(CID)!.state;
+    campaign.tokens.sinna.inventory = [{ id: 'plate', kind: 'armor', name: 'Plate armor', description: '', quantity: 1, equip: { kind: 'armor', armorType: 'heavy', armorBase: 18 } }];
+    campaign.tokens.sinna.equipment = { slots: {}, activeSet: 1, resting: false, restingKeep: [] };
+    repo.states.set(CID, { state: campaign, version: repo.states.get(CID)!.version + 1 });
+    const equip = await call('POST', 'command', { campaignId: CID, command: { type: 'equipItem', tokenId: 'sinna', itemId: 'plate', slot: 'chest' } }, hannah);
+    expect(equip.status).toBe(200);
+    expect(repo.states.get(CID)!.state.tokens.sinna.armorWornAt).toBeTruthy();
+    expect((await call('POST', 'sheet', { action: 'castMageArmor', tokenId: 'sinna', spellId: 'mage-armor', expectedVersion: 3 }, hannah)).status).toBe(422);
+    expect((await sheet(hannah)).sheet.resources[0].current).toBe(0);
+  });
+
   it('beast pictures: owner or GM upload, validated, path never exposed', async () => {
     const png = 'data:image/png;base64,' + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]).toString('base64');
     expect((await call('POST', 'beast-image', { tokenId: 'sinna', formId: 'wolf', image: png }, jean)).status).toBe(403);

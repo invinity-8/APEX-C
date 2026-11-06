@@ -207,6 +207,8 @@ export interface Token {
   speedFt?: number;
   /** APEX 0.5: equipped items (references into `inventory`), weapon sets, resting preset. */
   equipment?: Equipment;
+  /** Server timestamp when active body armour was put on; Mage Armor ends after this point. */
+  armorWornAt?: string;
   /** APEX 0.6: magical currency balances (server-authoritative) and their revision. */
   currency?: Partial<Record<CurrencyId, number>>;
   currencyRev?: number;

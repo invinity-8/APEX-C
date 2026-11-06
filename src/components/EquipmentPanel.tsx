@@ -39,6 +39,7 @@ const DND = 'application/x-apex-item';
 export function useSheet(game: GameApi, tokenId: string | null): CharacterSheet | null {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const { sheets } = game;
+  const revision = sheets.revision;
   useEffect(() => {
     if (!tokenId) return setSheet(null);
     let live = true;
@@ -46,7 +47,7 @@ export function useSheet(game: GameApi, tokenId: string | null): CharacterSheet 
     return () => {
       live = false;
     };
-  }, [tokenId, sheets]);
+  }, [tokenId, sheets, revision]);
   return sheet;
 }
 
@@ -66,7 +67,16 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
   const [editing, setEditing] = useState<Item | null>(null);
   const [chooser, setChooser] = useState<EquipSlot | null>(null);
   const [over, setOver] = useState<EquipSlot | null>(null);
-  const derived = sheet ? deriveStats(sheet, { inventory: inv, equipment: token.details?.equipment }, game.view.itemRules) : null;
+  const [now, setNow] = useState(() => Date.now());
+  const mageArmorExpiry = sheet?.spellEffects.find((effect) => effect.kind === 'mageArmor')?.expiresAt;
+  useEffect(() => {
+    if (!mageArmorExpiry) return;
+    const delay = Date.parse(mageArmorExpiry) - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), delay + 1);
+    return () => window.clearTimeout(timer);
+  }, [mageArmorExpiry]);
+  const derived = sheet ? deriveStats(sheet, { inventory: inv, equipment: token.details?.equipment, armorWornAt: token.details?.armorWornAt }, game.view.itemRules, now) : null;
   const active = new Set(activeSlots(eq));
   if (!token.details) return <p className="text-xs text-marble-500">This equipment is not visible.</p>;
 

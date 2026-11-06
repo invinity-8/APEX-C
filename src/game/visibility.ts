@@ -137,6 +137,8 @@ export interface TokenDetails {
   containers?: InventoryContainer[];
   /** APEX 0.5: private like the inventory (owner + GM only). */
   equipment?: Equipment;
+  /** Owner/GM only: invalidates an active Mage Armor effect when body armor is donned. */
+  armorWornAt?: string;
   /** APEX 0.6: magical currency (owner + GM only). */
   currency?: Partial<Record<CurrencyId, number>>;
   currencyRev?: number;
@@ -249,6 +251,7 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.itemRequests?.length ? { itemRequests: structuredClone(t.itemRequests) } : {}),
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
+  ...(withInventory && t.armorWornAt ? { armorWornAt: t.armorWornAt } : {}),
   ...(withInventory ? { currency: { ...(t.currency ?? {}) }, currencyRev: t.currencyRev ?? 0 } : {}),
   ...(withInventory && t.lastTransmute ? { lastTransmute: structuredClone(t.lastTransmute) } : {}),
   ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),

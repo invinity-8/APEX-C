@@ -413,6 +413,7 @@ export function rowsToSheet(rows: ImportRow[], source: { fileName: string; forma
     abilities: [],
     spellcasting: [],
     spells: [],
+    spellEffects: [],
     notes: '',
     raw: [],
     source: { kind: 'pdf', fileName: source.fileName.slice(0, 200), importedAt: new Date().toISOString(), format: source.format },

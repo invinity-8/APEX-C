@@ -27,6 +27,7 @@ import { migrateState, stripLegacy } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
+import { castMageArmor, isWearingArmor } from '../game/spells.js';
 import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { buildSnapshot, isSnapshot, restoreSheetParts, sheetLevel, SHEET_PARTS, type SheetPart } from '../game/progression.js';
@@ -657,6 +658,12 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
           await log(false, res.error);
           throw new HttpError(422, res.error, 'rejected');
         }
+        const affectedTokenId = 'tokenId' in cmd ? cmd.tokenId : undefined;
+        if (affectedTokenId) {
+          const before = stored.state.tokens[affectedTokenId];
+          const after = res.state.tokens[affectedTokenId];
+          if (before && after && !isWearingArmor(before) && isWearingArmor(after)) after.armorWornAt = new Date().toISOString();
+        }
         const version = await repo.saveState(user.campaignId, res.state, stored.version, user.id);
         if (version === null) continue; // somebody else wrote first → re-validate against the fresh state
 
@@ -889,7 +896,9 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
         await repo.backupSheet(cid, tokenId, buildSnapshot(prevSheet.sheet, state!.tokens[tokenId], label, 'Automatic snapshot before an incremental PDF update.'), cur.version, 'snapshot', user.id);
       }
     } else if (cur && reason !== 'edit') await repo.backupSheet(cid, tokenId, cur.data, cur.version, `Before ${reason === 'import-replace' ? 'import (replace)' : 'import (merge)'}`, user.id);
-    const v = await repo.saveSheet(cid, tokenId, parsed.sheet, body.expectedVersion, user.id);
+    const currentParsed = cur ? parseSheet(cur.data) : null;
+    const safeSheet = { ...parsed.sheet, spellEffects: currentParsed?.ok ? currentParsed.sheet.spellEffects : [] };
+    const v = await repo.saveSheet(cid, tokenId, safeSheet, body.expectedVersion, user.id);
     if (v === null) {
       throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded – please check it and save again.', 'sheet_conflict', undefined, {
         current: await sheetPayload(repo, cid, tokenId, state!),
@@ -921,6 +930,23 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
       if (v !== null) return sheetPayload(repo, cid, tokenId, state!);
     }
     throw new HttpError(409, 'The character sheet is being changed elsewhere right now. Please try again.', 'conflict');
+  }
+  if (body.action === 'castMageArmor') {
+    if (!isId(body.spellId)) throw new HttpError(400, 'Choose a valid spell.');
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER) || body.expectedVersion < 0) throw new HttpError(400, 'Invalid sheet version.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'The character sheet changed in the meantime – the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    const parsed = cur ? parseSheet(cur.data) : null;
+    const sheet = parsed?.ok ? parsed.sheet : emptySheet();
+    const cast = castMageArmor(sheet, state!.tokens[tokenId], body.spellId, Date.now());
+    if (!cast.ok) throw new HttpError(422, cast.error, 'rejected');
+    const version = await repo.saveSheet(cid, tokenId, cast.sheet, body.expectedVersion, user.id);
+    if (version === null) {
+      throw new HttpError(409, 'The character sheet changed in the meantime – the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    return sheetPayload(repo, cid, tokenId, state!);
   }
   // ---- APEX 0.7 class abilities & hit points: server-validated rules, one atomic write with a version check
   const ABILITY_ACTIONS = new Set(['wildShape', 'revert', 'damage', 'heal', 'tempHp', 'sorcery']);

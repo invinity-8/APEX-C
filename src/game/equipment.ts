@@ -363,7 +363,7 @@ export function abilityMods(sheet: CharacterSheet): Partial<Record<Ability, numb
   return out;
 }
 
-export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment'>, rules: ItemRules = DEFAULT_ITEM_RULES): DerivedStats {
+export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment' | 'armorWornAt'>, rules: ItemRules = DEFAULT_ITEM_RULES, nowMs = Date.now()): DerivedStats {
   const eq = equipmentOf(token);
   const mods = abilityMods(sheet);
   const pb = num(sheet.combat.find((c) => /^proficiency bonus$/i.test(c.label))?.value);
@@ -373,8 +373,11 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     .map((s) => ({ slot: s, item: eq.slots[s] ? items.get(eq.slots[s]!) : undefined }))
     .filter((x): x is { slot: EquipSlot; item: Item } => !!x.item?.equip);
   const allEquipped = EQUIP_SLOTS.map((s) => (eq.slots[s] ? items.get(eq.slots[s]!) : undefined)).filter((i): i is Item => !!i?.equip);
+  const armor = worn.find((w) => w.slot === 'chest' && w.item.equip!.kind === 'armor')?.item;
+  const mageArmor = sheet.spellEffects.find((effect) => effect.kind === 'mageArmor');
+  const mageArmorActive = !!mageArmor && Date.parse(mageArmor.expiresAt) > nowMs && !armor && !(token.armorWornAt && Date.parse(token.armorWornAt) > Date.parse(mageArmor.castAt));
   const bonuses = itemBonuses(worn, rules);
-  const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther;
+  const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther || mageArmorActive;
 
   // ---- Armor Class
   let ac: DerivedStats['ac'];
@@ -391,7 +394,6 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
   } else {
     const steps: CalcStep[] = [];
     const dex = mods.dex;
-    const armor = worn.find((w) => w.slot === 'chest' && w.item.equip!.kind === 'armor')?.item;
     let value: number;
     if (armor && armor.equip!.armorBase) {
       const e = armor.equip!;
@@ -403,6 +405,10 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
       else if (cap !== 0) steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
       else steps.push({ label: 'Dexterity does not apply (heavy armour)', value: 0, op: 'cap' });
       value += add;
+    } else if (mageArmorActive) {
+      value = 13 + dex;
+      steps.push({ label: 'Mage Armor (active): base AC 13', value: 13, op: '=' });
+      steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
     } else {
       value = 10 + dex;
       steps.push({ label: eq.resting ? 'Unarmored (resting): 10' : 'Unarmored: 10', value: 10, op: '=' });
