@@ -401,7 +401,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <div className="flex items-center gap-2">
             <label>
               kg{' '}
-              <input className={`${input} w-20`} type="number" min={0} step={0.1} aria-label="Weight in kg" value={draft.weightKg} onChange={(e) => setDraft({ ...draft, weightKg: e.target.value })} placeholder={itemWeightKg({ baseId: item.baseId }).toString()} />
+              <input className={`${input} w-20`} type="number" min={0} step={0.001} aria-label="Weight in kg" value={draft.weightKg} onChange={(e) => setDraft({ ...draft, weightKg: e.target.value })} placeholder={itemWeightKg({ baseId: item.baseId }).toString()} />
             </label>
             <label className={item.rarity || item.mods?.length ? 'hidden' : undefined}>
               Qty{' '}
@@ -452,7 +452,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
             <ItemBadges item={item} />
-            {itemWeightKg(item) > 0 && <span className="ml-1.5 text-[10px] tabular-nums text-marble-500">{(itemWeightKg(item) * item.quantity).toFixed(1)} kg</span>}
+            {itemWeightKg(item) > 0 && <span className="ml-1.5 text-[10px] tabular-nums text-marble-500">{(itemWeightKg(item) * item.quantity).toFixed(3)} kg</span>}
             {slot && (
               <span className="ml-1.5 rounded border border-gold-500/50 px-1 text-[10px] uppercase tracking-wider text-gold-300" title="Equipped – see the Equipment tab">
                 equipped · {SLOT_LABEL[slot]}
