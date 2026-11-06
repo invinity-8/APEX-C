@@ -64,6 +64,9 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
   const items = useMemo(() => details?.inventory ?? [], [details?.inventory]);
   const eq = equipmentOf({ equipment: details?.equipment });
   const [name, setName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newNotes, setNewNotes] = useState('');
+  const [newWeightKg, setNewWeightKg] = useState('');
   const [qty, setQty] = useState(1);
   const [target, setTarget] = useState(containers[0]?.id ?? 'backpack');
   const [newContainer, setNewContainer] = useState('');
@@ -91,9 +94,16 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
   const add = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const r = await run({ type: 'invAddItem', tokenId: token.id, itemId: newEntryId('itm'), name: name.trim(), quantity: qty, container: target });
+    const weight = newWeightKg.trim() === '' ? undefined : Number(newWeightKg);
+    if (weight !== undefined && (!Number.isFinite(weight) || weight < 0 || weight > 2000)) return;
+    const r = isGm
+      ? await run({ type: 'invAddItem', tokenId: token.id, itemId: newEntryId('itm'), name: name.trim(), quantity: qty, description: newDescription, notes: newNotes, ...(weight !== undefined ? { weightKg: weight } : {}), container: target })
+      : await run({ type: 'invRequestItem', tokenId: token.id, requestId: newEntryId('req'), name: name.trim(), quantity: qty, description: newDescription, notes: newNotes, ...(weight !== undefined ? { weightKg: weight } : {}), container: target });
     if (r.ok) {
       setName('');
+      setNewDescription('');
+      setNewNotes('');
+      setNewWeightKg('');
       setQty(1);
     }
   };
@@ -138,14 +148,26 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
     <div className="space-y-3" aria-label={`Inventory of ${token.name}`}>
       <section className="panel space-y-2 p-3">
         <h2 className="font-display text-2xl font-black text-gold-200">Inventory – {token.name}</h2>
-        <form onSubmit={add} className="flex flex-wrap items-end gap-2">
+        <form onSubmit={add} className="flex flex-wrap items-end gap-2" aria-label={isGm ? 'Create narrative inventory item' : 'Request a narrative inventory item'}>
           <label className="min-w-[14rem] flex-1 text-xs text-marble-300">
-            New entry
+            {isGm ? 'New item' : 'Request an item'}
             <input className={`${input} mt-1 w-full`} placeholder="e.g. Old iron key, wrapped in red cloth" value={name} maxLength={INVENTORY_LIMITS.name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="min-w-[14rem] flex-1 text-xs text-marble-300">
+            Description
+            <input className={`${input} mt-1 w-full`} value={newDescription} maxLength={INVENTORY_LIMITS.description} onChange={(e) => setNewDescription(e.target.value)} />
+          </label>
+          <label className="min-w-[10rem] flex-1 text-xs text-marble-300">
+            Notes
+            <input className={`${input} mt-1 w-full`} value={newNotes} maxLength={INVENTORY_LIMITS.notes} onChange={(e) => setNewNotes(e.target.value)} />
           </label>
           <label className="text-xs text-marble-300">
             Qty
-            <input className={`${input} mt-1 w-16`} type="number" min={0} value={qty} onChange={(e) => setQty(Math.max(0, Math.round(Number(e.target.value) || 0)))} />
+            <input className={`${input} mt-1 w-16`} type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Math.round(Number(e.target.value) || 1)))} />
+          </label>
+          <label className="text-xs text-marble-300">
+            Weight kg
+            <input className={`${input} mt-1 w-24`} type="number" min={0} max={2000} step={0.001} value={newWeightKg} onChange={(e) => setNewWeightKg(e.target.value)} />
           </label>
           <label className="text-xs text-marble-300">
             Put into
@@ -158,9 +180,11 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
             </select>
           </label>
           <button type="submit" className="btn btn-gold" disabled={busy || !name.trim()}>
-            + Add
+            {isGm ? '+ Add' : 'Send for approval'}
           </button>
         </form>
+        {!isGm && <p className="text-[11px] text-marble-500">Narrative items stay out of your inventory until the GM approves them. Equipment and magical effects can only be assigned by the GM.</p>}
+        {!!details.itemRequests?.length && <section className="border-t border-ink-700 pt-2" aria-label="Your item requests"><h3 className="text-xs font-semibold text-marble-200">Item requests</h3><ul className="mt-1 flex flex-wrap gap-2 text-[11px]">{details.itemRequests.map(r => <li key={r.id} className="rounded border border-ink-600 px-2 py-1"><b>{r.name}</b> · {r.status}</li>)}</ul></section>}
         <div className="flex flex-wrap items-end gap-2 border-t border-ink-700 pt-2 text-xs" role="search">
           <label className="min-w-[10rem] flex-1 text-marble-300">
             Search
@@ -401,7 +425,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <div className="flex items-center gap-2">
             <label>
               kg{' '}
-              <input className={`${input} w-20`} type="number" min={0} step={0.1} aria-label="Weight in kg" value={draft.weightKg} onChange={(e) => setDraft({ ...draft, weightKg: e.target.value })} placeholder={itemWeightKg({ baseId: item.baseId }).toString()} />
+              <input className={`${input} w-20`} type="number" min={0} step={0.001} aria-label="Weight in kg" value={draft.weightKg} onChange={(e) => setDraft({ ...draft, weightKg: e.target.value })} placeholder={itemWeightKg({ baseId: item.baseId }).toString()} />
             </label>
             <label className={item.rarity || item.mods?.length ? 'hidden' : undefined}>
               Qty{' '}
@@ -452,7 +476,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
             <ItemBadges item={item} />
-            {itemWeightKg(item) > 0 && <span className="ml-1.5 text-[10px] tabular-nums text-marble-500">{(itemWeightKg(item) * item.quantity).toFixed(1)} kg</span>}
+            {itemWeightKg(item) > 0 && <span className="ml-1.5 text-[10px] tabular-nums text-marble-500">{(itemWeightKg(item) * item.quantity).toFixed(3)} kg</span>}
             {slot && (
               <span className="ml-1.5 rounded border border-gold-500/50 px-1 text-[10px] uppercase tracking-wider text-gold-300" title="Equipped – see the Equipment tab">
                 equipped · {SLOT_LABEL[slot]}
@@ -779,3 +803,4 @@ function carryBonusLb(items: Item[], eq: Equipment, rules: ItemRules): number {
     .filter((x): x is { slot: typeof x.slot; item: Item } => !!x.item);
   return itemBonuses(worn, rules).carry.value;
 }
+
