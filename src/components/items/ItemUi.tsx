@@ -449,3 +449,4 @@ export function CarryGauge({ load }: { load: CarryLoad }) {
     </div>
   );
 }
+

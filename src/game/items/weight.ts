@@ -90,3 +90,4 @@ export function strengthScore(sheet: { attributes: Array<{ name: string; value: 
   const n = a ? Number(/\d+/.exec(a.value)?.[0]) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
 }
+
