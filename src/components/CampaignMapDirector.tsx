@@ -54,6 +54,10 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
   }
 
   useEffect(() => {
+    if (enabled) setFocusId(readFocus(campaignId));
+  }, [enabled, campaignId]);
+
+  useEffect(() => {
     if (!enabled || !online) return;
     let live = true;
     api.sceneList(0, { archived: false, sort: 'name' }).then(page => { if (live) { setScenes(page.scenes); setNextOffset(page.nextOffset); } }).catch(e => { if (live) setError(String(e)); });
@@ -95,6 +99,7 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
   function changeFocus(id: string | null) {
     setFocusId(id);
     setSelection('');
+    setSelectedPlayers([]);
     setPlaceMode(false);
     setNotice('');
     try {
@@ -137,6 +142,19 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
       if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) setError('The transfer may still have completed. Refresh player assignments before retrying.');
       else setError(String(e));
     } finally { setBusy(false); }
+  }
+
+  async function advanceInterval() {
+    if (!focus?.scene || busy) return;
+    const interval = focus.scene.category === 'battle' ? 'round' : 'hour';
+    const expected = interval === 'round' ? focus.motion?.round ?? 0 : focus.motion?.hour ?? 0;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await api.sceneMove({ action: 'advance', requestId: crypto.randomUUID(), interval, expected });
+      setFocus(await api.sceneFocus(focus.scene.id));
+      setNotice('Scene interval advanced.');
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
   }
 
   async function placeToken(x: number, y: number) {
@@ -207,13 +225,7 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
         </label>
         <button className="btn btn-ghost" type="button" disabled={!placementToken || busy} aria-pressed={placeMode} onClick={() => setPlaceMode(value => !value)}>{placeMode ? 'Cancel placement' : 'Place token'}</button>
         {focus?.motion && <span className="text-marble-400">{focus.scene?.category === 'battle' ? `Round ${focus.motion.round}` : `Hour ${focus.motion.hour}`}</span>}
-        {focus?.motion && <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => {
-          const interval = focus.scene?.category === 'battle' ? 'round' : 'hour';
-          void api.sceneMove({ action: 'advance', requestId: crypto.randomUUID(), interval, expected: interval === 'round' ? focus.motion?.round : focus.motion?.hour })
-            .then(async () => { if (focus.scene) setFocus(await api.sceneFocus(focus.scene.id)); })
-            .then(() => setNotice('Scene interval advanced.'))
-            .catch(e => setError(String(e)));
-        }}>Advance interval</button>}
+        {focus?.motion && <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => void advanceInterval()}>Advance interval</button>}
       </div>}
       {error && <p role="alert" className="mt-2 text-sm text-blood-200">{error}</p>}
       {notice && <p role="status" className="mt-2 text-sm text-gold-200">{notice}</p>}
