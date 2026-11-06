@@ -2,7 +2,7 @@
 
 Stand: 2026-11-06
 Produktionsbasis: `df8090fad406677f26830952861c7b092f4beff0`; PRs #41–#47 sind gemergt.
-Abschlussbranch: `feat/apex-09-closeout`; PR #48 offen als Draft.
+Abschlussbranch: `feat/apex-09-closeout`; PR #48 offen und bereit zur manuellen Prüfung.
 Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Production-Deployment-Aktion durchgeführt.
 
 ## Implementiert und automatisiert geprüft
@@ -18,7 +18,7 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 - **Map-Zuweisungen (dieser Branch):** Spielerzuweisungen bleiben auch ohne gesetzten GM-Szenenfokus sichtbar und bedienbar; Sanctuary, aktueller Fokus und andere Szenen werden klar unterschieden. UI-Regressionstest ergänzt.
 - **Map-Sichtbarkeit und szenengebundener Loot (dieser Branch):** GM kann sichtbare Marker einer veröffentlichten Szene live ein-/ausblenden. Der Server prüft aktuelle Draft-/Published-Revisionen und synchronisiert nur das Sichtbarkeitsfeld des Zielmarkers; andere private Draftänderungen bleiben erhalten. Loot-Rolls prüfen beim Start die veröffentlichte Szene und aktuelle Spielerzuweisung, erscheinen Spielern nur in dieser Szene und lehnen Stimmen nach einem Szenenwechsel ab. Neue Szenen- und API-Regressionen bestehen lokal. Keine Migration.
 - **Events-Bestätigungsdialog (dieser Branch):** Bei fehlgeschlagenem Event-Trigger bleibt die Bestätigung offen, damit der GM nicht den Eindruck erhält, das Ereignis sei erledigt. Schließen erst nach erfolgreichem Command; vollständiger Test-/Build-Lauf und PR-CI bestehen.
-- **Automatisierte Ergebnisse:** Migration Guard (12 registrierte, keine pending), 47 Testdateien / 396 Tests, TypeScript und Produktionsbuild lokal bestanden. GitHub-CI Run `42285415582` deckte den vorherigen Remote-Head `8019955e7dca69b533b98a86ba6643267a839666` ab; dessen Preview-/CI-Erfolg umfasst nicht die jetzt lokalen Änderungen. Für diese Änderungen ist nach Push ein neuer CI-Lauf erforderlich. Production-DB-Job war beim früheren Run übersprungen; keine Production-Bereitstellung.
+- **Automatisierte Ergebnisse:** Migration Guard (12 registrierte, keine pending), 47 Testdateien / 396 Tests, TypeScript und Produktionsbuild lokal bestanden. GitHub-CI Run `42289602511` für Code-Head `0ecfc7eac79cb653891539331f0ed97701d4bc61` ist vollständig erfolgreich: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Checks. Production-DB-Job wurde übersprungen. Vercel Preview scheitert derzeit am kostenlosen Tageslimit. Keine Production-Bereitstellung.
 - **Produktionsstatus der Ausgangsbasis:** read-only `/api/apex?op=health` HTTP 200 mit `ok: true`, schemaVersion 6, migrationsComplete true und leeren Missing-/Unknown-/Error-Listen; Vercel Deployment für `df8090f` meldete READY. Das belegt den Ausgangsstand, nicht die Änderungen dieses Branches.
 
 ## Bereits gemergte Funktionen – Code vorhanden; Browserabnahme offen
@@ -39,11 +39,11 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 ## Nicht verifiziert / blockiert
 
-- **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden, aber `playwright` fehlt; zusätzlich erreichte der Browser den lokalen Mockserver nicht. Die erfolgreiche Preview vom aktuellen Head wurde read-only auf Version `0.9.0`, HTTP 200, Health `ok: true`, Schema 6/6 und vollständige Migrationen geprüft. Das ersetzt keinen GM-/Player-Rollenablauf. Keine Kampagnendaten wurden geschrieben.
+- **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden, aber `playwright` fehlt; zusätzlich erreichte der Browser den lokalen Mockserver nicht. Eine frühere Preview auf dem vorherigen Code-Head wurde read-only auf Version `0.9.0`, HTTP 200, Health `ok: true`, Schema 6/6 und vollständige Migrationen geprüft. Das ersetzt keinen GM-/Player-Rollenablauf und prüft nicht diesen PR-Head. Keine Kampagnendaten wurden geschrieben.
 - **Isolierte DB-Prüfung:** lokal nicht ausgeführt; aktueller PR-CI Run `42285415582` hat Migrationen, RLS und Scene-Transaktionen gegen Wegwerf-Postgres erfolgreich geprüft; Production-DB-Job wurde übersprungen.
 - **Production:** keine neue Production-Bereitstellung oder Promotion. Die aktuelle read-only Health-Abfrage bezog sich ausschließlich auf die Preview und änderte keine Daten.
 - **Kenney visuell/Performance:** keine Classic-/2.5D-Screenshots und keine 39-/78-Radius-Metriken erhoben.
-- **Isolierte SQL/RLS/Scene-Prüfungen für den aktuellen Commit:** in der lokalen Windows-Arbeitsumgebung fehlen `psql`, Docker und Bash. GitHub-Workflow `42285415582` hat die isolierten Prüfungen für den aktuellen Head bestanden; dieser Branch ändert kein Datenbankschema.
+- **Isolierte SQL/RLS/Scene-Prüfungen:** in der lokalen Windows-Arbeitsumgebung fehlen `psql`, Docker und Bash. GitHub-Workflow `42285415582` hat die isolierten Prüfungen für den früheren Remote-Head bestanden. Für den aktuellen Commit läuft ein neuer Workflow; dieser Branch ändert kein Datenbankschema.
 - **Live-Status:** die aktuellen Codeänderungen dieses Branches sind weder gemergt noch live; nur die oben benannte `df8090f`-Produktionsbasis ist live verifiziert.
 
 ## Priorisierte offene Abnahme- und Implementierungsaufgaben
@@ -63,6 +63,6 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 - Es wurde keine Supabase-Testdatenbank oder kostenpflichtige Ressource angelegt.
 - Keine Produktionsmigration, kein Produktions-Storage-Upload oder produktiver Schreibzugriff.
-- Vercel Preview auf aktuellem Commit `8019955e7dca69b533b98a86ba6643267a839666`: erfolgreich und read-only Version-/Health-geprüft (HTTP 200, Version 0.9.0, Health `ok: true`, Schema 6/6, Migrationen komplett). Keine Production-Bereitstellung, Promotion oder PR-Merge.
+- Vercel Preview auf früherem Commit `8019955e7dca69b533b98a86ba6643267a839666`: erfolgreich und read-only Version-/Health-geprüft (HTTP 200, Version 0.9.0, Health `ok: true`, Schema 6/6, Migrationen komplett). Der aktuelle Preview-Job kann wegen des kostenlosen Vercel-Tageslimits nicht bauen. Keine Production-Bereitstellung, Promotion oder PR-Merge.
 - Keine Supabase-Migration in diesem Branch: Journal-Backlinks und Cube-Progression verwenden bestehende Journal-/State-JSON-Felder; TS-Konfiguration ist build-only. Der Code-Migrationspfad initialisiert optionale Progression beim Laden älterer Savegames.
-- **Freigabe:** APEX 0.9 noch nicht als vollständig finalabgenommen bezeichnen. Für den aktuellen lokalen Stand bestehen Tests (47 Dateien/396 Tests), TypeScript, Produktionsbuild und Migration Guard. Isolierte SQL/RLS/Scene-CI-Prüfungen sowie Preview-Health beziehen sich auf den früheren Remote-Head; der neue Änderungssatz braucht einen CI-Lauf nach Push. Rollenbrowserabnahme, szenengebundene Events/Encounter und weitere P1-Funktions-/Visualnachweise bleiben offen.
+- **Freigabe:** APEX 0.9 noch nicht als vollständig finalabgenommen bezeichnen. Für Code-Head `0ecfc7e` bestehen lokale Tests (47 Dateien/396 Tests), TypeScript, Produktionsbuild und Migration Guard sowie GitHub-CI einschließlich isolierter SQL/RLS/Scene-Checks. Der Preview-Build ist wegen des kostenlosen Tageslimits blockiert; der frühere Preview-Health-Check bezieht sich auf einen früheren Code-Head. Rollenbrowserabnahme, szenengebundene Events/Encounter und weitere P1-Funktions-/Visualnachweise bleiben offen.
