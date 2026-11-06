@@ -185,6 +185,25 @@ export class SupabaseRepo implements Repo {
       return data as { ok: boolean; error?: string };
     },
   };
+  /** Only the small CC0 Nature Isometric preview set is exposed; arbitrary paths are never accepted. */
+  readonly kenneyPreview = {
+    signPreviewAssets: async () => {
+      const paths = {
+        ground: 'kenney_nature-kit/Isometric/ground_grass_NE.png',
+        tree: 'kenney_nature-kit/Isometric/tree_blocks_NE.png',
+        bush: 'kenney_nature-kit/Isometric/plant_bush_NE.png',
+      };
+      const { data, error } = await this.db.storage.from('apex-asset-packs').createSignedUrls(Object.values(paths), 60);
+      if (error) throw new Error(`Kenney preview signing: ${error.message}`);
+      const byPath = new Map((data ?? []).map(item => [item.path, item.signedUrl]));
+      const assets = Object.fromEntries(Object.entries(paths).flatMap(([key, path]) => {
+        const url = byPath.get(path);
+        return url ? [[key, url]] : [];
+      }));
+      if (!assets.ground || !assets.tree || !assets.bush) throw new Error('Kenney preview assets are unavailable.');
+      return { assets, expiresIn: 60 };
+    },
+  };
   readonly sceneAssets: import('./sceneAssets.js').SceneAssetStore = {
     get: async (campaignId, id) => {
       const { data, error } = await this.db.from('apex_scene_assets').select('id,scene_id,audience,source_path,thumbnail_path,width,height').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
