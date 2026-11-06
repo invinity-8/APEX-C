@@ -25,11 +25,12 @@ import { Bar } from './ui';
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
 
 // APEX 0.7 consolidation: equipment and inventory live together on the Inventory page
-type Tab = 'overview' | 'attributes' | 'abilities' | 'resources' | 'appearance' | 'notes' | 'history';
+type Tab = 'overview' | 'attributes' | 'abilities' | 'spells' | 'resources' | 'appearance' | 'notes' | 'history';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
   { id: 'abilities', label: 'Abilities & Spells' },
+  { id: 'spells', label: 'Spellbook' },
   { id: 'resources', label: 'Resources' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
@@ -348,7 +349,6 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
               <Empty>No attacks recorded.</Empty>
             )}
           </section>
-          <SpellsSection sheet={sheet} editing={editing} set={set} onToggle={(id) => void quickSave((s) => toggle(s.spells, id))} />
           <EntrySection title="Spellcasting" editing={editing} empty="Spellcasting ability, attack bonus, save DC …" rows={sheet.spellcasting} onChange={(spellcasting) => set({ spellcasting })} />
           <section className="panel p-3 lg:col-span-2">
             <h3 className="panel-title mb-2">Features &amp; traits</h3>
@@ -378,6 +378,17 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
               <Empty>No features recorded.</Empty>
             )}
           </section>
+        </div>
+      )}
+
+      {tab === 'spells' && (
+        <div className="space-y-3" aria-label="Full spellbook">
+          <section className="panel p-3">
+            <h2 className="font-display text-2xl font-black text-gold-200">Spellbook</h2>
+            <p className="mt-1 text-xs text-marble-400">Known, prepared and cantrip entries come from this character sheet. Spell slot use remains tracked in Resources.</p>
+            {build && <p className="mt-1 text-xs text-marble-500">Character: {build}</p>}
+          </section>
+          <SpellsSection sheet={sheet} editing={editing} set={set} onToggle={(id) => void quickSave((s) => toggle(s.spells, id))} />
         </div>
       )}
 
