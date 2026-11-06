@@ -119,8 +119,6 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'unequipSlot',
   'setWeaponSet',
   'setResting',
-  'setItemEquip',
-  'setEquipConfig',
   'itemIdentify',
   'itemReroll',
   'itemSalvage',
@@ -781,3 +779,4 @@ function wornPlacement(t: Token, item: Item, container: string): string | null {
 function cloneOneToken(prev: GameState, tokenId: string): GameState {
   return { ...prev, tokens: { ...prev.tokens, [tokenId]: structuredClone(prev.tokens[tokenId]) } };
 }
+
