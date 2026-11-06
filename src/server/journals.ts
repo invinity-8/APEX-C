@@ -27,6 +27,11 @@ export function parseJournal(value: unknown): JournalDraft | null {
 export async function journalRequest(user: AuthUser, method: string, query: Record<string, string | undefined>, body: unknown, store?: JournalStore, repo?: import('./repo.js').Repo): Promise<SceneResult> {
   if (!store) return { status: 503, body: { error: 'Journal storage unavailable.' } };
   if (method === 'GET') {
+    if (query.id) {
+      if (!uuid(query.id)) return { status: 400, body: { error: 'Invalid entry ID.' } };
+      const entry = await store.get(user, query.id);
+      return entry ? { status: 200, body: { entry } } : { status: 404, body: { error: 'Journal entry not found.' } };
+    }
     const offset = Number(query.offset ?? 0);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) return { status: 400, body: { error: 'Invalid page.' } };
     if ((query.search?.length ?? 0)>200 || (query.category?.length ?? 0)>80 || (query.tag?.length ?? 0)>40 || (query.sort && !['newest','oldest'].includes(query.sort))) return {status:400,body:{error:'Invalid journal search.'}};
