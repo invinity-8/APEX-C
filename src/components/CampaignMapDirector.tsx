@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { GameApi } from '../state/gameApi';
 import type { SceneDefinition, SceneSummary } from '../server/scenes';
 import type { SceneSnapshot } from '../server/sceneRuntime';
@@ -105,7 +105,7 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
     void loadFocus(id);
   }
 
-  async function searchScenes(event: React.FormEvent) {
+  async function searchScenes(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try { await loadScenes(search); }
     catch (e) { setError(String(e)); }
