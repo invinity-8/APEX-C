@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import type { GameApi } from '../state/gameApi';
-import type { SceneDefinition, SceneSummary } from '../server/scenes';
+import type { SceneSummary } from '../server/scenes';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import { api, ApiError } from '../online/api';
 import { SceneSurface } from './SceneSurface';
@@ -92,7 +92,7 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
   }).filter((token): token is { tokenId: string; name: string; color: string } => !!token);
   const allowedTokens = markers.filter(token => focusTokenIds.includes(token.tokenId));
 
-  function setFocus(id: string | null) {
+  function changeFocus(id: string | null) {
     setFocusId(id);
     setSelection('');
     setPlaceMode(false);
@@ -176,8 +176,8 @@ export function CampaignMapDirector({ game, enabled, openScenes, children }: {
               {publishedScenes.map(scene => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
             </select>
           </label>
-          <button className="btn btn-gold" type="button" disabled={busy || !selection} onClick={() => setFocus(selection)}>Switch Scene</button>
-          <button className="btn btn-ghost" type="button" disabled={busy || !focusId} onClick={() => setFocus(null)}>Arena</button>
+          <button className="btn btn-gold" type="button" disabled={busy || !selection} onClick={() => changeFocus(selection)}>Switch Scene</button>
+          <button className="btn btn-ghost" type="button" disabled={busy || !focusId} onClick={() => changeFocus(null)}>Arena</button>
           <button className="btn btn-ghost" type="button" onClick={openScenes}>Scene Library</button>
         </form>
       </div>
