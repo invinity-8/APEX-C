@@ -13,7 +13,7 @@ function setup() {
   let s = createDemoState({ radius: 6, seed: 1 });
   s.tokens.sinna.inventory = [];
   for (const [id, name, q] of [['a', 'Rope', 1], ['b', 'Torch', 6], ['c', 'Old iron key wrapped in red cloth', 1], ['d', 'Torch', 2]] as const)
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: id, name, quantity: q });
+    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: id, name, quantity: q }, { role: 'gm' });
   return s;
 }
 const ids = (s: GameState) => s.tokens.sinna.inventory.map((i) => i.id);
