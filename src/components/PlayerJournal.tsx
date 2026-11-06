@@ -12,6 +12,8 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
   const writingId = useId();
   const [selectedReference, setSelectedReference] = useState('');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [backlinks, setBacklinks] = useState<JournalEntry[]>([]);
+  const [backlinksNext, setBacklinksNext] = useState<number | null>(null);
   const [owner, setOwner] = useState('');
   const [next, setNext] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -31,6 +33,14 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
     api.journalList().then(p => { if (live) { setEntries(p.entries); setOwner(p.ownerId); setNext(p.nextOffset); } }).catch(e => { if (live) setError(String(e)); });
     return () => { live = false; };
   }, []);
+  useEffect(() => {
+    let live = true;
+    setBacklinks([]); setBacklinksNext(null);
+    api.journalBacklinks(editing.id).then(p => {
+      if (live) { setBacklinks(p.entries.filter(entry => entry.id !== editing.id)); setBacklinksNext(p.nextOffset); }
+    }).catch(e => { if (live) setError(String(e)); });
+    return () => { live = false; };
+  }, [editing.id, editing.version]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
@@ -85,6 +95,15 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
       setEntries(old => [...old, ...p.entries.filter(e => !old.some(o => o.id === e.id))]); setNext(p.nextOffset);
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
+  async function moreBacklinks() {
+    if (backlinksNext === null || busy) return;
+    setBusy(true); setError('');
+    try {
+      const p = await api.journalBacklinks(editing.id, backlinksNext);
+      setBacklinks(old => [...old, ...p.entries.filter(e => e.id !== editing.id && !old.some(item => item.id === e.id))]);
+      setBacklinksNext(p.nextOffset);
+    } catch (e) { setError(String(e)); } finally { setBusy(false); }
+  }
   async function searchAll() {
     if(busy) return; setBusy(true); setError('');
     const filters:JournalFilters={search:search.trim()||undefined,category:category||undefined,tag:tag.trim()||undefined,sort};
@@ -116,7 +135,6 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
   }
   const referenceEntries = entries.filter(entry => ['People', 'Places'].includes(entry.category));
   const references = Object.fromEntries(referenceEntries.map(entry => [entry.id, entry.title]));
-  const backlinks = entries.filter(entry => entry.id !== editing.id && entry.body.includes('[[ref:' + editing.id + ']]'));
   return <section className="journal-panel" aria-label="Campaign journal">
     <h3>Campaign Journal</h3>
     <p>Personal notes stay private unless you explicitly share them. Save before changing tabs.</p>
@@ -153,7 +171,7 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
         <button className="btn btn-primary" disabled={!dirty || !draft.title.trim()}>{busy ? 'Saving…' : 'Save entry'}</button>
       </fieldset>
     </form>
-    {backlinks.length > 0 && <aside aria-label="Journal backlinks"><h4>Backlinks in loaded entries</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul></aside>}
+    {backlinks.length > 0 && <aside aria-label="Journal backlinks"><h4>Referenced by</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul>{backlinksNext !== null && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void moreBacklinks()}>Load older backlinks</button>}</aside>}
     <article className="journal-reading" aria-label="Reading preview"><JournalMarkdown body={draft.body} references={references} onReference={id => void openReference(id)}/>{imageUrl && <img src={imageUrl} alt="Journal attachment" loading="lazy" />}</article>
   </section>;
 }
