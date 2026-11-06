@@ -167,6 +167,8 @@ end $$;
 begin;
 select pg_temp.expect_denied('select * from public.apex_journals', '22222222-2222-2222-2222-222222222222');
 select pg_temp.expect_denied_anon('select * from public.apex_journals');
+select pg_temp.expect_denied('select * from public.apex_scene_assets', '22222222-2222-2222-2222-222222222222');
+select pg_temp.expect_denied_anon('select * from public.apex_scene_assets');
 select pg_temp.expect_denied('select * from public.apex_scenes', '22222222-2222-2222-2222-222222222222');
 select pg_temp.expect_denied('select * from public.apex_scene_assignments', '22222222-2222-2222-2222-222222222222');
 select pg_temp.expect_denied_anon('select * from public.apex_scenes');
@@ -193,13 +195,13 @@ begin
     where campaign_id = main_id and role = 'player' limit 1;
   begin
     insert into public.apex_scene_assignments (campaign_id, user_id, scene_id)
-    values (main_id, player_id, other_scene_id);
+    values (main_id, player_id, other_scene_id) on conflict(campaign_id,user_id) do update set scene_id = excluded.scene_id;
     raise exception 'cross-campaign scene assignment accepted';
   exception when foreign_key_violation then null;
   end;
 
   insert into public.apex_scene_assignments (campaign_id, user_id, scene_id)
-  values (main_id, player_id, null);
+  values (main_id, player_id, null) on conflict(campaign_id,user_id) do update set scene_id = null;
   assert exists (select 1 from public.apex_scene_assignments
                  where campaign_id = main_id and user_id = player_id and scene_id is null),
          'Sanctuary is persisted separately from the inherited Arena';

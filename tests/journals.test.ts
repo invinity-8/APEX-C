@@ -6,7 +6,7 @@ const id = '00000000-0000-4000-8000-000000000001';
 const user = { id, campaignId: 'campaign', role: 'player' } as AuthUser;
 const draft: JournalDraft = { title: 'Personal secret', body: '# Memories\n\nText', category: 'Personal Notes', tags: ['quest'], pinned: false, sharing: 'private', scene_id: null, game_date: 'Day 3' };
 const entry = { ...draft, id, owner_id: user.id, created_at: '2026-11-05T12:00:00Z', updated_at: '2026-11-05T12:00:00Z', version: 1 } as JournalEntry;
-const storage = (): JournalStore => ({ list: vi.fn().mockResolvedValue([entry]), save: vi.fn().mockResolvedValue(entry), remove: vi.fn().mockResolvedValue(true) });
+const storage = (): JournalStore => ({ list: vi.fn().mockResolvedValue([entry]), get: vi.fn().mockResolvedValue(null), save: vi.fn().mockResolvedValue(entry), remove: vi.fn().mockResolvedValue(true) });
 
 describe('personal campaign journals', () => {
   it('validates sizes, visibility and references without trusting ownership fields', () => {
@@ -16,7 +16,7 @@ describe('personal campaign journals', () => {
   it('binds reads and writes to the authenticated identity', async () => {
     const store = storage();
     const result = await journalRequest(user, 'GET', {}, null, store);
-    expect(result.status).toBe(200); expect(store.list).toHaveBeenCalledWith(user, 0);
+    expect(result.status).toBe(200); expect(store.list).toHaveBeenCalledWith(user, 0, false, { search:undefined, category:undefined, tag:undefined, sort:undefined });
     expect((await journalRequest(user, 'POST', {}, { action: 'save', id, version: 0, owner_id: 'victim', entry: draft }, store)).status).toBe(200);
     expect(store.save).toHaveBeenCalledWith(user, id, 0, draft);
   });

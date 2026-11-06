@@ -36,7 +36,7 @@ describe('GM scene preparation boundary', () => {
   it('returns bounded library pages and continuation offsets', async () => {
     const store = catalog(); vi.mocked(store.list).mockResolvedValue(Array.from({ length: 50 }, () => ({ id: 'scene' })) as never);
     const result = await sceneRequest(gm, 'GET', { offset: '50' }, null, store);
-    expect(store.list).toHaveBeenCalledWith(gm.campaignId, 50);
+    expect(store.list).toHaveBeenCalledWith(gm.campaignId, 50, { category:undefined, search:undefined, archived:undefined, sort:undefined });
     expect(result.body).toMatchObject({ nextOffset: 100 });
   });
 });

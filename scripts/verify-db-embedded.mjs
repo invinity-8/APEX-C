@@ -15,8 +15,9 @@ try {
     catch (error) { throw new Error(`${file}, pass ${pass}: ${error.message}`, { cause: error }); }
   }
   console.log('PASS all migrations applied twice in isolated PostgreSQL/WASM');
-  for (const file of ['rls_check.sql', 'post_deploy_checks.sql', 'scene_runtime_check.sql']) {
+  for (const file of ['rls_check.sql', 'post_deploy_checks.sql', 'scene_runtime_check.sql', 'scene_motion_check.sql', 'scene_travel_check.sql']) {
     await db.exec(clean(readFileSync('supabase/tests/' + file, 'utf8')));
     console.log('PASS', file);
   }
-} finally { await db.close(); }
+} catch (error) { console.error('FAIL isolated database:', error.message, error.code ?? '', error.where ?? ''); process.exitCode = 1; }
+finally { await db.close(); }

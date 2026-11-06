@@ -12,6 +12,7 @@ import type { SessionInfo } from '../server/protocol';
 import { api, ApiError, newRequestId } from './api';
 import { LoginPage, MessageScreen, Splash, Spinner } from './AuthScreens';
 import { useOnlineGame } from './useOnlineGame';
+import { PlayerJournal } from '../components/PlayerJournal';
 import { profileByKey, type ProfileConfig } from '../data/profiles';
 import { ProfileSelect, WelcomeScreen, loadChosenProfile, saveChosenProfile, useProfileStatus } from '../entry/EntryScreens';
 
@@ -120,7 +121,7 @@ function OnlineCampaign({ campaignId, info, signOut }: { campaignId: string; inf
   if (payload.role === 'gm') return <InitCampaign campaignId={campaignId} name={payload.campaignName} onDone={refresh} signOut={signOut} />;
   return (
     <MessageScreen
-      title={payload.campaignName}
+      title="Character Sanctuary"
       actions={
         <>
           <button className="btn btn-ghost" onClick={refresh}>
@@ -134,6 +135,7 @@ function OnlineCampaign({ campaignId, info, signOut }: { campaignId: string; inf
     >
       <p>{payload.notice ?? 'Waiting for the Game Master.'}</p>
       <p className="text-xs text-marble-500">Signed in as {info.user.displayName}.</p>
+      <PlayerJournal />
     </MessageScreen>
   );
 }

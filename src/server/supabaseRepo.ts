@@ -116,8 +116,101 @@ const toArchive = (r: Record<string, unknown>): ArchiveInfo => ({
   phase: (r.phase as string | null) ?? null,
 });
 const newTopic = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+const JOURNAL_FIELDS = 'id,owner_id,title,body,category,tags,pinned,sharing,scene_id,image_id,game_date,created_at,updated_at,version';
 
 export class SupabaseRepo implements Repo {
+  readonly journalImages: import('./journalImages.js').JournalImageStore = {
+    get: async (campaignId, id) => {
+      const { data, error } = await this.db.from('apex_journal_images').select('id,entry_id,owner_id,source_path,thumbnail_path,mime').eq('campaign_id',campaignId).eq('id',id).maybeSingle();
+      if (error) throw new Error(`journal image: ${error.message}`);
+      return data as import('./journalImages.js').JournalImage | null;
+    },
+    upload: async (user, entryId, image, thumbnail) => {
+      const id = crypto.randomUUID(), base = `${user.campaignId}/${user.id}/${entryId}/${id}`, source_path = base + '/image', thumbnail_path = base + '/thumbnail';
+      const storage = this.db.storage.from('apex-journal-images');
+      try {
+        for (const [path, content] of [[source_path,image],[thumbnail_path,thumbnail]] as const) { const r = await storage.upload(path,content.bytes,{ contentType: content.mime, upsert:false, cacheControl:'60' }); if (r.error) throw new Error(r.error.message); }
+        const row = { id, entry_id:entryId, owner_id:user.id, source_path, thumbnail_path, mime:image.mime };
+        const { error } = await this.db.from('apex_journal_images').insert({ ...row, campaign_id:user.campaignId });
+        if (error) throw new Error(error.message);
+        return row;
+      } catch (error) { await storage.remove([source_path,thumbnail_path]).catch(() => undefined); throw error; }
+    },
+    url: async path => { const { data,error } = await this.db.storage.from('apex-journal-images').createSignedUrl(path,60); return error ? null : data.signedUrl; },
+  };
+  readonly sanctuary: import('./sanctuary.js').SanctuaryStore = {
+    get: async campaignId => {
+      const { data, error } = await this.db.from('apex_sanctuary_settings').select('revision,atmosphere,default_asset,backgrounds').eq('campaign_id', campaignId).maybeSingle();
+      if (error) throw new Error(`Sanctuary settings: ${error.message}`);
+      return data ? { revision: data.revision, atmosphere: data.atmosphere, defaultAsset: data.default_asset, backgrounds: data.backgrounds } as import('./sanctuary.js').SanctuarySettings : { revision: 0, atmosphere: 'hall', defaultAsset: null, backgrounds: [] };
+    },
+    save: async (campaignId, expected, settings) => {
+      const row = { atmosphere: settings.atmosphere, default_asset: settings.defaultAsset, backgrounds: settings.backgrounds, revision: expected + 1 };
+      const result = expected === 0 ? await this.db.from('apex_sanctuary_settings').insert({ campaign_id: campaignId, ...row }).select('revision').single() : await this.db.from('apex_sanctuary_settings').update(row).eq('campaign_id', campaignId).eq('revision', expected).select('revision').maybeSingle();
+      if (result.error?.code === '23505') return null;
+      if (result.error) throw new Error(`Sanctuary settings save: ${result.error.message}`);
+      return result.data ? { ...settings, revision: result.data.revision } : null;
+    },
+  };
+  readonly sceneTravel: import('./sceneTravel.js').SceneTravel = {
+    snapshot: async (user, sceneId) => {
+      const location = await this.db.from('apex_party_locations').select('node_id,revision').eq('campaign_id', user.campaignId).eq('scene_id', sceneId).maybeSingle();
+      if (location.error) throw new Error(`party location: ${location.error.message}`);
+      let query = this.db.from('apex_scene_travel').select('id,proposed_by,from_node,to_node,route_id,total_hours,elapsed_hours,status,version,scene_revision').eq('campaign_id', user.campaignId).eq('scene_id', sceneId);
+      if (user.role !== 'gm') query = query.or(`proposed_by.eq.${user.id},status.in.(traveling,complete)`);
+      const { data, error } = await query.order('created_at', { ascending: false }).order('id').limit(50);
+      if (error) throw new Error(`travel proposals: ${error.message}`);
+      return { partyNode: location.data?.node_id ?? null, revision: location.data?.revision ?? 0, proposals: (data as import('./sceneTravel.js').TravelRecord[]).map(p => ({ ...p, proposed_by: user.role === 'gm' || p.proposed_by === user.id ? p.proposed_by : '' })) };
+    },
+    action: async (user, sceneId, input) => {
+      const { data, error } = await this.db.rpc('apex_world_travel_action', { p_campaign: user.campaignId, p_actor: user.id, p_scene: sceneId, p_input: input });
+      if (error) throw new Error(`world travel: ${error.message}`);
+      return data as { ok: boolean; error?: string };
+    },
+  };
+  readonly sceneMotion: import('./sceneMotion.js').SceneMotion = {
+    snapshot: async (campaignId, sceneId, userId, tokenIds) => {
+      const { data, error } = await this.db.rpc('apex_scene_motion_state', { p_campaign: campaignId, p_scene: sceneId, p_user: userId, p_tokens: tokenIds });
+      if (error) throw new Error(`scene motion: ${error.message}`);
+      return data as import('./sceneMotion.js').MotionSnapshot;
+    },
+    write: async (user, input, cost, discovered) => {
+      const { data, error } = await this.db.rpc('apex_write_scene_motion', { p_campaign: user.campaignId, p_actor: user.id, p_input: input, p_cost: cost, p_discovered: discovered });
+      if (error) throw new Error(`scene move: ${error.message}`);
+      return data as { ok: boolean; error?: string };
+    },
+    advance: async (user, interval, expected, requestId) => {
+      const { data, error } = await this.db.rpc('apex_advance_scene_interval', { p_campaign: user.campaignId, p_actor: user.id, p_interval: interval, p_expected: expected, p_request: requestId });
+      if (error) throw new Error(`scene interval: ${error.message}`);
+      return data as { ok: boolean; error?: string };
+    },
+  };
+  readonly sceneAssets: import('./sceneAssets.js').SceneAssetStore = {
+    get: async (campaignId, id) => {
+      const { data, error } = await this.db.from('apex_scene_assets').select('id,scene_id,audience,source_path,thumbnail_path,width,height').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
+      if (error) throw new Error(`map asset: ${error.message}`);
+      return data as import('./sceneAssets.js').SceneAsset | null;
+    },
+    upload: async (user, sceneId, audience, image, thumbnail) => {
+      const id = crypto.randomUUID(), path = `${user.campaignId}/${sceneId}/${id}`;
+      const source_path = path + '/map', thumbnail_path = path + '/thumbnail';
+      const storage = this.db.storage.from('apex-scene-maps');
+      try {
+        for (const [key, file] of [[source_path, image], [thumbnail_path, thumbnail]] as const) {
+          const result = await storage.upload(key, file.bytes, { contentType: file.mime, upsert: false, cacheControl: '60' });
+          if (result.error) throw new Error(result.error.message);
+        }
+        const asset = { id, scene_id: sceneId, audience, source_path, thumbnail_path, width: image.width, height: image.height };
+        const { error } = await this.db.from('apex_scene_assets').insert({ ...asset, campaign_id: user.campaignId });
+        if (error) throw new Error(error.message);
+        return asset;
+      } catch (error) { await storage.remove([source_path, thumbnail_path]).catch(() => undefined); throw error; }
+    },
+    url: async path => {
+      const { data, error } = await this.db.storage.from('apex-scene-maps').createSignedUrl(path, 60);
+      return error ? null : data.signedUrl;
+    },
+  };
   readonly sceneRuntime: import('./sceneRuntime.js').SceneRuntime = {
     assignments: async campaignId => {
       const { data, error } = await this.db.from('apex_scene_assignments').select('user_id,scene_id,revision,spawn_x,spawn_y').eq('campaign_id', campaignId).limit(100);
@@ -130,9 +223,9 @@ export class SupabaseRepo implements Repo {
       return data as import('./sceneRuntime.js').SceneAssignment | null;
     },
     scene: async (campaignId, id) => {
-      const { data, error } = await this.db.from('apex_scenes').select('id,name,category,revision,is_draft,is_legacy_arena,archived,published_metadata').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
+      const { data, error } = await this.db.from('apex_scenes').select('id,name,category,published_revision,is_draft,is_legacy_arena,archived,published_metadata').eq('campaign_id', campaignId).eq('id', id).maybeSingle();
       if (error) throw new Error(`assigned scene: ${error.message}`);
-      return data as import('./sceneRuntime.js').RuntimeScene | null;
+      return data ? { ...data, revision: data.published_revision } as import('./sceneRuntime.js').RuntimeScene : null;
     },
     transition: async (user, sceneId, targets, requestId) => {
       const { data, error } = await this.db.rpc('apex_assign_scene', { p_campaign: user.campaignId, p_actor: user.id, p_scene: sceneId, p_targets: targets, p_request: requestId });
@@ -141,20 +234,30 @@ export class SupabaseRepo implements Repo {
     },
   };
   readonly journalStore: import('./journals.js').JournalStore = {
-    list: async (user, offset) => {
+    get: async (user, id) => {
+      const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
+      const { data, error } = await this.db.from('apex_journals').select(JOURNAL_FIELDS).eq('campaign_id', user.campaignId).eq('id', id).or(visibility).maybeSingle();
+      if (error) throw new Error(`journal entry: ${error.message}`);
+      return data as import('./journals.js').JournalEntry | null;
+    },
+    list: async (user, offset, mine = false, filters = {}) => {
       // IDs come exclusively from authenticated profiles, never the request.
       const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
-      const { data, error } = await this.db.from('apex_journals').select('*')
-        .eq('campaign_id', user.campaignId).or(visibility)
-        .order('pinned', { ascending: false }).order('created_at', { ascending: false }).order('id').range(offset, offset + 49);
+      let query = this.db.from('apex_journals').select(JOURNAL_FIELDS).eq('campaign_id', user.campaignId);
+      query = mine ? query.eq('owner_id', user.id) : query.or(visibility);
+      if (filters.search) query=query.textSearch('search_document',filters.search,{type:'websearch',config:'simple'});
+      if (filters.category) query=query.eq('category',filters.category);
+      if (filters.tag) query=query.contains('tags',[filters.tag]);
+      const { data, error } = await query
+        .order('pinned', { ascending: false }).order('created_at', { ascending: filters.sort==='oldest' }).order('id').range(offset, offset + 49);
       if (error) throw new Error(`journal list: ${error.message}`);
       return data as import('./journals.js').JournalEntry[];
     },
     save: async (user, id, version, draft) => {
       const row = { ...draft, updated_at: new Date().toISOString(), version: version + 1 };
       const result = version === 0
-        ? await this.db.from('apex_journals').insert({ ...row, id, campaign_id: user.campaignId, owner_id: user.id }).select('*').single()
-        : await this.db.from('apex_journals').update(row).eq('campaign_id', user.campaignId).eq('owner_id', user.id).eq('id', id).eq('version', version).select('*').maybeSingle();
+        ? await this.db.from('apex_journals').insert({ ...row, id, campaign_id: user.campaignId, owner_id: user.id }).select(JOURNAL_FIELDS).single()
+        : await this.db.from('apex_journals').update(row).eq('campaign_id', user.campaignId).eq('owner_id', user.id).eq('id', id).eq('version', version).select(JOURNAL_FIELDS).maybeSingle();
       if (result.error?.code === '23505') return null;
       if (result.error) throw new Error(`journal save: ${result.error.message}`);
       return result.data as import('./journals.js').JournalEntry | null;
@@ -167,16 +270,20 @@ export class SupabaseRepo implements Repo {
     },
   };
   readonly sceneCatalog: import('./scenes.js').SceneCatalog = {
-    list: async (campaignId, offset) => {
-      const { data, error } = await this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived')
-        .eq('campaign_id', campaignId).order('created_at', { ascending: false }).order('id').range(offset, offset + 49);
+    list: async (campaignId, offset, filters={}) => {
+      let query = this.db.from('apex_scenes')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id')
+        .eq('campaign_id', campaignId);
+      if(filters.category) query=query.eq('category',filters.category);
+      if(filters.archived!==undefined) query=query.eq('archived',filters.archived);
+      if(filters.search) query=query.ilike('name','%'+filters.search.replace(/[\\%_]/g,'\\$&')+'%');
+      const { data,error }=await query.order(filters.sort==='name'?'name':'updated_at',{ascending:filters.sort==='name'}).order('id').range(offset,offset+49);
       if (error) throw new Error(`scene list: ${error.message}`);
       return data as import('./scenes.js').SceneSummary[];
     },
     get: async (campaignId, id) => {
       const { data, error } = await this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived,metadata')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,metadata')
         .eq('campaign_id', campaignId).eq('id', id).maybeSingle();
       if (error) throw new Error(`scene preview: ${error.message}`);
       return data as import('./scenes.js').SceneDefinition | null;
@@ -184,14 +291,12 @@ export class SupabaseRepo implements Repo {
     create: async (campaignId, scene) => {
       const { data, error } = await this.db.from('apex_scenes')
         .insert({ campaign_id: campaignId, ...scene, is_draft: true, is_legacy_arena: false })
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived,metadata').single();
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,metadata').single();
       if (error) throw new Error(`scene create: ${error.message}`);
       return data as import('./scenes.js').SceneDefinition;
     },
     update: async (campaignId, id, revision, patch) => {
-      const { data, error } = await this.db.from('apex_scenes').update({ ...patch, revision: revision + 1, updated_at: new Date().toISOString() })
-        .eq('campaign_id', campaignId).eq('id', id).eq('revision', revision)
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,archived,metadata').maybeSingle();
+      const { data, error } = await this.db.rpc('apex_update_scene', { p_campaign:campaignId, p_scene:id, p_revision:revision, p_patch:patch });
       if (error) throw new Error(`scene update: ${error.message}`);
       return data as import('./scenes.js').SceneDefinition | null;
     },

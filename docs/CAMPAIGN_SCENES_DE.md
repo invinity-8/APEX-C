@@ -1,61 +1,79 @@
-# APEX 0.8 Szenenbasis
+# APEX 0.8 – Campaign Engine
 
-## Aktualisierung: neuer Branch und Draft-PR
+## Deutscher Implementierungs- und Prüfbericht
 
-**Dieser Abschnitt ersetzt den darunter dokumentierten historischen Teilstand.**
-Branch: `feat/apex-0-8-campaign-engine-v2`; Draft-PR: https://github.com/invinity-8/APEX-C/pull/39. Basis: main/e9e5155. Kein Merge, keine Produktionsmigration, kein Produktionsdeployment.
+**Arbeitsbranch:** `feat/apex-0-8-campaign-engine-v2`
+**Review:** [Draft Pull Request #39](https://github.com/invinity-8/APEX-C/pull/39)
+**Ausgangspunkt:** aktueller `main` zum Start dieser Arbeit (`e9e5155`). Änderungen sind auf dem Feature-Branch gebündelt. Kein Merge nach `main`, keine Produktionsmigration und kein Produktionsdeployment.
 
-Mittlerweile implementiert:
+## 1. Kampagnenarchitektur und Szenenbibliothek
 
-- Vier Szenenkategorien mit UUIDs, begrenzten Metadatenseiten, Suche in geladenen Einträgen, Sortierung, Archivfilter, Umbenennen, Duplizieren, Archivieren und Wiederherstellen. Die Arena bleibt eine unangetastete Legacy-Referenz.
-- Karteneditor mit Quadrat-/Hexraster, Skalierung, Zoom/Scroll-Pan, verschiebbaren Markern, Beschriftungen, Spawnpunkten, Wänden/Bereichen, Szenen-Zielreferenzen und sichtbaren/verborgenen Routen mit Reisezeit. Entwurfsdaten und veröffentlichte Daten sind getrennt und revisionsgeschützt. Ein Sichtbarkeitsmodus zeigt offenbarte Elemente; er ist noch keine vollständige Spieleridentitätsvorschau.
-- Atomare Zuordnung ausgewählter Spieler oder der aktiven Partei zu veröffentlichten Szenen oder Sanctuary. `apex_assign_scene` prüft GM-Rolle, Mitgliedschaften, Spawn und alle Zuordnungsrevisionen vor dem Schreiben. Idempotenz schützt wiederholte Transfers. Ein Versionsupdate nutzt die bestehenden Realtime-/Reconnect-Abläufe. Archivieren belegter Szenen wird durch einen Datenbanktrigger verhindert.
-- Veraltete Arena-Bewegungen werden nach Szenenwechseln einschließlich Verlassen/Rückkehr serverseitig abgewiesen. Eigene Charakterbearbeitung bleibt möglich. Transfers verändern das Arena-JSON und damit Inventar, Ressourcen, Gelände und Fog nicht.
-- Spieler erhalten serverseitig ausschließlich offenbarte Elemente ihrer veröffentlichten zugewiesenen Szene, ohne GM-Notizen, verborgene Knoten/Routen oder Spawn-Definitionen. Außerhalb der Arena wird deren Karten-/Orts-/Log-/Händler-/Loot-Information aus der Antwort entfernt. Autorisierte eigene Charakterdaten bleiben verfügbar.
-- Sanctuary im bestehenden Workspace mit vorhandenem Porträt, Charakter-/Inventarzugang und drei originalen CSS-Atmosphären. Die persönliche Auswahl ist eine lokale UI-Präferenz. GM-Hintergründe und freie freigegebene Bilder fehlen noch.
-- Persönliche Journale in einer separaten geschützten Tabelle mit Titel, Text, Kategorien, Tags, Datum, Ingame-Datum, Pins, explizitem Save, Versionsprüfung, Suche/Filter in geladenen Einträgen, Löschen und Markdown-Export geladener eigener Einträge. Standard privat, explizite GM-/Party-Freigabe; GM hat keinen allgemeinen Zugriff auf private Notizen. Szenenreferenzen und Bildanhänge sind noch nicht freigeschaltet. Einfache Überschriftenvorschau, vollständiger Markdowntext im Export.
-- Neue Skalen sind explizit vorbereitet: GM-Navigation, Routenreise, Stundenexploration und taktische Runden. Stundenumrechnung: `speedFt × 600 / 5280 / terrainCost` Meilen/Stunde (600 Sechs-Sekunden-Runden). Keine Umrechnung der bisherigen Arena-8-MP-Regeln. Neue Bewegung ist noch nicht implementiert.
+APEX führt Szenendefinitionen als eigenständige, stabile Datensätze mit Kategorie, Elternbeziehung, Entwurfs-/Veröffentlichungsstand, Kartenmetadaten und optionalen Assets. Figuren- und Inventardaten bleiben im bestehenden Kampagnenmodell. Szenen- und Journalzustand werden nicht in einen großen globalen Spielzustand geschrieben.
 
-Verifikation dieses Zwischenstands: Build und 334 Tests (38 Dateien) erfolgreich. 29 isolierte Browserchecks gegen echte APEX-Handler und In-Memory-Speicher bestanden: Kartenentwurf/Spawn/Veröffentlichung, zwei live wechselnde Browser, Split-Party/Sanctuary, Wiederholung, Reconnect, unverändertes Arena-JSON, Privatsphäre und Journalpersistenz/-freigabe/-export. `dev/e2e-campaign08.cjs` benötigt den lokalen Mockserver. Playwright ist über die gebündelte Runtime verfügbar; optional `APEX_PLAYWRIGHT_MODULE` und `APEX_BROWSER_PATH` setzen.
+Die Bibliothek besitzt vier getrennte Kategorien, serverseitige Suche, Sortierung, Archivfilter, begrenztes Nachladen, Status, Thumbnail, Elternort und aktive Spieler. Szenen lassen sich als Entwurf anlegen, umbenennen, privat ansehen, duplizieren, archivieren/wiederherstellen und veröffentlichen. Startervorlagen umfassen ein leeres Planetensystem, zwei Weltkarten, eine leere Hexregion sowie quadratische und hexagonale Kampfkarten. Die vorhandene Arena wird als geschützte Legacy-Region angezeigt.
 
-Zusätzlich wurden alle Migrationen zweimal in isoliertem PostgreSQL/WASM angewendet und die RLS-, Deployment- und neuen Szenentransaktionsprüfungen erfolgreich ausgeführt. Auth-/Realtime-Dienste sind dabei gestubbt. `scripts/verify-db-embedded.mjs` verwendet eine flüchtige Datenbank; Testinstallation: `pnpm --dir .test-tools add --save-exact @electric-sql/pglite@0.5.15` ([API-Dokumentation](https://pglite.dev/docs/api)). CI ergänzt echte isolierte PostgreSQL-17-Tests. Das ist keine Live-Supabase-/Vercel-Verifikation.
+## 2. GM Scene Director und Editor
 
-Offen für 0.8: Uploads/Assetrechte/Thumbnails, Templates, GM-Hintergründe, Spielerbewegung/GM-Tokenplatzierung, Routenreisevorschläge/-bestätigung/-fortschritt, individuelle Exploration, vollständige Sicherheits-/Konkurrenz-/Lastabnahme und reale Preview-Verifikation. Spieler ohne Welt/Charakter verwenden bislang die bisherige Warteansicht. Erweiterte Kampf-, Zauber-, Initiative-, Zufallsbegegnungs-, Quest-/NPC-Kodex- und Zusammenfassungssysteme bleiben künftigen Releases vorbehalten.
+Der Scene Director verbindet Bibliothek, private GM-Vorschau, eine gefilterte Vorschau für einen ausgewählten Spieler, Eltern-/Szenenverknüpfungen und Spielerzuordnungen. Vorschau und Veröffentlichung ändern keine Spielerzuweisung. Die gesamte Gruppe oder einzelne Spieler können atomar in eine veröffentlichte Szene oder ins Sanctuary wechseln. Revisionen, Idempotenz und Datenbanktransaktionen schützen vor doppelten oder konkurrierenden Transfers. Nach einer unsicheren Clientantwort kann der GM den Transfer prüfen/wiederholen.
 
-Die noch unveröffentlichte Version-6-Migration enthält inzwischen zusätzlich Journale, Transitionsprotokoll und RPC/Archivschutz. Rollback bleibt additiv: alte Anwendung kann die neuen Tabellen ignorieren; vor deren Entfernung Daten sichern und neue Trigger entfernen. Gemeinsame Integrationspunkte: App, Online-Hook/-API, Server-API/Repository, Mock und Campaign-Widget. Keine 0.7-Regelsysteme wurden neu gebaut. Keine Produktionslastmessung; Metadatenpages sind auf 50 Zeilen, Zuordnungslisten auf 100 Spieler begrenzt. Keine neuen Polling-Loops und keine Journal-Broadcasts.
+Der gemeinsame 2D-Editor unterstützt Bildhintergründe, Quadrat-/Hexraster, Maßstab, Scroll-Pan und Zoom, Kartenmarker, Beschriftungen, POIs, Spawnpunkte, Wände, blockierte Bereiche, Terrainkosten, Links und verborgene/aufgedeckte Elemente. Welt- und Himmelskarten können Orte und Routen mit Reisezeit und Entfernung definieren. Die Himmelskarte ist eine frei verbundene 2D-Navigation, keine Orbitalphysik. Das ist ein bewusst begrenzter Szeneneditor und kein professionelles Zeichenwerkzeug.
 
-## Historischer Teilstand (vor den obigen Ergänzungen)
+Bilder werden auf Typ, Dateikopf, Abmessungen und Größe geprüft, verkleinert und mit Vorschaubild gespeichert. Private GM-Originale sind in getrennten privaten Buckets. Spieler erhalten ein separat erzeugtes, beschnittenes Kartenbild: nur offenbarte Rechtecke oder ausdrücklich die ganze Karte. Kurzlebige signierte URLs werden erst nach Berechtigungsprüfung erstellt.
 
-## Implementierungsstand, 5. November 2026
+## 3. Arena und Migration
 
-Dies ist ein Teilstand von PR 1, keine abgeschlossene APEX-0.8-Auslieferung. Arbeitsbranch: `feat/apex-0-8-campaign-engine`; Basis nach Fast-forward: `e9e5155` (main). Bereits vorhandene uncommittete Schema-/SQL-Vorarbeiten wurden erhalten. Kein Push, PR, Produktionsdeployment oder Datenbankeingriff wurde ausgeführt.
+Die neue Migration ist additiv und idempotent. Sie registriert die bestehende Arena als Region und referenziert deren vorhandenen Spielstand, statt Welt-ID, Seed, Gelände, Figuren, Fog of War, Zeit, Ereignisse oder Chronik zu regenerieren. Bestehende Arena-Tabellen und 8-MP-Regeln bleiben zuständig. Neue Spieler ohne gültige Zuordnung beginnen sicher im Sanctuary; bestehende Spieler behalten die explizite Arena-Zuweisung.
 
-- Architektur: eigenständiger Szenenkatalog neben dem unveränderten Arena-Spielstand. Keine Änderungen an Inventar, Fähigkeiten, Ausrüstung oder Händlerregeln.
-- Kategorien: Celestial, World, Region, Battle sind als Entwurf anlegbar. Die Kategorien besitzen noch keine eigenen spielbaren Kartenansichten.
-- Scene Director: neuer Tab im bestehenden Campaign-Widget mit vier Kategorien, Suche in geladenen Metadaten, Entwurfserstellung und privater Vorschau der Szenendefinition. Er übernimmt Verschieben, Skalieren, Einklappen und Wiederherstellen vom vorhandenen Widget.
-- Bibliothek/Editor: maximal 50 Metadaten pro API-Seite; Karteneditoren, Uploads, Templates, Duplizieren, Archivieren und Verknüpfungen fehlen noch. Die Vorschau ist keine gerenderte Karte und keine Spielerperspektive.
-- Arena: additive Referenzmigration, ohne Änderung des gespeicherten Weltzustands. Laufzeit und bestehende Befehle bleiben im bisherigen Arena-Modell.
-- Sanctuary und Journale: noch nicht implementiert. Das Zuordnungsschema kann Sanctuary darstellen, die Oberfläche verwendet es noch nicht.
-- Bewegung: keine Änderung der vorhandenen 8-MP-Regeln. Stundenbasierte Regionenbewegung, taktische Bewegung und Routenreisen bleiben offen.
-- Berechtigungen: `/api/apex?op=scenes` läuft hinter Sitzung, CSRF und Schemaverifikation. Spieler erhalten 403 vor dem Speicherzugriff. Kampagnen-ID stammt ausschließlich aus der Sitzung. Schreibanfragen dürfen nur Namen und Kategorie setzen; Entwürfe können damit weder veröffentlicht noch zur Legacy-Arena erklärt werden. Direkter Browserzugriff auf beide Tabellen wird durch RLS und entzogene Rechte gesperrt.
-- Multiplayer: Spielerzuordnung, atomare Übergänge, Spawnpunkte, eigene Szenenpositionen, Szenen-Fog, Reconnect und Sperren veralteter Aktionen fehlen. Deshalb existiert noch keine Aktivierungsschaltfläche.
-- Performance: begrenzte, deterministisch sortierte Katalogseiten; keine neuen Polling-Loops, keine Journale oder privaten Szenen in gemeinsamen Broadcasts. Bestehendes Datenbank-Timeout und Request-Messung werden genutzt. Keine Lasttest- oder Produktionsmesswerte erhoben.
-- Migration: `20261105120000_apex_scene_foundation.sql` ist vorbereitet, nicht angewendet. Schema-Vertrag auf Version 6 angehoben. Anwendung und Migration müssen vor einem Deployment gemeinsam geprüft werden; Version 6 blockiert Anfragen gegen eine ältere Datenbank.
-- Verifikation: Produktionsbuild erfolgreich, 37 Testdateien / 329 Tests erfolgreich, Migrationsregister und `git diff --check` erfolgreich. Neue Modultests decken Rollen, fremde Kampagnen, validierte Erstellung und Pagination ab; API-Tests prüfen Sitzung und CSRF. Datenbanktests sind vorbereitet, aber nicht ausgeführt. PostgreSQL/Docker und Playwright sind lokal nicht verfügbar; Browser-, Live-Supabase- und Vercel-Tests stehen aus. Der vollständige 25-Punkte-Abnahmekatalog ist nicht erfüllt.
-- Pull Requests: noch keine angelegt. Vorgesehene Reihenfolge bleibt PR 1 (Basis, main), PR 2 (Editoren, PR-1-Branch), PR 3 (Sanctuary/Journale, PR-2-Branch), PR 4 (Navigation, PR-3-Branch). Nach jedem Merge die nächste PR auf main umbasieren, keine bereits gemergten Feature-Branches weiterverwenden.
-- Integration: main enthielt inzwischen die 0.7-Abschlüsse und `APEX_08_HANDOVER.md`. Fast-forward und Wiederherstellung der Vorarbeiten liefen ohne Konflikte. Gemeinsame Integrationspunkte sind `App.tsx`, Online-API und Server-Repository/API; vor einem späteren Push erneut mit main abgleichen.
-- Zukunft: vollständige Kampfautomatisierung, Zauber, Initiative, Zufallsbegegnungen, Quest-/NPC-Kodex und automatische Zusammenfassungen bleiben außerhalb 0.8. Die noch offenen oben genannten 0.8-Funktionen sind davon getrennte Pflichtarbeit.
+Die Migration wurde **nicht** in Supabase Main ausgeführt. Vor einem späteren Rollout müssen Migration und Anwendung gemeinsam durch eine isolierte echte PostgreSQL-/Supabase-Umgebung laufen. Ein Anwendungsrollback kann die neuen Tabellen zunächst liegen lassen. Vor einer späteren Schemaentfernung sind Szenen, Journale, Anhänge und Assets zu sichern und neue Trigger/Buckets kontrolliert zurückzubauen; bestehende Arena-Daten sind davon getrennt.
 
-## API dieses Teilstands
+## 4. Character Sanctuary
 
-`GET /api/apex?op=scenes&offset=0` liefert GM-Metadaten und `nextOffset`. `GET /api/apex?op=scenes&id=<uuid>` liefert eine GM-interne Szenendefinition. `POST /api/apex?op=scenes` erwartet `{ name, category }` und legt einen Entwurf an. Weder GET noch POST verändert Spielerzuordnungen oder den Arena-Spielstand. Suche im UI gilt nur für bereits geladene Seiten.
+Das Sanctuary ist die neutrale Standardansicht, wenn keine gültige aktive Szene zugewiesen ist. Sie verwendet das vorhandene Charakterporträt und lässt Charakterblatt, Inventar und übrige bestehende Widgets erreichbar. Drei eigene CSS-Atmosphären sowie vom GM geprüfte, optionale Hintergründe sind verfügbar. Die persönliche Auswahl bleibt eine UI-Präferenz. Es gibt kein 3D-, Spline- oder Blender-Laufzeitsystem.
 
-Die Migration registriert pro Kampagne eine veröffentlichte Region Map namens Arena. Diese Szene verweist über die Kampagnen-ID auf den bestehenden Arena-Spielstand. Welt-ID, Seed, Gelände, Positionen, Fog of War und Ereignisse liegen weiterhin im bestehenden Spielstand. Snapshots, Archive und Befehle verwenden weiterhin ihre bisherigen Tabellen. Neue Kampagnen erhalten die Arena-Referenz über einen Trigger.
+## 5. Journale
 
-Die Szenentabelle kennt die Kategorien Celestial, World, Region und Battle. Zuordnungen verweisen über Kampagnen-ID und Szenen-ID auf eine Szene derselben Kampagne. Für die spätere Laufzeitintegration bedeutet eine fehlende Zuordnung die bisherige Arena und eine explizite leere Szenen-ID Sanctuary. Beide Tabellen sind ausschließlich für den Server vorgesehen. GM- und Spielerberechtigungen müssen zusätzlich in der späteren API durchgesetzt werden.
+Jeder Spieler besitzt persistente Einträge mit Titel, Markdown-Text, Datum, Ingame-Datum, Szenenverweis, Tags, Kategorie, Pin, optionalem Bild und explizitem Speichern. Suche, Kategorie-/Tagfilter, Sortierung, Löschen sowie vollständiger Markdown-Export sind umgesetzt; mit Bildern wird ein ZIP mit Markdown und Anhängen erzeugt. Die Freigabe ist ausdrücklich privat, an GM oder Partei. Private Inhalte werden weder in den gemeinsamen Spielzustand noch in Realtime-Broadcasts aufgenommen. Serverberechtigungen schützen Einträge und Bilder; die Freigabe kann jederzeit entzogen werden.
 
-## Prüfung und Wiederherstellung
+Questverwaltung, automatisierte Zusammenfassungen, NPC-Kodex und gemeinsames Partei-Journal bleiben Erweiterungen für spätere Releases.
 
-Die Migration zuerst in einer isolierten PostgreSQL-15- oder neueren Umgebung mit `scripts/verify-db-local.sh` prüfen. Der Testlauf wendet die Migrationen zweimal an. Die Szenentests prüfen den Backfill, die Registrierung neuer Kampagnen, direkten Tabellenzugriff und kampagnenübergreifende Zuordnungen.
+## 6. Bewegung, Sichtbarkeit und Multiplayer
 
-Bei einem Rollback der Anwendung können die zusätzlichen Tabellen liegen bleiben. Die Migration schreibt keine vorhandenen Arena-Spielstände um. Vor einer späteren Entfernung der Tabellen Szenendefinitionen und Zuordnungen sichern und den Trigger auf Kampagnen entfernen. Das Entfernen der Tabellen gehört in eine eigene geprüfte Migration.
+Bewegung ist pro Szeneart getrennt:
+
+- **Celestial:** GM-gesteuerte Navigation/Verbindungen.
+- **World:** Vorschläge entlang bekannter Routen; der GM bestätigt und steuert Fortschritt. Ein Vorschlag teleportiert nicht.
+- **Region:** konfigurierbares Raster, Terrainkosten und explizite Stundenintervalle. Umrechnung: `Gehgeschwindigkeit in ft/Runde × 600 / 5280 / Terrainkosten` Meilen je Stunde.
+- **Battle:** Raster-/Hexbewegung in Fuß je taktischer Runde von sechs Sekunden.
+
+Bewegungsbudget ist serverautoritativ, pro Figur und Intervall über Szenenwechsel hinweg geteilt und wird nur durch ausdrückliche GM-Runden-/Stundenfortschaltung erneuert. Überlappung mit Wänden wird geometrisch geprüft. Das bestehende Arena-8-MP-System wird nicht umgerechnet oder aufgefüllt.
+
+Jeder Spieler sieht serverseitig nur seine zugewiesene veröffentlichte Szene, freigegebene Elemente und eigene Entdeckungen. GM-Notizen, Entwürfe, verborgene Routen/Orte, Spawndefinitionen und GM-Originalbilder werden nicht an Spielerantworten ausgegeben. Alte Arena-Karteninhalte werden außerhalb der Arena aus der Spielerantwort gefiltert; Figur, Inventar und Ressourcen bleiben zugänglich. Entdeckungen sind szenenbezogen. Veraltete Bewegungen nach einem Transfer werden abgewiesen. Offline-Spieler erhalten beim erneuten Laden ihre gespeicherte Zuweisung.
+
+Spieler können ihre eigene Figur bewegen; der GM kann Token platzieren und Runden/Stunden fortschalten. Angriffswürfe, Zauberziele, Initiative, Kampfautomatisierung und Zufallsbegegnungen sind nicht implementiert und erscheinen nicht als funktionslose Aktionen.
+
+## 7. Integration, Performance und Rücknahme
+
+Die Integration nutzt das bestehende Workspace, Charakter-/Inventar-Widgets, API, Sitzung, CSRF-Schutz, Realtime-Versionierung und Wiederverbindung. Persönliche Journale starten ohne zusätzliche Polling-Schleife. Szenenmetadaten und Spielerlisten werden seitenweise begrenzt; Kartenbilder und Thumbnails werden bei Bedarf geladen. Entwurfs- und Veröffentlichungsrevisionen sind unabhängig, sodass GM-Entwurfsbearbeitung keine laufende Spielerbewegung ungültig macht.
+
+Der lokale Mockserver und In-Memory-Speicher werden nur in der isolierten Mock-Konfiguration geladen. Sie bieten keinen Fallback in Produktion. Änderung und Rückbau neuer Tabellen/Assets sind von der alten Arena getrennt; die bestehenden Regel- und Itembereiche aus APEX 0.7 wurden nicht nachgebaut.
+
+## 8. Prüfung
+
+Erfolgreich auf diesem Branch:
+
+- **349 Unit-/API-Tests in 41 Dateien**.
+- TypeScript- und Produktionsbuild erfolgreich.
+- **52 Browserprüfungen für 0.8** gegen echte APEX-API-Handler und isolierten In-Memory-Speicher: Szenenkategorien/Vorlagen, private Karte und physisch beschnittene Spielerversion, zwei verbundene Spieler, geteilte Gruppe, Wechsel/Wiederverbindung, Erhalt des Arena-Zustands, Bewegungsbudgets, GM-Reisebestätigung, Sanctuary, private/geteilte Journale, Bilder und ZIP-Export.
+- Bestehende Browserregression: 139/139 Prüfungen bestanden, einschließlich GM-Ereignisse, Ankündigungen, Weltwechsel, Archive, Charakterblatt, Inventar, Ausrüstung, Ressourcen und Workspace-Widgets.
+- Alle Migrationen zweimal in flüchtigem PostgreSQL/WASM angewendet; RLS-, Deploy-, Szenen-, Bewegungs- und Reiseroutinen bestanden. Auth/Realtime und Storage-HTTP-Dienst sind in diesem WASM-Lauf gestubbt.
+- Migrationsregister und `git diff --check` erfolgreich.
+
+Diese Prüfungen sind lokale, isolierte Verifikation. Sie belegen keine Live-Supabase-, echten Storage-, Vercel-Preview- oder Produktionslastprüfung. Das Auslassen einer kostenpflichtigen Supabase-Testdatenbank spart Kosten; die produktive Supabase-Datenbank blieb unangetastet.
+
+## 9. PR, Integration und Zukunft
+
+Der zusammenhängende Draft-PR #39 umfasst die Fundament-, Editor-, Sanctuary/Journal- und Navigationsänderungen in einem reviewbaren Feature-Branch. Ein einzelner PR vermeidet, dass abhängige Zwischenstände in bereits gemergte Feature-Branches integriert werden. Er ist nicht automatisch gemergt. Nachfolgende technische Prüfung kann die Änderung bei Bedarf in kleinere abhängige PRs aufteilen.
+
+Die 0.7-Arbeit war in `main` enthalten, bevor dieser Branch angelegt wurde. Inventar, Klassenfähigkeiten, Wild Shape, Sorcery Points, Händler, Loot, Ressourcen und Charakterdarstellung wurden in dieser Umsetzung nicht neu aufgebaut. Es sind keine Konflikte mit einem anderen aktiven Feature-Branch absichtlich integriert worden. Vor dem Merge sollte der GitHub-Review und der Vercel-Preview-Check abgewartet werden.
+
+**Später:** vollständiges Kampfsystem, Angriffe/Zauber/Initiative, Begegnungsgenerator, Quest-/NPC-Kodex und automatische Recaps. Weltkarten- und Himmelskartenbilder sind GM-gesteuerte, frei zuordenbare Karten; keine komplexe neue Illustration oder physikalische Simulation.

@@ -198,6 +198,11 @@ export interface Repo {
   sceneCatalog?: import('./scenes.js').SceneCatalog;
   journalStore?: import('./journals.js').JournalStore;
   sceneRuntime?: import('./sceneRuntime.js').SceneRuntime;
+  sceneAssets?: import('./sceneAssets.js').SceneAssetStore;
+  sceneMotion?: import('./sceneMotion.js').SceneMotion;
+  sceneTravel?: import('./sceneTravel.js').SceneTravel;
+  sanctuary?: import('./sanctuary.js').SanctuaryStore;
+  journalImages?: import('./journalImages.js').JournalImageStore;
   // ---- profiles & credentials
   /** Profiles of one campaign, or – with campaignId null – of all campaigns. */
   profiles(campaignId: string | null): Promise<Profile[]>;

@@ -17,6 +17,12 @@ grant execute on function auth.uid() to anon, authenticated;
 grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 create publication supabase_realtime;
+-- Bucket metadata only; this does not imitate the Storage HTTP service or signed URLs.
+create schema storage;
+create table storage.buckets(id text primary key,name text not null,public boolean not null default false,file_size_limit bigint,allowed_mime_types text[]);
+alter table storage.buckets enable row level security;
+grant usage on schema storage to service_role;
+grant all on storage.buckets to service_role;
 -- Replica of the PRODUCTION legacy objects from migration 20261101094428
 -- (structure only – the original also inserted three email addresses, omitted here).
 create schema if not exists apex_private;

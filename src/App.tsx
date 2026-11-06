@@ -287,7 +287,7 @@ export default function App({ game }: { game: GameApi }) {
             id="gm-campaign"
             tabs={[
               { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
-              { id: 'scenes', label: 'Scene Director', render: () => <SceneDirector /> },
+              { id: 'scenes', label: 'Scene Director', render: () => <SceneDirector version={online.version} /> },
               { id: 'journal', label: 'Journal', render: () => <PlayerJournal /> },
               { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
             ]}
@@ -327,7 +327,7 @@ export default function App({ game }: { game: GameApi }) {
       { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
     );
   }
-  if (game.online && !isGm) widgets.push({ id: 'journal', title: 'Campaign Journal', icon: '📖', render: () => <PlayerJournal /> });
+  if (game.online && !isGm) widgets.push({ id: 'journal', title: 'Campaign Journal', icon: '📖', render: () => <PlayerJournal sceneReference={game.scene?.scene ? {id:game.scene.scene.id,name:game.scene.scene.name}:undefined} /> });
   widgets.push(
     {
       id: 'chronicle',

@@ -22,6 +22,10 @@ export function seedProfiles(repo: MemoryRepo, campaignId: string) {
     mk('simon', 'Simon', 'Elwin', 'player', ['elwin'], 4),
     mk('jerba', 'Jerba', 'Javi', 'player', ['javi'], 5),
   ];
+  // Existing-campaign fixture: represent the additive migration's explicit Arena backfill.
+  const id = crypto.randomUUID(), now = new Date().toISOString();
+  repo.sceneRows.push({ campaign_id: campaignId, id, name: 'Arena', category: 'region', is_legacy_arena: true, is_draft: false, archived: false, revision: 1, created_at: now, updated_at: now, metadata: {} });
+  repo.sceneAssignments.push(...repo.profileList.filter(p => p.role === 'player').map(p => ({ campaign_id: campaignId, user_id: p.userId, scene_id: id, revision: 0, spawn_x: null, spawn_y: null })));
 }
 
 /** Sets a password and activates the profile directly in the repo (test setup only). */
