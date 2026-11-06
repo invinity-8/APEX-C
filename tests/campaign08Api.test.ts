@@ -92,6 +92,30 @@ describe('campaign engine API integration',()=>{
     expect(stale.status).toBe(409);
     expect(repo.states.get(cid)!.state.sceneAnnouncements?.map(a=>a.id)).toEqual(['notice-live']);
   });
+  it('revalidates assigned encounter participants after a concurrent scene transfer',async()=>{
+    const scene=await battle(); await assign(scene.id,0);
+    repo.beforeSave=()=>{ void repo.sceneRuntime.transition({id:user('gm').userId,campaignId:cid,role:'gm'} as AuthUser,null,[{userId:user('hannah').userId,revision:1}],crypto.randomUUID()); };
+    const response=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{
+      type:'sceneEncounterStart',sceneId:scene.id,publishedRevision:scene.published_revision!,encounterId:'raced-assignment',title:'Assignment race',
+      participants:[{id:'pc-sinna',tokenId:'sinna',name:'Sinna',initiative:12,visible:true}],
+    }});
+    expect(response.status).toBe(409);
+    expect(repo.states.get(cid)!.state.sceneEncounters?.[scene.id]).toBeUndefined();
+    const afterTransfer=(await request('hannah','state')).body as PlayerPayload;
+    expect(afterTransfer.scene?.kind).toBe('sanctuary');
+  });
+  it('revalidates the published scene revision after a concurrent republish',async()=>{
+    const scene=await battle(); await assign(scene.id,0);
+    repo.beforeSave=()=>{
+      const row=repo.sceneRows.find(item=>item.campaign_id===cid&&item.id===scene.id)!;
+      void repo.sceneCatalog.update(cid,scene.id,row.revision,{published_metadata:row.published_metadata});
+    };
+    const response=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{
+      type:'sceneAnnounce',sceneId:scene.id,publishedRevision:scene.published_revision!,announcementId:'raced-publish',title:'Revision race',text:'This must not be posted against an outdated map.',
+    }});
+    expect(response.status).toBe(409);
+    expect(repo.states.get(cid)!.state.sceneAnnouncements).toBeUndefined();
+  });
   it('rejects an Arena move if a transition wins the optimistic write race',async()=>{
     const original=structuredClone(repo.states.get(cid)!.state), sinna=original.tokens.sinna;
     const destination=neighbors(sinna.pos).find(to=>validateMove(original,{role:'player',tokenId:'sinna'},'sinna',to).ok); expect(destination).toBeDefined();
