@@ -187,7 +187,7 @@ export function EventsPanel({ state, run, selectedHex }: { state: GameState; run
                     <div className="label">Preview – if triggered now</div>
                     <EffectList state={state} ev={ev} />
                     <div className="flex flex-wrap gap-1.5">
-                      <button className="btn btn-gold px-2 py-0.5" onClick={() => void run({ type: 'decideEvent', eventId: ev.id, decision: 'approve' }).then(() => setConfirm(null))}>
+                      <button className="btn btn-gold px-2 py-0.5" onClick={() => void run({ type: 'decideEvent', eventId: ev.id, decision: 'approve' }).then(result => { if (result.ok) setConfirm(null); })}>
                         Approve &amp; Trigger
                       </button>
                       <button className="btn btn-ghost px-2 py-0.5" onClick={() => setConfirm(null)}>
