@@ -53,6 +53,31 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
   if (method === 'GET') {
     if (user.role !== 'gm') return { status: 200, body: await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel) };
     const profiles = (await repo.profiles(user.campaignId)).filter(p => p.active && p.role === 'player');
+    if (query.focus) {
+      if (!/^[0-9a-f-]{36}$/i.test(query.focus)) return { status: 400, body: { error: 'Invalid focus scene.' } };
+      const focus = await repo.sceneRuntime.scene(user.campaignId, query.focus);
+      // GM focus always uses the published revision. A private draft cannot accidentally
+      // become live to players just because the GM opens the Map page.
+      if (!focus || focus.is_legacy_arena || focus.archived || focus.is_draft) return { status: 404, body: { error: 'Published scene not found.' } };
+      const map = parseMap(focus.published_metadata);
+      if (!map) return { status: 404, body: { error: 'Published scene is unavailable.' } };
+      const [assignments, profiles, stored] = await Promise.all([
+        repo.sceneRuntime.assignments(user.campaignId),
+        repo.profiles(user.campaignId),
+        repo.loadState(user.campaignId),
+      ]);
+      const assignedProfiles = profiles.filter(p => p.active && p.role === 'player' && assignments.some(a => a.user_id === p.userId && a.scene_id === focus.id));
+      const tokenIds = [...new Set(assignedProfiles.flatMap(p => p.tokenIds))].filter(id => !!stored?.state.tokens[id]).slice(0, 100);
+      const motion = tokenIds.length && repo.sceneMotion
+        ? await repo.sceneMotion.snapshot(user.campaignId, focus.id, user.id, tokenIds)
+        : undefined;
+      const focusMap = { ...map, playerBackgroundAsset: map.backgroundAsset ?? map.playerBackgroundAsset };
+      return { status: 200, body: {
+        kind: 'scene', assignmentRevision: 0,
+        scene: { id: focus.id, name: focus.name, category: focus.category, revision: focus.revision, map: focusMap },
+        ...(motion ? { motion } : {}),
+      } };
+    }
     if (query.player) {
       const p = profiles.find(p => p.userId === query.player);
       if (!p) return { status: 404, body: { error: 'Player not found.' } };

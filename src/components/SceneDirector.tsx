@@ -15,7 +15,7 @@ import { SanctuarySettingsPanel } from './SanctuarySettings';
 const labels = { celestial: 'Celestial Maps', world: 'World Maps', region: 'Region Maps', battle: 'Battle Maps' };
 
 /** Mounted lazily inside the existing GM campaign workspace. Preview never assigns players. */
-export function SceneDirector({ version = 0 }: { version?: number }) {
+export function SceneDirector({ version = 0, campaignId = '' }: { version?: number; campaignId?: string }) {
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [category, setCategory] = useState<SceneCategory>('region');
   const [name, setName] = useState('');
@@ -174,6 +174,11 @@ export function SceneDirector({ version = 0 }: { version?: number }) {
     {preview ? <section className="scene-private-editor"><h2>{preview.name}</h2>
       <p>GM-only definition preview. Player assignments are unchanged.</p>
       <p>{labels[preview.category]} · {preview.is_draft ? 'Draft' : 'Published'}</p>
+      {!preview.is_draft && !preview.archived && !preview.is_legacy_arena && <button className="btn btn-gold" type="button" disabled={busy} onClick={() => {
+        try { localStorage.setItem(`apex.map.gm-focus.${campaignId}`, preview.id); } catch { /* session focus still updates in the current tab */ }
+        window.dispatchEvent(new CustomEvent('apex:scene-focus-changed', { detail: { campaignId, sceneId: preview.id } }));
+        setNotice('GM Map focus changed. Player assignments remain unchanged.');
+      }} >Set Map focus</button>}
       <button disabled={busy || !!uncertain || preview.is_draft || preview.archived || !selectedPlayers.length} onClick={() => void assign(preview.id)}>Assign selected players to this scene</button>
       {preview.is_legacy_arena && <p>This scene references the existing saved Arena. Its terrain and progress are preserved.</p>}
       <SanctuarySettingsPanel candidateAsset={parseMap(preview.metadata)?.playerBackgroundAsset} candidateName={preview.name} />

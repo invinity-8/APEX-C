@@ -30,6 +30,7 @@ import { MerchantShop } from './components/Merchant';
 import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
 import { SceneDirector } from './components/SceneDirector';
+import { CampaignMapDirector } from './components/CampaignMapDirector';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 
@@ -454,7 +455,7 @@ export default function App({ game }: { game: GameApi }) {
           ) : screen === 'feedback' && isGm && game.online ? (
             <FeedbackInbox online={game.online} notify={notify} />
           ) : screen === 'scenes' && isGm && game.online ? (
-            <SceneDirector version={game.online.version} />
+            <SceneDirector version={game.online.version} campaignId={game.online.campaignId} />
           ) : screen === 'arsenal' && isGm && state ? (
             <ArsenalPanel state={state} run={run} />
           ) : screen === 'merchant' && !isGm && view.merchant && myToken ? (
@@ -482,7 +483,8 @@ export default function App({ game }: { game: GameApi }) {
           defaults={defaults}
           storageKey={layoutKey(announceScope, role)}
           center={
-        game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> :
+        <CampaignMapDirector game={game} enabled={isGm && !!game.online} openScenes={() => setScreen('scenes')}>
+          {game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> :
         <>
           <ArenaMap
             mapRef={mapRef}
@@ -515,8 +517,8 @@ export default function App({ game }: { game: GameApi }) {
               {toast.text}
             </div>
           )}
-        </>
-
+        </>}
+        </CampaignMapDirector>
           }
         />
       </div>
