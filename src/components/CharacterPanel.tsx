@@ -507,7 +507,9 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
             onAddItems={async (items) => {
               let added = 0;
               for (const it of items) {
-                const r = await run({ type: 'invAddItem', tokenId: token.id, itemId: newEntryId('itm'), name: it.name, quantity: it.quantity, container: 'backpack' });
+                const r = isGm
+                  ? await run({ type: 'invAddItem', tokenId: token.id, itemId: newEntryId('itm'), name: it.name, quantity: it.quantity, container: 'backpack' })
+                  : await run({ type: 'invRequestItem', tokenId: token.id, requestId: newEntryId('req'), name: it.name, quantity: it.quantity, description: '', container: 'backpack' });
                 if (r.ok) added++;
               }
               return added;
@@ -826,3 +828,4 @@ function EntrySection({ title, editing, rows, empty, onChange, wide, children }:
     </section>
   );
 }
+
