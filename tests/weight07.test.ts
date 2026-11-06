@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
 import { executeCommand, type Command } from '../src/game/commands';
-import { carryLoad, holdingContainerId, itemWeightKg, lbToKg } from '../src/game/items/weight';
+import { carryLoad, holdingContainerId, itemWeightKg, itemWeightGrams, lbToKg } from '../src/game/items/weight';
 import type { GameState } from '../src/game/types';
 
 const GM = { role: 'gm' as const };
@@ -41,6 +41,14 @@ describe('carry weight (kg)', () => {
     s = run(s, { type: 'invUpdateItem', tokenId: 'sinna', itemId: 'rock', rev: 0, weightKg: 1 });
     expect(carryLoad(s.tokens.sinna, 10, 0, false).loadKg).toBe(3);
     expect(carryLoad(s.tokens.sinna, 10, 20, false).capacityKg).toBe(lbToKg(170));
+  });
+
+  it('stores manual weights at gram precision and includes small items without rounding each one away', () => {
+    const s = run(fresh(), { type: 'invAddItem', tokenId: 'sinna', itemId: 'paper', name: 'Letter', quantity: 3, weightKg: 0.001 });
+    const item = s.tokens.sinna.inventory[0];
+    expect(itemWeightGrams(item)).toBe(1);
+    expect(itemWeightKg(item)).toBe(0.001);
+    expect(carryLoad(s.tokens.sinna, 10, 0, false).loadKg).toBe(0.003);
   });
 
   it('standard rule: over capacity only; variant: encumbered above STR×5 lb, heavily above STR×10 lb', () => {
