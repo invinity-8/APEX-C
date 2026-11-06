@@ -1,61 +1,63 @@
-# APEX – Implementierungsstatus
+# APEX 0.9 – Implementierungsstatus und Handover
 
-**Stand:** 2026-11-06  
-**Branch:** `feat/apex-09-completion-reconciliation`  
-**Basis:** aktuelles `main` nach PR #43  
-**Lesart:** „Implementiert und verifiziert“ bezieht sich jeweils nur auf die unten genannte Evidenz. Ein grüner Unit-Test ist keine Produktions- oder Browserabnahme.
+Stand: 2026-11-06  
+Main: ccb08da73278502067ad94e21998b3ec019e59cd (PRs #44–#46 gemergt)  
+PR #47: feat/apex-09-journal-references, offen und mergebar; Konflikt in diesem Dokument sorgfältig anhand beider Fassungen gelöst. Latest main ist als erster Parent integriert. Der PR bleibt ungemergt, bis der Owner ihn freigibt.
 
-## Implementiert und verifiziert
+## Implementiert und getestet
 
-- **Character/Spells-Routing:** Character öffnet jetzt explizit Overview; der volle Spellbook-Tab ist kein Tab in der Character-Seite mehr. Die Top-Level-Seite Spells setzt weiterhin den Spellbook-Starttab. Codeprüfung: `src/App.tsx`, `src/components/CharacterPanel.tsx`.
-- **Journal-Navigation:** Online-Spieler und GM können Journal jetzt als eigene Hauptseite öffnen. Die doppelten Journal-Einstiege in GM- und Spieler-Workspace-Widgets wurden entfernt. Codeprüfung: `src/App.tsx`.
-- **Produktions-Schema:** Read-only Datenbankabfrage zeigt Schema-Version 6. Migrationshistorie enthält `20261105120000` und `20261106100000`. Das Repository-Manifest enthielt beide noch nicht; dieser Branch gleicht `supabase/remote_history.txt` an, ohne Datenbank oder Migration auszuführen.
-- **Kenney-Speicher:** Read-only Abfrage bestätigt privaten Bucket `apex-asset-packs` und 6.557 Objekte. Keine Objekte hochgeladen, verschoben oder geöffnet.
+- **Character/Spells-Navigation (main, PR #44):** Character landet auf Overview; Spellbook ist aus der Character-Untermenüleiste entfernt und bleibt im Top-Level Spells. Doppelte Journal-Widgets sind entfernt; Journal hat einen Haupteinstieg.
+- **Map Campaign Director (main, PR #45):** GM-Fokus auf veröffentlichte Szenen, unabhängig von Spielerzuweisungen; explizite Zuweisung/Transfers und Sanctuary. Player-Runtime gibt nur die für den Spieler autorisierte Szene aus.
+- **Kenney 2.5D Vorschau (main, PR #46):** optionale Classic/2.5D-Darstellung für Forest-Szenen; feste Asset-Allowlist, serverseitige 60-Sekunden-Signaturen aus dem privaten Bucket und Rollen-/Szenenchecks. Classic bleibt Fallback.
+- **CI für PRs #44–#46:** jeweilige GitHub-Workflows erfolgreich: Migration Guard, Gesamttests, TypeScript/Production-Build und isolierte Migration/RLS/Scene-Checks. Produktiver Deployment-Check wurde für PR-Jobs übersprungen.
 
-## Implementiert, aber noch nicht produktionsverifiziert
+## Integriert in PR #47, noch nicht in main
 
-- Die drei vorangegangenen Änderungen aus PRs #41–43: Szenenbibliothek/Forest-Editor, Itemanfragen/Ausrüstung und Spellbook-/Loot-Basiseinstieg sind in `main`. Die PRs meldeten Tests und Builds erfolgreich; für #41–43 gab es jedoch keinen vollständigen rollenbasierten Browserlauf auf einer zugänglichen Preview.
-- Die neuen Navigationsänderungen in diesem Branch bestehen den GitHub-Workflow-Build. Browserklicks als GM, Zauberwirker und Nichtzauberwirker sind noch offen; die Preview-URL leitet auf Vercel-Login um.
+- **People/Places-Journals:** explizite Referenzseiten werden als Journal-Einträge der Kategorien People oder Places angelegt. Einfügen speichert nur [[ref:UUID]]. Der Titel wird nur aus zugänglichen Einträgen aufgelöst; nicht lesbare oder fehlende Einträge zeigen keine vertraulichen Titel. Einzelaufrufe nutzen JournalStore.get und dessen Sichtbarkeitsfilter.
+- Backlinks werden aus aktuell geladenen Einträgen gebildet; ältere Seiten zählen erst nach „Load older entries“.
+- Merge-Kandidat `22bb186` bestand Workflow Run #150: Migration Guard, 45 Testdateien / 373 Tests, TypeScript und Vite-Produktionsbuild sowie isolierte Migration-/RLS-/Scene-Checks. Das API-Client-Integrationsloch bei `sceneFocus` und `kenneyPreview` wurde dabei behoben. Vercel-Preview erfolgreich gebaut.
+- Noch nicht in main, bis PR #47 gemergt ist. Keine Migration erforderlich.
+
+## Implementiert, aber nicht produktions- oder rollenbrowserverifiziert
+
+- Merge #44–#46 hat die Änderungssets auf main gebracht. Der integrierte PR-#47-Kandidat ist CI-/Preview-grün; das ist keine Produktions- oder GM-/Player-Abnahme.
+- Die APEX Preview-Einstiegsseite lädt. Ein angemeldeter Kampagnenlauf wurde ausgelassen, weil die Preview auf reale Kampagnendaten zeigen könnte.
+- 2.5D-Kartenrendering mit echter Forest-Szene, Screenshotvergleich und Messungen für Radius 39/78 sind nicht nachgewiesen.
 
 ## Teilweise implementiert
 
-- **Szenen:** vier Kategorien, Bibliothek, Entwürfe, Editor, Vorschau und Spielerzuweisungen existieren. PR #45 ergänzt einen GM-Fokus auf veröffentlichte Szenen, Tokenpositionen und explizite Split-Party-/Sanctuary-Transfers. Fog-/Encounter-/Loot-/Event-Bedienung direkt auf fokussierten Szenen und die Rollen-Browserabnahme stehen noch aus.
-- **Spellbook:** eigene Top-Level-Route und Grundfelder existieren. Strukturierte Regeldetails, erlaubte Spell-Referenzen, Klassenregeln, vorbereitete Zauber und Casting-Effekte fehlen.
-- **Charakter, Fähigkeiten und Ressourcen:** Sheets, Import, History und Fähigkeiten existieren. Es fehlt eine einheitliche Regelquelle für abgeleitete Werte und eine klare Synchronisierung zwischen Sheet-Ressourcen und Spielressourcen.
-- **Inventar, Ausrüstung, Händler und Loot:** Kernpfade sind vorhanden und getestet. Vielseitige Waffen, Carry-Movement-Penalties, Legacy-Kompatibilität und vollständige Itemübergabe brauchen weitere Abnahme.
-- **Journal:** Speichern, Versionierung, Suche, Kategorien, Tags, Pins, Teilen, Szenenbezug und Export existieren. Menschen-/Ortsregister, Verlinkungen/Backlinks sowie Komfort- und Browserabnahme fehlen.
-- **Synchronisierung/Berechtigungen:** Serverautorität, gefilterte Spieleransicht, Scene-/Journal-Checks und SQL-Tests existieren. Reconnect-/Privacy-Abläufe wurden in dieser Runde nicht im Browser durchgespielt.
+- **Scenes:** Bibliothek, vier Kategorien, Vorbereitung, Preview, Editor, Forest-Generator, Upload, Undo und Publishing-Basics sind vorhanden. Vollständige Draft/Save/Publish/Live-Trennung und direkte Map-Kontrollen für Fog, Events, Encounter und Loot fehlen.
+- **Character/Rules:** Sheet, Import, History und Fähigkeiten existieren. Abgeleitete Werte und synchronisierte Ressourcen sind nicht über alle Ausrüstungs-/Leveländerungen vereinheitlicht.
+- **Spellbook:** Top-Level und grundlegende Datenfelder sind da. Strukturierte Details, lizenzierte Referenzauflösung, Klassen-/Vorbereitungsregeln, Slots sowie abgesicherte Casting-Effekte fehlen.
+- **Inventory/Equipment:** Kernfunktionen und Tests sind vorhanden; vielseitige Waffen, Encumbrance-Bewegungsfolgen, Legacy-Kompatibilität sowie durchgehende Roundtrips brauchen Abnahme.
+- **Journal:** Speichern, Versionierung, Suche, Kategorien, Tags, Pins, Freigabe, Szenenverweis und Export sind in main. People/Places-Links sind im offenen PR #47 enthalten. Charakter-/NPC-/Ingame-Kontinuitätsfelder fehlen.
+- **Realtime/Permissions:** Serverautorität und SQL-/API-Tests bestehen; Reconnect, Rollenwechsel und Datenschutz wurden nicht komplett im Browser durchgespielt.
 
-## Priorisierte offene Arbeit
+## Fehlend oder gezielt zurückgestellt
 
-| Priorität | Arbeit | Relevante Bereiche | Abhängigkeiten | Abnahmekriterien | Aufwand |
-|---|---|---|---|---|---|
-| P0 | Live-Kontrollen für fokussierte Szenen und Sichtbarkeits-/Fog-Workflow | `CampaignMapDirector.tsx`, `SceneSurface.tsx`, `sceneRuntime.ts` | Map-Fokus aus PR #45 | Fog-/Sichtbarkeitsregeln im GM-Szenenmodus vollständig steuerbar; Events/Announcements/Loot/Encounter bleiben mit fokussierter Szene verknüpft; Reconnect erhält Fokus und korrekte Spielerzuweisungen | Groß |
-| P0 | Sichere Kenney-Asset-Auslieferung und erster 2.5D-Preview-Renderer | Supabase Storage, API, Map-Renderer | Private Allowlist/Manifest und serverseitige URL-Ausgabe; lizenzierte Sprites | gleiche Karte mit Classic/2.5D; Token/Hex/Fog/Movement unverändert; Browser-Screenshot und Messwerte bei Radius 39 und 78; Abbruch/Fallback bei Fehlern | Groß |
-| P1 | Spell-Daten- und Klassenregeln vervollständigen | `sheet.ts`, `CharacterPanel.tsx`, `ClassAbilities.tsx` | Regelentscheidung, vertrauenswürdige lizenzierte Referenzdaten | Metadaten/Details und Vorbereitung basieren auf einer autoritativen Quelle; fehlende Beschreibung eindeutig markiert; keine erfundenen proprietären Texte | Groß |
-| P1 | Abgeleitete Werte, Waffen, Effekte und Ressourcen vereinheitlichen | `sheet.ts`, `equipment.ts`, `commands.ts`, `ClassAbilities.tsx` | Regelmodell / Systemgrenzen | Level, Equipment, AC, Waffen, Slot-/Resource-Verbrauch und unterstützte temporäre Effekte propagieren konsistent; Konflikt-/Negativtests vorhanden | Groß |
-| P1 | Journal-People/Places und Continuity | `journals.ts`, API, `PlayerJournal.tsx` | Additive Datentyp-/Migrationsentscheidung | explizite Referenzen verlinken Scene/Character/Person/Ort; keine automatische falsche Entity-Erzeugung; Privacy bleibt je Freigabe erhalten | Mittel |
-| P1 | Szenenentwurf/live Publishing und Map/Editor-Trennung | `SceneMapEditor.tsx`, `SceneDirector.tsx`, scene API | Map-Fokusarbeit | Editoränderungen bleiben privat bis explizitem Apply/Publish; Live-Version und Draft sind klar erkennbar; GM Preview leakt nichts | Groß |
-| P2 | Vollständige Handels-, Loot- und Migrations-/Legacy-Abnahme | Items, Merchant, Party Loot, tests | P0/P1 stabile Regelbasis | E2E Item/Gold/Roll/Approval/Inventory round-trip inkl. Retry und vorhandener Alt-Daten | Mittel |
-| P2 | Produktweiter Browser- und Performance-Durchlauf | Alle Hauptseiten, Vercel Preview | Authentifizierbare Preview oder lokale Browserports | GM, Player, Caster, Non-caster; Reconnect; Radius 39/78; Screenshots, Netzwerklast und Render-/Interaction-Messungen | Mittel |
+- **Fehlend:** Rollenbasierte Browser-/E2E-Abnahme als GM, normaler Player, Caster und Non-caster mit isolierter Testkampagne.
+- **Fehlend:** identische Classic-/2.5D-Screenshots und Performancewerte (Netzwerkbytes, Ladezeit, Reaktionszeit, Renderdauer) für Radius 39 und 78.
+- **Zurückgestellt:** vollständiges Spell-Regelwerk/klassenabhängige Vorbereitung, bis die lizenzierte Quelle und verbindliche Regelentscheidungen feststehen.
+- **Zurückgestellt:** vollständige abgeleitete Character- und Weapon-Engine einschließlich Cube-Progression und aller temporären Effekte; erfordert ein gemeinsames Regelmodell und Regressionstests.
+- **Zurückgestellt:** Journal-Referenzen für Charaktere, Szenen, Ingame-Daten und Backlinks über alle paginierten Einträge; PR #47 deckt People/Places und geladene Einträge ab.
 
-## Entfernt / nicht als implementiert gezählt
+## Priorisierte Restarbeit mit Abnahmekriterien
 
-- Die doppelten **Journal-Workspace-Einstiege** wurden durch eine eindeutige Journal-Hauptnavigation ersetzt.
-- Kenney-Assets gelten trotz ihres vorhandenen privaten Uploads nicht als integrierte Spielfunktion; kein Renderer-/Ladeerfolg wird behauptet.
-- Nicht aufgeführte dekorative oder zukünftige Systeme werden hier nicht als produktiv abgeschlossen gewertet.
+| Priorität | Arbeit | Abhängigkeit / Orte | Abnahmekriterium | Aufwand |
+|---|---|---|---|---|
+| P0 | PR #47 vom Owner mergen | PR #47; docs/audits | Bestehender PR ist konfliktfrei, latest main ist integriert, People/Places-Code bleibt erhalten, vollständiger Branch-Workflow grün; Owner merge nach Review | Klein |
+| P0 | Rollenbasierte End-to-End-Abnahme | geschützte isolierte Preview, Map/Scenes/Character/Spells/Journal | GM, Player, Caster und Non-caster; Wechsel/Refresh/Reconnect; private Journals und fremde Szenen bleiben unsichtbar | Groß |
+| P1 | Fog/Live-Scene Controls und Draft/Publish-Klarheit | CampaignMapDirector, SceneDirector, sceneRuntime | GM steuert Sichtbarkeit und passende Events/Loot/Encounter am Fokus; private Draft-Änderung ändert veröffentlichte Player-Szene erst nach Apply/Publish | Groß |
+| P1 | 2.5D Visuelle/Performanceabnahme | SceneSurface, Kenney-API, isolierte Forest-Szene | Screenshotpaar gleicher Szene/Kamera; 39/78 Messwerte; Token-/Grid-/Movement-/Visibility unverändert; Classic-Fallback funktioniert | Mittel |
+| P1 | Spell-/Character-Regelmodell | sheet.ts, abilities.ts, equipment.ts, Spellbook | lizenzierte Details; Klassenregel für Preparation; Slots/Ressourcen single-source; AC/Stats/Weapon changes propagieren und testen | Groß |
+| P1 | Inventory/Equipment Konsistenz | inventory.ts, equipment.ts, Merchant, Loot | weapon/equipment/weight/currency/approval roundtrip; legacy items und movement encumbrance bleiben korrekt | Groß |
+| P2 | Journal Continuity über People/Places hinaus | journals.ts, PlayerJournal.tsx | referenzierte Scene/Character/Datefelder; backlinks über pagination; Sharing/Privacy-Negativtests | Mittel |
+| P2 | Events, Merchant, Loot und Reconnect Browserabnahme | GM panels, events, items, online sync | GM-Aktion erscheint nur bei berechtigtem Player; wiederholte Requests erzeugen keine Duplikate | Mittel |
 
-## Noch nicht ausgeführt
+## Produktionsdaten und Kosten
 
-- Map-Fokus-API-Regressionen: **6/6 fokussierte Tests bestanden** (veröffentlichte Szene, Draft/Archiv/Legacy-Ablehnung, ungültige ID, Player-Privacy). Die Tests liefen gegen den Branch-Quelltext und das unveränderte Repo-Test-Harness.
-- Vercel Preview für den aktuellen Map-Director-Commit ist `READY` (TypeScript und Production-Build bestanden). Der Browser leitet weiterhin zur Vercel-Loginseite um; kein GM-/Spieler-E2E und keine Screenshots.
-- Der vollständige Supabase-Migrations-/RLS-Workflow wurde für PR #45 noch nicht ausgeführt; die „Production database deployed and secure“-Stufe läuft nur nach Push auf `main` oder manuellem Start. Kein Produktionsdeployment und keine Produktionsmigration.
-- Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
+Read-only Abfrage im aktuellen Produktionsprojekt bestätigt schema_version 6, erwartete Migrationseinträge bis 20261106100000 und den privaten Storage-Bucket apex-asset-packs. Für Konfliktlösung und PR #47 wurde keine Migration, kein Produktionsschreibzugriff und keine Bucket-/Objektänderung ausgeführt. Kenney-Spriteabrufe nutzen existierende Storage-Bandbreite; es wurden keine Image Transformations oder zusätzliche Datenbanken eingerichtet.
 
+## Releaseentscheidung
 
-## PR #46 – Kenney 2.5D Preview
-
-- **Implementiert und CI-verifiziert:** begrenzter Classic/2.5D-Schalter für generierte Forest-Szenen, private kurzlebige Kenney-Signaturen, Kampagnen-/Szenenautorisation und API-Negativtests. Details: `docs/audits/APEX_KENNEY_25D_PREVIEW.md`.
-- **Preview:** Vercel Deployment ist `READY`; die APEX-Einstiegsseite lädt in der Browserprüfung.
-- **Nicht browserverifiziert:** GM-/Spielerlogin, Kartenrendering im angemeldeten Zustand, Screenshotvergleich, Laden-/Eingabe-/Rendermessung für Radius 39 und 78. Die Preview-Anmeldung könnte die echte Kampagne erreichen; deshalb wurde sie nicht geöffnet.
-- **Daten:** keine Migration, keine Produktions-DB-Änderung, keine Bucket- oder Objektänderung. Sprite-Abruf nutzt höchstens die bestehende Storage-Bandbreite; keine Bildtransformation.
+APEX 0.9 ist bereit für die **gezielte Finaltestphase**, aber nicht für eine abschließende Produktionsabnahme. PR #47 ist vorbereitet und mergebar, aber noch offen. Nach Owner-Merge die oben genannten P0-Browserabläufe mit isolierten Rollen-Konten ausführen. Keine automatische Merge- oder Deploymentaktion.

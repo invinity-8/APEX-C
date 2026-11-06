@@ -1,59 +1,53 @@
-# APEX-Funktionsabgleich
+# APEX 0.9 – Funktionsabgleich
 
-**Stand:** 2026-11-06  
-**Geprüfter Ausgangspunkt:** GitHub `main`, nach Merge von PR #43 (Commit `61a4c9886f85db73bbc6f094269f5786c82dc18c`).  
-**Prüfmethode:** Repository-Dateien, Releases/Handovers, PRs #41–43, Migrationsdateien, bestehende Vitest/API/SQL-Tests sowie read-only Abfragen gegen APEX MAIN. Dies ist eine evidenzbasierte Bestandsaufnahme, kein Ersatz für den noch ausstehenden Rollen-Browserlauf.
+Stand: 2026-11-06  
+Geprüfter Stand: main nach Merge #44, #45 und #46 (Commit ccb08da73278502067ad94e21998b3ec019e59cd). Zusätzlich wurde der PR-#47-Branch mit den expliziten Journal-Referenzen verglichen.  
+Methode: Code, Tests, Migrationsdateien, PR-Verläufe und read-only Produktionsabfragen. Rollen-Browserflows wurden nicht mit echten Kampagnenkonten ausgeführt.
 
-## Wichtigste Befunde
+## Kurzbefund
 
-1. Die Navigation ließ den gespeicherten Charakter-Tab auch im Charakter-Hauptbereich gelten. Wer zuletzt den Spellbook-Tab nutzte, konnte daher beim Öffnen von **Character** erneut den Spellbook sehen. Die Character-Seite landet jetzt explizit auf **Overview**; der Spellbook-Untertab ist aus der Character-Navigation entfernt, und die Top-Level-Seite **Spells** öffnet ihn weiterhin.
-2. Das Journal hatte bereits einen persistenten API-/DB-Workflow (Suche, Kategorien, Tags, Pin, Versionskonflikte, Export und private/GM/Party-Freigabe), war aber nur in einem Map-Workspace-Widget erreichbar. Es ist nun eine eigene Hauptnavigation. Die parallelen GM-/Spieler-Widgets wurden entfernt, damit es einen eindeutigen Einstieg gibt.
-3. PR #45 ergänzt den Map-Tab um einen kampagnenspezifischen GM-Fokus, der ausschließlich die veröffentlichte Szenenversion anzeigt. Der Fokuswechsel bewegt keine Spieler; selektive Zuweisung und Sanctuary-Transfer bleiben getrennte, explizite Aktionen. Weiter offen sind Fog-/Encounter-/Loot-/Event-Kontrollen direkt auf Szenenkarten sowie die Rollen-Browserabnahme.
-4. Das Spell-Modell ist weiterhin dünn: Name, Level, vorbereitet, Quelle und Notizen. Es gibt keine gemeinsamen strukturierten Details für Schule, Reichweite, Komponenten, Konzentration, Rituale oder Klassenregeln. #43 stellt die Seite bereit, erfüllt aber die Spell-Detail-/Vorbereitungszusagen nicht.
-5. Die Kenney-Bibliothek ist vorhanden, wird aber nicht gerendert. Read-only Produktionsprüfung am Bucket `apex-asset-packs`: **6.557 Objekte**, Bucket privat; Stichproben zeigen Isometric-PNGs und FBX-Modelle. Die Live-Dateien werden durch diese Arbeit weder kopiert noch öffentlich gemacht. Eine sichere, autorisierte Asset-Auslieferung und ein klassischer/2.5D-Vergleich fehlen weiterhin.
-6. Der frühere Schema-Alarm ist im aktuellen Datenbankstand nicht mehr vorhanden: `apex_schema_info.schema_version = 6`; die Migrationen `20261105120000` und `20261106100000` sind in `supabase_migrations.schema_migrations` registriert. Die Repository-Datei `supabase/remote_history.txt` war hinter diesem Ist-Stand. Dieser Branch ergänzt die beiden fehlenden Einträge; es wurde keine Migration ausgeführt.
+- Die Navigation zwischen Character und Spells ist in main korrigiert. Das Journal hat eine eigene Hauptnavigation; die doppelten Journal-Workspace-Einstiege sind entfernt.
+- Der Map-Tab hat nun einen separaten GM-Fokus, der Spielerzuweisungen nicht automatisch verändert. Ausgewählte Transfers und Sanctuary sind eigene, serverautorisierte Aktionen.
+- Die Kenney-Vorschau ist im Map-Renderer implementiert. Sie verwendet eine kleine Sprite-Auswahl aus dem existierenden privaten Bucket und kurzlebige signierte URLs. Ein angemeldeter Kartenlauf, Screenshotvergleich und Performancewerte sind noch nicht browserverifiziert.
+- PR #47 ergänzt People-/Places-Referenzen in Journal-Einträgen. Die Links speichern IDs; sichtbare Titel werden nur aus für den Nutzer lesbaren Einträgen aufgelöst. Der Dokumentkonflikt ist im bestehenden Branch durch Vergleich beider Fassungen gelöst; latest main ist als erster Parent integriert. PR #47 ist offen und mergebar, aber noch nicht in main gemergt. Journal-Referenzen bleiben bis zum Owner-Merge PR-Code.
+- Die Produktionsabfragen dieses Durchlaufs sind read-only: Schema-Version 6; die letzten registrierten Migrationen sind 20261104220752, 20261105120000 und 20261106100000. Bucket apex-asset-packs ist weiterhin privat. Keine Produktionsänderung wurde vorgenommen.
 
 ## Abgleichsmatrix
 
-| Bereich | Einstufung | Implementierung / Evidenz | Lücke, Schweregrad und erforderlicher Fix | Testabdeckung |
-|---|---|---|---|---|
-| Authentifizierung | Implementiert; Kernpfad verifiziert | `src/server/auth.ts`, `src/server/api.ts`, `src/online/useOnlineGame.ts`; serverseitige Session, CSRF/Origin und Rollen | Rollenbasierter Browserlauf (GM/Spieler) wiederholen; **Mittel** | Auth-/API-Tests; keine Browserabnahme in dieser Runde |
-| Kampagnenverwaltung | Teilweise | `src/server/scenes.ts`, `src/server/sceneRuntime.ts`, `src/components/WorldPanel.tsx` | World, Szene, Legacy-Arena und aktuelle GM-Fokusszene in einem konsistenten Dashboard verbinden; **Hoch** | `tests/scenes.test.ts`, `tests/campaign08Api.test.ts` |
-| Szenennavigation | Teilweise; GM-Fokus in PR #45 | `src/components/CampaignMapDirector.tsx`, `SceneDirector.tsx`, `PlayerScene.tsx`, `src/server/sceneRuntime.ts`; veröffentlichter GM-Fokus, Split-Party-Zuweisung, Sanctuary und Szenenbewegung | Direkte Nebelsicht-/Encounter-/Loot-/Eventkontrollen im Map-Scene-Modus und Rollen-Browserabnahme; **Hoch** | `tests/mapFocus.test.ts`, `tests/sceneRules08.test.ts`, `tests/scenes.test.ts`, Supabase scene SQL checks |
-| Szeneneditor | Teilweise | `src/components/SceneMapEditor.tsx`, `src/campaign/maps.ts`; Terrain, Generator, Upload, Layer-/Marker-Metadaten, Undo | Draft, gespeicherter Entwurf und veröffentlichte/live Version durchgängig erklären und testen; Editoroberfläche auf Editor-Einstieg abstimmen; **Hoch** | `tests/forestGenerator.test.ts`, `tests/scenes.test.ts` |
-| Sanctuary | Implementiert, Integration teilweise | `src/server/sanctuary.ts`, `src/components/SanctuarySettings.tsx` | Map-Kontrollzentrum muss Sanctuary-Zustand plus Wiederaufnahme/Wechsel direkt anbieten; **Mittel** | Scene travel SQL/API checks |
-| Charakterseite | Teilweise; Routingfehler behoben | `src/App.tsx`, `src/components/CharacterPanel.tsx` | Freitext-Sheet ist kein regelberechnetes Charaktermodell; Attributes/Features und abgeleitete Werte mit Import abgleichen; **Hoch** | `tests/sheet.test.ts`, `tests/character07.test.ts` |
-| Spellbook | Teilweise | `src/game/sheet.ts`, `src/components/CharacterPanel.tsx`; bisher nur grundlegende Spellfelder | Strukturierte, lizenzierte Details, Auflösung fehlender Beschreibung, Klassen-/Vorbereitungsregeln und Zauberplätze aus einer Quelle; **Hoch** | Sheet-Tests; keine Abdeckung für vollständige Casting-Regeln |
-| Klassenfähigkeiten | Teilweise | `src/components/ClassAbilities.tsx`, `src/game/abilities.ts` | Bestehende Fähigkeitssysteme mit Sheet-Import und Spell/Resource-Modell abgleichen; **Mittel** | `tests/abilities07.test.ts`, `tests/abilitiesApi07.test.ts` |
-| Ressourcen | Teilweise | Ressourcen in `GameState` und `CharacterSheet`; Widget in `ResourceOrbs.tsx` | Festlegen, welche Ressource autoritativ ist; Sheet-Ressourcen und Kampagnenressourcen dürfen nicht doppelt oder still auseinanderlaufen; **Hoch** | `tests/resources.test.ts`, `tests/sheet.test.ts` |
-| Inventar | Implementiert, Tests vorhanden | `src/game/inventory.ts`, `src/components/InventoryPanel.tsx`; sichere Item-Requests aus #42 | Legacy-Fälle, Traglaststrafe und tatsächliche Browserinteraktion abschließen; **Mittel** | `tests/inventory06.test.ts`, `tests/weight07.test.ts`, `tests/itemRequests.test.ts` |
-| Itemisierung / Ausrüstung | Teilweise | `src/game/items/*`, `src/game/equipment.ts`, `src/components/EquipmentPanel.tsx` | Waffeninteraktion und vielseitige Waffen durchgängige Spieler- und Regelpfade; **Hoch** | `tests/equipment.test.ts`, `tests/armory07.test.ts` |
-| Handel / Merchant | Implementiert, End-to-End ungeprüft | `src/game/items/merchant.ts`, `src/components/Merchant.tsx` | Mit Inventory, Gewicht, Currency und GM-Approval browserseitig verifizieren; **Mittel** | `tests/merchant07.test.ts` |
-| Loot-Verteilung | Teilweise | `src/game/items/partyLoot.ts`, `src/components/LootRolls.tsx`; #43 minimiert Roll-Dock | Vollständiger Mehr-Item-Ablauf/Animation und Inventarübergang; **Mittel** | `tests/partyLoot07.test.ts`, `tests/partyLootApi07.test.ts` |
-| Journals | Backend vorhanden; Hauptnavigation ergänzt | `src/server/journals.ts`, `src/server/journalImages.ts`, `src/components/PlayerJournal.tsx` | Personen/Orte-Referenzen, Backlinks und Continuity-Felder fehlen; Sichtbarkeit noch je Rolle im Browser nachweisen; **Mittel** | `tests/journals.test.ts`, `tests/journalZip.test.ts` |
-| GM-Werkzeuge | Teilweise | `src/components/GmPanel.tsx`, `src/components/PlayersPanel.tsx`, `src/components/SceneDirector.tsx` | Map-Operationskontrollen und Szene-Edits/Live-Status deutlicher integrieren; **Hoch** | Server-/API- und scene SQL checks |
-| Events / Ankündigungen | Implementiert, live ungeprüft | `src/game/events.ts`, `src/components/GmEvents.tsx`, `src/components/AnnouncementOverlay.tsx` | GM- und Spieler-Browserablauf einschließlich Wiederverbindung bestätigen; **Mittel** | `tests/events.test.ts`, `tests/announcements07.test.ts` |
-| Workspace-Widgets | Implementiert | `src/workspace/Workspace.tsx`, `src/workspace/layout.ts`, `src/workspace/WidgetTabs.tsx` | Rollenwechsel und Auflösung/Erhalt gespeicherter Layouts testen; redundantes Journal-Widget entfernt | `tests/workspace.test.ts`, `tests/workspace07.test.ts` |
-| Feedback | Implementiert, Ende-zu-Ende ungeprüft | `src/components/Feedback.tsx`, `src/server/api.ts`, Migration `20261104090000` | Browserflow Reporter → GM-Triage wiederholen; **Niedrig** | API/Server-Tests |
-| Weltarchive | Implementiert | `src/components/WorldPanel.tsx`, Migration `20261101202637` | Restore/Archiv/Characters continuity in isolierter Kampagne testen; **Mittel** | Welt-/Migrationstests |
-| Berechtigungen | Implementiert mit Tests | `src/server/validate.ts`, `src/server/api.ts`, `src/game/visibility.ts` | Negative RLS-/player-scene/asset/journal Tests nach nächster Änderung erneut laufen lassen; **Hoch** | `supabase/tests/rls_check.sql`, `supabase/tests/scene_travel_check.sql`, `tests/visibility.test.ts` |
-| Multiplayer-Synchronisierung | Implementiert, Produktionspfad nicht browserverifiziert | `src/online/useOnlineGame.ts`, `src/server/api.ts`, Supabase Realtime | Reconnect und kleiner UI-Update ohne volle Refresh-/Polling-Stürme messen; **Hoch** | Server-/stability tests; kein erfolgreicher Rollen-Browserlauf in dieser Runde |
-| Asset library / Kenney 2.5D | Assetdaten verifiziert; Renderer geplant | Private Supabase Storage `apex-asset-packs`, `src/server/sceneAssets.ts` (nur Szenenbilder) | Manifest/Allowlist, server-signierte Assets, Sprite-Renderer, Classic-Schalter und Screenshot-/FPS-Messung fehlen; **Hoch** | Bucket-/Objektzählung read-only; noch keine Renderer-Tests |
+| Bereich | Status | Ist-Verhalten / Beleg | Verbleibende Arbeit und Abnahme |
+|---|---|---|---|
+| Authentifizierung | Implementiert und getestet | Serverseitige Session, Rollen aus Profil, CSRF und Berechtigungsprüfungen in auth.ts/api.ts; Tests vorhanden | GM-/Player-Browserlauf mit isolierten Testkonten; kein Zugriff auf echte Kampagne für Abnahmetests |
+| Kampagnenverwaltung | Teilweise implementiert | Kampagnenstatus und Weltenverwaltung vorhanden; Szenen und Legacy-Arena laufen teils über getrennte Abläufe | Ein Kampagnen-Dashboard, das Welt, Szenenfokus und Sanctuary zeigt; Reload/Reconnect ohne falsche Zuweisung |
+| Map / Szenennavigation | Implementiert und CI-getestet | PR #45: veröffentlichter GM-Fokus, Such-/Wechselkontrolle, Zuweisungen und explizite Sanctuary-Transfers; SceneRuntime begrenzt Spieler auf ihre Szene | Rollen-Browserlauf sowie Fog-/Events-/Loot-/Encounter-Kontrollen im fokussierten Map-Modus |
+| Szenenbibliothek und Editor | Teilweise implementiert | Vier Kategorien, Bibliothek, Suche, Vorschau, Editor, Generator, Uploads und Undo vorhanden | Draft, gespeicherte Änderungen und veröffentlichte Live-Version in der UI eindeutig unterscheiden; Draft-Änderung darf Player-Ansicht nicht verändern |
+| Sanctuary / Downtime | Implementiert, Map-Integration teilweise | Sanctuary-Einstellungen und Zuweisungs-API existieren | GM muss aus Map sehen können, wer in Sanctuary ist, und Szenenwechsel direkt auslösen; geprüfter Split-Party-Browserlauf |
+| Character | Routing implementiert und CI-getestet; Regelmodell teilweise | PR #44: Character startet auf Overview; redundanter Spellbook-Untertab entfernt | Abgeleitete Werte und Ressourcenquelle vereinheitlichen; Equipment-/Leveländerungen müssen AC, Stats und Character-Ansicht konsistent aktualisieren |
+| Spells | Teilweise; Detailmodell fehlt | Top-Level-Spells öffnet den Spellbook. Bestehende Felder enthalten grundlegende Spell-Daten | Strukturierte Schule, Zeit, Reichweite, Komponenten, Dauer, Konzentration, Ritual, Klassenregeln, Vorbereitung und Slots aus einer autoritativen, lizenzierten Quelle; unbekannte Beschreibungen klar markieren |
+| Fähigkeiten / Effekte | Teilweise implementiert | Klassenfähigkeiten und unterstützte Effekte existieren getrennt von einem umfassenden Spell-/Character-Regelmodell | Nur dokumentierte Effekte wie Mage Armor mit Ablauf, Stackregeln und Ressourcenverbrauch integrieren; Regel- und Negativtests |
+| Ressourcen | Teilweise implementiert | Ressourcen leben teils im GameState und teils im CharacterSheet | Eine autoritative Quelle pro Ressource; Änderungen müssen Widget, Character und Verbrauchspfad konsistent halten |
+| Inventar | Kernpfade implementiert und getestet | PR #42: Items, Anfragen, Gewicht und Freigabepfade vorhanden | Legacy-Items, Carry-Movement-Penalties und tatsächliche Player-Interaktion durchspielen |
+| Ausrüstung / Waffen | Teilweise implementiert | Equipment und Armory vorhanden; Tests für Ausrüstungsregeln | Waffenaktionen und vielseitige Waffen mit Charakterwerten/Inventar verbinden; AC-/Gewichts-/Auswirkungsregressionen testen |
+| Handel / Merchant | Implementiert, End-to-End nicht verifiziert | Merchant-Regeln und UI vorhanden | Isolierter Kauf/Verkauf/Gold-/Gewichts-/Freigabe-Roundtrip mit Retry prüfen |
+| Loot | Teilweise implementiert | Loot-Rolls und Party-Loot-Logik vorhanden | Mehrfachitem-Verteilung, Empfänger, Inventar/Currency-Übergang und Wiederverbindung browserseitig verifizieren |
+| Journal | Grundfunktion in main; People/Places-Referenzen in offenem PR #47 | Hauptnavigation, private/GM/Party-Freigabe, Suche, Tags, Pins, Versionen und Export in main. PR #47 fügt explizite People/Places-Einträge, IDs, sichtbarkeitsgeprüfte Auflösung und Backlinks hinzu; Branch-Workflow ist grün und PR mergebar | Nach Owner-Merge rollenbasierte Privacy- und Save/Reopen-Browserabnahme durchführen. Backlinks umfassen aktuell nur geladene Seiten; Continuity zu Szene/Charakter/Datum bleibt offen |
+| GM-Werkzeuge | Teilweise implementiert | GM-Panel, Player-Management, Events und Scene Director vorhanden | Map-Fokus, Sichtbarkeit, Events, Announcements, Loot und Encounter mit der aktiven Szene zusammenführen, ohne private Drafts zu veröffentlichen |
+| Events / Ankündigungen | Implementiert, UI-Integration teilweise | Events und Announcements besitzen Komponenten und API-/Unit-Tests | Direkter Fokusbezug und Reconnect als GM und Player prüfen |
+| Workspace-Widgets | Implementiert und getestet | Layout-/Widget-Logik vorhanden; Journal-Duplikate entfernt | Gespeicherte Layouts über Rollen- und App-Upgrade-Abnahme prüfen |
+| Feedback | Implementiert, E2E offen | Reporter-, Inbox- und Statuspfade vorhanden | Reporter → GM-Triage → geteilte Antwort in Preview als getrennte Rollen abnehmen |
+| Weltarchive | Implementiert, E2E offen | Archive-/Restore-Pfade und Migrationstests vorhanden | Restore in isolierter Kampagne mit Character- und Scene-Kontinuität abnehmen |
+| Berechtigungen / Datenschutz | Implementiert und mit API-/SQL-Tests abgesichert | Spieler-Scene-Filter, Journal-Visibility-Store und RLS-/Scene-SQL-Checks vorhanden; PR #46 signiert nur feste Assetpfade nach Szenenprüfung | Gezielte Negativtests für geteilte/versteckte Journal-Referenzen und Rollenbrowserlauf |
+| Multiplayer / Synchronisierung | Teilweise browserverifiziert | Versionierte Writes, Scene motion und Realtime-/Polling-Pfade vorhanden | GM/Player reconnecten; prüfen, dass Zuweisungen und veröffentlichter Stand erhalten bleiben und kleine Aktionen keine Refresh-Stürme auslösen |
+| Kenney / 2.5D | Renderer implementiert und CI-getestet, Produktion nicht visuell abgenommen | PR #46: Classic/2.5D-Schalter, fixe Asset-Allowlist, private signed URLs, Zugriff auf veröffentlichte bzw. zugewiesene Szene | Angemeldete Preview, gleiche Kamera/Szene als Screenshotpaar; Ladezeit, Bytes, Eingabereaktion und Rendering bei Radius 39 und 78 messen |
 
-## Verifizierte Produktionsdaten (read-only)
+## Produktions- und Migrationsstand (read-only)
 
-- APEX MAIN Projekt `xqkyaqxuoaxadpkcdhch`: Schema-Version **6**.
-- Registrierte letzte Migrationen: `20261104220752 add_apex_agent_asset_pack_catalog`, `20261105120000 apex_scene_foundation`, `20261106100000 apex_asset_pack_storage_state`.
-- Bucket `apex-asset-packs` ist **privat**; Anzahl: **6.557 Objekte**. Stichproben bestätigen Kenney-Isometric-PNGs und Kenney-Modell-Dateien; es wurden keine Objekte heruntergeladen oder verändert.
-- Die Supabase-Speicheranleitung bestätigt, dass private Buckets RLS oder zeitlich begrenzte signierte URLs verlangen. APEX muss die Berechtigung serverseitig prüfen, bevor es Asset-URLs ausgibt.
+- PR #47 Merge-Kandidat `22bb186` (Workflow Run #150) bestand Migration Guard, 45 Testdateien / 373 Tests, TypeScript plus Vite-Produktionsbuild sowie isolierte Migration-/RLS-/Scene-Checks. Vercel-Preview ist erfolgreich gebaut. Der Build zeigt nur Vite-Konfigurations-/Chunkgrößen-Warnungen.
 
-## In diesem Branch umgesetzt
+- apex_schema_info meldet schema_version 6.
+- Migrationseinträge enthalten 20261104220752 add_apex_agent_asset_pack_catalog, 20261105120000 apex_scene_foundation und 20261106100000 apex_asset_pack_storage_state.
+- apex-asset-packs ist privat. Für diesen PR wurde weder die DB noch Storage verändert.
+- Test-/Migrationsworkflow verwendet isoliertes Postgres; produktive Verifikation läuft nicht als PR-Job.
 
-- Character-Seite startet ausdrücklich auf Overview; Spellbook-Tab aus Character-Navigation entfernt.
-- Journal hat einen dedizierten Top-Level-Einstieg; doppelte Map-Widgets entfernt.
-- GM Map-Fokus zeigt veröffentlichte Szenen; Transfers bleiben ausdrücklich und revisionsgeprüft.
-- `supabase/remote_history.txt` gleicht die zwei bereits im Produktionsverlauf sichtbaren Migrationen ab.
+## Nicht als abgeschlossen werten
 
-## Nicht als erledigt gewertet
-
-Keine Browser-Rollenabnahme, kein echtes 2.5D-Rendering, kein Spell-Regelwerk und kein vollständiger Draft/Publish-Abnahmelauf. Sichtbarkeit/Fog sowie Events/Encounters/Loot direkt auf fokussierten Szenen bleiben offen. Diese Punkte erhalten erst nach Implementierung und Verifikation den Status „vollständig“.
+CI-Erfolg belegt Tests und Build des jeweiligen Commitstands, nicht echte Produktions- oder Rollen-Browserabnahme. Insbesondere bleiben Spell-Detailregeln, Draft/Live-Abnahme, Map-Operationskontrollen und Performance/Screenshotprüfung offen.
