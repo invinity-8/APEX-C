@@ -35,7 +35,7 @@ function setup() {
   s.tokens.sinna.inventory = [];
   s.tokens.sinna.equipment = undefined;
   for (const [id, name] of [['bp', 'Breastplate'], ['sh', 'Shield'], ['qs', 'Quarterstaff'], ['dg', 'Dagger'], ['gs', 'Greatsword']])
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: id, name });
+    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: id, name }, GM);
   for (const [id, preset] of [['bp', ARMOR_PRESETS.Breastplate], ['sh', ARMOR_PRESETS.Shield], ['qs', WEAPON_PRESETS.Quarterstaff], ['dg', WEAPON_PRESETS.Dagger], ['gs', WEAPON_PRESETS.Greatsword]] as const)
     s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: id, rev: 0, equip: preset }, GM);
   return s;
@@ -90,7 +90,7 @@ describe('equipment rules (server-authoritative)', () => {
   });
 
   it('equips one physical weapon from a stack and safely reuses it on a retried command', () => {
-    let s = run(setup(), { type: 'invAddItem', tokenId: 'sinna', itemId: 'stacked', name: 'Quarterstaff', quantity: 2 });
+    let s = run(setup(), { type: 'invAddItem', tokenId: 'sinna', itemId: 'stacked', name: 'Quarterstaff', quantity: 2 }, GM);
     s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'stacked', rev: 0, equip: WEAPON_PRESETS.Quarterstaff }, GM);
     const equip = { type: 'equipItem', tokenId: 'sinna', itemId: 'stacked', slot: 'main1' } as const;
     s = run(s, equip);
@@ -118,7 +118,7 @@ describe('equipment rules (server-authoritative)', () => {
 
   it('wrong slots, undefined properties and removed items are handled safely', () => {
     let s = setup();
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'rope', name: 'Rope' });
+    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'rope', name: 'Rope' }, GM);
     expect(executeCommand(s, P, { type: 'equipItem', tokenId: 'sinna', itemId: 'rope', slot: 'main1' }).ok).toBe(false);
     expect(executeCommand(s, P, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'main1' }).ok).toBe(false);
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' });
