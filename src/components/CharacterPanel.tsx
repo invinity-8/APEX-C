@@ -622,7 +622,7 @@ function SpellsSection({ sheet, editing, set, onToggle }: { sheet: CharacterShee
   const spells = sheet.spells;
   const levels = useMemo(() => [...new Set(spells.map((s) => s.level))].sort((a, b) => a - b), [spells]);
   const slots = sheet.resources.filter((r) => /^spell slots/i.test(r.name));
-  const visible = (s: SheetSpell) => (filter === 'all' || s.level === 0 || s.prepared) && (!q || s.name.toLowerCase().includes(q.toLowerCase()));
+  const visible = (s: SheetSpell) => (filter === 'all' || s.level === 0 || s.prepared) && (!q || [s.name, s.school, s.source, s.description].some((value) => value.toLowerCase().includes(q.toLowerCase())));
   return (
     <section className="panel p-3 lg:col-span-2">
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -648,21 +648,27 @@ function SpellsSection({ sheet, editing, set, onToggle }: { sheet: CharacterShee
       {editing ? (
         <ListEditor
           rows={spells}
-          make={() => ({ id: newEntryId('sp'), name: '', level: 1, prepared: false, source: '', notes: '' })}
+          make={() => ({ id: newEntryId('sp'), name: '', level: 1, prepared: false, source: '', notes: '', school: '', castingTime: '', range: '', components: '', duration: '', concentration: false, ritual: false, description: '' })}
           render={(s, upd) => (
-            <>
+            <div className="grid w-full gap-1.5 sm:grid-cols-2">
               <input className={input} aria-label="Spell name" placeholder="Spell" value={s.name} onChange={(e) => upd({ ...s, name: e.target.value })} />
-              <select className={`${input} w-24`} aria-label="Spell level" value={s.level} onChange={(e) => upd({ ...s, level: Number(e.target.value), prepared: Number(e.target.value) === 0 || s.prepared })}>
-                {Array.from({ length: 10 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {i === 0 ? 'Cantrip' : `Level ${i}`}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-1 text-[11px] text-marble-300">
-                <input type="checkbox" checked={s.prepared} disabled={s.level === 0} onChange={(e) => upd({ ...s, prepared: e.target.checked })} /> prepared
-              </label>
-            </>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <select className={`${input} w-24`} aria-label="Spell level" value={s.level} onChange={(e) => upd({ ...s, level: Number(e.target.value), prepared: Number(e.target.value) === 0 || s.prepared })}>
+                  {Array.from({ length: 10 }, (_, i) => <option key={i} value={i}>{i === 0 ? 'Cantrip' : `Level ${i}`}</option>)}
+                </select>
+                <label className="flex items-center gap-1 text-[11px] text-marble-300"><input type="checkbox" checked={s.prepared} disabled={s.level === 0} onChange={(e) => upd({ ...s, prepared: e.target.checked })} /> prepared</label>
+                <label className="flex items-center gap-1 text-[11px] text-marble-300"><input type="checkbox" checked={s.concentration} onChange={(e) => upd({ ...s, concentration: e.target.checked })} /> concentration</label>
+                <label className="flex items-center gap-1 text-[11px] text-marble-300"><input type="checkbox" checked={s.ritual} onChange={(e) => upd({ ...s, ritual: e.target.checked })} /> ritual</label>
+              </div>
+              <input className={input} aria-label="Spell school" placeholder="School" value={s.school} onChange={(e) => upd({ ...s, school: e.target.value })} />
+              <input className={input} aria-label="Spell source" placeholder="Class / source" value={s.source} onChange={(e) => upd({ ...s, source: e.target.value })} />
+              <input className={input} aria-label="Casting time" placeholder="Casting time" value={s.castingTime} onChange={(e) => upd({ ...s, castingTime: e.target.value })} />
+              <input className={input} aria-label="Spell range" placeholder="Range" value={s.range} onChange={(e) => upd({ ...s, range: e.target.value })} />
+              <input className={input} aria-label="Spell components" placeholder="Components" value={s.components} onChange={(e) => upd({ ...s, components: e.target.value })} />
+              <input className={input} aria-label="Spell duration" placeholder="Duration" value={s.duration} onChange={(e) => upd({ ...s, duration: e.target.value })} />
+              <textarea className={`${input} min-h-16 sm:col-span-2`} aria-label="Spell description" placeholder="Effect / rules summary" value={s.description} onChange={(e) => upd({ ...s, description: e.target.value })} />
+              <input className={`${input} sm:col-span-2`} aria-label="Spell notes" placeholder="Private notes" value={s.notes} onChange={(e) => upd({ ...s, notes: e.target.value })} />
+            </div>
           )}
           onChange={(next) => set({ spells: next })}
           addLabel="+ Spell"
@@ -676,13 +682,22 @@ function SpellsSection({ sheet, editing, set, onToggle }: { sheet: CharacterShee
               <div className="label mb-1">{lvl === 0 ? 'Cantrips' : `Level ${lvl}`}</div>
               <ul className="grid gap-1 sm:grid-cols-2">
                 {list.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 rounded-md border border-ink-700 px-2 py-1 text-sm">
-                    <span className={`min-w-0 flex-1 truncate ${s.prepared ? 'text-gold-200' : 'text-marble-300'}`}>{s.name}</span>
-                    {s.source && <span className="text-[10px] text-marble-500">{s.source}</span>}
-                    {lvl > 0 && (
-                      <label className="flex items-center gap-1 text-[10px] text-marble-300">
-                        <input type="checkbox" checked={s.prepared} onChange={() => onToggle(s.id)} aria-label={`${s.name} prepared`} /> prepared
-                      </label>
+                  <li key={s.id} className="rounded-md border border-ink-700 px-2 py-1 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={`min-w-0 flex-1 truncate ${s.prepared ? 'text-gold-200' : 'text-marble-300'}`}>{s.name}</span>
+                      {s.source && <span className="text-[10px] text-marble-500">{s.source}</span>}
+                      {lvl > 0 && <label className="flex items-center gap-1 text-[10px] text-marble-300"><input type="checkbox" checked={s.prepared} onChange={() => onToggle(s.id)} aria-label={`${s.name} prepared`} /> prepared</label>}
+                    </div>
+                    {(s.school || s.castingTime || s.range || s.components || s.duration || s.concentration || s.ritual || s.description || s.notes) && (
+                      <details className="mt-1 text-xs text-marble-300">
+                        <summary className="cursor-pointer text-[10px] text-marble-500">Details</summary>
+                        <div className="mt-1 space-y-1">
+                          {(s.school || s.castingTime || s.range || s.components || s.duration) && <p>{[s.school, s.castingTime && `Cast: ${s.castingTime}`, s.range && `Range: ${s.range}`, s.components && `Components: ${s.components}`, s.duration && `Duration: ${s.duration}`].filter(Boolean).join(' · ')}</p>}
+                          {(s.concentration || s.ritual) && <p>{[s.concentration && 'Concentration', s.ritual && 'Ritual'].filter(Boolean).join(' · ')}</p>}
+                          {s.description && <p className="whitespace-pre-wrap">{s.description}</p>}
+                          {s.notes && <p className="whitespace-pre-wrap text-marble-500">Notes: {s.notes}</p>}
+                        </div>
+                      </details>
                     )}
                   </li>
                 ))}

@@ -473,7 +473,7 @@ export function rowsToSheet(rows: ImportRow[], source: { fileName: string; forma
         sheet.abilities.push({ id: newEntryId('f'), name: r.label, text: r.value.trim() });
         break;
       case 'spell':
-        sheet.spells.push({ id: newEntryId('sp'), name: (r.value.trim() || r.label).slice(0, 160), level: Math.max(0, Math.min(9, r.level ?? 1)), prepared: (r.level ?? 1) === 0 || !!r.prepared, source: r.spellSource ?? '', notes: '' });
+        sheet.spells.push({ id: newEntryId('sp'), name: (r.value.trim() || r.label).slice(0, 160), level: Math.max(0, Math.min(9, r.level ?? 1)), prepared: (r.level ?? 1) === 0 || !!r.prepared, source: r.spellSource ?? '', notes: '', school: '', castingTime: '', range: '', components: '', duration: '', concentration: false, ritual: false, description: '' });
         break;
       case 'note':
         sheet.notes = [sheet.notes, r.label === 'Complete page text' ? r.value.trim() : `${r.label}:\n${r.value.trim()}`].filter(Boolean).join('\n\n').slice(0, SHEET_LIMITS.notes);

@@ -17,6 +17,17 @@ describe('Character sheet model', () => {
     expect(parseSheet('nope').ok).toBe(false);
   });
 
+  it('preserves structured spell details and remains compatible with older saves', () => {
+    const oldSave = parseSheet({ ...emptySheet(), spells: [{ id: 'spell-old', name: 'Mage Armor', level: 1, prepared: true, source: 'Wizard', notes: 'Check components' }] });
+    expect(oldSave.ok && oldSave.sheet.spells[0]).toMatchObject({ school: '', castingTime: '', range: '', components: '', duration: '', concentration: false, ritual: false, description: '' });
+
+    const spell = { id: 'spell-new', name: 'Mage Armor', level: 1, prepared: true, source: 'Wizard', notes: '', school: 'Abjuration', castingTime: '1 action', range: 'Touch', components: 'V, S, M', duration: '8 hours', concentration: false, ritual: false, description: 'Target AC becomes 13 + Dexterity modifier while unarmored.' };
+    const parsed = parseSheet({ ...emptySheet(), spells: [spell] });
+    expect(parsed.ok && parsed.sheet.spells[0]).toEqual(spell);
+    const bounded = parseSheet({ ...emptySheet(), spells: [{ ...spell, description: 'x'.repeat(8001) }] });
+    expect(bounded.ok && bounded.sheet.spells[0].description).toHaveLength(8000);
+  });
+
   it('merge keeps existing entries and replaces same-named ones', () => {
     const a = { ...emptySheet(), attributes: [{ id: 'a1', name: 'Strength', value: '10', modifier: '+0' }], notes: 'Old' };
     const b = { ...emptySheet(), attributes: [{ id: 'b1', name: 'strength', value: '14', modifier: '+2' }, { id: 'b2', name: 'Dexterity', value: '12', modifier: '+1' }], notes: 'New', hitPoints: { current: 9, max: 9, temp: 0 } };
