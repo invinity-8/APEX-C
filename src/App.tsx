@@ -33,7 +33,7 @@ import { SceneDirector } from './components/SceneDirector';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 
-type View = 'map' | 'scenes' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
+type View = 'map' | 'scenes' | 'character' | 'spells' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
 
 interface Toast {
   id: number;
@@ -359,6 +359,7 @@ export default function App({ game }: { game: GameApi }) {
     { id: 'map', label: '🗺 Map' },
     ...(isGm && game.online ? [{ id: 'scenes' as View, label: '🧭 Scenes' }] : []),
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
+    { id: 'spells', label: '✨ Spells' },
     { id: 'inventory', label: '🎒 Inventory' },
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
@@ -402,7 +403,7 @@ export default function App({ game }: { game: GameApi }) {
       <Header
         game={game}
         notify={notify}
-        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'inventory' ? 'Inventory' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
+        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
       />
       <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Main navigation">
@@ -461,8 +462,8 @@ export default function App({ game }: { game: GameApi }) {
             <p className="p-6 text-sm text-marble-500">The merchant has closed shop.</p>
           ) : !sheetToken ? (
             <p className="p-6 text-sm text-marble-500">No character available.</p>
-          ) : screen === 'character' ? (
-            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} />
+          ) : screen === 'character' || screen === 'spells' ? (
+            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} initialTab={screen === 'spells' ? 'spells' : undefined} />
           ) : (
             // APEX 0.7 consolidation: one page for everything the character carries – worn equipment and inventory
             <div className="mx-auto grid max-w-7xl items-start gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_27rem]">
