@@ -45,6 +45,8 @@ export interface CharacterSnapshot {
     inventory: Array<Pick<Item, 'id' | 'name' | 'quantity'> & Partial<Pick<Item, 'baseId' | 'rarity' | 'itemLevel'>>>;
     /** Reference only – never restored. */
     currency: Partial<Record<CurrencyId, number>>;
+    /** Reference only – Cube progression is not changed by restoring a sheet snapshot. */
+    cubeProgression?: Token['cubeProgression'];
   };
 }
 
@@ -85,6 +87,7 @@ export function buildSnapshot(sheet: CharacterSheet, t: Token, name: string, not
       ...(t.equipment ? { equipment: structuredClone(t.equipment) } : {}),
       inventory: t.inventory.map((i) => ({ id: i.id, name: i.name, quantity: i.quantity, ...(i.baseId ? { baseId: i.baseId } : {}), ...(i.rarity ? { rarity: i.rarity } : {}), ...(i.itemLevel ? { itemLevel: i.itemLevel } : {}) })),
       currency: { ...(t.currency ?? {}) },
+      ...(t.cubeProgression ? { cubeProgression: structuredClone(t.cubeProgression) } : {}),
     },
   };
 }

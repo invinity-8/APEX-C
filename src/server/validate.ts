@@ -163,6 +163,12 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'gmSetCubeAccess':
       if (!isId(c.tokenId) || typeof c.permanent !== 'boolean') return bad('gmSetCubeAccess');
       return { ok: true, command: { type: 'gmSetCubeAccess', tokenId: c.tokenId, permanent: c.permanent } };
+    case 'gmSetCubeProgression':
+      if (!isId(c.tokenId) || !isInt(c.level, 5)) return bad('gmSetCubeProgression');
+      return { ok: true, command: { type: 'gmSetCubeProgression', tokenId: c.tokenId, level: c.level } };
+    case 'cubeUpgrade':
+      if (!isId(c.tokenId) || !isInt(c.expectedLevel, 5) || !isInt(c.currencyRev, 1e9)) return bad('cubeUpgrade');
+      return { ok: true, command: { type: 'cubeUpgrade', tokenId: c.tokenId, expectedLevel: c.expectedLevel, currencyRev: c.currencyRev } };
     case 'gmRechargeItem':
       if (!isId(c.tokenId) || !isId(c.itemId)) return bad('gmRechargeItem');
       return { ok: true, command: { type: 'gmRechargeItem', tokenId: c.tokenId, itemId: c.itemId } };

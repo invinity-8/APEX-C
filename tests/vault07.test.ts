@@ -31,14 +31,17 @@ describe('Imperial Transmutation Cube', () => {
     expect(executeCommand(s, P, { type: 'combineFragments', tokenId: 'sinna', sets: 1, currencyRev: 0 }).ok).toBe(true);
   });
 
-  it('carrying the cube unlocks it; losing the cube locks it again (current possession)', () => {
+  it('new Cube starts locked, progression unlocks transmutation, and earned access survives losing the item', () => {
     let s = run(fresh(), { type: 'arsenalGenerate', stagedId: 'cube', baseId: 'apex-imperial-transmutation-cube', rarity: 'normal', itemLevel: 1, identified: true, giveTo: 'sinna' }, GM, 1);
+    expect(buildPlayerView(s, 'sinna').tokens.find((t) => t.id === 'sinna')!.details!.transmuteUnlocked).toBeUndefined();
+    s = run(s, { type: 'gmGrantCurrency', tokenId: 'sinna', currency: 'cubeFragment', amount: 3 }, GM);
+    s = run(s, { type: 'cubeUpgrade', tokenId: 'sinna', expectedLevel: 0, currencyRev: 1 });
     expect(buildPlayerView(s, 'sinna').tokens.find((t) => t.id === 'sinna')!.details!.transmuteUnlocked).toBe(true);
     const r = transmute(s);
     expect(r.ok).toBe(true);
     s = r.state;
     s = run(s, { type: 'gmRevokeItem', tokenId: 'sinna', itemId: 'cube' }, GM);
-    expect(transmute(s).ok).toBe(false);
+    expect(transmute(s).ok).toBe(true);
   });
 
   it('the GM can grant permanent access; players cannot grant themselves anything', () => {
@@ -51,6 +54,6 @@ describe('Imperial Transmutation Cube', () => {
   });
 
   it('all currencies keep their balances and have a vault slot', () => {
-    expect(CURRENCY_IDS).toEqual(['gold', 'seal', 'orb', 'augment', 'ascend', 'fragment']);
+    expect(CURRENCY_IDS).toEqual(['gold', 'seal', 'orb', 'augment', 'ascend', 'fragment', 'cubeFragment']);
   });
 });

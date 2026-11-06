@@ -224,6 +224,9 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
         rules={rules}
         onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
         onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
+        cubeProgression={details.cubeProgression}
+        cubeCarried={!!details.cubeCarried}
+        onCubeUpgrade={async (expectedLevel, currencyRev) => (await run({ type: 'cubeUpgrade', tokenId: token.id, expectedLevel, currencyRev })).ok}
         lastTransmute={details.lastTransmute}
         transmuteUnlocked={!!details.transmuteUnlocked}
       />
@@ -697,7 +700,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
 /** Item action menu: every action is listed; unavailable ones are disabled with the reason shown. */
 function ItemActions(props: CardProps & { item: Item; close: () => void; onMode: (m: 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate') => void; onRevealed: () => void }) {
   const { token, item, run, eq } = props;
-  const purse = { currency: token.details?.currency };
+  const purse = { currency: token.details?.currency, cubeAccess: token.details?.cubeAccess, cubeProgression: token.details?.cubeProgression, inventory: token.details?.inventory ?? [] };
   const actor = props.isGm ? ({ role: 'gm' } as const) : ({ role: 'player', tokenId: token.id } as const);
   const slot = slotOfItem(eq, item.id);
   const target = suggestSlot(eq, item);

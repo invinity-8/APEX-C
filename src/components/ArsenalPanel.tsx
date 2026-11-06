@@ -728,7 +728,10 @@ function CurrencyGrants({ players, run }: { players: Token[]; run: Run }) {
             return (
               <li key={p.id} className="flex items-center gap-2 rounded-md border border-ink-600 px-2 py-1" data-cube-row={p.id}>
                 <b className="text-marble-100">{p.name}</b>
-                <span className={carries || p.cubeAccess ? 'text-gold-200' : 'text-marble-500'}>{carries ? 'carries a cube' : p.cubeAccess ? 'permanent access' : 'locked'}</span>
+                <span className={carries || p.cubeAccess ? 'text-gold-200' : 'text-marble-500'}>level {p.cubeProgression?.level ?? (carries || p.cubeAccess ? 4 : 0)} · {carries ? 'carries a cube' : p.cubeAccess ? 'permanent access' : 'no Cube access'}</span>
+                <select className={input} aria-label={`Cube level for ${p.name}`} value={p.cubeProgression?.level ?? (carries || p.cubeAccess ? 4 : 0)} disabled={!!p.cubeAccess} title={p.cubeAccess ? 'Permanent legacy access preserves all previous crafting rights at level 4.' : undefined} onChange={(e) => void run({ type: 'gmSetCubeProgression', tokenId: p.id, level: Number(e.target.value) })}>
+                  {[0, 1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>Set level {level}</option>)}
+                </select>
                 <label className="flex items-center gap-1 text-marble-300">
                   <input type="checkbox" checked={!!p.cubeAccess} onChange={(e) => void run({ type: 'gmSetCubeAccess', tokenId: p.id, permanent: e.target.checked })} aria-label={`Permanent transmutation access for ${p.name}`} />
                   permanent
@@ -737,7 +740,7 @@ function CurrencyGrants({ players, run }: { players: Token[]; run: Run }) {
             );
           })}
         </ul>
-        <p className="mt-1 text-[11px] text-marble-500">Grant the cube itself via “Generate” (base item “Imperial Transmutation Cube”). By default access needs the cube in the inventory; “permanent” keeps it unlocked without the cube.</p>
+        <p className="mt-1 text-[11px] text-marble-500">Grant the cube via “Generate”. Players earn levels with the separate Cube Fragments from the purse above. Existing cube owners and permanent GM access retain their previous crafting rights; level 5 remains reserved.</p>
       </div>
     </section>
   );
@@ -855,6 +858,11 @@ function Balance({ state, run }: { state: GameState; run: Run }) {
     ['transmuteWeightRenewal', 'Transmutation weight: Renewal'],
     ['transmuteWeightAugment', 'Transmutation weight: Augmentation'],
     ['transmuteWeightAscension', 'Transmutation weight: Ascension'],
+    ['cubeLevel1Fragments', 'Cube fragments: level 1'],
+    ['cubeLevel2Fragments', 'Cube fragments: level 2'],
+    ['cubeLevel3Fragments', 'Cube fragments: level 3'],
+    ['cubeLevel4Fragments', 'Cube fragments: level 4'],
+    ['cubeLevel5Fragments', 'Cube fragments: level 5'],
     ['encumbranceVariant', 'Variant encumbrance (0 = SRD standard, 1 = variant)'],
     ['resistanceCap', 'Resistance cap (points)'],
     ['toHitCap', 'To-hit cap per weapon'],

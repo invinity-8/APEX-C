@@ -53,6 +53,12 @@ export interface ItemRules {
   transmuteWeightRenewal: number;
   transmuteWeightAugment: number;
   transmuteWeightAscension: number;
+  /** APEX 0.9 – separate Cube Fragments required to advance from levels 0–4. */
+  cubeLevel1Fragments: number;
+  cubeLevel2Fragments: number;
+  cubeLevel3Fragments: number;
+  cubeLevel4Fragments: number;
+  cubeLevel5Fragments: number;
   /** APEX 0.7 carrying: 0 = SRD standard (capacity STR × 15 lb), 1 = SRD variant encumbrance (×5 / ×10 thresholds). */
   encumbranceVariant: number;
 }
@@ -76,6 +82,11 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   transmuteWeightRenewal: 65,
   transmuteWeightAugment: 30,
   transmuteWeightAscension: 5,
+  cubeLevel1Fragments: 3,
+  cubeLevel2Fragments: 6,
+  cubeLevel3Fragments: 9,
+  cubeLevel4Fragments: 12,
+  cubeLevel5Fragments: 15,
   encumbranceVariant: 0,
 };
 
@@ -99,6 +110,11 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   transmuteWeightRenewal: [0, 1000],
   transmuteWeightAugment: [0, 1000],
   transmuteWeightAscension: [0, 1000],
+  cubeLevel1Fragments: [1, 999],
+  cubeLevel2Fragments: [1, 999],
+  cubeLevel3Fragments: [1, 999],
+  cubeLevel4Fragments: [1, 999],
+  cubeLevel5Fragments: [1, 999],
   encumbranceVariant: [0, 1],
 };
 

@@ -27,6 +27,7 @@ import { clampLevel, DRAFT_LIMITS, normaliseEntry, QUEST_BASE, rollDraft, type D
 import { isBagOfHolding } from './weight.js';
 import { createItem } from './instance.js';
 import { AFFIX_RULES, itemRulesOf, MODIFIER_VERSION, RARITY_LABEL } from './rules.js';
+import { canUseCubeOperation, carriesCube, cubeCostForNextLevel, cubeLevelOf, hasCubeAccess, CUBE_BASE } from './cubeProgression.js';
 
 export type GenRarity = 'normal' | 'magic' | 'rare';
 
@@ -50,6 +51,8 @@ export type LootCommand =
   | { type: 'gmTimeTwist'; tokenId: string; action: 'resolve' | 'cancel' }
   | { type: 'gmRechargeItem'; tokenId: string; itemId: string }
   | { type: 'gmSetCubeAccess'; tokenId: string; permanent: boolean }
+  | { type: 'gmSetCubeProgression'; tokenId: string; level: number }
+  | { type: 'cubeUpgrade'; tokenId: string; expectedLevel: number; currencyRev: number }
   // APEX 0.7 – loot drafts (see lootDraft.ts)
   | { type: 'lootDraftCreate'; draftId: string; encounter: Encounter; referenceLevel?: number; categories: LootCategory[]; seed?: number; partyLevel?: number }
   | { type: 'lootDraftEdit'; rev: number; op: DraftOp }
@@ -61,8 +64,8 @@ export type DraftOp =
   | { kind: 'set'; key: string; quantity?: number; itemLevel?: number; rarity?: DraftRarity; identified?: boolean }
   | { kind: 'add'; entry: LootDraftEntry };
 
-export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem', 'gmSetCubeAccess', 'lootDraftCreate', 'lootDraftEdit', 'lootDraftApprove', 'lootDraftDiscard']);
-export const LOOT_PLAYER_COMMANDS = new Set<LootCommand['type']>(['itemIdentify', 'itemReroll', 'itemSalvage', 'combineFragments', 'itemAugment', 'itemAscend', 'transmuteFragments', 'itemActivate']);
+export const LOOT_GM_COMMANDS = new Set<LootCommand['type']>(['arsenalGenerate', 'arsenalGive', 'arsenalDiscard', 'gmGrantCurrency', 'gmRevokeItem', 'gmSetItemLock', 'arsenalGenerateUnique', 'gmTimeTwist', 'gmRechargeItem', 'gmSetCubeAccess', 'gmSetCubeProgression', 'lootDraftCreate', 'lootDraftEdit', 'lootDraftApprove', 'lootDraftDiscard']);
+export const LOOT_PLAYER_COMMANDS = new Set<LootCommand['type']>(['itemIdentify', 'itemReroll', 'itemSalvage', 'combineFragments', 'itemAugment', 'itemAscend', 'transmuteFragments', 'itemActivate', 'cubeUpgrade']);
 export const LOOT_COMMANDS = new Set<string>([...LOOT_GM_COMMANDS, ...LOOT_PLAYER_COMMANDS]);
 /** Commands that need a server-provided random seed. */
 export const SEEDED_COMMANDS = new Set<string>(['arsenalGenerate', 'lootDraftCreate', 'lootDraftApprove', 'itemReroll', 'itemAugment', 'itemAscend', 'transmuteFragments']);
@@ -95,7 +98,8 @@ export function canIdentify(t: Pick<Token, 'currency'>, item: Item): Check {
   return yes;
 }
 
-export function canReroll(t: Pick<Token, 'currency'>, item: Item): Check {
+export function canReroll(t: Pick<Token, 'currency' | 'cubeAccess' | 'cubeProgression' | 'inventory'>, item: Item): Check {
+  if (hasCubeAccess(t) && !canUseCubeOperation(t, 'renewal')) return no('Cube level 2 is required for Renewal operations.');
   if (!item.rarity || !item.baseId) return no('Only generated Magic or Rare items can be rerolled.');
   if (item.identified === false) return no('Cannot reroll an unidentified item – identify it first.');
   if (item.rarity !== 'magic' && item.rarity !== 'rare') return no(`${RARITY_LABEL[item.rarity]} items have no modifiers to reroll.`);
@@ -105,7 +109,8 @@ export function canReroll(t: Pick<Token, 'currency'>, item: Item): Check {
   return yes;
 }
 
-export function canAugment(t: Pick<Token, 'currency'>, item: Item): Check {
+export function canAugment(t: Pick<Token, 'currency' | 'cubeAccess' | 'cubeProgression' | 'inventory'>, item: Item): Check {
+  if (hasCubeAccess(t) && !canUseCubeOperation(t, 'augment')) return no('Cube level 3 is required for Augmentation operations.');
   if (!item.rarity || !item.baseId) return no('Only generated equipment can be augmented.');
   if (item.identified === false) return no('Identify this item first.');
   if (item.rarity === 'normal') return no('Normal items have no affix slots – use an Orb of Ascension first.');
@@ -118,7 +123,8 @@ export function canAugment(t: Pick<Token, 'currency'>, item: Item): Check {
   return yes;
 }
 
-export function canAscend(t: Pick<Token, 'currency'>, item: Item): Check {
+export function canAscend(t: Pick<Token, 'currency' | 'cubeAccess' | 'cubeProgression' | 'inventory'>, item: Item): Check {
+  if (hasCubeAccess(t) && !canUseCubeOperation(t, 'ascend')) return no('Cube level 4 is required for Ascension operations.');
   if (!item.rarity || !item.baseId) return no('Only generated equipment can be ascended.');
   if (item.identified === false) return no('Identify this item first.');
   if (item.rarity === 'rare') return no('Rare is the highest rarity an Orb of Ascension can reach.');
@@ -174,7 +180,9 @@ function revealedName(base: BaseItem, item: Item): string {
 export function addToInventory(t: Token, item: Item): string | null {
   if (t.inventory.length + 1 + (item.held?.length ?? 0) > INVENTORY_LIMITS.items) return `${t.name}'s inventory is full.`;
   if (t.inventory.some((i) => i.id === item.id)) return 'An item with this id already exists.';
+  const legacyCubeEntitlement = item.baseId === CUBE_BASE && !t.cubeProgression && (!!t.cubeAccess || carriesCube(t));
   t.inventory.push({ ...item, container: containersOf(t)[0].id });
+  if (item.baseId === CUBE_BASE && !t.cubeProgression) t.cubeProgression = { level: legacyCubeEntitlement ? 4 : 0, ...(legacyCubeEntitlement ? { legacyEntitlement: true } : {}) };
   syncHolding(t); // a Bag of Holding unpacks its contents into its own container
   return null;
 }
@@ -269,12 +277,11 @@ function uniqueItem(id: string, uniqueId: string, day: number): Item | null {
 }
 
 /**
- * APEX 0.7 – Imperial Transmutation Cube: advanced currency crafting (Arcane Transmutation) is unlocked while the
- * character CARRIES a cube (current possession), or permanently if the GM granted the entitlement. Basic currency
- * functions (balances, identify, reroll, combining fragments into Orbs of Renewal) never need the cube.
+ * APEX 0.9 – Imperial Transmutation Cube progression. New progression records unlock operations by level;
+ * pre-progression saves retain the 0.7 compatibility rules through migrateCubeProgression/cubeLevelOf.
  */
-export const CUBE_BASE = 'apex-imperial-transmutation-cube';
-export const hasCube = (t: Pick<Token, 'inventory' | 'cubeAccess'>) => !!t.cubeAccess || t.inventory.some((i) => i.baseId === CUBE_BASE);
+export { CUBE_BASE };
+export const hasCube = (t: Pick<Token, 'inventory' | 'cubeAccess' | 'cubeProgression'>) => hasCubeAccess(t);
 
 // ---------------------------------------------------------------- command execution
 
@@ -539,6 +546,7 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       const t0 = prev.tokens[cmd.tokenId];
       if (!t0) return fail(prev, 'Unknown character.');
       if (!hasCube(t0)) return fail(prev, 'Arcane Transmutation requires the Imperial Transmutation Cube.');
+      if (!canUseCubeOperation(t0, 'transmute')) return fail(prev, 'Cube level 1 is required for Basic Transmutation.');
       if ((t0.currencyRev ?? 0) !== cmd.currencyRev) return fail(prev, 'Your currency changed in the meantime – please try again.');
       if (typeof cmd.seed !== 'number') return fail(prev, 'This needs a server seed.');
       const sets = Math.floor(cmd.sets);
@@ -635,6 +643,35 @@ export function executeLoot(prev: GameState, actor: Actor, cmd: LootCommand): Re
       else delete t.cubeAccess;
       audit(state, { by: 'GM', action: 'lock', tokenId: t.id, detail: cmd.permanent ? 'Permanent Transmutation access granted' : 'Permanent Transmutation access revoked (the cube itself still unlocks it)' });
       return { ok: true, state };
+    }
+    case 'gmSetCubeProgression': {
+      const current = prev.tokens[cmd.tokenId];
+      if (current?.kind !== 'player') return fail(prev, 'Unknown character.');
+      if (!Number.isInteger(cmd.level) || cmd.level < 0 || cmd.level > 5) return fail(prev, 'Cube level is outside the allowed range.');
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      t.cubeProgression = { ...t.cubeProgression, level: cmd.level, ...(t.cubeAccess ? { gmOverride: true } : {}) };
+      audit(state, { by: 'GM', action: 'lock', tokenId: t.id, detail: `Cube progression set to level ${cmd.level}` });
+      return { ok: true, state };
+    }
+    case 'cubeUpgrade': {
+      const current = prev.tokens[cmd.tokenId];
+      if (current?.kind !== 'player') return fail(prev, 'Unknown character.');
+      if (current.cubeAccess) return fail(prev, 'Permanent GM Cube access already preserves every implemented crafting operation.');
+      if (!hasCubeAccess(current)) return fail(prev, 'You need the Imperial Transmutation Cube or an existing Cube entitlement.');
+      const level = cubeLevelOf(current);
+      if (level !== cmd.expectedLevel) return fail(prev, 'Your Cube level changed in the meantime – please try again.');
+      if ((current.currencyRev ?? 0) !== cmd.currencyRev) return fail(prev, 'Your currency changed in the meantime – please try again.');
+      const cost = cubeCostForNextLevel(level, rules);
+      if (cost === null) return fail(prev, 'The Cube is already at the maximum level.');
+      const fragments = balanceOf(current, 'cubeFragment');
+      if (fragments < cost) return fail(prev, `Requires ${currencyLabel('cubeFragment', cost)}.`);
+      const state = prepare(prev, cmd.tokenId);
+      const t = state.tokens[cmd.tokenId];
+      t.cubeProgression = { ...t.cubeProgression, level: level + 1, ...(t.cubeAccess ? { gmOverride: true } : {}) };
+      setBalance(t, 'cubeFragment', fragments - cost);
+      audit(state, { by: byName(prev, actor), action: 'currency', tokenId: t.id, detail: `Cube upgraded to level ${level + 1}; spent ${currencyLabel('cubeFragment', cost)}` });
+      return { ok: true, state, message: `Cube upgraded to level ${level + 1}.` };
     }
     case 'combineFragments': {
       const t0 = prev.tokens[cmd.tokenId];

@@ -33,6 +33,7 @@ import { redactItem } from './items/instance.js';
 import type { BeastForm } from './beasts.js';
 import type { CharacterCosmetics } from './cosmetics.js';
 import type { CurrencyId } from './items/currency.js';
+import { canUseCubeOperation, cubeLevelOf } from './items/cubeProgression.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
 import { lootRollsView, type LootRoll } from './items/partyLoot.js';
 import { merchantView, type Merchant } from './items/merchant.js';
@@ -152,6 +153,9 @@ export interface TokenDetails {
   /** APEX 0.7: Arcane Transmutation unlocked (cube carried or GM entitlement). */
   transmuteUnlocked?: boolean;
   cubeAccess?: boolean;
+  cubeProgression?: Token['cubeProgression'];
+  cubeCarried?: boolean;
+  cubeCanTransmute?: boolean;
   /** Effective server-computed arena allowance; speed encumbrance never trusts client edits. */
   movementAllowance?: { maxMovePoints: number; remainingMovePoints: number; speedFt: number; loadState: import('./items/weight.js').LoadState };
 }
@@ -259,8 +263,9 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),
   ...(withInventory && t.bodyType ? { bodyType: t.bodyType } : {}),
   ...(withInventory && t.sneaking ? { sneaking: true } : {}),
-  ...(withInventory && (t.cubeAccess || t.inventory.some((i) => i.baseId === 'apex-imperial-transmutation-cube')) ? { transmuteUnlocked: true } : {}),
+  ...(withInventory && canUseCubeOperation(t, 'transmute') ? { transmuteUnlocked: true } : {}),
   ...(withInventory && t.cubeAccess ? { cubeAccess: true } : {}),
+  ...(withInventory ? { cubeProgression: { ...(t.cubeProgression ?? {}), level: cubeLevelOf(t), ...(t.cubeAccess ? { gmOverride: true } : {}) }, cubeCarried: t.inventory.some(i => i.baseId === 'apex-imperial-transmutation-cube'), cubeCanTransmute: canUseCubeOperation(t, 'transmute') } : {}),
   ...(withInventory && t.beastImages ? { beastImageV: Object.fromEntries(Object.entries(t.beastImages).map(([k, v]) => [k, v.v])) } : {}),
 });
 

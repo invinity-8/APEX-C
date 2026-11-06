@@ -11,6 +11,7 @@ import { uniqueDef } from '../../game/items/uniques';
 import type { CarryLoad } from '../../game/items/weight';
 import { formatReduction } from '../../game/items/resistance';
 import { DEFAULT_ITEM_RULES, RARITY_LABEL, type ItemRules } from '../../game/items/rules';
+import { cubeCostForNextLevel, unlockedCubeOperations, CUBE_MAX_LEVEL } from '../../game/items/cubeProgression';
 import type { Item } from '../../game/types';
 import { RARITY_STYLE } from '../itemPresentation';
 
@@ -59,6 +60,12 @@ export function CurrencyIcon({ id, size = 20 }: { id: CurrencyId; size?: number 
           <path d="M12 3l1 18M6.5 12l11-2.5" stroke={c} strokeWidth=".8" opacity=".7" />
         </>
       )}
+      {id === 'cubeFragment' && (
+        <>
+          <path d="M12 2.5 19 7v9l-7 5.5L5 16V7z" fill="#142d31" stroke={c} strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="m12 5 2.3 4.1-2.7 1.5 2 4.8-5-5.7 2.7-1.5z" fill={c} opacity=".9" />
+        </>
+      )}
     </svg>
   );
 }
@@ -78,7 +85,8 @@ export function CubeIcon({ size = 28, locked = false }: { size?: number; locked?
 const VAULT_GROUPS: Array<{ label: string; ids: CurrencyId[] }> = [
   { label: 'Coin', ids: ['gold'] },
   { label: 'Orbs & seals', ids: ['seal', 'orb', 'augment', 'ascend'] },
-  { label: 'Materials', ids: ['fragment'] },
+  { label: 'Arcane materials', ids: ['fragment'] },
+  { label: 'Cube progression', ids: ['cubeFragment'] },
 ];
 
 /**
@@ -94,6 +102,9 @@ export function CurrencyBar({
   onTransmute,
   lastTransmute,
   transmuteUnlocked = false,
+  cubeProgression,
+  cubeCarried = false,
+  onCubeUpgrade,
 }: {
   currency: Partial<Record<CurrencyId, number>> | undefined;
   currencyRev: number;
@@ -102,6 +113,9 @@ export function CurrencyBar({
   onTransmute?: (sets: number, currencyRev: number) => Promise<boolean>;
   lastTransmute?: { rev: number; result: Partial<Record<CurrencyId, number>> };
   transmuteUnlocked?: boolean;
+  cubeProgression?: { level: number; gmOverride?: boolean; legacyEntitlement?: boolean };
+  cubeCarried?: boolean;
+  onCubeUpgrade?: (expectedLevel: number, currencyRev: number) => Promise<boolean>;
 }) {
   const purse = { currency };
   const per = rules.fragmentsPerOrb;
@@ -115,6 +129,10 @@ export function CurrencyBar({
   const w = [rules.transmuteWeightRenewal, rules.transmuteWeightAugment, rules.transmuteWeightAscension];
   const wSum = w.reduce((a, b) => a + b, 0) || 1;
   const odds = (i: number) => `${Math.round((w[i] / wSum) * 100)}%`;
+  const cubeLevel = Math.max(0, Math.min(CUBE_MAX_LEVEL, cubeProgression?.level ?? 0));
+  const cubeFragments = balanceOf(purse, 'cubeFragment');
+  const cubeCost = cubeCostForNextLevel(cubeLevel, rules);
+  const canUpgradeCube = (cubeCarried || transmuteUnlocked || cubeLevel > 0) && cubeCost !== null && cubeFragments >= cubeCost;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (panel === 'combine' && onCombine && (await onCombine(Math.min(sets, max), currencyRev))) (setPanel(null), setSets(1));
@@ -168,6 +186,26 @@ export function CurrencyBar({
             </div>
             <div className="text-marble-300">{CURRENCIES[sel].purpose}</div>
           </div>
+        </div>
+      )}
+      {cubeProgression && (
+        <div className="mt-2 rounded-md border border-teal-800/70 bg-teal-950/30 p-2 text-xs" data-testid="cube-progression">
+          <div className="flex flex-wrap items-center gap-2">
+            <strong className="text-teal-200">Cube level {cubeLevel} / {CUBE_MAX_LEVEL}</strong>
+            {cubeProgression.gmOverride && <span className="rounded border border-gold-500/40 px-1.5 py-0.5 text-gold-200">GM permanent override</span>}
+            {cubeProgression.legacyEntitlement && <span className="text-marble-400">Legacy crafting rights preserved</span>}
+            {!cubeCarried && !transmuteUnlocked && cubeLevel === 0 && <span className="text-marble-400">Carry the Cube to begin progression.</span>}
+          </div>
+          <progress className="mt-1.5 h-2 w-full accent-teal-400" max={CUBE_MAX_LEVEL} value={cubeLevel} aria-label={`Cube progression level ${cubeLevel} of ${CUBE_MAX_LEVEL}`} />
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-marble-300">
+            {unlockedCubeOperations().filter((o) => o.level <= cubeLevel).map((o) => <span key={o.level} className="text-teal-200">✓ {o.label}</span>)}
+            {unlockedCubeOperations().filter((o) => o.level > cubeLevel).map((o) => <span key={o.level} className="text-marble-500">🔒 {o.label}</span>)}
+          </div>
+          {cubeCost !== null && <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span>Next level: {cubeFragments} / {cubeCost} Cube Fragments</span>
+            {onCubeUpgrade && !cubeProgression.gmOverride && <button className="btn btn-ghost px-2 py-0.5" disabled={!canUpgradeCube} onClick={async () => { await onCubeUpgrade(cubeLevel, currencyRev); }} data-testid="cube-upgrade">Upgrade to level {cubeLevel + 1}</button>}
+          </div>}
+          {cubeLevel === CUBE_MAX_LEVEL && <p className="mt-1 text-marble-400">Advanced crafting is reserved for a future release.</p>}
         </div>
       )}
       {(onCombine || onTransmute) && (

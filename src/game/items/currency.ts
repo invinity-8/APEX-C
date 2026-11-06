@@ -2,9 +2,9 @@
  * APEX magical currency (APEX 0.6) – original names. Balances live on the character token
  * (`token.currency`) and only ever change through server-validated commands.
  */
-export type CurrencyId = 'gold' | 'seal' | 'orb' | 'augment' | 'ascend' | 'fragment';
+export type CurrencyId = 'gold' | 'seal' | 'orb' | 'augment' | 'ascend' | 'fragment' | 'cubeFragment';
 /** APEX 0.7: Gold Pieces – the coin used at the GM Merchant – live in the same server-validated purse. */
-export const CURRENCY_IDS: CurrencyId[] = ['gold', 'seal', 'orb', 'augment', 'ascend', 'fragment'];
+export const CURRENCY_IDS: CurrencyId[] = ['gold', 'seal', 'orb', 'augment', 'ascend', 'fragment', 'cubeFragment'];
 export const MAX_CURRENCY = 99999;
 
 export const CURRENCIES: Record<CurrencyId, { name: string; plural: string; purpose: string; color: string }> = {
@@ -14,6 +14,7 @@ export const CURRENCIES: Record<CurrencyId, { name: string; plural: string; purp
   augment: { name: 'Orb of Augmentation', plural: 'Orbs of Augmentation', purpose: 'Adds one random eligible modifier to an identified Magic or Rare item with a free affix slot.', color: '#5fc6a8' },
   ascend: { name: 'Orb of Ascension', plural: 'Orbs of Ascension', purpose: 'Raises an identified item one rarity step (Normal → Magic → Rare), keeping its modifiers.', color: '#e08a4a' },
   fragment: { name: 'Arcane Fragment', plural: 'Arcane Fragments', purpose: 'Salvaged from equipment; combine them into Orbs of Renewal.', color: '#b48ce6' },
+  cubeFragment: { name: 'Cube Fragment', plural: 'Cube Fragments', purpose: 'Progression material for the Imperial Transmutation Cube. Never spent as Arcane Fragments.', color: '#74d2c3' },
 };
 
 export const currencyLabel = (id: CurrencyId, n: number) => `${n} ${n === 1 ? CURRENCIES[id].name : CURRENCIES[id].plural}`;

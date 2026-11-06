@@ -128,6 +128,7 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'itemReroll',
   'itemSalvage',
   'combineFragments',
+  'cubeUpgrade',
   'itemAugment',
   'itemAscend',
   'transmuteFragments',

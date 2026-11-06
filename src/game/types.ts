@@ -218,6 +218,8 @@ export interface Token {
   cosmetics?: CharacterCosmetics;
   /** APEX 0.7: GM-granted permanent Arcane Transmutation access (otherwise carrying the cube unlocks it). */
   cubeAccess?: boolean;
+  /** APEX 0.9: earned Cube level, unspent Cube Fragments and GM adjustment marker. */
+  cubeProgression?: { level: number; gmOverride?: boolean; legacyEntitlement?: boolean };
   /** APEX 0.7: Sneak mode – each step costs double movement points. Not invisibility: being unseen still needs a Stealth check. */
   sneaking?: boolean;
   /** APEX 0.7: player-uploaded pictures per Wild Shape form (private storage path + cache version; path never sent). */
