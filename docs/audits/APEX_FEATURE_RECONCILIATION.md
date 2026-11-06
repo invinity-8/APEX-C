@@ -9,7 +9,7 @@ Methode: Code, Tests, Migrationsdateien, PR-Verläufe und read-only Produktionsa
 - Die Navigation zwischen Character und Spells ist in main korrigiert. Das Journal hat eine eigene Hauptnavigation; die doppelten Journal-Workspace-Einstiege sind entfernt.
 - Der Map-Tab hat nun einen separaten GM-Fokus, der Spielerzuweisungen nicht automatisch verändert. Ausgewählte Transfers und Sanctuary sind eigene, serverautorisierte Aktionen.
 - Die Kenney-Vorschau ist im Map-Renderer implementiert. Sie verwendet eine kleine Sprite-Auswahl aus dem existierenden privaten Bucket und kurzlebige signierte URLs. Ein angemeldeter Kartenlauf, Screenshotvergleich und Performancewerte sind noch nicht browserverifiziert.
-- PR #47 ergänzt People-/Places-Referenzen in Journal-Einträgen. Die Links speichern IDs; sichtbare Titel werden nur aus für den Nutzer lesbaren Einträgen aufgelöst. Der PR bleibt bis zur Konfliktauflösung und Integration in main offen.
+- PR #47 ergänzt People-/Places-Referenzen in Journal-Einträgen. Die Links speichern IDs; sichtbare Titel werden nur aus für den Nutzer lesbaren Einträgen aufgelöst. Der Dokumentkonflikt ist im bestehenden Branch durch Vergleich beider Fassungen gelöst; latest main ist als erster Parent integriert. PR #47 ist offen und mergebar, aber noch nicht in main gemergt. Journal-Referenzen bleiben bis zum Owner-Merge PR-Code.
 - Die Produktionsabfragen dieses Durchlaufs sind read-only: Schema-Version 6; die letzten registrierten Migrationen sind 20261104220752, 20261105120000 und 20261106100000. Bucket apex-asset-packs ist weiterhin privat. Keine Produktionsänderung wurde vorgenommen.
 
 ## Abgleichsmatrix
@@ -40,6 +40,8 @@ Methode: Code, Tests, Migrationsdateien, PR-Verläufe und read-only Produktionsa
 | Kenney / 2.5D | Renderer implementiert und CI-getestet, Produktion nicht visuell abgenommen | PR #46: Classic/2.5D-Schalter, fixe Asset-Allowlist, private signed URLs, Zugriff auf veröffentlichte bzw. zugewiesene Szene | Angemeldete Preview, gleiche Kamera/Szene als Screenshotpaar; Ladezeit, Bytes, Eingabereaktion und Rendering bei Radius 39 und 78 messen |
 
 ## Produktions- und Migrationsstand (read-only)
+
+- PR #47 Merge-Kandidat `22bb186` (Workflow Run #150) bestand Migration Guard, 45 Testdateien / 373 Tests, TypeScript plus Vite-Produktionsbuild sowie isolierte Migration-/RLS-/Scene-Checks. Vercel-Preview ist erfolgreich gebaut. Der Build zeigt nur Vite-Konfigurations-/Chunkgrößen-Warnungen.
 
 - apex_schema_info meldet schema_version 6.
 - Migrationseinträge enthalten 20261104220752 add_apex_agent_asset_pack_catalog, 20261105120000 apex_scene_foundation und 20261106100000 apex_asset_pack_storage_state.
