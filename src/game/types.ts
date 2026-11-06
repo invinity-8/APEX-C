@@ -134,6 +134,19 @@ export interface Item {
   history?: Array<{ day: number; text: string }>;
 }
 
+/** Player-authored generic items stay drafts until a GM approves them. */
+export interface NarrativeItemRequest {
+  id: string;
+  name: string;
+  description: string;
+  notes?: string;
+  quantity: number;
+  weightKg?: number;
+  container?: string;
+  createdDay: number;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
 /** One rolled modifier on an item instance (APEX 0.6). */
 export interface RolledMod {
   modId: string;
@@ -181,6 +194,8 @@ export interface Token {
   /** Nur Spieler: Teilt diese Figur Sicht & Wissen mit dem Rest der Gruppe? */
   sharesWithParty: boolean;
   inventory: Item[];
+  /** Pending and recently reviewed narrative-item requests; exposed only to this character's owner and GM. */
+  itemRequests?: NarrativeItemRequest[];
   /** APEX 0.3: inventory containers (missing = the default set, see inventory.ts). */
   containers?: InventoryContainer[];
   /** APEX 0.4 – cosmetic only (never used for permissions or rules). */
@@ -404,3 +419,4 @@ export interface ItemAuditEntry {
 
 /** Who performs an action? */
 export type Actor = { role: 'gm' } | { role: 'player'; tokenId: string };
+

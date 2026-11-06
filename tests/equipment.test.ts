@@ -35,9 +35,9 @@ function setup() {
   s.tokens.sinna.inventory = [];
   s.tokens.sinna.equipment = undefined;
   for (const [id, name] of [['bp', 'Breastplate'], ['sh', 'Shield'], ['qs', 'Quarterstaff'], ['dg', 'Dagger'], ['gs', 'Greatsword']])
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: id, name });
+    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: id, name }, GM);
   for (const [id, preset] of [['bp', ARMOR_PRESETS.Breastplate], ['sh', ARMOR_PRESETS.Shield], ['qs', WEAPON_PRESETS.Quarterstaff], ['dg', WEAPON_PRESETS.Dagger], ['gs', WEAPON_PRESETS.Greatsword]] as const)
-    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: id, rev: 0, equip: preset });
+    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: id, rev: 0, equip: preset }, GM);
   return s;
 }
 const slotsUsing = (s: GameState, id: string) => EQUIP_SLOTS.filter((k) => s.tokens.sinna.equipment?.slots[k] === id);
@@ -58,7 +58,7 @@ describe('equipment rules (server-authoritative)', () => {
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' });
     const dex18 = { ...sheet, attributes: sheet.attributes.map((a) => (a.name === 'Dexterity' ? { ...a, value: '18' } : a)) };
     expect(deriveStats(dex18, s.tokens.sinna).ac.value).toBe(16); // 14 + min(4, 2)
-    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 1, equip: ARMOR_PRESETS['Plate armor'] });
+    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 1, equip: ARMOR_PRESETS['Plate armor'] }, GM);
     expect(deriveStats(dex18, s.tokens.sinna).ac.value).toBe(18);
   });
 
@@ -89,6 +89,20 @@ describe('equipment rules (server-authoritative)', () => {
     expect(executeCommand(s, P, { type: 'equipItem', tokenId: 'sinna', itemId: 'gs', slot: 'off2' }).ok).toBe(false);
   });
 
+  it('equips one physical weapon from a stack and safely reuses it on a retried command', () => {
+    let s = run(setup(), { type: 'invAddItem', tokenId: 'sinna', itemId: 'stacked', name: 'Quarterstaff', quantity: 2 }, GM);
+    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'stacked', rev: 0, equip: WEAPON_PRESETS.Quarterstaff }, GM);
+    const equip = { type: 'equipItem', tokenId: 'sinna', itemId: 'stacked', slot: 'main1' } as const;
+    s = run(s, equip);
+    const firstCopyId = s.tokens.sinna.equipment!.slots.main1;
+    expect(s.tokens.sinna.inventory.find((i) => i.id === 'stacked')?.quantity).toBe(1);
+    expect(s.tokens.sinna.inventory.find((i) => i.id === firstCopyId)?.quantity).toBe(1);
+    s = run(s, equip);
+    expect(s.tokens.sinna.inventory).toHaveLength(7);
+    expect(s.tokens.sinna.inventory.filter((i) => i.id === firstCopyId)).toHaveLength(1);
+    expect(s.tokens.sinna.equipment!.slots.main1).toBe(firstCopyId);
+  });
+
   it('resting preset: armour and shield count as removed, nothing else changes; switching back restores', () => {
     let s = setup();
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' });
@@ -104,7 +118,7 @@ describe('equipment rules (server-authoritative)', () => {
 
   it('wrong slots, undefined properties and removed items are handled safely', () => {
     let s = setup();
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'rope', name: 'Rope' });
+    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'rope', name: 'Rope' }, GM);
     expect(executeCommand(s, P, { type: 'equipItem', tokenId: 'sinna', itemId: 'rope', slot: 'main1' }).ok).toBe(false);
     expect(executeCommand(s, P, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'main1' }).ok).toBe(false);
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' });
@@ -115,6 +129,8 @@ describe('equipment rules (server-authoritative)', () => {
   it('permissions: players only for their own character; GM-locked properties', () => {
     let s = setup();
     expect(executeCommand(s, { role: 'player', tokenId: 'aster' }, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' }).ok).toBe(false);
+    expect(executeCommand(s, P, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 0, equip: { kind: 'armor', armorBase: 25 } }).ok).toBe(false);
+    expect(executeCommand(s, P, { type: 'setEquipConfig', tokenId: 'sinna', acOther: 50 }).ok).toBe(false);
     s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 1, equip: { kind: 'armor', armorType: 'medium', armorBase: 15 }, gmLocked: true }, GM);
     expect(s.tokens.sinna.inventory.find((i) => i.id === 'bp')!.equip!.gmLocked).toBe(true);
     expect(executeCommand(s, P, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'bp', rev: 2, equip: { kind: 'armor', armorBase: 25 } }).ok).toBe(false);
@@ -135,3 +151,4 @@ describe('equipment rules (server-authoritative)', () => {
     expect(suggestEquip('Mysterious Orb')).toBeNull();
   });
 });
+

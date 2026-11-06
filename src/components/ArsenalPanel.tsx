@@ -47,12 +47,29 @@ const CATEGORY_LABEL: Partial<Record<BaseCategory, string>> = {
 };
 
 export function ArsenalPanel({ state, run }: { state: GameState; run: Run }) {
+  const [requestEdits, setRequestEdits] = useState<Record<string, { name?: string; description?: string; notes?: string; quantity?: number }>>({});
   const players = Object.values(state.tokens).filter((t) => t.kind === 'player');
+  const pendingItemRequests = players.flatMap(t => (t.itemRequests ?? []).filter(r => r.status === 'pending').map(request => ({ token: t, request })));
   const staged = state.arsenal?.staged ?? [];
   const open = (state.lootRolls ?? []).filter((r) => r.status === 'open').length;
   return (
     <div className="mx-auto max-w-7xl space-y-3 p-3" aria-label="GM Arsenal">
       <h2 className="font-display text-2xl font-black text-gold-200">Arsenal</h2>
+      {pendingItemRequests.length > 0 && <section className="panel space-y-2 p-3" aria-label="Pending narrative item requests">
+        <h3 className="panel-title">Pending player item requests <span className="ml-1 text-xs text-gold-200">{pendingItemRequests.length}</span></h3>
+        <ul className="space-y-2">{pendingItemRequests.map(({ token, request }) => {
+          const edit = requestEdits[request.id] ?? {};
+          const set = (patch: typeof edit) => setRequestEdits(prev => ({ ...prev, [request.id]: { ...prev[request.id], ...patch } }));
+          return <li key={`${token.id}:${request.id}`} className="grid gap-2 rounded-lg border border-ink-600 bg-ink-800/50 p-2 sm:grid-cols-[8rem_1fr_1fr_5rem_auto]" data-item-request={request.id}>
+            <div className="text-xs text-marble-400">{token.name} · day {request.createdDay}</div>
+            <input className={input} aria-label={`Edit ${request.name} name`} value={edit.name ?? request.name} onChange={e => set({ name: e.target.value })} />
+            <input className={input} aria-label={`Edit ${request.name} description`} placeholder="Description" value={edit.description ?? request.description} onChange={e => set({ description: e.target.value })} />
+            <input className={input} aria-label={`Edit ${request.name} quantity`} type="number" min={1} value={edit.quantity ?? request.quantity} onChange={e => set({ quantity: Math.max(1, Math.round(Number(e.target.value) || 1)) })} />
+            <div className="flex gap-1"><button className="btn btn-gold px-2" onClick={() => void run({ type: 'gmReviewItemRequest', tokenId: token.id, requestId: request.id, decision: 'approve', edits: { name: edit.name ?? request.name, description: edit.description ?? request.description, notes: edit.notes ?? request.notes ?? '', quantity: edit.quantity ?? request.quantity, ...(request.weightKg !== undefined ? { weightKg: request.weightKg } : {}), ...(request.container ? { container: request.container } : {}) } })}>Approve</button><button className="btn btn-ghost px-2" onClick={() => void run({ type: 'gmReviewItemRequest', tokenId: token.id, requestId: request.id, decision: 'reject' })}>Reject</button></div>
+            <label className="text-xs text-marble-400 sm:col-start-2 sm:col-span-2">Notes<input className={`${input} mt-1 w-full`} aria-label={`Edit ${request.name} notes`} value={edit.notes ?? request.notes ?? ''} onChange={e => set({ notes: e.target.value })} /></label>
+          </li>;
+        })}</ul>
+      </section>}
       {/* APEX 0.7 consolidation: one area per task; the tray (shared by all of them) stays visible on the side */}
       <div className="grid items-start gap-3 lg:grid-cols-[1fr_22rem]">
         <WidgetTabs
@@ -869,3 +886,4 @@ function Balance({ state, run }: { state: GameState; run: Run }) {
     </section>
   );
 }
+

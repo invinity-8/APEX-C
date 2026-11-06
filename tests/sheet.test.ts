@@ -124,14 +124,17 @@ describe('Inventory rules', () => {
     expect(containersOf(s.tokens.sinna).map((c) => c.name)).toEqual(['Backpack', 'Pockets', 'Side Pouch', 'Equipped / Worn', 'Other']);
   });
 
-  it('players change only their own inventory, and the change stays out of the shared log', () => {
+  it('players can request only their own narrative items; requests stay out of the shared log', () => {
     const s = createDemoState({ radius: 6, seed: 1 });
-    const own = executeCommand(s, { role: 'player', tokenId: 'sinna' }, { type: 'invAddItem', tokenId: 'sinna', itemId: 'k1', name: '  Old iron key  ' });
+    const own = executeCommand(s, { role: 'player', tokenId: 'sinna' }, { type: 'invRequestItem', tokenId: 'sinna', requestId: 'req-1', name: '  Old iron key  ', quantity: 1, description: 'A found key.' });
     expect(own.ok).toBe(true);
-    expect(own.state.tokens.sinna.inventory.at(-1)).toMatchObject({ id: 'k1', name: 'Old iron key', quantity: 1, container: 'backpack', rev: 0 });
+    expect(own.state.tokens.sinna.inventory.some(i => i.id === 'k1')).toBe(false);
+    expect(own.state.tokens.sinna.itemRequests?.[0]).toMatchObject({ id: 'req-1', name: 'Old iron key', status: 'pending' });
     expect(own.state.log).toEqual(s.log);
-    const other = executeCommand(s, { role: 'player', tokenId: 'sinna' }, { type: 'invAddItem', tokenId: 'aster', itemId: 'k2', name: 'x' });
+    const other = executeCommand(s, { role: 'player', tokenId: 'sinna' }, { type: 'invRequestItem', tokenId: 'aster', requestId: 'req-2', name: 'x', quantity: 1, description: '' });
     expect(other.ok).toBe(false);
+    const bypass = executeCommand(s, { role: 'player', tokenId: 'sinna' }, { type: 'invAddItem', tokenId: 'sinna', itemId: 'k1', name: 'Key' });
+    expect(bypass.ok).toBe(false);
     const empty = executeCommand(s, { role: 'gm' }, { type: 'invAddItem', tokenId: 'aster', itemId: 'k3', name: '   ' });
     expect(empty.ok).toBe(false);
   });
@@ -143,3 +146,4 @@ describe('Inventory rules', () => {
     for (const t of v.tokens.filter((t) => t.id !== 'sinna')) expect(t.details?.inventory ?? []).toEqual([]);
   });
 });
+

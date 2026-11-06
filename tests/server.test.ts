@@ -400,31 +400,37 @@ describe('Filtered state and commands (unchanged multiplayer rules)', () => {
 });
 
 describe('Inventory (authoritative game state)', () => {
-  it('a player adds a free-text item to their own inventory; the GM sees the same record', async () => {
+  it('a player item request stays pending until GM approval, then both views show the approved item', async () => {
     const h = as(await login('hannah', 'hannah-pass-1'));
-    const r = await h.cmd({ type: 'invAddItem', tokenId: 'sinna', itemId: 'itm-key', name: 'Old iron key, wrapped in red cloth', container: 'pockets' });
+    const r = await h.cmd({ type: 'invRequestItem', tokenId: 'sinna', requestId: 'req-key', name: 'Old iron key, wrapped in red cloth', quantity: 1, description: 'Found near the gate.', container: 'pockets' });
     expect(r.status).toBe(200);
     const mine = (r.body as PlayerPayload).view!.tokens.find((t) => t.id === 'sinna')!.details!;
-    expect(mine.inventory.find((i) => i.id === 'itm-key')).toMatchObject({ name: 'Old iron key, wrapped in red cloth', quantity: 1, container: 'pockets' });
+    expect(mine.inventory.find((i) => i.id === 'req-req-key')).toBeUndefined();
+    expect(mine.itemRequests?.find((i) => i.id === 'req-key')).toMatchObject({ status: 'pending', description: 'Found near the gate.' });
+    const gm = as(await login('gm', 'gm-secret-pass'));
+    await gm.cmd({ type: 'gmReviewItemRequest', tokenId: 'sinna', requestId: 'req-key', decision: 'approve' });
+    const approved = ((await h.get('state')).body as PlayerPayload).view!.tokens.find((t) => t.id === 'sinna')!.details!;
+    expect(approved.inventory.find((i) => i.id === 'req-req-key')).toMatchObject({ name: 'Old iron key, wrapped in red cloth', quantity: 1, container: 'pockets' });
     // existing items are preserved and get a default container
-    expect(mine.inventory.find((i) => i.name === 'Aqueduct-Stone Staff')?.container).toBe('equipped');
-    const gmState = ((await as(await login('gm', 'gm-secret-pass')).get('state')).body as GmPayload).state!;
-    expect(gmState.tokens.sinna.inventory.some((i) => i.id === 'itm-key')).toBe(true);
+    expect(approved.inventory.find((i) => i.name === 'Aqueduct-Stone Staff')?.container).toBe('equipped');
+    const gmState = ((await gm.get('state')).body as GmPayload).state!;
+    expect(gmState.tokens.sinna.inventory.some((i) => i.id === 'req-req-key')).toBe(true);
   });
 
   it('custom containers can be created, renamed and deleted only when empty', async () => {
     const h = as(await login('hannah', 'hannah-pass-1'));
     expect((await h.cmd({ type: 'invAddContainer', tokenId: 'sinna', containerId: 'c-chest', name: 'Hidden Chest' })).status).toBe(200);
-    await h.cmd({ type: 'invAddItem', tokenId: 'sinna', itemId: 'itm-1', name: 'Silver ring', container: 'c-chest' });
+    await h.cmd({ type: 'invRequestItem', tokenId: 'sinna', requestId: 'req-ring', name: 'Silver ring', quantity: 1, description: '', container: 'c-chest' });
+    await as(await login('gm', 'gm-secret-pass')).cmd({ type: 'gmReviewItemRequest', tokenId: 'sinna', requestId: 'req-ring', decision: 'approve' });
     expect((await h.cmd({ type: 'invRemoveContainer', tokenId: 'sinna', containerId: 'c-chest' })).status).toBe(422);
-    await h.cmd({ type: 'invUpdateItem', tokenId: 'sinna', itemId: 'itm-1', rev: 0, container: 'backpack' });
+    await h.cmd({ type: 'invUpdateItem', tokenId: 'sinna', itemId: 'req-req-ring', rev: 0, container: 'backpack' });
     expect((await h.cmd({ type: 'invRenameContainer', tokenId: 'sinna', containerId: 'c-chest', name: 'Old Chest' })).status).toBe(200);
     expect((await h.cmd({ type: 'invRemoveContainer', tokenId: 'sinna', containerId: 'c-chest' })).status).toBe(200);
   });
 
   it('players cannot touch another character’s inventory; the GM can', async () => {
     const h = as(await login('hannah', 'hannah-pass-1'));
-    expect((await h.cmd({ type: 'invAddItem', tokenId: 'aster', itemId: 'itm-x', name: 'Planted evidence' })).status).toBe(403);
+    expect((await h.cmd({ type: 'invRequestItem', tokenId: 'aster', requestId: 'req-x', name: 'Planted evidence', quantity: 1, description: '' })).status).toBe(403);
     expect((await h.cmd({ type: 'invRemoveItem', tokenId: 'aster', itemId: 'i4', rev: 0 })).status).toBe(403);
     const gm = as(await login('gm', 'gm-secret-pass'));
     expect((await gm.cmd({ type: 'invUpdateItem', tokenId: 'aster', itemId: 'i4', rev: 0, quantity: 2, notes: 'Notched' })).status).toBe(200);
@@ -581,3 +587,4 @@ describe('Infrastructure and deployment health', () => {
     expect((r.body as { code: string }).code).toBe('schema_outdated');
   });
 });
+

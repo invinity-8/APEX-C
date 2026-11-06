@@ -26,6 +26,7 @@ import type {
   MarkerStyle,
   Announcement,
   BodyType,
+  NarrativeItemRequest,
 } from './types.js';
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
@@ -132,6 +133,7 @@ export interface TokenDetails {
   sharesWithParty: boolean;
   /** Private: only the character's own player and the GM receive the inventory. */
   inventory: Item[];
+  itemRequests?: NarrativeItemRequest[];
   containers?: InventoryContainer[];
   /** APEX 0.5: private like the inventory (owner + GM only). */
   equipment?: Equipment;
@@ -244,6 +246,7 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   controllers: [...t.controllers],
   sharesWithParty: t.sharesWithParty,
   inventory: withInventory ? t.inventory.map((i) => (redact ? redactItem({ ...i }) : structuredClone(i))) : [],
+  ...(withInventory && t.itemRequests?.length ? { itemRequests: structuredClone(t.itemRequests) } : {}),
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
   ...(withInventory ? { currency: { ...(t.currency ?? {}) }, currencyRev: t.currencyRev ?? 0 } : {}),
@@ -450,3 +453,4 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     merchant: merchantView(state, redactItem),
   };
 }
+
