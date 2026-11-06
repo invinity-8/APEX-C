@@ -1,4 +1,25 @@
 -- Isolated test transaction only. Never run this fixture against the live campaign.
+create or replace function pg_temp.expect_denied(sql text, who uuid) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', who)::text, true);
+  execute 'set local role authenticated';
+  begin
+    execute sql;
+    raise exception 'NOT DENIED: %', sql;
+  exception when insufficient_privilege then null;
+  end;
+  execute 'reset role';
+end $$;
+create or replace function pg_temp.expect_denied_anon(sql text) returns void language plpgsql as $$
+begin
+  execute 'set local role anon';
+  begin
+    execute sql;
+    raise exception 'NOT DENIED (anon): %', sql;
+  exception when insufficient_privilege then null;
+  end;
+  execute 'reset role';
+end $$;
 begin;
 do $$
 declare
