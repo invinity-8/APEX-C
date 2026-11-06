@@ -24,11 +24,12 @@ export const BAG_CAPACITY_KG = lbToKg(500);
 export const holdingContainerId = (bagItemId: string) => `hold-${bagItemId}`;
 export const isBagOfHolding = (i: Pick<Item, 'baseId'>) => i.baseId === BAG_OF_HOLDING;
 
-export function itemWeightKg(i: Pick<Item, 'weightKg' | 'baseId'>): number {
-  if (typeof i.weightKg === 'number' && Number.isFinite(i.weightKg) && i.weightKg >= 0) return i.weightKg;
+export function itemWeightGrams(i: Pick<Item, 'weightKg' | 'baseId'>): number {
+  if (typeof i.weightKg === 'number' && Number.isFinite(i.weightKg) && i.weightKg >= 0) return Math.round(i.weightKg * 1000);
   const b = baseItem(i.baseId);
-  return b ? lbToKg(b.weight) : 0;
+  return b ? Math.round(lbToKg(b.weight) * 1000) : 0;
 }
+export const itemWeightKg = (i: Pick<Item, 'weightKg' | 'baseId'>): number => itemWeightGrams(i) / 1000;
 
 /** Bag of Holding ids by their holding container id. */
 export function holdingContainers(t: Pick<Token, 'inventory'>): Map<string, Item> {
@@ -37,7 +38,7 @@ export function holdingContainers(t: Pick<Token, 'inventory'>): Map<string, Item
 
 export function bagContentsKg(t: Pick<Token, 'inventory'>, bagItemId: string): number {
   const id = holdingContainerId(bagItemId);
-  return round(t.inventory.filter((i) => i.container === id).reduce((s, i) => s + itemWeightKg(i) * i.quantity, 0));
+  return round(t.inventory.filter((i) => i.container === id).reduce((s, i) => s + itemWeightGrams(i) * i.quantity, 0) / 1000);
 }
 
 export type LoadState = 'ok' | 'encumbered' | 'heavily' | 'over';
@@ -56,16 +57,16 @@ export interface CarryLoad {
   assumedStrength?: boolean;
 }
 
-const round = (n: number) => Math.round(n * 100) / 100;
+const round = (n: number) => Math.round(n * 1000) / 1000;
 
 export const ASSUMED_STRENGTH = 10;
 
 export function carryLoad(t: Pick<Token, 'inventory'> & { currency?: Token['currency'] }, strength: number | null, carryBonusLb: number, variant: boolean): CarryLoad {
   const holding = holdingContainers(t);
   let load = 0;
-  for (const i of t.inventory) if (!(i.container && holding.has(i.container))) load += itemWeightKg(i) * i.quantity;
+  for (const i of t.inventory) if (!(i.container && holding.has(i.container))) load += itemWeightGrams(i) * i.quantity;
   const coinsKg = round(lbToKg(Math.max(0, t.currency?.gold ?? 0) / 50));
-  const loadKg = round(load + coinsKg);
+  const loadKg = round(load / 1000 + coinsKg);
   const bags = [...holding.values()].map((b) => ({ id: b.id, name: b.name, contentsKg: bagContentsKg(t, b.id), capacityKg: BAG_CAPACITY_KG }));
   // without a Strength score on the sheet APEX assumes an average 10, so the gauge still gives a guide value
   const assumed = strength === null || !Number.isFinite(strength) || strength <= 0;
@@ -89,3 +90,4 @@ export function strengthScore(sheet: { attributes: Array<{ name: string; value: 
   const n = a ? Number(/\d+/.exec(a.value)?.[0]) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
 }
+
