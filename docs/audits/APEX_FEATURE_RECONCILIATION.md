@@ -3,7 +3,7 @@
 Stand: 2026-11-06
 Geprüfter Ausgangsstand: `main` / Production `df8090fad406677f26830952861c7b092f4beff0` (PRs #41–#47 gemergt).
 Abschlussbranch: `feat/apex-09-closeout`, abgeleitet von diesem `main`.
-Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, TypeScript und Produktionsbuild sowie read-only Health-/Deploymentprüfung. Keine Produktionsdaten wurden geschrieben. Der Mock-Harness verwendet MemoryRepo. Der gestartete lokale Mockserver war im verfügbaren isolierten Browser nicht erreichbar (`ERR_CONNECTION_TIMED_OUT`); daher ist kein GM-/Player-Browserlauf behauptet.
+Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, TypeScript und Produktionsbuild sowie read-only Health-/Deploymentprüfung. Keine Produktionsdaten wurden geschrieben. Der Mock-Harness verwendet MemoryRepo. Der gestartete lokale Mockserver war im verfügbaren isolierten Browser nicht erreichbar (`ERR_CONNECTION_TIMED_OUT`). Die Vercel-Code-Preview rendert im Browser die APEX-0.9-Willkommensseite mit PR-/Commit-Kennung; es wurde keine Anmeldung ausgelöst und kein GM-/Player-Ablauf durchgeführt.
 
 ## Live- und Merge-Status
 
