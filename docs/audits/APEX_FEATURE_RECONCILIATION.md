@@ -37,9 +37,9 @@ Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, Ty
 - `pnpm run test`: bestanden; 45 Dateien / 376 Tests.
 - `pnpm run typecheck`: bestanden.
 - `pnpm run build`: bestanden; bestehende Warnungen zu Vite-native-config-Imports und Client-Chunks über 500 kB.
-- Isolierte Postgres-Migrations-/RLS-/Scene-Transaktionsprüfung: CI Run `42269369640` auf aktuellem PR-Head bestanden; Production-DB-Job übersprungen.
+- Isolierte Postgres-Migrations-/RLS-/Scene-Transaktionsprüfung: CI Run `42270359126` auf Head `b0def743dd81b7779f8e1e65dfab60787524d740` bestanden; Production-DB-Job übersprungen.
 - Echter GM-/Player-Browserlauf: nicht bestanden/nicht gelaufen, weil der Harness-Playwright-Treiber fehlt und der verfügbare Browser die lokale Mock-URL nicht erreichen kann. Kein Ergebnis daraus wird als Abnahme gewertet.
-- PR-CI Run `42269369640` auf dem aktuellen PR-Head: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der production-db-Deployment-Job ist korrekt übersprungen; es gab keinen Produktionsschreibzugriff.
+- PR-CI Run `42270359126` auf Head `b0def743dd81b7779f8e1e65dfab60787524d740`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der production-db-Deployment-Job ist korrekt übersprungen; es gab keinen Produktionsschreibzugriff.
 
 ## Abschlussentscheidung
 

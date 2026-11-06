@@ -12,7 +12,7 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 - **TypeScript-Konfiguration (dieser Branch):** globale `types`-Liste entfernt, Vite-Client-Typen via `src/vite-env.d.ts` auf den Client begrenzt. Lokaler TypeScript-/Produktionsbuild und aktueller Vercel-Preview-Build bestehen. Der Preview-API-Endpunkt antwortet mit HTTP 200 und bestätigt Version `0.9.0` sowie den aktuellen PR-Commit. Production wurde nicht neu bereitgestellt.
 - **APEX-Version:** Frontend, API und Paketversion sind für den Releasekandidaten auf `0.9.0` angehoben; Versionssynchronität ist durch `tests/foundation.test.ts` abgesichert.
 - **Versatile-Griff:** Handwechsel ist jetzt eine autorisierte `setWeaponGrip`-Aktion auf dem Charakter. Die serverseitige Regel akzeptiert nur eine ausgerüstete vielseitige Waffe mit gültigem Zweithand-Schadenswürfel; Zweihandgriff räumt den Nebenhandslot frei und die abgeleitete Angriffsübersicht zeigt den alternativen Würfel. Beim Zurückschalten wird Nebenhandausrüstung nicht automatisch wieder angelegt. Unit-/Validierungstests ergänzt; Browser-/Live-Roundtrip bleibt offen.
-- **Automatisierte Ergebnisse:** lokal bestanden: Migration Guard (12 registrierte, keine pending), 45 Testdateien / 376 Tests, TypeScript und Produktionsbuild. Aktueller PR-CI Run `42269369640` besteht Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks; der Production-DB-Job wurde übersprungen.
+- **Automatisierte Ergebnisse:** lokal bestanden: Migration Guard (12 registrierte, keine pending), 45 Testdateien / 376 Tests, TypeScript und Produktionsbuild. PR-CI Run `42270359126` auf Head `b0def743dd81b7779f8e1e65dfab60787524d740` bestand Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks; der Production-DB-Job wurde übersprungen. Danach folgte nur diese Dokumentationskorrektur.
 - **Produktionsstatus der Ausgangsbasis:** read-only `/api/apex?op=health` HTTP 200 mit `ok: true`, schemaVersion 6, migrationsComplete true und leeren Missing-/Unknown-/Error-Listen; Vercel Deployment für `df8090f` meldete READY. Das belegt den Ausgangsstand, nicht die Änderungen dieses Branches.
 
 ## Bereits gemergte Funktionen – Code vorhanden; Browserabnahme offen
@@ -34,7 +34,7 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 ## Nicht verifiziert / blockiert
 
 - **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden, aber `playwright` fehlt in dieser Arbeitsumgebung. Der aktuelle Vercel-Preview liefert die Version `0.9.0` für den PR-Commit; das ersetzt keinen Rollen-/Kampagnenablauf. Keine Produktionsdaten wurden verwendet.
-- **Isolierte DB-Prüfung:** lokal nicht ausgeführt; aktueller PR-CI Run `42269369640` hat Migrationen, RLS, Scene runtime/motion/travel und Post-deploy SQL gegen Wegwerf-Postgres erfolgreich geprüft.
+- **Isolierte DB-Prüfung:** lokal nicht ausgeführt; PR-CI Run `42270359126` hat Migrationen, RLS, Scene runtime/motion/travel und Post-deploy SQL gegen Wegwerf-Postgres erfolgreich geprüft.
 - **Production:** keine neue Production-Bereitstellung. Der aktuelle Vercel-Preview wurde als Preview für den PR-Commit geprüft; er wurde nicht promoted.
 - **Kenney visuell/Performance:** keine Classic-/2.5D-Screenshots und keine 39-/78-Radius-Metriken erhoben.
 - **Live-Status:** die aktuellen Codeänderungen dieses Branches sind weder gemergt noch live; nur die oben benannte `df8090f`-Produktionsbasis ist live verifiziert.
@@ -44,7 +44,7 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 | Priorität | Restpunkt | Abnahmekriterium |
 |---|---|---|
 | P0 | Isolierte Rollen-Browserabnahme nach Bereitstellung eines erreichbaren, kostenneutralen Playwright-/Browser-Testtreibers | GM, zwei Player, Caster und Non-caster; Scene-Draft/Publish/Assignment/Sanctuary; Journal private/GM/party; Berechtigungsablehnungen; Reconnect/Reload; keine doppelten Aktionen; Screenshots und Testdaten nur lokal isoliert |
-| P0 | Isolierte SQL-CI für den Closeout-Head | Erledigt: aktueller PR-Head bestand Run `42269369640` mit Migration Guard, RLS, Scene runtime/motion/travel und Post-deploy checks gegen Wegwerf-Postgres; Production-DB-Job übersprungen |
+| P0 | Isolierte SQL-CI für den Closeout-Head | Erledigt: Head `b0def743dd81b7779f8e1e65dfab60787524d740` bestand Run `42270359126` mit Migration Guard, RLS, Scene runtime/motion/travel und Post-deploy checks gegen Wegwerf-Postgres; Production-DB-Job übersprungen |
 | P1 | Reguläre Production-Abnahme nach Merge | Erst nach Owner-Merge und planmäßiger Release-Pipeline Produktions-Health und Function-Verarbeitung erneut kontrollieren; kein Production-Deployment wurde ausgeführt |
 | P1 | Szenegebundene GM-Kontrollen | Fokus-Szene zeigt Fog, Events, Loot und Encounter; Draft bleibt privat; Apply/Publish ist explizit; Player erhält ausschließlich freigegebene Szene/Informationen |
 | P1 | Zauber- und Character-Regelmodell | Lizenziertes Spell-Datenmodell, Klassen/Vorbereitung/Slots; Mage Armor sicher castbar mit Dauer/Ablauf/Stacking; Ressourcenverbrauch, AC und Character-Ansicht haben je eine Quelle; Positiv-/Negativtests |
