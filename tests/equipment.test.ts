@@ -89,6 +89,20 @@ describe('equipment rules (server-authoritative)', () => {
     expect(executeCommand(s, P, { type: 'equipItem', tokenId: 'sinna', itemId: 'gs', slot: 'off2' }).ok).toBe(false);
   });
 
+  it('equips one physical weapon from a stack and safely reuses it on a retried command', () => {
+    let s = run(setup(), { type: 'invAddItem', tokenId: 'sinna', itemId: 'stacked', name: 'Quarterstaff', quantity: 2 });
+    s = run(s, { type: 'setItemEquip', tokenId: 'sinna', itemId: 'stacked', rev: 0, equip: WEAPON_PRESETS.Quarterstaff });
+    const equip = { type: 'equipItem', tokenId: 'sinna', itemId: 'stacked', slot: 'main1' } as const;
+    s = run(s, equip);
+    const firstCopyId = s.tokens.sinna.equipment!.slots.main1;
+    expect(s.tokens.sinna.inventory.find((i) => i.id === 'stacked')?.quantity).toBe(1);
+    expect(s.tokens.sinna.inventory.find((i) => i.id === firstCopyId)?.quantity).toBe(1);
+    s = run(s, equip);
+    expect(s.tokens.sinna.inventory).toHaveLength(7);
+    expect(s.tokens.sinna.inventory.filter((i) => i.id === firstCopyId)).toHaveLength(1);
+    expect(s.tokens.sinna.equipment!.slots.main1).toBe(firstCopyId);
+  });
+
   it('resting preset: armour and shield count as removed, nothing else changes; switching back restores', () => {
     let s = setup();
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'bp', slot: 'chest' });
