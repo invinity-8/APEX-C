@@ -46,10 +46,11 @@ describe('rough weights for free-text items', () => {
 
   it('new free-text items (manual or imported) get an estimate unless a weight is given', () => {
     const s = createDemoState({ radius: 4, seed: 1 });
-    const P = { role: 'player' as const, tokenId: 'sinna' };
-    let r = executeCommand(s, P, { type: 'invAddItem', tokenId: 'sinna', itemId: 'x1', name: 'Bedroll' });
+    const GM = { role: 'gm' as const };
+    let r = executeCommand(s, GM, { type: 'invAddItem', tokenId: 'sinna', itemId: 'x1', name: 'Bedroll' });
     expect(r.ok && r.state.tokens.sinna.inventory.find((i) => i.id === 'x1')!.weightKg).toBe(3.2);
-    r = executeCommand(r.state, P, { type: 'invAddItem', tokenId: 'sinna', itemId: 'x2', name: 'Bedroll', weightKg: 1 });
+    r = executeCommand(r.state, GM, { type: 'invAddItem', tokenId: 'sinna', itemId: 'x2', name: 'Bedroll', weightKg: 1 });
     expect(r.ok && r.state.tokens.sinna.inventory.find((i) => i.id === 'x2')!.weightKg).toBe(1);
   });
 });
+
