@@ -1,0 +1,52 @@
+# APEX – Implementierungsstatus
+
+**Stand:** 2026-11-06  
+**Branch:** `feat/apex-09-completion-reconciliation`  
+**Basis:** aktuelles `main` nach PR #43  
+**Lesart:** „Implementiert und verifiziert“ bezieht sich jeweils nur auf die unten genannte Evidenz. Ein grüner Unit-Test ist keine Produktions- oder Browserabnahme.
+
+## Implementiert und verifiziert
+
+- **Character/Spells-Routing:** Character öffnet jetzt explizit Overview; der volle Spellbook-Tab ist kein Tab in der Character-Seite mehr. Die Top-Level-Seite Spells setzt weiterhin den Spellbook-Starttab. Codeprüfung: `src/App.tsx`, `src/components/CharacterPanel.tsx`.
+- **Journal-Navigation:** Online-Spieler und GM können Journal jetzt als eigene Hauptseite öffnen. Die doppelten Journal-Einstiege in GM- und Spieler-Workspace-Widgets wurden entfernt. Codeprüfung: `src/App.tsx`.
+- **Produktions-Schema:** Read-only Datenbankabfrage zeigt Schema-Version 6. Migrationshistorie enthält `20261105120000` und `20261106100000`. Das Repository-Manifest enthielt beide noch nicht; dieser Branch gleicht `supabase/remote_history.txt` an, ohne Datenbank oder Migration auszuführen.
+- **Kenney-Speicher:** Read-only Abfrage bestätigt privaten Bucket `apex-asset-packs` und 6.557 Objekte. Keine Objekte hochgeladen, verschoben oder geöffnet.
+
+## Implementiert, aber noch nicht produktionsverifiziert
+
+- Die drei vorangegangenen Änderungen aus PRs #41–43: Szenenbibliothek/Forest-Editor, Itemanfragen/Ausrüstung und Spellbook-/Loot-Basiseinstieg sind in `main`. Die PRs meldeten Tests und Builds erfolgreich; für #41–43 gab es jedoch keinen vollständigen rollenbasierten Browserlauf auf einer zugänglichen Preview.
+- Die neuen Navigationsänderungen in diesem Branch brauchen noch den Branch-Build und Browserklicks als GM, Zauberwirker und Nichtzauberwirker.
+
+## Teilweise implementiert
+
+- **Szenen:** vier Kategorien, Bibliothek, Entwürfe, Editor, Vorschau und Spielerzuweisungen existieren. Ein klarer Map-GM-Fokus und Map-Szenenwechsel unabhängig von Spielerzuweisungen sind noch kein geschlossener Ablauf.
+- **Spellbook:** eigene Top-Level-Route und Grundfelder existieren. Strukturierte Regeldetails, erlaubte Spell-Referenzen, Klassenregeln, vorbereitete Zauber und Casting-Effekte fehlen.
+- **Charakter, Fähigkeiten und Ressourcen:** Sheets, Import, History und Fähigkeiten existieren. Es fehlt eine einheitliche Regelquelle für abgeleitete Werte und eine klare Synchronisierung zwischen Sheet-Ressourcen und Spielressourcen.
+- **Inventar, Ausrüstung, Händler und Loot:** Kernpfade sind vorhanden und getestet. Vielseitige Waffen, Carry-Movement-Penalties, Legacy-Kompatibilität und vollständige Itemübergabe brauchen weitere Abnahme.
+- **Journal:** Speichern, Versionierung, Suche, Kategorien, Tags, Pins, Teilen, Szenenbezug und Export existieren. Menschen-/Ortsregister, Verlinkungen/Backlinks sowie Komfort- und Browserabnahme fehlen.
+- **Synchronisierung/Berechtigungen:** Serverautorität, gefilterte Spieleransicht, Scene-/Journal-Checks und SQL-Tests existieren. Reconnect-/Privacy-Abläufe wurden in dieser Runde nicht im Browser durchgespielt.
+
+## Priorisierte offene Arbeit
+
+| Priorität | Arbeit | Relevante Bereiche | Abhängigkeiten | Abnahmekriterien | Aufwand |
+|---|---|---|---|---|---|
+| P0 | Map-Campaign-Director: GM-Fokus getrennt von Spielerszenen, Switch Scene, Sanctuary- und Split-Party-Workflow | `App.tsx`, `SceneDirector.tsx`, `sceneRuntime.ts`, API/DB | Kein DB-Wechsel, falls bestehende Scene-Runtime reicht; andernfalls additive Migration | GM wechselt Fokus, ohne Zuweisungen zu ändern; selektive Spielerzuweisung; Spieler sehen ausschließlich eigene Szene; Reload/Reconnect erhält Zustand | Groß |
+| P0 | Sichere Kenney-Asset-Auslieferung und erster 2.5D-Preview-Renderer | Supabase Storage, API, Map-Renderer | Private Allowlist/Manifest und serverseitige URL-Ausgabe; lizenzierte Sprites | gleiche Karte mit Classic/2.5D; Token/Hex/Fog/Movement unverändert; Browser-Screenshot und Messwerte bei Radius 39 und 78; Abbruch/Fallback bei Fehlern | Groß |
+| P1 | Spell-Daten- und Klassenregeln vervollständigen | `sheet.ts`, `CharacterPanel.tsx`, `ClassAbilities.tsx` | Regelentscheidung, vertrauenswürdige lizenzierte Referenzdaten | Metadaten/Details und Vorbereitung basieren auf einer autoritativen Quelle; fehlende Beschreibung eindeutig markiert; keine erfundenen proprietären Texte | Groß |
+| P1 | Abgeleitete Werte, Waffen, Effekte und Ressourcen vereinheitlichen | `sheet.ts`, `equipment.ts`, `commands.ts`, `ClassAbilities.tsx` | Regelmodell / Systemgrenzen | Level, Equipment, AC, Waffen, Slot-/Resource-Verbrauch und unterstützte temporäre Effekte propagieren konsistent; Konflikt-/Negativtests vorhanden | Groß |
+| P1 | Journal-People/Places und Continuity | `journals.ts`, API, `PlayerJournal.tsx` | Additive Datentyp-/Migrationsentscheidung | explizite Referenzen verlinken Scene/Character/Person/Ort; keine automatische falsche Entity-Erzeugung; Privacy bleibt je Freigabe erhalten | Mittel |
+| P1 | Szenenentwurf/live Publishing und Map/Editor-Trennung | `SceneMapEditor.tsx`, `SceneDirector.tsx`, scene API | Map-Fokusarbeit | Editoränderungen bleiben privat bis explizitem Apply/Publish; Live-Version und Draft sind klar erkennbar; GM Preview leakt nichts | Groß |
+| P2 | Vollständige Handels-, Loot- und Migrations-/Legacy-Abnahme | Items, Merchant, Party Loot, tests | P0/P1 stabile Regelbasis | E2E Item/Gold/Roll/Approval/Inventory round-trip inkl. Retry und vorhandener Alt-Daten | Mittel |
+| P2 | Produktweiter Browser- und Performance-Durchlauf | Alle Hauptseiten, Vercel Preview | Authentifizierbare Preview oder lokale Browserports | GM, Player, Caster, Non-caster; Reconnect; Radius 39/78; Screenshots, Netzwerklast und Render-/Interaction-Messungen | Mittel |
+
+## Entfernt / nicht als implementiert gezählt
+
+- Die doppelten **Journal-Workspace-Einstiege** wurden durch eine eindeutige Journal-Hauptnavigation ersetzt.
+- Kenney-Assets gelten trotz ihres vorhandenen privaten Uploads nicht als integrierte Spielfunktion; kein Renderer-/Ladeerfolg wird behauptet.
+- Nicht aufgeführte dekorative oder zukünftige Systeme werden hier nicht als produktiv abgeschlossen gewertet.
+
+## Noch nicht ausgeführt
+
+- Kein Typecheck, Unit/API-Test oder Build **auf dem neuen Remote-Branch** in dieser Runde.
+- Kein Browser-E2E: bisherige PRs dokumentieren, dass lokale Browserports in der verwalteten Umgebung nicht erreichbar waren und geschützte Preview-Anmeldung erforderlich war.
+- Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
