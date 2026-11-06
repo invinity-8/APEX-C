@@ -55,6 +55,7 @@ export function LootRollDock({ rolls, viewerId, serverTime, run }: { rolls: Loot
   const left = useCountdown(rolls, serverTime);
   const [busy, setBusy] = useState<string | null>(null);
   const [seen, setSeen] = useState<string[]>([]);
+  const [minimized, setMinimized] = useState(false);
   if (!viewerId) return null;
   const mine = rolls.filter((r) => r.eligible.includes(viewerId));
   const open = mine.filter((r) => r.status === 'open');
@@ -68,9 +69,10 @@ export function LootRollDock({ rolls, viewerId, serverTime, run }: { rolls: Loot
       setBusy(null);
     }
   };
+  if (minimized) return <button className="fixed bottom-3 left-3 z-40 rounded-full border border-gold-400/60 bg-ink-950/95 px-4 py-2 text-sm font-bold text-gold-200 shadow-2xl" aria-label={`Reopen loot chest (${open.length} open)`} onClick={() => setMinimized(false)}>🎁 Loot chest {open.length ? `· ${open.length} open` : '· results'}</button>;
   return (
-    <aside className="fixed bottom-3 left-3 z-40 max-h-[70vh] w-[min(24rem,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-xl border border-gold-500/40 bg-ink-950/95 p-3 shadow-2xl" aria-label="Loot rolls">
-      <h2 className="font-display text-sm font-black uppercase tracking-widest text-gold-200">🎲 Loot rolls</h2>
+    <aside className="fixed left-1/2 top-24 z-40 max-h-[70vh] w-[min(30rem,calc(100vw-1.5rem))] -translate-x-1/2 space-y-2 overflow-y-auto rounded-2xl border border-gold-400/60 bg-ink-950/95 p-4 shadow-2xl" aria-label="Loot rolls">
+      <div className="flex items-center justify-between gap-2"><h2 className="font-display text-sm font-black uppercase tracking-widest text-gold-200">🎁 You found something</h2><button className="btn btn-ghost px-2 py-1 text-xs" aria-label="Minimize loot chest" onClick={() => setMinimized(true)}>Minimize</button></div>
       {open.map((r) => {
         const mineChoice = r.choices[viewerId];
         const secs = left(r);
