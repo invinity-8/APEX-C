@@ -1,5 +1,1168 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíÛ®ºÙ:-jZ.¶›­–)Ş³Rò¢ Ğ¢¢U‚öæÆ–æR’(	2F†RWF†÷&—FF—fR6W'fW"Æ–W"àĞ¢ Ğ¢¢6V7W&—G’ÖöFVÂ„U‚ã2“ Ğ¢¢Ò6–vâÖ–âÒ&öf–ÆR‚%v†ò&R–÷Sò"’²77v÷&Bâ77v÷&G2&RfW&–f–VB6W'fW"×6–FRv–ç7@Ğ¢¢&vöã&–B†6†W3²æ÷F†–ær&÷WBF†R77v÷&BWfW"&V6†W2F†R6Æ–VçBv–âàĞ¢¢Ò7V66W76gVÂ6–vâÖ–â7&VFW2&æFöÒ6W76–öâFö¶VâÂFVÆ—fW&VBôäÅ’2â‡GGöæÇ’Â6V7W&RÀĞ¢¢6ÖU6—FSÕ7G&–7B6öö¶–RâF†RFF&6R7F÷&W2—G24„Ó#Sb†6‚â6W76–öç2W‡—&RƒBF—2–FÆRÀĞ¢¢3F—2'6öÇWFR’æB&R&Wfö¶VBöâÆöv÷WBÂ77v÷&B&W6WBæBFV7F—fF–öâàĞ¢¢Ò–FVçF—G’6öÖW2ôäÅ’g&öÒF†R6W76–öã²&öÆRæB6†&7FW'2ôäÅ’g&öÒF†R&öf–ÆR&÷r–âF†PĞ¢¢FF&6R†W…÷&öf–ÆW2’(	2æWfW"g&öÒF†R&WVW7B&öG’â6†ö÷6–ærF†RtÒ6&Bw&çG2æ÷F†–æpĞ¢¢v—F†÷WBF†RtÒ77v÷&BàĞ¢¢Ò7FFRÖ6†æv–ær&WVW7G2…õ5B’×W7B6''’F†R†VFW"‚ÔU‚Ô55$c¢æBÂ–bF†R'&÷w6W Ğ¢¢6VæG2â÷&–v–âÂ—B×W7B&RF†—26—FR„55$b&÷FV7F–öâöâF÷öb6ÖU6—FSÕ7G&–7B’àĞ¢¢ÒF†RgVÆÂvÖU7FFR—2&WGW&æVBFòF†RvÖRÖ7FW"öæÇ’âÆ–W'2&V6V—fR'V–ÆEÆ–W%f–Wr‚Ğ¢¢f÷"F†V—"÷vâ6†&7FW"âÆ–W'2Ö’öæÇ’Ö÷fRF†V—"6†&7FW'2æBVF—BF†V—"÷vàĞ¢¢6†&7FW"w2v–ÆÂÂ6†VWBæB–çfVçF÷'’àĞ¢¢Ò6öÖÖæG2&R&R×fÆ–FFVB'’W†V7WFT6öÖÖæB‚’v–ç7BF†RÆFW7B7F÷&VB7FFRæBw&—GFVàĞ¢¢v—F‚÷F–Ö—7F–2Æö6¶–ær‡fW'6–öâ6†V6²’(	26öæ7W'&VçBw&—FW26ææ÷B÷fW'w&—FRV6‚÷F†W"àĞ¢¢ğĞ¦–×÷'B²7&VFTFVÖõ7FFRÂÔ…õ$D•U2ÂÔ”åõ$D•U2Òg&öÒrââöFFöFVÖòæ§2s°Ğ¦–×÷'B²4„$5DU%ô4ôÔÔäE2ÂW†V7WFT6öÖÖæBÂfÆ–FFTÖ÷fRÂG—R6öÖÖæBÒg&öÒrââövÖRö6öÖÖæG2æ§2s°Ğ¦–×÷'B²4TTDTEô4ôÔÔäE2Òg&öÒrââövÖRö—FV×2öÆö÷Bæ§2s°Ğ¦–×÷'B²%E•ôÄôõEõ4TTDTBÂ%E•ôÄôõEõD”ÔTBÒg&öÒrââövÖRö—FV×2÷'G”Æö÷Bæ§2s°Ğ¦–×÷'B²ÖVF–äÆWfVÂÒg&öÒrââövÖRö—FV×2öÆö÷DG&gBæ§2s°Ğ¦–×÷'B²Ö–w&FU7FFRÂ7G&—ÆVv7’Òg&öÒrââövÖRöÖ–w&FRæ§2s°Ğ¦–×÷'B²&VD'V–ÆD–æfòÒg&öÒrââö'V–ÆBö'V–ÆD–æfòæ§2s°Ğ¦–×÷'B²õdU%4”ôâÒg&öÒrââö'V–ÆB÷fW'6–öâæ§2s°Ğ¦–×÷'B²V×G•6†VWBÂ'6U6†VWBÂG—R6†&7FW%6†VWBÒg&öÒrââövÖR÷6†VWBæ§2s°Ğ¦–×÷'B²67DÖvT&Ö÷"Â—5vV&–æt&Ö÷"Òg&öÒrââövÖR÷7VÆÇ2æ§2s°Ğ¦–×÷'B²6†&7FW$Ö÷fVÖVçDÆöBÒg&öÒrââövÖRö—FV×2÷vV–v‡Bæ§2s°Ğ¦–×÷'B²Ç”FÖvRÂÇ”†VÆ–ærÂ6öçfW'E6÷&6W'’Â&WfW'BÂ6WEFV×‡ÂG&ç6f÷&ÒÂG—R&–Æ—G•&W7VÇBÒg&öÒrââövÖRö&–Æ—F–W2æ§2s°Ğ¦–×÷'B²f–æD&V7BÒg&öÒrââövÖRö&V7D6FÆöræ§2s°Ğ¦–×÷'B²'V–ÆE6æ6†÷BÂ—56æ6†÷BÂ&W7F÷&U6†VWE'G2Â6†VWDÆWfVÂÂ4„TUEõ%E2ÂG—R6†VWE'BÒg&öÒrââövÖR÷&öw&W76–öâæ§2s°Ğ¦–×÷'BG—R²7F÷"ÂvÖU7FFRÒg&öÒrââövÖR÷G—W2æ§2s°Ğ¦–×÷'B²†6TæÖRÒg&öÒrââövÖR÷FW‡Bæ§2s°Ğ¦–×÷'B²'V–ÆEÆ–W%f–WrÒg&öÒrââövÖR÷f—6–&–Æ—G’æ§2s°Ğ¦–×÷'B²Ç•&÷7FW"ÂæVVG5&÷7FW%WFFRÒg&öÒrââövÖR÷&÷7FW"æ§2s°Ğ¦–×÷'B²6''”6†&7FW'2ÂæWuv÷&ÆDÖWFÂ&V6öæ6–ÆU&W7F÷&RÂv÷&ÆD–DöbÒg&öÒrââövÖR÷v÷&ÆBæ§2s°Ğ¦–×÷'B°Ğ¢4U54”ôåô%4ôÅUDUôÕ2ÀĞ¢4U54”ôåô4ôô´”RÀĞ¢4U54”ôåô”DÄUôÕ2ÀĞ¢6ÆV%6W76–öä6öö¶–RÀĞ¢GVÖ×•fW&–g’ÀĞ¢†6…77v÷&BÀĞ¢Æöö·4Æ–¶UFö¶VâÀĞ¢æWu6W76–öåFö¶VâÀĞ¢æ÷&ÖÆ—6U6WGW6öFRÀĞ¢77v÷&E&ö&ÆVÒÀĞ¢6W76–öä6öö¶–RÀĞ¢6†#Sd†W‚ÀĞ¢fW&–g•77v÷&BÀĞ§Òg&öÒrâöWF‚æ§2s°Ğ¦–×÷'BG—R°Ğ¢FÖ–ä÷fW'f–WrÀĞ¢6×–vå–ÆöBÀĞ¢6†&7FW%&VbÀĞ¢Æ–W%–ÆöBÀĞ¢V&Æ–5&öf–ÆRÀĞ¢6W76–öä–æfòÀĞ¢6†VWE–ÆöBÀĞ¢'G•f—FÂÀĞ¢v—&Uf–WrÀĞ§Òg&öÒrâ÷&÷Fö6öÂæ§2s°Ğ¦–×÷'B²v÷&ÆD6öæfÆ–7DW'&÷"ÂG—RfVVF&6µ&÷rÂG—R&6†—fT¶–æBÂG—RWF…W6W"ÂG—R†VÇF…&W÷'BÂG—R&öf–ÆRÂG—R&WòÒg&öÒrâ÷&Wòæ§2s°Ğ¦–×÷'B²U…T5DTEôÔ”u$D”ôå2Â$UT•$TEõ44„TÔõdU%4”ôâÒg&öÒrâ÷66†VÖæ§2s°Ğ¦–×÷'B²66VæU&WVW7BÒg&öÒrâ÷66VæW2æ§2s°Ğ¦–×÷'B²¦÷W&æÅ&WVW7BÒg&öÒrâö¦÷W&æÇ2æ§2s°Ğ¦–×÷'B²'VçF–ÖU&WVW7BÂ66VæU6æ6†÷BÒg&öÒrâ÷66VæU'VçF–ÖRæ§2s°Ğ¦–×÷'B²76WE&WVW7BÒg&öÒrâ÷66VæT76WG2æ§2s°Ğ¦–×÷'B²Ö÷F–öå&WVW7BÒg&öÒrâ÷66VæTÖ÷F–öâæ§2s°Ğ¦–×÷'B²G&fVÅ&WVW7BÒg&öÒrâ÷66VæUG&fVÂæ§2s°Ğ¦–×÷'B²6æ7GV'•&WVW7BÒg&öÒrâ÷6æ7GV'’æ§2s°Ğ¦–×÷'B²¦÷W&æÄ–ÖvU&WVW7BÒg&öÒrâö¦÷W&æÄ–ÖvW2æ§2s°Ğ¦–×÷'B²¶VææW•&Wf–Wu&WVW7BÒg&öÒrâö¶VææW•&Wf–Wræ§2s°Ğ¦–×÷'B²—4–BÂ—4–çBÂ—4ö&¢Â'6T6öÖÖæBÒg&öÒrâ÷fÆ–FFRæ§2s°Ğ Ğ¦W‡÷'B–çFW&f6R•&WVW7B°Ğ¢ÖWF†öC¢7G&–æs°Ğ¢÷¢7G&–æs°Ğ¢VW'“¢&V6÷&CÇ7G&–ærÂ7G&–ærÂVæFVf–æVCã°Ğ¢&öG“¢Væ¶æ÷vã°Ğ¢ò¢¢Æ÷vW"Ö66R&WVW7B†VFW'2†6öö¶–RÂ÷&–v–âÂ†÷7BÂ‚ÖW‚Ö77&bÂW6W"ÖvVçB(
-b’â¢ğĞ¢†VFW'3¢&V6÷&CÇ7G&–ærÂ7G&–ærÂVæFVf–æVCã°Ğ¢ò¢¢6Æ–VçB•2&W÷'FVB'’F†RÆFf÷&Ò‡‚Öf÷'v&FVBÖf÷"ò‚×&VÂÖ—’â¢ğĞ¢—¢7G&–ærÂçVÆÃ°Ğ§ĞĞ Ğ¦W‡÷'B–çFW&f6R•&W7öç6R°Ğ¢7FGW3¢çVÖ&W#°Ğ¢&öG“¢Væ¶æ÷vã°Ğ¢ò¢¢6WBÔ6öö¶–R†VFW"fÇVW2â¢ğĞ¢6öö¶–W3ó¢7G&–æuµÓ°Ğ¢ò¢¢W‡G&&W7öç6R†VFW'2†RærâÆö6F–öâf÷"&VF—&V7B’â¢ğĞ¢†VFW'3ó¢&V6÷&CÇ7G&–ærÂ7G&–æsã°Ğ§ĞĞ Ğ¦6öç7BÔ…õ$UE$”U2ÒC°Ğ¦6öç7B´TUõ4ä4„õE2Òc°Ğ Ğ¦6Æ72‡GGW'&÷"W‡FVæG2W'&÷"°Ğ¢6öç7G'V7F÷"€Ğ¢V&Æ–27FGW3¢çVÖ&W"ÀĞ¢ÖW76vS¢7G&–ærÀĞ¢V&Æ–26öFSó¢7G&–ærÀĞ¢ò¢¢6V6öæG2VçF–Â&WG'’Ö¶W26Vç6R‡&FRÆ–Ö—G2’â¢ğĞ¢V&Æ–2&WG'”gFW#ó¢çVÖ&W"ÀĞ¢V&Æ–2W‡G&ó¢&V6÷&CÇ7G&–ærÂVæ¶æ÷vãâÀĞ¢’°Ğ¢7WW"†ÖW76vR“°Ğ¢ĞĞ§ĞĞ Ğ¦6öç7Bö²Ò†&öG“¢Væ¶æ÷vâÂ6öö¶–W3ó¢7G&–æuµÒ“¢•&W7öç6RÓâ‡²7FGW3¢#Â&öG’Ââââ†6öö¶–W2ò²6öö¶–W2Ò¢·Ò’Ò“°Ğ Ğ¢ò¢¢&öf–ÆR6÷VçG22&öæÆ–æR"–böæRöb—G2FWf–6W26öçF7FVBF†R6W'fW"v—F†–âF†—2v–æF÷râ¢ğĞ¦W‡÷'B6öç7B$U4Tä4Uõt”äDõuôÕ2ÒsUó°Ğ Ğ¢ò¢¢Æöv–â&FRÆ–Ö—G2†f–ÆVBGFV×G2v—F†–âF†Rv–æF÷r’â¢ğĞ¦W‡÷'B6öç7BÄôt”åôÄ”Ô•E2Ò°Ğ¢v–æF÷t×3¢R¢cóÀĞ¢W%&öf–ÆS¢RÀĞ¢W$—¢#ÀĞ¢vÆö&Ã¢3ÀĞ§Ó°Ğ Ğ¢ò¢ Ğ¢¢U‚ãrÆVv7’&VFW#¢WfW'’vÖR7FFRF†R6W'fW"&VG2†Æ—fR7FFRÂF–Ç’6æ6†÷G2Âv÷&ÆB&6†—fW2’—0Ğ¢¢æ÷&ÖÆ—6VB'’7G&—ÆVv7’‚’(	2ö'6öÆWFRf–VÆG27V6‚2F†RöÆBv–ÆÇ÷vW"&W6÷W&6RæWfW"&V6‚F†R'VÆW2ÂF†PĞ¢¢6Æ–VçG2÷"æWrw&—FRâ7F÷&VB&6†—fW2&Ræ÷B&Ww&—GFVã²F†W’&R6ÆVæVBv†VæWfW"F†W’&R&VBàĞ¢¢ğĞ¦W‡÷'BgVæ7F–öâv—F„ÆVv7•&VFW"‡&Wó¢&Wò“¢&Wò°Ğ¢&WGW&âæWr&÷‡’‡&WòÂ°Ğ¢vWB‡F&vWBÂ&÷Â&V6V—fW"’°Ğ¢–b‡&÷ÓÓÒvÆöE7FFRrĞ¢&WGW&â7–æ2†6–C¢7G&–ær’Óâ°Ğ¢6öç7B2Òv—BF&vWBæÆöE7FFR†6–B“°Ğ¢–b‡2’7G&—ÆVv7’‡2ç7FFR“°Ğ¢&WGW&â3°Ğ¢Ó°Ğ¢–b‡&÷ÓÓÒvÆöE6æ6†÷BrĞ¢&WGW&â7–æ2†6–C¢7G&–ærÂ–C¢çVÖ&W"’Óâ°Ğ¢6öç7B2Òv—BF&vWBæÆöE6æ6†÷B†6–BÂ–B“°Ğ¢–b‡2’7G&—ÆVv7’‡2“°Ğ¢&WGW&â3°Ğ¢Ó°Ğ¢–b‡&÷ÓÓÒvÆöD&6†—fRrĞ¢&WGW&â7–æ2†6–C¢7G&–ærÂ–C¢7G&–ær’Óâ°Ğ¢6öç7BÒv—BF&vWBæÆöD&6†—fR†6–BÂ–B“°Ğ¢–b†’7G&—ÆVv7’†ç7FFR“°Ğ¢&WGW&â°Ğ¢Ó°Ğ¢6öç7BbÒ&VfÆV7BævWB‡F&vWBÂ&÷Â&V6V—fW"“°Ğ¢&WGW&âG—VöbbÓÓÒvgVæ7F–öâròbæ&–æB‡F&vWB’¢c°Ğ¢ÒÀĞ¢Ò“°Ğ§ĞĞ Ğ¦W‡÷'B7–æ2gVæ7F–öâ†æFÆT’‡&W¢•&WVW7BÂ&u&Wó¢&Wò“¢&öÖ—6SÄ•&W7öç6Sâ°Ğ¢6öç7B&WòÒv—F„ÆVv7•&VFW"‡&u&Wò“°Ğ¢G'’°Ğ¢–b‡&WæÖWF†öBÓÓÒttUBrbb&Wæ÷ÓÓÒwfW'6–öâr’&WGW&âö²‡&VD'V–ÆD–æfò‡&ö6W72æVçbÂõdU%4”ôâÂçVÆÂ’“²òòæòD"66W70Ğ¢–b‡&WæÖWF†öBÓÓÒttUBrbb&Wæ÷ÓÓÒv†VÇF‚r’&WGW&âö²†v—B†VÇF‚‡&Wò’“°Ğ¢–b‡&WæÖWF†öBÓÓÒuõ5Br’6†V6´77&b‡&W“°Ğ¢v—B&WV—&T6ö×F–&ÆU66†VÖ‡&Wò“°Ğ Ğ¢òòÒÒÒÒV&Æ–2÷W&F–öç2†æò6W76–öâ–WBĞ¢–b‡&WæÖWF†öBÓÓÒttUBrbb&Wæ÷ÓÓÒw&öf–ÆW2r’&WGW&âö²†v—B&öf–ÆU7FGW2‡&Wò’“°Ğ¢–b‡&WæÖWF†öBÓÓÒuõ5Brbb&Wæ÷ÓÓÒvÆöv–âr’&WGW&âv—BÆöv–â‡&WÂ&Wò“°Ğ¢–b‡&WæÖWF†öBÓÓÒuõ5Brbb&Wæ÷ÓÓÒw6WGWr’&WGW&âv—BvÕ6WGW‡&WÂ&Wò“°Ğ¢–b‡&WæÖWF†öBÓÓÒuõ5Brbb&Wæ÷ÓÓÒvÆöv÷WBr’&WGW&âv—BÆöv÷WB‡&WÂ&Wò“°Ğ Ğ¢òòöæR&÷VæBG&—¢6W76–öâ²&öf–ÆR²77v÷&BfÆr²6×–vâ†æB&W6Væ6RF÷V6‚’àĞ¢6öç7BW6W"Òv—BWF†VçF–6FR‡&WÂ&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒv¶VææW’×&Wf–Wrr’&WGW&âv—B¶VææW•&Wf–Wu&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒw66VæW2r’&WGW&âv—B66VæU&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wæ&öG’Â&Wòç66VæT6FÆörÂ&Wòç66VæT76WG2“°Ğ¢–b‡&Wæ÷ÓÓÒv¦÷W&æÂr’&WGW&âv—B¦÷W&æÅ&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wæ&öG’Â&Wòæ¦÷W&æÅ7F÷&RÂ&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒw66VæR×'VçF–ÖRr’&WGW&âv—B'VçF–ÖU&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wæ&öG’Â&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒw66VæRÖ76WG2r’&WGW&âv—B76WE&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wæ&öG’Â&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒw66VæRÖÖ÷F–öâr’&WGW&âv—BÖ÷F–öå&WVW7B‡W6W"Â&WæÖWF†öBÂ&Wæ&öG’Â&WòÂ&WçVW'’“°Ğ¢–b‡&Wæ÷ÓÓÒw66VæR×G&fVÂr’&WGW&âv—BG&fVÅ&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wæ&öG’Â&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒw6æ7GV'’r’&WGW&âv—B6æ7GV'•&WVW7B‡W6W"Â&WæÖWF†öBÂ&Wæ&öG’Â&Wò“°Ğ¢–b‡&Wæ÷ÓÓÒv¦÷W&æÂÖ–ÖvW2r’&WGW&âv—B¦÷W&æÄ–ÖvU&WVW7B‡W6W"Â&WæÖWF†öBÂ&WçVW'’Â&Wæ&öG’Â&Wò“°Ğ¢7v—F6‚†G·&WæÖWF†öGÒG·&Wæ÷Ö’°Ğ¢66RttUB6W76–öâs Ğ¢&WGW&âö²‡6W76–öä–æfò‡W6W"’“°Ğ¢66RttUB–ærs¢°Ğ¢òò†V'F&VC¢6†VfW'6–öâ6†V6²†æò7FFRG&ç6fW"“²&W6Væ6Rv2&Vg&W6†VB'’WF†VçF–6FR‚’àĞ¢&WGW&âö²‡²fW'6–öã¢†v—B&Wòç7FFUfW'6–öâ‡W6W"æ6×–vä–B’’óòÂ7–æ5F÷–3¢W6W"ç7–æ5F÷–2Ò“°Ğ¢ĞĞ¢66RttUB7FFRs¢°Ğ¢òò6Æ–VçG272F†RfW'6–öâF†W’Ç&VG’†fS¢æ÷F†–ær—2&RÖF÷væÆöFVB–b—BF–Bæ÷B6†ævRàĞ¢6öç7B6–æ6RÒçVÖ&W"‡&WçVW'’ç6–æ6R“°Ğ¢–b„çVÖ&W"æ—4–çFVvW"‡6–æ6R’bb6–æ6Râ’°Ğ¢6öç7BbÒ†v—B&Wòç7FFUfW'6–öâ‡W6W"æ6×–vä–B’’óò°Ğ¢–b‡bÓÓÒ6–æ6R’&WGW&âö²‡²Væ6†ævVC¢G'VRÂfW'6–öã¢bÒ“°Ğ¢ĞĞ¢&WGW&âö²†v—B6×–vå–ÆöB‡W6W"Â&WòÂ&WçVW'’æ2’“°Ğ¢ĞĞ¢66RttUB6öÖÖæB×7FGW2s Ğ¢&WGW&âö²†v—B6öÖÖæE7FGW2‡W6W"Â&WçVW'’ç&WVW7D–BÂ&Wò’“°Ğ¢66Ruõ5B6öÖÖæBs Ğ¢&WGW&âö²†v—B'Vä6öÖÖæB‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢66Ruõ5BFÖ–âs Ğ¢&WGW&âö²†v—B'VäFÖ–â‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢66Ruõ5B77v÷&Bs Ğ¢&WGW&âv—B6†ævT÷vå77v÷&B‡W6W"Â&WÂ&Wò“°Ğ¢66Ruõ5B÷'G&—Bs Ğ¢&WGW&âö²†v—BWÆöE÷'G&—B‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢66RttUB÷'G&—Bs Ğ¢&WGW&âv—B÷'G&—E&VF—&V7B‡W6W"Â&WçVW'’çFö¶VâÂ&Wò“°Ğ¢66Ruõ5B&V7BÖ–ÖvRs Ğ¢&WGW&âö²†v—BWÆöD&V7D–ÖvR‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢66RttUB&V7BÖ–ÖvRs Ğ¢&WGW&âv—B&V7D–ÖvU&VF—&V7B‡W6W"Â&WçVW'’çFö¶VâÂ&WçVW'’æf÷&ÒÂ&Wò“°Ğ¢66RttUB6†VWBs Ğ¢&WGW&âö²†v—BvWE6†VWB‡W6W"Â&WçVW'’çFö¶VâÂ&Wò’“°Ğ¢66RttUB'G’s Ğ¢&WGW&âö²†v—B'G•f—FÇ2‡W6W"Â&Wò’“°Ğ¢66Ruõ5B6†VWBs Ğ¢&WGW&âö²†v—B'Vå6†VWB‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢66Ruõ5B6†&7FW"Ö&6†—fRs Ğ¢&WGW&âö²†v—B'Vä6†&7FW$&6†—fR‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢66RttUBfVVF&6²s Ğ¢&WGW&âö²†v—BÆ—7DfVVF&6²‡W6W"Â&Wò’“°Ğ¢66Ruõ5BfVVF&6²s Ğ¢&WGW&âö²†v—B'VäfVVF&6²‡W6W"Â&Wæ&öG’Â&Wò’“°Ğ¢FVfVÇC Ğ¢F‡&÷ræWr‡GGW'&÷"ƒCBÂuVæ¶æ÷vâ’÷W&F–öââr“°Ğ¢ĞĞ¢Ò6F6‚†R’°Ğ¢–b†R–ç7Fæ6Vöb‡GGW'&÷"’°Ğ¢6öç7B&W3¢•&W7öç6RÒ°Ğ¢7FGW3¢Rç7FGW2ÀĞ¢&öG“¢²W'&÷#¢RæÖW76vRÂ6öFS¢Ræ6öFRÂâââ†Rç&WG'”gFW"ò²&WG'”gFW#¢Rç&WG'”gFW"Ò¢·Ò’Ââââ†RæW‡G&óò·Ò’ÒÀĞ¢Ó°Ğ¢–b†Rç7FGW2ÓÓÒCbbRæ6öFRÓÓÒwVæWF†VçF–6FVBrbb&Wæ†VFW'2æ6öö¶–Sòæ–æ6ÇVFW2…4U54”ôåô4ôô´”R’’&W2æ6öö¶–W2Ò¶6ÆV%6W76–öä6öö¶–R‚•Ó°Ğ¢&WGW&â&W3°Ğ¢ĞĞ¢6öç6öÆRæW'&÷"‚u¶W‚Ö•ÒrÂR“°Ğ¢–b‚öfWF6‚f–ÆVGÄT4ôäå$TeU4TGÄTäõDdõTäGÄUD”ÔTDõUGÆæWGv÷&·ÇF–ÖV÷WBö’çFW7B…7G&–ær‚†R2W'&÷"“òæÖW76vRóòR’’’°Ğ¢&WGW&â²7FGW3¢S2Â&öG“¢²W'&÷#¢uF†R6×–vâFF&6R6ææ÷B&R&V6†VB&–v‡Bæ÷râÆV6RG'’v–â–âÖöÖVçBârÂ6öFS¢vF%÷Vç&V6†&ÆRrÒÓ°Ğ¢ĞĞ¢&WGW&â²7FGW3¢SÂ&öG“¢²W'&÷#¢t–çFW&æÂ6W'fW"W'&÷"âÆV6RG'’v–âârÒÓ°Ğ¢ĞĞ§ĞĞ Ğ¢òòÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒ55$`Ğ Ğ¢ò¢ Ğ¢¢õ5B&WVW7G2×W7B6öÖRg&öÒF†RU‚vR—G6VÆc¢7W7FöÒ†VFW"†6ææ÷B&R6VçB7&÷72×6—FPĞ¢¢v—F†÷WB4õ%2&VfÆ–v‡BÂv†–6‚F†—2’æWfW"w&çG2’æB(	2v†Vâ&W6VçB(	2ÖF6†–ær÷&–v–âàĞ¢¢ğĞ¦gVæ7F–öâ6†V6´77&b‡&W¢•&WVW7B’°Ğ¢–b‡&Wæ†VFW'5²w‚ÖW‚Ö77&buÒÓÒsr’F‡&÷ræWr‡GGW'&÷"ƒC2Âu&WVW7B&Æö6¶VB†Ö—76–ær6V7W&—G’†VFW"’âÆV6R&VÆöBF†RvRârÂv77&br“°Ğ¢6öç7B÷&–v–âÒ&Wæ†VFW'2æ÷&–v–ã°Ğ¢–b‚÷&–v–â’&WGW&ã°Ğ¢6öç7B†÷7BÒ&Wæ†VFW'5²w‚Öf÷'v&FVBÖ†÷7BuÒóò&Wæ†VFW'2æ†÷7C°Ğ¢ÆWB÷&–v–ä†÷7C¢7G&–æs°Ğ¢G'’°Ğ¢÷&–v–ä†÷7BÒæWrU$Â†÷&–v–â’æ†÷7C°Ğ¢Ò6F6‚°Ğ¢F‡&÷ræWr‡GGW'&÷"ƒC2Âu&WVW7B&Æö6¶VB†–çfÆ–B÷&–v–â’ârÂv77&br“°Ğ¢ĞĞ¢–b‚†÷7BÇÂ÷&–v–ä†÷7BÓÒ†÷7Bç7Æ—B‚rÂr•³ÒçG&–Ò‚’’F‡&÷ræWr‡GGW'&÷"ƒC2Âu&WVW7B&Æö6¶VB†f÷&V–vâ÷&–v–â’ârÂv77&br“°Ğ§ĞĞ Ğ¢òòÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒÒFWÆ÷–ÖVçB†VÇF‚b66†VÖvFPĞ Ğ¦W‡÷'B7–æ2gVæ7F–öâ†VÇF‚‡&Wó¢&Wò“¢&öÖ—6SÄ†VÇF…&W÷'Câ°Ğ¢6öç7BW'&÷'3¢7G&–æuµÒÒµÓ°Ğ¢6öç7B#¢†VÇF…&W÷'BÒ°Ğ¢FF&6S¢fÇ6RÀĞ¢6×–vå6VVFVC¢fÇ6RÀĞ¢&öf–ÆW5F&ÆS¢fÇ6RÀĞ¢&VÇF–ÖS¢fÇ6RÀĞ¢6V7W&—G”ö³¢çVÆÂÀĞ¢66†VÖfW'6–öã¢çVÆÂÀĞ¢&WV—&VE66†VÖfW'6–öã¢$UT•$TEõ44„TÔõdU%4”ôâÀĞ¢Ö–w&F–öç46ö×ÆWFS¢fÇ6RÀĞ¢Ö—76–ætÖ–w&F–öç3¢²ââäU…T5DTEôÔ”u$D”ôå5ÒÀĞ¢Væ¶æ÷väÖ–w&F–öç3¢µÒÀĞ¢W'&÷'2ÀĞ¢Ó°Ğ¢G'’°Ğ¢6öç7BBÒv—B&WòæFWÆ÷•7FGW2‚“°Ğ¢"æFF&6RÒG'VS°Ğ¢"ç66†VÖfW'6–öâÒBç66†VÖfW'6–öã°Ğ¢"æ6×–vå6VVFVBÒBæ6×–vå6VVFVC°Ğ¢"ç&öf–ÆW5F&ÆRÒBç&öf–ÆW2ÓÓÒS°Ğ¢"ç&VÇF–ÖRÒBç&VÇF–ÖS°Ğ¢"ç6V7W&—G”ö²ÒBç6V7W&—G•&ö&ÆV×2ÓÓÒçVÆÂòçVÆÂ¢Bç6V7W&—G•&ö&ÆV×2æÆVæwF‚ÓÓÒ°Ğ¢–b†Bç6V7W&—G•&ö&ÆV×3òæÆVæwF‚’W'&÷'2çW6‚†6V7W&—G’&ö&ÆV×3¢G¶Bç6V7W&—G•&ö&ÆV×2æ¦ö–â‚s²r—Ö“°Ğ¢"æÖ—76–ætÖ–w&F–öç2ÒU…T5DTEôÔ”u$D”ôå2æf–ÇFW"‚‡b’ÓâBæÖ–w&F–öç2æ–æ6ÇVFW2‡b’“°Ğ¢"çVæ¶æ÷väÖ–w&F–öç2ÒBæÖ–w&F–öç2æf–ÇFW"‚‡b’ÓâU…T5DTEôÔ”u$D”ôå2æ–æ6ÇVFW2‡b’“°Ğ¢"æÖ–w&F–öç46ö×ÆWFRÒ"æÖ—76–ætÖ–w&F–öç2æÆVæwF‚ÓÓÒ°Ğ¢–b‚"æÖ–w&F–öç46ö×ÆWFR’W'&÷'2çW6‚†FF&6RÖ–w&F–öç2Ö—76–æs¢G·"æÖ—76–ætÖ–w&F–öç2æ¦ö–â‚rÂr—Ö“°Ğ¢–b‡"çVæ¶æ÷väÖ–w&F–öç2æÆVæwF‚’W'&÷'2çW6‚†FF&6R†2Ö–w&F–öç2F†—2FWÆ÷–ÖVçBFöW2æ÷B¶æ÷s¢G·"çVæ¶æ÷väÖ–w&F–öç2æ¦ö–â‚rÂr—Ö“°Ğ¢–b‚†Bç66†VÖfW'6–öâóò’Â$UT•$TEõ44„TÔõdU%4”ôâ’W'&÷'2çW6‚†FF&6R66†VÖfW'6–öâG¶Bç66†VÖfW'6–öçÒ—2öÆFW"F†â&WV—&VBGµ$UT•$TEõ44„TÔõdU%4”ôçÖ“°Ğ¢–b‚Bæ6×–vå6VVFVB’W'&÷'2çW6‚‚uF†RÖ–â6×–vâ—2Ö—76–ærâr“°Ğ¢–b†Bç&öf–ÆW2ÓÒR’W'&÷'2çW6‚†W‡V7FVBR&öf–ÆW2Âf÷VæBG¶Bç&öf–ÆW7Òæ“°Ğ¢–b‚Bç&VÇF–ÖR’W'&÷'2çW6‚‚uF†RÆ—fR×WFFR'&öF67BG&–vvW"—2æ÷B–ç7FÆÆVBâr“°Ğ¢Ò6F6‚†R’°Ğ¢W'&÷'2çW6‚†FF&6S¢G²†R2W'&÷"’æÖW76vWÖ“°Ğ¢ĞĞ¢&WGW&â#°Ğ§ĞĞ Ğ¦ÆWB66†VÖ6†V6¶VDBÒ°Ğ¢ò¢¢&VgW6W26×–vâ&WVW7G2v†–ÆRF†RFF&6R—2öÆFW"F†âF†—26öFR†66†VBf÷"Ö–çWFW2W"–ç7Fæ6R’â¢ğĞ¦7–æ2gVæ7F–öâ&WV—&T6ö×F–&ÆU66†VÖ‡&Wó¢&Wò’°Ğ¢–b„FFRææ÷r‚’Ò66†VÖ6†V6¶VDBÂcó’&WGW&ã°Ğ¢6öç7BBÒv—B&WòæFWÆ÷•7FGW2‚“°Ğ¢–b‚†Bç66†VÖfW'6–öâóò’Â$UT•$TEõ44„TÔõdU%4”ôâ’°Ğ¢F‡&÷}zë­­¢G§²ÚîÆ­yÖeedback(cid, { ...(user.role === 'gm' ? {} : { userId: user.id }), limit: 500 });
+/**
+ * APEX online API â€“ the authoritative server layer.
+ *
+ * Security model (APEX 0.3):
+ *  - Sign-in = profile ("Who are you?") + password. Passwords are verified server-side against
+ *    Argon2id hashes; nothing about the password ever reaches the client again.
+ *  - A successful sign-in creates a random session token, delivered ONLY as an HttpOnly, Secure,
+ *    SameSite=Strict cookie. The database stores its SHA-256 hash. Sessions expire (14 days idle,
+ *    30 days absolute) and are revoked on logout, password reset and deactivation.
+ *  - Identity comes ONLY from the session; role and characters ONLY from the profile row in the
+ *    database (apex_profiles) â€“ never from the request body. Choosing the GM card grants nothing
+ *    without the GM password.
+ *  - State-changing requests (POST) must carry the header X-APEX-CSRF: 1 and, if the browser
+ *    sends an Origin, it must be this site (CSRF protection on top of SameSite=Strict).
+ *  - The full GameState is returned to the Game Master only. Players receive buildPlayerView()
+ *    for their own character. Players may only move their characters and edit their own
+ *    character's Will, sheet and inventory.
+ *  - Commands are re-validated by executeCommand() against the latest stored state and written
+ *    with optimistic locking (version check) â€“ concurrent writes cannot overwrite each other.
+ */
+import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
+import { CHARACTER_COMMANDS, executeCommand, validateMove, type Command } from '../game/commands.js';
+import { SEEDED_COMMANDS } from '../game/items/loot.js';
+import { PARTY_LOOT_SEEDED, PARTY_LOOT_TIMED } from '../game/items/partyLoot.js';
+import { medianLevel } from '../game/items/lootDraft.js';
+import { migrateState, stripLegacy } from '../game/migrate.js';
+import { readBuildInfo } from '../build/buildInfo.js';
+import { APP_VERSION } from '../build/version.js';
+import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
+import { castMageArmor, isWearingArmor } from '../game/spells.js';
+import { characterMovementLoad } from '../game/items/weight.js';
+import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
+import { findBeast } from '../game/beastCatalog.js';
+import { buildSnapshot, isSnapshot, restoreSheetParts, sheetLevel, SHEET_PARTS, type SheetPart } from '../game/progression.js';
+import type { Actor, GameState } from '../game/types.js';
+import { phaseName } from '../game/text.js';
+import { buildPlayerView } from '../game/visibility.js';
+import { applyRoster, needsRosterUpdate } from '../game/roster.js';
+import { carryCharacters, newWorldMeta, reconcileRestore, worldIdOf } from '../game/world.js';
+import {
+  SESSION_ABSOLUTE_MS,
+  SESSION_COOKIE,
+  SESSION_IDLE_MS,
+  clearSessionCookie,
+  dummyVerify,
+  hashPassword,
+  looksLikeToken,
+  newSessionToken,
+  normaliseSetupCode,
+  passwordProblem,
+  sessionCookie,
+  sha256Hex,
+  verifyPassword,
+} from './auth.js';
+import type {
+  AdminOverview,
+  CampaignPayload,
+  CharacterRef,
+  PlayerPayload,
+  PublicProfile,
+  SessionInfo,
+  SheetPayload,
+  PartyVital,
+  WireView,
+} from './protocol.js';
+import { WorldConflictError, type FeedbackRow, type ArchiveKind, type AuthUser, type HealthReport, type Profile, type Repo } from './repo.js';
+import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
+import { sceneRequest } from './scenes.js';
+import { journalRequest } from './journals.js';
+import { runtimeRequest, sceneSnapshot } from './sceneRuntime.js';
+import { assetRequest } from './sceneAssets.js';
+import { motionRequest } from './sceneMotion.js';
+import { travelRequest } from './sceneTravel.js';
+import { sanctuaryRequest } from './sanctuary.js';
+import { journalImageRequest } from './journalImages.js';
+import { kenneyPreviewRequest } from './kenneyPreview.js';
+import { isId, isInt, isObj, parseCommand } from './validate.js';
+
+export interface ApiRequest {
+  method: string;
+  op: string;
+  query: Record<string, string | undefined>;
+  body: unknown;
+  /** Lower-case request headers (cookie, origin, host, x-apex-csrf, user-agent â€¦). */
+  headers: Record<string, string | undefined>;
+  /** Client IP as reported by the platform (x-forwarded-for / x-real-ip). */
+  ip: string | null;
+}
+
+export interface ApiResponse {
+  status: number;
+  body: unknown;
+  /** Set-Cookie header values. */
+  cookies?: string[];
+  /** Extra response headers (e.g. Location for a redirect). */
+  headers?: Record<string, string>;
+}
+
+const MAX_RETRIES = 4;
+const KEEP_SNAPSHOTS = 60;
+
+class HttpError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+    /** Seconds until a retry makes sense (rate limits). */
+    public retryAfter?: number,
+    public extra?: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
+
+const ok = (body: unknown, cookies?: string[]): ApiResponse => ({ status: 200, body, ...(cookies ? { cookies } : {}) });
+
+/** A profile counts as "online" if one of its devices contacted the server within this window. */
+export const PRESENCE_WINDOW_MS = 75_000;
+
+/** Login rate limits (failed attempts within the window). */
+export const LOGIN_LIMITS = {
+  windowMs: 15 * 60_000,
+  perProfile: 5,
+  perIp: 20,
+  global: 300,
+};
+
+/**
+ * APEX 0.7 legacy reader: every game state the server reads (live state, daily snapshots, world archives) is
+ * normalised by stripLegacy() â€“ obsolete fields such as the old Willpower resource never reach the rules, the
+ * clients or a new write. Stored archives are not rewritten; they are cleaned whenever they are read.
+ */
+export function withLegacyReader(repo: Repo): Repo {
+  return new Proxy(repo, {
+    get(target, prop, receiver) {
+      if (prop === 'loadState')
+        return async (cid: string) => {
+          const s = await target.loadState(cid);
+          if (s) stripLegacy(s.state);
+          return s;
+        };
+      if (prop === 'loadSnapshot')
+        return async (cid: string, id: number) => {
+          const s = await target.loadSnapshot(cid, id);
+          if (s) stripLegacy(s);
+          return s;
+        };
+      if (prop === 'loadArchive')
+        return async (cid: string, id: string) => {
+          const a = await target.loadArchive(cid, id);
+          if (a) stripLegacy(a.state);
+          return a;
+        };
+      const v = Reflect.get(target, prop, receiver);
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+  });
+}
+
+export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResponse> {
+  const repo = withLegacyReader(rawRepo);
+  try {
+    if (req.method === 'GET' && req.op === 'version') return ok(readBuildInfo(process.env, APP_VERSION, null)); // no DB access
+    if (req.method === 'GET' && req.op === 'health') return ok(await health(repo));
+    if (req.method === 'POST') checkCsrf(req);
+    await requireCompatibleSchema(repo);
+
+    // ---- public operations (no session yet)
+    if (req.method === 'GET' && req.op === 'profiles') return ok(await profileStatus(repo));
+    if (req.method === 'POST' && req.op === 'login') return await login(req, repo);
+    if (req.method === 'POST' && req.op === 'setup') return await gmSetup(req, repo);
+    if (req.method === 'POST' && req.op === 'logout') return await logout(req, repo);
+
+    // One round trip: session + profile + password flag + campaign (and presence touch).
+    const user = await authenticate(req, repo);
+    if (req.op === 'kenney-preview') return await kenneyPreviewRequest(user, req.method, req.query, repo);
+    if (req.op === 'scenes') return await sceneRequest(user, req.method, req.query, req.body, repo.sceneCatalog, repo.sceneAssets);
+    if (req.op === 'journal') return await journalRequest(user, req.method, req.query, req.body, repo.journalStore, repo);
+    if (req.op === 'scene-runtime') return await runtimeRequest(user, req.method, req.query, req.body, repo);
+    if (req.op === 'scene-assets') return await assetRequest(user, req.method, req.query, req.body, repo);
+    if (req.op === 'scene-motion') return await motionRequest(user, req.method, req.body, repo, req.query);
+    if (req.op === 'scene-travel') return await travelRequest(user, req.method, req.query, req.body, repo);
+    if (req.op === 'sanctuary') return await sanctuaryRequest(user, req.method, req.body, repo);
+    if (req.op === 'journal-images') return await journalImageRequest(user, req.method, req.query, req.body, repo);
+    switch (`${req.method} ${req.op}`) {
+      case 'GET session':
+        return ok(sessionInfo(user));
+      case 'GET ping': {
+        // Heartbeat: cheap version check (no state transfer); presence was refreshed by authenticate().
+        return ok({ version: (await repo.stateVersion(user.campaignId)) ?? 0, syncTopic: user.syncTopic });
+      }
+      case 'GET state': {
+        // Clients pass the version they already have: nothing is re-downloaded if it did not change.
+        const since = Number(req.query.since);
+        if (Number.isInteger(since) && since > 0) {
+          const v = (await repo.stateVersion(user.campaignId)) ?? 0;
+          if (v === since) return ok({ unchanged: true, version: v });
+        }
+        return ok(await campaignPayload(user, repo, req.query.as));
+      }
+      case 'GET command-status':
+        return ok(await commandStatus(user, req.query.requestId, repo));
+      case 'POST command':
+        return ok(await runCommand(user, req.body, repo));
+      case 'POST admin':
+        return ok(await runAdmin(user, req.body, repo));
+      case 'POST password':
+        return await changeOwnPassword(user, req, repo);
+      case 'POST portrait':
+        return ok(await uploadPortrait(user, req.body, repo));
+      case 'GET portrait':
+        return await portraitRedirect(user, req.query.token, repo);
+      case 'POST beast-image':
+        return ok(await uploadBeastImage(user, req.body, repo));
+      case 'GET beast-image':
+        return await beastImageRedirect(user, req.query.token, req.query.form, repo);
+      case 'GET sheet':
+        return ok(await getSheet(user, req.query.token, repo));
+      case 'GET party':
+        return ok(await partyVitals(user, repo));
+      case 'POST sheet':
+        return ok(await runSheet(user, req.body, repo));
+      case 'POST character-archive':
+        return ok(await runCharacterArchive(user, req.body, repo));
+      case 'GET feedback':
+        return ok(await listFeedback(user, repo));
+      case 'POST feedback':
+        return ok(await runFeedback(user, req.body, repo));
+      default:
+        throw new HttpError(404, 'Unknown API operation.');
+    }
+  } catch (e) {
+    if (e instanceof HttpError) {
+      const res: ApiResponse = {
+        status: e.status,
+        body: { error: e.message, code: e.code, ...(e.retryAfter ? { retryAfter: e.retryAfter } : {}), ...(e.extra ?? {}) },
+      };
+      if (e.status === 401 && e.code === 'unauthenticated' && req.headers.cookie?.includes(SESSION_COOKIE)) res.cookies = [clearSessionCookie()];
+      return res;
+    }
+    console.error('[apex-api]', e);
+    if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|timeout/i.test(String((e as Error)?.message ?? e))) {
+      return { status: 503, body: { error: 'The campaign database cannot be reached right now. Please try again in a moment.', code: 'db_unreachable' } };
+    }
+    return { status: 500, body: { error: 'Internal server error. Please try again.' } };
+  }
+}
+
+// ---------------------------------------------------------------- CSRF
+
+/**
+ * POST requests must come from the APEX page itself: a custom header (cannot be sent cross-site
+ * without a CORS preflight, which this API never grants) and â€“ when present â€“ a matching Origin.
+ */
+function checkCsrf(req: ApiRequest) {
+  if (req.headers['x-apex-csrf'] !== '1') throw new HttpError(403, 'Request blocked (missing security header). Please reload the page.', 'csrf');
+  const origin = req.headers.origin;
+  if (!origin) return;
+  const host = req.headers['x-forwarded-host'] ?? req.headers.host;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    throw new HttpError(403, 'Request blocked (invalid origin).', 'csrf');
+  }
+  if (!host || originHost !== host.split(',')[0].trim()) throw new HttpError(403, 'Request blocked (foreign origin).', 'csrf');
+}
+
+// ---------------------------------------------------------------- deployment health & schema gate
+
+export async function health(repo: Repo): Promise<HealthReport> {
+  const errors: string[] = [];
+  const r: HealthReport = {
+    database: false,
+    campaignSeeded: false,
+    profilesTable: false,
+    realtime: false,
+    securityOk: null,
+    schemaVersion: null,
+    requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
+    migrationsComplete: false,
+    missingMigrations: [...EXPECTED_MIGRATIONS],
+    unknownMigrations: [],
+    errors,
+  };
+  try {
+    const d = await repo.deployStatus();
+    r.database = true;
+    r.schemaVersion = d.schemaVersion;
+    r.campaignSeeded = d.campaignSeeded;
+    r.profilesTable = d.profiles === 5;
+    r.realtime = d.realtime;
+    r.securityOk = d.securityProblems === null ? null : d.securityProblems.length === 0;
+    if (d.securityProblems?.length) errors.push(`Security problems: ${d.securityProblems.join('; ')}`);
+    r.missingMigrations = EXPECTED_MIGRATIONS.filter((v) => !d.migrations.includes(v));
+    r.unknownMigrations = d.migrations.filter((v) => !EXPECTED_MIGRATIONS.includes(v));
+    r.migrationsComplete = r.missingMigrations.length === 0;
+    if (!r.migrationsComplete) errors.push(`Database migrations missing: ${r.missingMigrations.join(', ')}`);
+    if (r.unknownMigrations.length) errors.push(`Database has migrations this deployment does not know: ${r.unknownMigrations.join(', ')}`);
+    if ((d.schemaVersion ?? 0) < REQUIRED_SCHEMA_VERSION) errors.push(`Database schema version ${d.schemaVersion} is older than required ${REQUIRED_SCHEMA_VERSION}`);
+    if (!d.campaignSeeded) errors.push('The main campaign is missing.');
+    if (d.profiles !== 5) errors.push(`Expected 5 profiles, found ${d.profiles}.`);
+    if (!d.realtime) errors.push('The live-update broadcast trigger is not installed.');
+  } catch (e) {
+    errors.push(`database: ${(e as Error).message}`);
+  }
+  return r;
+}
+
+let schemaCheckedAt = 0;
+/** Refuses campaign requests while the database is older than this code (cached for 10 minutes per instance). */
+async function requireCompatibleSchema(repo: Repo) {
+  if (Date.now() - schemaCheckedAt < 600_000) return;
+  const d = await repo.deployStatus();
+  if ((d.schemaVersion ?? 0) < REQUIRED_SCHEMA_VERSION) {
+    throw new HttpError(503, 'The campaign database is being updated. Please try again in a few minutes.', 'schema_outdated');
+  }
+  schemaCheckedAt = Date.now();
+}
+
+/** Test helper: forget the cached schema check. */
+export function resetSchemaCache() {
+  schemaCheckedAt = 0;
+}
+
+// ---------------------------------------------------------------- profiles & sign-in
+
+/** Public: which profiles can currently sign in (no account data, no hashes). */
+async function profileStatus(repo: Repo): Promise<{ profiles: PublicProfile[] }> {
+  const [all, dates] = await Promise.all([repo.profiles(null), repo.credentialDates(null)]);
+  const out = new Map<string, PublicProfile>();
+  for (const p of all) {
+    const pwSet = !!dates[`${p.campaignId}:${p.key}`];
+    const prev = out.get(p.key);
+    const entry: PublicProfile = { key: p.key, active: (prev?.active ?? false) || (p.active && pwSet) };
+    if (p.role === 'gm' && !pwSet) entry.needsSetup = true;
+    out.set(p.key, entry);
+  }
+  return { profiles: [...out.values()] };
+}
+
+async function findProfile(repo: Repo, key: unknown, campaignId?: unknown): Promise<Profile> {
+  if (typeof key !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(key)) throw new HttpError(400, 'Please choose your profile.', 'bad_profile');
+  const matches = (await repo.profiles(null)).filter((p) => p.key === key && (typeof campaignId !== 'string' || p.campaignId === campaignId));
+  if (!matches.length) throw new HttpError(404, 'This profile does not exist.', 'bad_profile');
+  if (matches.length > 1) throw new HttpError(400, 'Please choose a campaign.', 'choose_campaign');
+  return matches[0];
+}
+
+const ipHashOf = (req: ApiRequest) => sha256Hex(`apex-ip:${req.ip ?? 'unknown'}`);
+
+/** Throws 429 when too many failed attempts happened recently. Checked BEFORE the password. */
+async function checkLoginRate(repo: Repo, profileKey: string, ipHash: string) {
+  const since = new Date(Date.now() - LOGIN_LIMITS.windowMs).toISOString();
+  const s = await repo.loginAttemptStats(profileKey, ipHash, since);
+  const wait = () => {
+    const oldest = s.oldestProfileFailure ? Date.parse(s.oldestProfileFailure) : Date.now();
+    return Math.max(30, Math.ceil((oldest + LOGIN_LIMITS.windowMs - Date.now()) / 1000));
+  };
+  if (s.profileFailures >= LOGIN_LIMITS.perProfile) {
+    throw new HttpError(429, `Too many wrong passwords for this profile. Please wait ${Math.ceil(wait() / 60)} minutes and try again.`, 'rate_limited', wait());
+  }
+  if (s.ipFailures >= LOGIN_LIMITS.perIp || s.globalFailures >= LOGIN_LIMITS.global) {
+    throw new HttpError(429, 'Too many sign-in attempts. Please wait 15 minutes and try again.', 'rate_limited', 900);
+  }
+}
+
+/** Creates a session for a profile and returns the Set-Cookie header. */
+async function startSession(repo: Repo, p: Profile, req: ApiRequest): Promise<string> {
+  const token = newSessionToken();
+  const now = Date.now();
+  await repo.createSession({
+    tokenHash: await sha256Hex(token),
+    campaignId: p.campaignId,
+    profileKey: p.key,
+    userId: p.userId,
+    expiresAt: new Date(now + Math.min(SESSION_IDLE_MS, SESSION_ABSOLUTE_MS)).toISOString(),
+    userAgent: (req.headers['user-agent'] ?? '').slice(0, 200) || null,
+  });
+  await ensureMember(repo, p);
+  return sessionCookie(token, SESSION_IDLE_MS / 1000);
+}
+
+/** Keeps apex_campaign_members / assignments in sync with the profile (presence & audit). */
+async function ensureMember(repo: Repo, p: Profile) {
+  const members = await repo.members(p.campaignId);
+  const m = members.find((x) => x.userId === p.userId);
+  if (!m || m.role !== p.role) await repo.upsertMember({ campaignId: p.campaignId, userId: p.userId, email: null, role: p.role });
+}
+
+async function login(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
+  const body = isObj(req.body) ? req.body : {};
+  const p = await findProfile(repo, body.profile, body.campaignId);
+  const password = typeof body.password === 'string' ? body.password : '';
+  if (!password) throw new HttpError(400, 'Please enter your password.', 'bad_password');
+  if (password.length > 1000) throw new HttpError(400, 'This password is too long.', 'bad_password');
+  const ipHash = await ipHashOf(req);
+  await checkLoginRate(repo, p.key, ipHash);
+
+  const cred = await repo.credential(p.campaignId, p.key);
+  if (!cred || !p.active) {
+    await dummyVerify(password);
+    throw new HttpError(
+      403,
+      p.role === 'gm' && !cred
+        ? 'The Game Master password has not been set up yet. Use â€œFirst-time setupâ€ with your setup code.'
+        : 'This profile has not been activated by the Game Master yet.',
+      p.role === 'gm' && !cred ? 'needs_setup' : 'profile_locked',
+    );
+  }
+  if (!(await verifyPassword(password, cred.passwordHash))) {
+    await repo.recordLoginAttempt(p.key, ipHash, false);
+    throw new HttpError(401, 'Wrong password. Please try again.', 'wrong_password');
+  }
+  await repo.recordLoginAttempt(p.key, ipHash, true);
+  const cookie = await startSession(repo, p, req);
+  return ok({ ok: true, profile: p.key }, [cookie]);
+}
+
+/**
+ * One-time Game Master setup: a setup code created by a database owner
+ * (select apex_private.create_gm_setup_code(); in the Supabase SQL editor) lets the GM set
+ * or reset the GM password. Codes are single-use, expire, and are rate-limited like logins.
+ * There is no permanent master password and nothing in the code base or environment that
+ * grants access by itself.
+ */
+async function gmSetup(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
+  const body = isObj(req.body) ? req.body : {};
+  const ipHash = await ipHashOf(req);
+  await checkLoginRate(repo, '__setup', ipHash);
+  const problem = passwordProblem(body.password);
+  if (problem) throw new HttpError(400, problem, 'bad_password');
+  const code = normaliseSetupCode(body.code);
+  const campaignId = code ? await repo.consumeSetupCode(await sha256Hex(code)) : null;
+  if (!campaignId) {
+    await repo.recordLoginAttempt('__setup', ipHash, false);
+    throw new HttpError(401, 'This setup code is wrong, expired or has already been used.', 'bad_code');
+  }
+  const gm = (await repo.profiles(campaignId)).find((p) => p.role === 'gm');
+  if (!gm) throw new HttpError(500, 'The campaign has no Game Master profile.');
+  await repo.recordLoginAttempt('__setup', ipHash, true);
+  await repo.setCredential(campaignId, gm.key, await hashPassword(body.password as string), gm.userId);
+  if (!gm.active) await repo.updateProfile(campaignId, gm.key, { active: true });
+  await repo.revokeProfileSessions(campaignId, gm.key);
+  const cookie = await startSession(repo, { ...gm, active: true }, req);
+  return ok({ ok: true, profile: gm.key }, [cookie]);
+}
+
+async function logout(req: ApiRequest, repo: Repo): Promise<ApiResponse> {
+  const token = req.headers.cookie ? cookieToken(req) : undefined;
+  if (looksLikeToken(token)) await repo.revokeSession(await sha256Hex(token));
+  return ok({ ok: true }, [clearSessionCookie()]);
+}
+
+async function changeOwnPassword(user: AuthUser, req: ApiRequest, repo: Repo): Promise<ApiResponse> {
+  const body = isObj(req.body) ? req.body : {};
+  const cred = await repo.credential(user.campaignId, user.profileKey);
+  const ipHash = await ipHashOf(req);
+  await checkLoginRate(repo, user.profileKey, ipHash);
+  if (!cred || typeof body.current !== 'string' || !(await verifyPassword(body.current, cred.passwordHash))) {
+    await repo.recordLoginAttempt(user.profileKey, ipHash, false);
+    throw new HttpError(401, 'Your current password is not correct.', 'wrong_password');
+  }
+  const problem = passwordProblem(body.next);
+  if (problem) throw new HttpError(400, problem, 'bad_password');
+  await repo.setCredential(user.campaignId, user.profileKey, await hashPassword(body.next as string), user.id);
+  // Other devices must sign in again with the new password; this device stays signed in.
+  await repo.revokeProfileSessions(user.campaignId, user.profileKey, user.sessionHash);
+  return ok({ ok: true });
+}
+
+// ---------------------------------------------------------------- identity
+
+const cookieToken = (req: ApiRequest) => {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === SESSION_COOKIE) return part.slice(i + 1).trim();
+  }
+  return undefined;
+};
+
+async function authenticate(req: ApiRequest, repo: Repo): Promise<AuthUser> {
+  const token = cookieToken(req);
+  if (!looksLikeToken(token)) throw new HttpError(401, 'Please sign in.', 'unauthenticated');
+  const hash = await sha256Hex(token);
+  const b = await repo.authBundle(hash);
+  if (!b) throw new HttpError(401, 'Your session has ended. Please sign in again.', 'unauthenticated');
+  const { session: s, profile: p } = b;
+  // Profile deactivated, password removed or re-keyed â†’ the session is no longer valid.
+  if (!p.active || p.userId !== s.userId || !b.passwordSet) {
+    await repo.revokeSession(hash);
+    throw new HttpError(401, 'Your access has been changed by the Game Master. Please sign in again.', 'unauthenticated');
+  }
+  return {
+    id: p.userId,
+    campaignId: p.campaignId,
+    profileKey: p.key,
+    displayName: p.displayName,
+    role: p.role,
+    tokenIds: p.tokenIds,
+    sessionHash: hash,
+    campaignName: b.campaign.name,
+    syncTopic: b.campaign.syncTopic,
+  };
+}
+
+function checkCampaign(user: AuthUser, campaignId: unknown) {
+  if (campaignId !== undefined && campaignId !== null && campaignId !== user.campaignId) {
+    throw new HttpError(403, 'You are not a member of this campaign.', 'not_authorized');
+  }
+}
+
+function sessionInfo(user: AuthUser): SessionInfo {
+  return {
+    user: { id: user.id, profile: user.profileKey, displayName: user.displayName, role: user.role },
+    campaigns: [{ id: user.campaignId, name: user.campaignName, role: user.role }],
+    syncTopic: user.syncTopic,
+  };
+}
+
+// ---------------------------------------------------------------- views
+
+const toWire = (view: ReturnType<typeof buildPlayerView>): WireView => {
+  const { hexByKey: _drop, ...rest } = view;
+  return rest;
+};
+
+function charactersOf(user: AuthUser, state: GameState | null): CharacterRef[] {
+  if (!state || user.role === 'gm') return [];
+  return user.tokenIds.filter((id) => state.tokens[id]?.kind === 'player').map((id) => ({ id, name: state.tokens[id].name }));
+}
+
+async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?: { state: GameState; version: number } | null): Promise<CampaignPayload> {
+  const s = stored === undefined ? await repo.loadState(user.campaignId) : stored;
+  const name = user.campaignName;
+  if (user.role === 'gm') {
+    return { role: 'gm', campaignId: user.campaignId, campaignName: name, version: s?.version ?? 0, state: s?.state ?? null };
+  }
+  const characters = charactersOf(user, s?.state ?? null);
+  const base: PlayerPayload = {
+    role: 'player',
+    campaignId: user.campaignId,
+    campaignName: name,
+    version: s?.version ?? 0,
+    characters,
+    activeCharacter: null,
+    view: null,
+  };
+  if (!s) return { ...base, notice: 'The Game Master has not opened the arena yet.' };
+  if (!characters.length) return { ...base, notice: 'No character has been assigned to your profile yet. Please ask your Game Master.' };
+  const active = characters.find((c) => c.id === as)?.id ?? characters[0].id;
+  const scene = await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel);
+  const view = buildPlayerView(s.state, active, scene.kind === 'scene' ? scene.scene?.id : null);
+  const savedSheet = await repo.loadSheet(user.campaignId, active);
+  const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+  const movement = characterMovementLoad(s.state, s.state.tokens[active], parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+  const ownToken = view.tokens.find(token => token.id === active);
+  if (ownToken?.details) ownToken.details.movementAllowance = {
+    maxMovePoints: movement.maxMovePoints,
+    remainingMovePoints: movement.remainingMovePoints,
+    speedFt: movement.speedFt,
+    loadState: movement.load.state,
+  };
+  if (scene.kind !== 'arena') {
+    // Non-Arena screens keep only authorized persistent character data, never legacy map intel.
+    view.hexes = []; view.hexByKey = {}; view.sites = []; view.trackers = []; view.log = []; view.announcements = [];
+    view.tokens = view.tokens.filter(t => user.tokenIds.includes(t.id)).map(t => ({ ...t, pos: { q: 0, r: 0 } }));
+    view.teams = [];
+  }
+  return { ...base, activeCharacter: active, scene, view: toWire(view) };
+}
+
+// ---------------------------------------------------------------- commands
+
+const isRequestId = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(v);
+
+/**
+ * Idempotency for state-changing requests: the client sends a random requestId. The id is reserved
+ * atomically (unique index) before anything is changed, so a repeated request â€“ double click,
+ * lost response, reconnect â€“ is never applied twice. Its outcome can be looked up later.
+ */
+async function withRequestId<T>(
+  user: AuthUser,
+  requestId: unknown,
+  command: unknown,
+  repo: Repo,
+  onDuplicate: () => Promise<T>,
+  run: () => Promise<{ result: T; version: number | null }>,
+): Promise<T> {
+  if (requestId === undefined || requestId === null) return (await run()).result;
+  if (!isRequestId(requestId)) throw new HttpError(400, 'Invalid request id.');
+  const r = await repo.reserveRequest({ campaignId: user.campaignId, userId: user.id, role: user.role, command, requestId });
+  if (r.kind === 'existing') {
+    if (r.state === 'ok') return onDuplicate();
+    if (r.state === 'pending') throw new HttpError(409, 'This action is still being processed.', 'in_progress');
+    throw new HttpError(422, r.error ?? 'This action was rejected.', 'rejected');
+  }
+  try {
+    const { result, version } = await run();
+    await repo.finishRequest(user.campaignId, requestId, true, null, version);
+    return result;
+  } catch (e) {
+    await repo.finishRequest(user.campaignId, requestId, false, e instanceof HttpError ? e.message : 'failed', null).catch(() => undefined);
+    throw e;
+  }
+}
+
+async function commandStatus(user: AuthUser, requestId: unknown, repo: Repo) {
+  if (!isRequestId(requestId)) throw new HttpError(400, 'Invalid request id.');
+  const r = await repo.requestStatus(user.campaignId, requestId);
+  if (!r || r.kind !== 'existing') return { requestId, state: 'unknown' as const, version: null, error: null };
+  return { requestId, state: r.state, version: r.version, error: r.error };
+}
+
+async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<CampaignPayload> {
+  if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
+  checkCampaign(user, body.campaignId);
+  const parsed = parseCommand(body.command);
+  if (!parsed.ok) throw new HttpError(400, parsed.error);
+  const cmd = parsed.command;
+  // Server-side randomness: generation and rerolls get a crypto seed here â€“ never from the client. It is set once,
+  // before the optimistic-locking retry loop, so a re-validation after a write conflict yields the same roll.
+  if (SEEDED_COMMANDS.has(cmd.type) || PARTY_LOOT_SEEDED.has(cmd.type)) (cmd as { seed?: number }).seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  // Server clock for deadlines (loot rolls) â€“ never from the client.
+  if (PARTY_LOOT_TIMED.has(cmd.type)) (cmd as { now?: number }).now = Date.now();
+  // Loot drafts default to the party's median character level, read from the stored sheets.
+  if (cmd.type === 'lootDraftCreate' && cmd.referenceLevel === undefined) cmd.partyLevel = await partyMedianLevel(user.campaignId, repo);
+  const as = typeof body.as === 'string' ? body.as : undefined;
+  const viewAs = as ?? (CHARACTER_COMMANDS.has(cmd.type) ? (cmd as { tokenId: string }).tokenId : undefined);
+  const tracked = isRequestId(body.requestId);
+  const log = (ok: boolean, error?: string, version?: number) =>
+    tracked ? Promise.resolve() : repo.logCommand({ campaignId: user.campaignId, userId: user.id, role: user.role, command: cmd, ok, error, version });
+
+  if (user.role !== 'gm' && cmd.type !== 'move' && !CHARACTER_COMMANDS.has(cmd.type)) {
+    await log(false, 'gm-only');
+    throw new HttpError(403, 'Only the Game Master can do that.', 'forbidden');
+  }
+
+  return withRequestId(
+    user,
+    body.requestId,
+    cmd,
+    repo,
+    async () => ({ ...(await campaignPayload(user, repo, viewAs)), duplicate: true }) as CampaignPayload,
+    async () => {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const stored = await repo.loadState(user.campaignId);
+        if (user.role !== 'gm' && repo.sceneRuntime) {
+          const scene = await sceneSnapshot(user, repo.sceneRuntime);
+          // Existing character, item, merchant and party-loot rules remain campaign-global (0.7 ownership).
+          const arenaOnly = !CHARACTER_COMMANDS.has(cmd.type);
+          if (arenaOnly && (scene.kind !== 'arena' || (body.sceneRevision ?? 0) !== scene.assignmentRevision)) throw new HttpError(409, 'Your scene changed. Reload before acting.', 'scene_changed');
+        }
+        if (!stored) throw new HttpError(409, 'The campaign has not been initialised yet.', 'not_initialised');
+        // A command prepared for a world that has since been replaced (reset / new world / restore) is never applied.
+        if (body.worldId !== undefined && body.worldId !== worldIdOf(stored.state)) {
+          throw new HttpError(409, 'The Game Master has switched to another world. Your view is being reloaded â€“ please repeat your action there if it still makes sense.', 'world_changed');
+        }
+        if (user.role === 'gm' && cmd.type === 'lootRollStart' && cmd.sceneId) {
+          if (!repo.sceneRuntime) throw new HttpError(503, 'Scene assignments are unavailable.', 'scene_unavailable');
+          const scene = await repo.sceneRuntime.scene(user.campaignId, cmd.sceneId);
+          if (!scene || scene.is_legacy_arena || scene.is_draft || scene.archived) throw new HttpError(409, 'Choose a published scene before starting scene loot.', 'scene_changed');
+          const [assignments, profiles] = await Promise.all([
+            repo.sceneRuntime.assignments(user.campaignId),
+            repo.profiles(user.campaignId),
+          ]);
+          const assignedUsers = new Set(assignments.filter(assignment => assignment.scene_id === scene.id).map(assignment => assignment.user_id));
+          const eligibleTokens = new Set(profiles.filter(profile => profile.active && profile.role === 'player' && assignedUsers.has(profile.userId))
+            .flatMap(profile => profile.tokenIds).filter(tokenId => stored.state.tokens[tokenId]?.kind === 'player'));
+          if (cmd.tokenIds.some(tokenId => !eligibleTokens.has(tokenId))) throw new HttpError(409, 'Every loot recipient must be assigned to the selected scene.', 'scene_changed');
+        }
+        if (user.role !== 'gm' && (cmd.type === 'lootRollChoose' || cmd.type === 'lootRollClaimExpired')) {
+          const roll = stored.state.lootRolls?.find(candidate => candidate.id === cmd.rollId);
+          if (roll?.sceneId) {
+            if (!repo.sceneRuntime) throw new HttpError(503, 'Scene assignments are unavailable.', 'scene_unavailable');
+            const assignment = await repo.sceneRuntime.assignment(user.campaignId, user.id);
+            if (assignment?.scene_id !== roll.sceneId || !roll.eligible.includes(cmd.tokenId)) {
+              throw new HttpError(409, 'This loot roll is only available to characters assigned to its scene.', 'scene_changed');
+            }
+          }
+        }
+
+        let actor: Actor;
+        try {
+          actor = actorFor(user, cmd, stored.state);
+        } catch (e) {
+          await log(false, (e as Error).message);
+          throw e;
+        }
+        if (cmd.type === 'move') {
+          const token = stored.state.tokens[cmd.tokenId];
+          if (token) {
+            const savedSheet = await repo.loadSheet(user.campaignId, token.id);
+            const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+            const movement = characterMovementLoad(stored.state, token, parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+            if (movement.load.state === 'over') throw new HttpError(422, `${token.name} is over carrying capacity; reduce the carried load before moving.`, 'rejected');
+            const check = validateMove(stored.state, actor, token.id, cmd.to);
+            if (check.ok && check.cost > movement.remainingMovePoints + 1e-9) {
+              throw new HttpError(422, `Encumbrance leaves only ${movement.remainingMovePoints} movement point(s) today.`, 'rejected');
+            }
+          }
+        }
+        const res = executeCommand(stored.state, actor, cmd);
+        if (!res.ok) {
+          await log(false, res.error);
+          throw new HttpError(422, res.error, 'rejected');
+        }
+        const affectedTokenId = 'tokenId' in cmd ? cmd.tokenId : undefined;
+        if (affectedTokenId) {
+          const before = stored.state.tokens[affectedTokenId];
+          const after = res.state.tokens[affectedTokenId];
+          if (before && after && !isWearingArmor(before) && isWearingArmor(after)) after.armorWornAt = new Date().toISOString();
+        }
+        const version = await repo.saveState(user.campaignId, res.state, stored.version, user.id);
+        if (version === null) continue; // somebody else wrote first â†’ re-validate against the fresh state
+
+        await log(true, undefined, version);
+        if ((cmd.type === 'advancePhase' || cmd.type === 'endDay') && res.state.phase === 'day') {
+          await repo.createSnapshot(user.campaignId, res.state, version, `Dawn of ${phaseName('day', res.state.day)}`, null);
+          await repo.pruneSnapshots(user.campaignId, KEEP_SNAPSHOTS);
+        }
+        return { result: await campaignPayload(user, repo, viewAs, { state: res.state, version }), version };
+      }
+      throw new HttpError(409, 'The campaign was changed by someone else at the same time. Please try again.', 'conflict');
+    },
+  );
+}
+
+/** Median character level of the player characters that have a sheet (null levels ignored; 1 if none). */
+async function partyMedianLevel(campaignId: string, repo: Repo): Promise<number> {
+  const stored = await repo.loadState(campaignId);
+  const details = await repo.loadSheetDetails(campaignId);
+  const levels = Object.entries(details)
+    .filter(([id, d]) => stored?.state.tokens[id]?.kind === 'player' && Array.isArray(d))
+    .map(([, d]) => sheetLevel({ details: d as CharacterSheet['details'] }))
+    .filter((n): n is number => typeof n === 'number' && n >= 1 && n <= 20);
+  return medianLevel(levels);
+}
+
+/** Determines the in-game actor. Never trusts anything but the server-side profile. */
+function actorFor(user: AuthUser, cmd: Command, state: GameState): Actor {
+  if (user.role === 'gm') return { role: 'gm' };
+  const own = charactersOf(user, state).map((c) => c.id);
+  if (!own.length) throw new HttpError(403, 'No character has been assigned to your profile.', 'forbidden');
+  if (cmd.type === 'move') {
+    if (own.includes(cmd.tokenId)) return { role: 'player', tokenId: cmd.tokenId };
+    // In-game control permission granted by the GM (Token.controllers).
+    const target = state.tokens[cmd.tokenId];
+    const via = own.find((id) => target?.kind === 'player' && target.controllers.includes(id));
+    if (via) return { role: 'player', tokenId: via };
+    throw new HttpError(403, `You may not move ${target?.name ?? 'this character'} â€“ only characters assigned to you.`, 'forbidden');
+  }
+  if (CHARACTER_COMMANDS.has(cmd.type)) {
+    const tokenId = (cmd as { tokenId: string }).tokenId;
+    if (!own.includes(tokenId)) throw new HttpError(403, 'You can only change your own character.', 'forbidden');
+    return { role: 'player', tokenId };
+  }
+  return { role: 'player', tokenId: own[0] };
+}
+
+// ---------------------------------------------------------------- portraits
+
+/** Detects the real image type from its first bytes (never trusts the file name or MIME type). */
+export function imageType(b: Uint8Array): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b.length > 12 && String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...b.subarray(8, 12)) === 'WEBP') return 'image/webp';
+  return null;
+}
+export const PORTRAIT_MAX_BYTES = 1_500_000;
+
+/**
+ * Portrait upload: the browser crops the picture and sends it base64-encoded. The server checks the
+ * permission (own character or GM), the real image type and the size, stores it in the PRIVATE bucket
+ * and records the new version on the token. The storage path is never sent to clients.
+ */
+async function uploadPortrait(user: AuthUser, body: unknown, repo: Repo) {
+  if (!isObj(body) || !isId(body.tokenId) || typeof body.image !== 'string') throw new HttpError(400, 'Invalid portrait upload.');
+  const tokenId = body.tokenId;
+  if (user.role !== 'gm' && !user.tokenIds.includes(tokenId)) throw new HttpError(403, 'You can only change your own portrait.', 'forbidden');
+  const b64 = body.image.replace(/^data:image\/[a-z]+;base64,/, '');
+  if (b64.length > Math.ceil((PORTRAIT_MAX_BYTES * 4) / 3) + 8 || !/^[A-Za-z0-9+/=]+$/.test(b64)) throw new HttpError(413, 'The picture is too large (max. 1.5 MB after cropping).');
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const type = imageType(bytes);
+  if (!type) throw new HttpError(415, 'Please use a JPG, PNG or WebP picture.');
+  const stored = await repo.loadState(user.campaignId);
+  if (!stored || stored.state.tokens[tokenId]?.kind !== 'player') throw new HttpError(404, 'Character not found.');
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/png' ? 'png' : 'webp';
+  const path = `${user.campaignId}/${tokenId}/${crypto.randomUUID()}.${ext}`;
+  await repo.uploadPortrait(path, bytes, type);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const cur = await repo.loadState(user.campaignId);
+    if (!cur) break;
+    const next = structuredClone(cur.state);
+    const t = next.tokens[tokenId];
+    if (!t) break;
+    const old = t.portrait?.path;
+    t.portrait = { path, v: (t.portrait?.v ?? 0) + 1 };
+    const v = await repo.saveState(user.campaignId, next, cur.version, user.id);
+    if (v === null) continue;
+    if (old) await repo.deletePortrait(old).catch(() => undefined);
+    return { tokenId, portraitV: t.portrait.v, version: v };
+  }
+  await repo.deletePortrait(path).catch(() => undefined);
+  throw new HttpError(409, 'The campaign was changed at the same time. Please try again.', 'conflict');
+}
+
+/**
+ * APEX 0.7: a player's own picture for one Wild Shape form (stored privately like portraits; the owner or the GM
+ * uploads it; the storage path is never sent to clients â€“ only a cache version).
+ */
+async function uploadBeastImage(user: AuthUser, body: unknown, repo: Repo) {
+  if (!isObj(body) || !isId(body.tokenId) || typeof body.formId !== 'string' || typeof body.image !== 'string') throw new HttpError(400, 'Invalid picture upload.');
+  const tokenId = body.tokenId;
+  if (user.role !== 'gm' && !user.tokenIds.includes(tokenId)) throw new HttpError(403, 'You can only change your own pictures.', 'forbidden');
+  const stored = await repo.loadState(user.campaignId);
+  if (!stored || stored.state.tokens[tokenId]?.kind !== 'player') throw new HttpError(404, 'Character not found.');
+  const form = findBeast(stored.state.customBeasts, body.formId);
+  if (!form) throw new HttpError(404, 'Unknown beast form.');
+  const b64 = body.image.replace(/^data:image\/[a-z]+;base64,/, '');
+  if (b64.length > Math.ceil((PORTRAIT_MAX_BYTES * 4) / 3) + 8 || !/^[A-Za-z0-9+/=]+$/.test(b64)) throw new HttpError(413, 'The picture is too large (max. 1.5 MB).');
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const type = imageType(bytes);
+  if (!type) throw new HttpError(415, 'Please use a JPG, PNG or WebP picture.');
+  const ext = type === 'image/jpeg' ? 'jpg' : type === 'image/png' ? 'png' : 'webp';
+  const path = `${user.campaignId}/${tokenId}/beast-${form.id}-${crypto.randomUUID()}.${ext}`;
+  await repo.uploadPortrait(path, bytes, type);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const cur = await repo.loadState(user.campaignId);
+    if (!cur) break;
+    const next = structuredClone(cur.state);
+    const t = next.tokens[tokenId];
+    if (!t) break;
+    const images = { ...(t.beastImages ?? {}) };
+    const old = images[form.id]?.path;
+    if (Object.keys(images).length >= 40 && !old) throw new HttpError(400, 'At most 40 beast pictures per character.');
+    images[form.id] = { path, v: (images[form.id]?.v ?? 0) + 1 };
+    t.beastImages = images;
+    const v = await repo.saveState(user.campaignId, next, cur.version, user.id);
+    if (v === null) continue;
+    if (old) await repo.deletePortrait(old).catch(() => undefined);
+    return { tokenId, formId: form.id, v: images[form.id].v, version: v };
+  }
+  await repo.deletePortrait(path).catch(() => undefined);
+  throw new HttpError(409, 'The campaign was changed at the same time. Please try again.', 'conflict');
+}
+
+async function beastImageRedirect(user: AuthUser, tokenId: unknown, formId: unknown, repo: Repo): Promise<ApiResponse> {
+  if (!isId(tokenId) || typeof formId !== 'string') throw new HttpError(400, 'Invalid picture.');
+  const stored = await repo.loadState(user.campaignId);
+  const img = stored?.state.tokens[tokenId]?.beastImages?.[formId];
+  if (!img) throw new HttpError(404, 'No picture.');
+  const url = await repo.portraitUrl(img.path, 600);
+  if (!url) throw new HttpError(404, 'No picture.');
+  return { status: 302, body: null, headers: { location: url, 'cache-control': 'private, max-age=300' } };
+}
+
+/** Portrait download: any signed-in member of the campaign may see player-character portraits (cosmetic). */
+async function portraitRedirect(user: AuthUser, tokenId: unknown, repo: Repo): Promise<ApiResponse> {
+  if (!isId(tokenId)) throw new HttpError(400, 'Invalid character.');
+  const stored = await repo.loadState(user.campaignId);
+  const t = stored?.state.tokens[tokenId];
+  if (!t || t.kind !== 'player' || !t.portrait) throw new HttpError(404, 'No portrait.');
+  const url = await repo.portraitUrl(t.portrait.path, 600);
+  if (!url) throw new HttpError(404, 'No portrait.');
+  return { status: 302, body: null, headers: { location: url, 'cache-control': 'private, max-age=300' } };
+}
+
+// ---------------------------------------------------------------- character sheets
+
+/** Which characters may this profile see/edit the sheet of? GM: all player characters; players: their own. */
+function sheetAccess(user: AuthUser, tokenId: unknown, state: GameState | null): string {
+  if (!isId(tokenId)) throw new HttpError(400, 'Invalid character.');
+  if (!state) throw new HttpError(409, 'The campaign has not been initialised yet.', 'not_initialised');
+  if (state.tokens[tokenId]?.kind !== 'player') throw new HttpError(404, 'Character not found.');
+  if (user.role !== 'gm' && !user.tokenIds.includes(tokenId)) {
+    throw new HttpError(403, 'You can only open your own character sheet.', 'forbidden');
+  }
+  return tokenId;
+}
+
+/**
+ * Party Health (APEX 0.5): current / max HP of the player characters in ONE request (two DB queries).
+ * The GM receives every player character; a player only their own character(s) â€“ no hidden data leaks.
+ */
+async function partyVitals(user: AuthUser, repo: Repo): Promise<{ members: PartyVital[] }> {
+  const state = (await repo.loadState(user.campaignId))?.state ?? null;
+  if (!state) return { members: [] };
+  const vitals = await repo.loadSheetVitals(user.campaignId);
+  const members = Object.values(state.tokens)
+    .filter((t) => t.kind === 'player' && (user.role === 'gm' || user.tokenIds.includes(t.id)))
+    .map((t) => {
+      const hp = vitals[t.id] as { current?: unknown; max?: unknown; temp?: unknown } | null | undefined;
+      const valid = hp && Number.isFinite(hp.current) && Number.isFinite(hp.max);
+      return { tokenId: t.id, hp: valid ? { current: Number(hp.current), max: Number(hp.max), temp: Number(hp.temp) || 0 } : null };
+    });
+  return { members };
+}
+
+async function getSheet(user: AuthUser, tokenId: unknown, repo: Repo): Promise<SheetPayload> {
+  const state = (await repo.loadState(user.campaignId))?.state ?? null;
+  const id = sheetAccess(user, tokenId, state);
+  return sheetPayload(repo, user.campaignId, id, state!);
+}
+
+async function sheetPayload(repo: Repo, campaignId: string, tokenId: string, state: GameState): Promise<SheetPayload> {
+  const s = await repo.loadSheet(campaignId, tokenId);
+  const parsed = s ? parseSheet(s.data) : null;
+  return {
+    tokenId,
+    characterName: state.tokens[tokenId].name,
+    sheet: parsed?.ok ? parsed.sheet : emptySheet(),
+    version: s?.version ?? 0,
+    updatedAt: s?.updatedAt ?? null,
+  };
+}
+
+async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<SheetPayload> {
+  if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
+  const state = (await repo.loadState(user.campaignId))?.state ?? null;
+  const tokenId = sheetAccess(user, body.tokenId, state);
+  const cid = user.campaignId;
+
+  if (body.action === 'save') {
+    const parsed = parseSheet(body.sheet);
+    if (!parsed.ok) throw new HttpError(400, parsed.error);
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER) || body.expectedVersion < 0) throw new HttpError(400, 'Invalid sheet version.');
+    const reason = body.reason === 'import-merge' || body.reason === 'import-replace' || body.reason === 'import-levelup' ? body.reason : 'edit';
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded â€“ please check it and save again.', 'sheet_conflict', undefined, {
+        current: await sheetPayload(repo, cid, tokenId, state!),
+      });
+    }
+    // Never replace data without a backup: imports always back up the previous sheet first.
+    if (cur && reason === 'import-levelup') {
+      // APEX 0.7: a level-up update always creates a full character snapshot first (restorable by the GM).
+      const prevSheet = parseSheet(cur.data);
+      if (prevSheet.ok) {
+        const from = sheetLevel(prevSheet.sheet);
+        const to = sheetLevel(parsed.sheet);
+        const label = from !== null && to !== null && from !== to ? `Before level-up ${from} â†’ ${to}` : 'Before sheet update (PDF)';
+        await repo.backupSheet(cid, tokenId, buildSnapshot(prevSheet.sheet, state!.tokens[tokenId], label, 'Automatic snapshot before an incremental PDF update.'), cur.version, 'snapshot', user.id);
+      }
+    } else if (cur && reason !== 'edit') await repo.backupSheet(cid, tokenId, cur.data, cur.version, `Before ${reason === 'import-replace' ? 'import (replace)' : 'import (merge)'}`, user.id);
+    const currentParsed = cur ? parseSheet(cur.data) : null;
+    const safeSheet = { ...parsed.sheet, spellEffects: currentParsed?.ok ? currentParsed.sheet.spellEffects : [] };
+    const v = await repo.saveSheet(cid, tokenId, safeSheet, body.expectedVersion, user.id);
+    if (v === null) {
+      throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded â€“ please check it and save again.', 'sheet_conflict', undefined, {
+        current: await sheetPayload(repo, cid, tokenId, state!),
+      });
+    }
+    return sheetPayload(repo, cid, tokenId, state!);
+  }
+
+  if (body.action === 'adjust') {
+    // Atomic +/- on one value: re-applied on the latest version, so quick taps on two devices both count.
+    if (!isInt(body.delta, 100000) || body.delta === 0) throw new HttpError(400, 'Invalid change.');
+    const delta = body.delta;
+    const target = body.target;
+    if (target !== 'hp' && target !== 'hpTemp' && target !== 'resource') throw new HttpError(400, 'Invalid resource.');
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const cur = await repo.loadSheet(cid, tokenId);
+      const parsed = cur ? parseSheet(cur.data) : null;
+      const sheet: CharacterSheet = parsed?.ok ? parsed.sheet : emptySheet();
+      if (target === 'resource') {
+        const r = sheet.resources.find((x) => x.id === body.resourceId);
+        if (!r) throw new HttpError(404, 'This resource no longer exists.', 'gone');
+        r.current = Math.max(0, Math.min(r.max ?? 100000, r.current + delta));
+      } else {
+        if (!sheet.hitPoints) throw new HttpError(400, 'This character sheet has no hit points.');
+        if (target === 'hp') sheet.hitPoints.current = Math.max(-sheet.hitPoints.max, Math.min(sheet.hitPoints.max, sheet.hitPoints.current + delta));
+        else sheet.hitPoints.temp = Math.max(0, Math.min(100000, sheet.hitPoints.temp + delta));
+      }
+      const v = await repo.saveSheet(cid, tokenId, sheet, cur?.version ?? 0, user.id);
+      if (v !== null) return sheetPayload(repo, cid, tokenId, state!);
+    }
+    throw new HttpError(409, 'The character sheet is being changed elsewhere right now. Please try again.', 'conflict');
+  }
+  if (body.action === 'castMageArmor') {
+    if (!isId(body.spellId)) throw new HttpError(400, 'Choose a valid spell.');
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER) || body.expectedVersion < 0) throw new HttpError(400, 'Invalid sheet version.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'The character sheet changed in the meantime â€“ the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    const parsed = cur ? parseSheet(cur.data) : null;
+    const sheet = parsed?.ok ? parsed.sheet : emptySheet();
+    const cast = castMageArmor(sheet, state!.tokens[tokenId], body.spellId, Date.now());
+    if (!cast.ok) throw new HttpError(422, cast.error, 'rejected');
+    const version = await repo.saveSheet(cid, tokenId, cast.sheet, body.expectedVersion, user.id);
+    if (version === null) {
+      throw new HttpError(409, 'The character sheet changed in the meantime â€“ the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    return sheetPayload(repo, cid, tokenId, state!);
+  }
+  // ---- APEX 0.7 class abilities & hit points: server-validated rules, one atomic write with a version check
+  const ABILITY_ACTIONS = new Set(['wildShape', 'revert', 'damage', 'heal', 'tempHp', 'sorcery']);
+  if (typeof body.action === 'string' && ABILITY_ACTIONS.has(body.action)) {
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid sheet version.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'The character sheet changed in the meantime â€“ the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    const parsed = cur ? parseSheet(cur.data) : null;
+    const sheet: CharacterSheet = parsed?.ok ? parsed.sheet : emptySheet();
+    const amount = (v: unknown) => {
+      if (!isInt(v, 1000) || (v as number) < 0) throw new HttpError(400, 'Invalid amount.');
+      return v as number;
+    };
+    let r: AbilityResult;
+    switch (body.action) {
+      case 'wildShape': {
+        const form = typeof body.formId === 'string' ? findBeast(state!.customBeasts, body.formId) : undefined;
+        if (!form) throw new HttpError(404, 'Unknown beast form.');
+        r = transform(sheet, form);
+        break;
+      }
+      case 'revert':
+        r = revert(sheet);
+        break;
+      case 'damage':
+        r = applyDamage(sheet, amount(body.amount));
+        break;
+      case 'heal':
+        r = applyHealing(sheet, amount(body.amount));
+        break;
+      case 'tempHp': {
+        const mode = body.mode === 'grant' || body.mode === 'replace' || body.mode === 'remove' ? body.mode : null;
+        if (!mode) throw new HttpError(400, 'Invalid temporary HP mode.');
+        r = setTempHp(sheet, mode, mode === 'remove' ? 0 : amount(body.amount));
+        break;
+      }
+      default: {
+        const dir = body.direction === 'toSlot' || body.direction === 'toPoints' ? body.direction : null;
+        if (!dir || !isInt(body.level, 9)) throw new HttpError(400, 'Invalid conversion.');
+        r = convertSorcery(sheet, dir, body.level as number);
+      }
+    }
+    if (!r.ok) throw new HttpError(422, r.error, 'rejected');
+    const v = await repo.saveSheet(cid, tokenId, r.sheet, cur?.version ?? 0, user.id);
+    if (v === null) throw new HttpError(409, 'The character sheet changed in the meantime â€“ please try again.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    return { ...(await sheetPayload(repo, cid, tokenId, state!)), message: r.message };
+  }
+  throw new HttpError(400, 'Unknown sheet action.');
+}
+
+// ---------------------------------------------------------------- character archive (APEX 0.7, GM only)
+
+/**
+ * Character snapshots: create, list, read, and restore SELECTED sheet parts. Restoring never touches items or
+ * currency (the snapshot only records them for reference); identity / equipment configuration are restored by the
+ * GM client with the game command gmRestoreCharacter, which drops references to items no longer owned.
+ */
+async function runCharacterArchive(user: AuthUser, body: unknown, repo: Repo) {
+  if (user.role !== 'gm') throw new HttpError(403, 'Only the Game Master can manage character archives.', 'forbidden');
+  if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
+  const cid = user.campaignId;
+  const state = (await repo.loadState(cid))?.state ?? null;
+  if (body.action === 'list') {
+    const tokenId = sheetAccess(user, body.tokenId, state);
+    return { snapshots: await repo.listSheetBackups(cid, tokenId, 100) };
+  }
+  if (body.action === 'get') {
+    if (!isInt(body.id, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid snapshot.');
+    const b = await repo.loadSheetBackup(cid, body.id);
+    if (!b) throw new HttpError(404, 'Snapshot not found.');
+    if (isSnapshot(b.data)) return { info: b, snapshot: b.data };
+    const p = parseSheet(b.data);
+    if (!p.ok) throw new HttpError(422, 'This backup cannot be read.');
+    return { info: b, snapshot: { kind: 'backup', name: b.reason, note: '', level: null, takenAt: b.createdAt, sheet: p.sheet, character: null } };
+  }
+  if (body.action === 'create') {
+    const tokenId = sheetAccess(user, body.tokenId, state);
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
+    if (!name) throw new HttpError(400, 'Please name the snapshot.');
+    const note = typeof body.note === 'string' ? body.note : '';
+    const cur = await repo.loadSheet(cid, tokenId);
+    const p = cur ? parseSheet(cur.data) : null;
+    const sheet = p?.ok ? p.sheet : emptySheet();
+    await repo.backupSheet(cid, tokenId, buildSnapshot(sheet, state!.tokens[tokenId], name, note), cur?.version ?? 0, 'snapshot', user.id);
+    return { snapshots: await repo.listSheetBackups(cid, tokenId, 100) };
+  }
+  if (body.action === 'restore') {
+    const tokenId = sheetAccess(user, body.tokenId, state);
+    if (!isInt(body.id, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid snapshot.');
+    const parts = Array.isArray(body.parts) ? body.parts.filter((x): x is SheetPart => SHEET_PARTS.some((p) => p.id === x)) : [];
+    if (!parts.length) throw new HttpError(400, 'Choose what to restore.');
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER)) throw new HttpError(400, 'Invalid sheet version.');
+    const b = await repo.loadSheetBackup(cid, body.id);
+    if (!b || b.tokenId !== tokenId) throw new HttpError(404, 'Snapshot not found for this character.');
+    const snapSheet = isSnapshot(b.data) ? parseSheet(b.data.sheet) : parseSheet(b.data);
+    if (!snapSheet.ok) throw new HttpError(422, 'This snapshot cannot be read.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) throw new HttpError(409, 'The character sheet changed in the meantime â€“ please review it again.', 'sheet_conflict');
+    const curSheet = cur ? parseSheet(cur.data) : null;
+    const now = curSheet?.ok ? curSheet.sheet : emptySheet();
+    // the state before the restore is kept as a snapshot too â€“ a restore can always be undone
+    await repo.backupSheet(cid, tokenId, buildSnapshot(now, state!.tokens[tokenId], `Before restore (${b.name ?? b.reason})`, `Parts: ${parts.join(', ')}`), cur?.version ?? 0, 'snapshot', user.id);
+    const v = await repo.saveSheet(cid, tokenId, restoreSheetParts(now, snapSheet.sheet, parts), cur?.version ?? 0, user.id);
+    if (v === null) throw new HttpError(409, 'The character sheet changed in the meantime â€“ please review it again.', 'sheet_conflict');
+    return { sheet: await sheetPayload(repo, cid, tokenId, state!), snapshots: await repo.listSheetBackups(cid, tokenId, 100) };
+  }
+  throw new HttpError(400, 'Unknown archive action.');
+}
+
+// ---------------------------------------------------------------- feedback (APEX 0.7)
+
+const FEEDBACK_KINDS = ['bug', 'feature', 'improvement'] as const;
+const FEEDBACK_STATUS = ['new', 'acknowledged', 'in_progress', 'resolved', 'rejected'] as const;
+export const FEEDBACK_LIMITS = { perHour: 10, screenshotBytes: 1_500_000, title: 140, description: 5000, steps: 3000 };
+const cleanText = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max) : '');
+
+/** Players see their own reports (and ones the GM shared) â€“ without GM notes or other players' identities. */
+function feedbackFor(user: AuthUser, rows: FeedbackRow[]) {
+  if (user.role === 'gm') return rows;
+  return rows.map((r) => ({ ...r, gmNotes: '', userId: r.userId === user.id ? r.userId : '', profileKey: r.userId === user.id ? r.profileKey : '', tokenId: r.userId === user.id ? r.tokenId : null }));
+}
+
+async function listFeedback(user: AuthUser, repo: Repo) {
+  const rows = await repo.listFeedback(user.campaignId, { ...(user.role === 'gm' ? {} : { userId: user.id }), limit: 500 });
+  return { feedback: feedbackFor(user, rows) };
+}
+
+async function runFeedback(user: AuthUser, body: unknown, repo: Repo) {
+  if (!isObj(body)) throw new HttpError(400, 'Invalid request.');
+  const cid = user.campaignId;
+  if (body.action === 'submit') {
+    const kind = FEEDBACK_KINDS.find((k) => k === body.kind);
+    const title = cleanText(body.title, FEEDBACK_LIMITS.title);
+    if (!kind || !title) throw new HttpError(400, 'Please choose a type and enter a title.');
+    const since = new Date(Date.now() - 3600_000).toISOString();
+    if ((await repo.countRecentFeedback(cid, user.id, since)) >= FEEDBACK_LIMITS.perHour) throw new HttpError(429, 'Thank you! You have sent many reports in the last hour â€“ please wait a little.', 'rate_limited');
+    let screenshotPath: string | null = null;
+    if (body.screenshot !== undefined && body.screenshot !== null) {
+      if (typeof body.screenshot !== 'string') throw new HttpError(400, 'Invalid screenshot.');
+      const b64 = body.screenshot.replace(/^data:image\/[a-z]+;base64,/, '');
+      if (b64.length > Math.ceil((FEEDBACK_LIMITS.screenshotBytes * 4) / 3) + 8 || !/^[A-Za-z0-9+/=]+$/.test(b64)) throw new HttpError(413, 'The screenshot is too large (max. 1.5 MB).');
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const type = imageType(bytes);
+      if (!type) throw new HttpError(415, 'Screenshots must be JPG, PNG or WebP pictures.');
+      screenshotPath = `${cid}/feedback/${crypto.randomUUID()}.${type === 'image/jpeg' ? 'jpg' : type === 'image/png' ? 'png' : 'webp'}`;
+      await repo.uploadPortrait(screenshotPath, bytes, type);
+    }
+    const tokenId = typeof body.tokenId === 'string' && user.tokenIds.includes(body.tokenId) ? body.tokenId : (user.tokenIds[0] ?? null);
+    const row = await repo.createFeedback({
+      campaignId: cid,
+      userId: user.id,
+      profileKey: user.profileKey,
+      tokenId: user.role === 'gm' ? null : tokenId,
+      kind,
+      category: cleanText(body.category, 40) || 'other',
+      title,
+      description: cleanText(body.description, FEEDBACK_LIMITS.description),
+      steps: cleanText(body.steps, FEEDBACK_LIMITS.steps),
+      page: cleanText(body.page, 120),
+      appVersion: cleanText(body.appVersion, 40) || APP_VERSION,
+      screenshotPath,
+    });
+    return { feedback: feedbackFor(user, [row])[0] };
+  }
+  if (body.action === 'screenshot') {
+    if (typeof body.id !== 'string') throw new HttpError(400, 'Invalid report.');
+    const rows = await repo.listFeedback(cid, { ...(user.role === 'gm' ? {} : { userId: user.id }), limit: 500 });
     const r = rows.find((x) => x.id === body.id);
     if (!r?.screenshotPath || (user.role !== 'gm' && r.userId !== user.id)) throw new HttpError(404, 'No screenshot.');
     return { url: await repo.portraitUrl(r.screenshotPath, 300) };

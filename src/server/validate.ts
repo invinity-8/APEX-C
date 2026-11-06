@@ -1,385 +1,520 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×n5ñ:-jZ.¶›­–)Ş³Rò¢ Ğ¢¢7G&–7B'VçF–ÖRfÆ–FF–öâöb6öÖÖæG2&V6V—fVBg&öÒ'&÷w6W'2àĞ¢¢ç—F†–ærF†BFöW2æ÷BÖF6‚F†RW‡V7FVB6†RW†7FÇ’—2&V¦V7FVB&Vf÷&PĞ¢¢—B&V6†W2F†RvÖRÆöv–2àĞ¢¢ğĞ¦–×÷'B²4„$5DU%ô4ôÔÔäE2ÂG—R6öÖÖæBÒg&öÒrââövÖRö6öÖÖæG2æ§2s°Ğ¦–×÷'B²”ådTåDõ%•ôÄ”Ô•E2Òg&öÒrââövÖRö–çfVçF÷'’æ§2s°Ğ¦–×÷'B²•DTÕõ%TÄUôÄ”Ô•E2ÂÔ…ô•DTÕôÄUdTÂÒg&öÒrââövÖRö—FV×2÷'VÆW2æ§2s°Ğ¦–×÷'B²5U%$Tä5•ô”E2ÂÔ…ô5U%$Tä5’Òg&öÒrââövÖRö—FV×2ö7W'&Væ7’æ§2s°Ğ¦–×÷'B²Ô…ô4õTåBÂG—RG&gD÷Òg&öÒrââövÖRö—FV×2öÆö÷Bæ§2s°Ğ¦–×÷'B²ÔU$4„åEôÄ”Ô•E2Òg&öÒrââövÖRö—FV×2öÖW&6†çBæ§2s°Ğ¦–×÷'B²ÄôõEô4„ô”4U2ÂÔ…ôõTåõ$ôÄÅ2Â$ôÄÅôÔ”åUDU2Òg&öÒrââövÖRö—FV×2÷'G”Æö÷Bæ§2s°Ğ¦–×÷'B²E$eEôÄ”Ô•E2ÂTä4õTåDU%2ÂÄôõEô4DTtõ$”U2Â$ôÄÄTEô4DTtõ$”U2ÂG—RÆö÷DG&gDVçG'’Òg&öÒrââövÖRö—FV×2öÆö÷DG&gBæ§2s°Ğ¦–×÷'B²$ôE•õE•U2ÂÔ$´U%õ5E”ÄU2Òg&öÒrââövÖR÷G—W2æ§2s°Ğ¦–×÷'B²'6T&V7BÒg&öÒrââövÖRö&V7G2æ§2s°Ğ¦–×÷'B²DU%$”åôõ$DU"Òg&öÒrââövÖR÷FW'&–âæ§2s°Ğ Ğ§G—Rö&¢Ò&V6÷&CÇ7G&–ærÂVæ¶æ÷vãã°Ğ Ğ¦–×÷'B²UT•õ4ÄõE2Â•DTÕô´”äE2ÂtTôåõ$õU%D”U2ÂG—RWV—6Æ÷BÂG—R—FVÔWV—ÂG—RvVöå&÷W'G’Òg&öÒrââövÖRöWV—ÖVçBæ§2s°Ğ Ğ¦6öç7B—4ö&¢Ò‡c¢Væ¶æ÷vâ“¢b—2ö&¢ÓâG—VöbbÓÓÒvö&¦V7BrbbbÓÒçVÆÂbb'&’æ—4'&’‡b“°Ğ¦6öç7B—4–BÒ‡c¢Væ¶æ÷vâ“¢b—27G&–ærÓâG—VöbbÓÓÒw7G&–ærrbbbæÆVæwF‚âbbbæÆVæwF‚ÃÒcBbbõåµÇrâÕÒ²BòçFW7B‡b“°Ğ¦6öç7B—4–çBÒ‡c¢Væ¶æ÷vâÂÆ–ÒÒ“¢b—2çVÖ&W"ÓâG—VöbbÓÓÒvçVÖ&W"rbbçVÖ&W"æ—4–çFVvW"‡b’bbÖF‚æ'2‡b’ÃÒÆ–Ó°Ğ¦6öç7B—4†–ÂÒ‡c¢Væ¶æ÷vâ“¢b—2²¢çVÖ&W#²#¢çVÖ&W"ÒÓâ—4ö&¢‡b’bb—4–çB‡bç’bb—4–çB‡bç"“°Ğ¢ò¢¢FW‡Bf–VÆC¢7G&–ærv—F†–âF†RÆVæwF‚Æ–Ö—Bƒ,9rf÷"6fWG“²F†R'VÆW2G&–ÒFòF†RW†7BÆ–Ö—B’â¢ğĞ¦6öç7B—5FW‡BÒ‡c¢Væ¶æ÷vâÂÖƒ¢çVÖ&W"“¢b—27G&–ærÓâG—VöbbÓÓÒw7G&–ærrbbbæÆVæwF‚ÃÒÖ‚¢#°Ğ¦6öç7BöæTöbÒÅBW‡FVæG27G&–æsâ‡c¢Væ¶æ÷vâÂ÷G3¢&VFöæÇ’EµÒ“¢b—2BÓâG—VöbbÓÓÒw7G&–ærrbb†÷G22&VFöæÇ’7G&–æuµÒ’æ–æ6ÇVFW2‡b“°Ğ Ğ¦6öç7B÷D&ööÂÒ‡c¢Væ¶æ÷vâ’ÓâbÓÓÒVæFVf–æVBÇÂG—VöbbÓÓÒv&ööÆVâs°Ğ¢ò¢¢Æö÷BG&gBVF—C²FW‡B—2ÆVæwF‚Ö6†V6¶VB†W&RæBG&–ÖÖVBöæ÷&ÖÆ—6VB'’F†R'VÆW2†Æö÷DG&gBçG2’â¢ğĞ¦gVæ7F–öâ'6TG&gD÷†ó¢ö&¢“¢G&gD÷ÂçVÆÂ°Ğ¢–b†òæ¶–æBÓÓÒw&VÖ÷fRr’&WGW&â—4–B†òæ¶W’’ò²¶–æC¢w&VÖ÷fRrÂ¶W“¢òæ¶W’Ò¢çVÆÃ°Ğ¢–b†òæ¶–æBÓÓÒw6WBr’°Ğ¢–b‚—4–B†òæ¶W’’’&WGW&âçVÆÃ°Ğ¢–b†òçVçF—G’ÓÒVæFVf–æVBbb‚—4–çB†òçVçF—G’ÂE$eEôÄ”Ô•E2çVçF—G’’ÇÂòçVçF—G’Â’’&WGW&âçVÆÃ°Ğ¢–b†òæ—FVÔÆWfVÂÓÒVæFVf–æVBbb‚—4–çB†òæ—FVÔÆWfVÂÂÔ…ô•DTÕôÄUdTÂ’ÇÂòæ—FVÔÆWfVÂÂ’’&WGW&âçVÆÃ°Ğ¢–b†òç&&—G’ÓÒVæFVf–æVBbböæTöb†òç&&—G’Â²væ÷&ÖÂrÂvÖv–2rÂw&&RuÒ26öç7B’’&WGW&âçVÆÃ°Ğ¢–b‚÷D&ööÂ†òæ–FVçF–f–VB’’&WGW&âçVÆÃ°Ğ¢&WGW&â²¶–æC¢w6WBrÂ¶W“¢òæ¶W’Ââââ†òçVçF—G’ÓÒVæFVf–æVBò²VçF—G“¢òçVçF—G’2çVÖ&W"Ò¢·Ò’Ââââ†òæ—FVÔÆWfVÂÓÒVæFVf–æVBò²—FVÔÆWfVÃ¢òæ—FVÔÆWfVÂ2çVÖ&W"Ò¢·Ò’Ââââ†òç&&—G’ÓÒVæFVf–æVBò²&&—G“¢òç&&—G’2væ÷&ÖÂrÒ¢·Ò’Ââââ†òæ–FVçF–f–VBÓÒVæFVf–æVBò²–FVçF–f–VC¢òæ–FVçF–f–VB2&ööÆVâÒ¢·Ò’Ó°Ğ¢ĞĞ¢–b†òæ¶–æBÓÒvFBrÇÂ—4ö&¢†òæVçG'’’’&WGW&âçVÆÃ°Ğ¢6öç7BRÒòæVçG'“°Ğ¢–b‚—4–B†Ræ¶W’’ÇÂöæTöb†Ræ6FVv÷'’ÂÄôõEô4DTtõ$”U2’ÇÂ—4–çB†RçVçF—G’ÂE$eEôÄ”Ô•E2çVçF—G’’ÇÂRçVçF—G’Â’&WGW&âçVÆÃ°Ğ¢–b†Ræ&6T–BÓÒVæFVf–æVBbb—4–B†Ræ&6T–B’’&WGW&âçVÆÃ°Ğ¢–b†Rç&&—G’ÓÒVæFVf–æVBbböæTöb†Rç&&—G’Â²væ÷&ÖÂrÂvÖv–2rÂw&&RuÒ26öç7B’’&WGW&âçVÆÃ°Ğ¢–b†Ræ—FVÔÆWfVÂÓÒVæFVf–æVBbb‚—4–çB†Ræ—FVÔÆWfVÂÂÔ…ô•DTÕôÄUdTÂ’ÇÂRæ—FVÔÆWfVÂÂ’’&WGW&âçVÆÃ°Ğ¢–b†Ræ7W'&Væ7’ÓÒVæFVf–æVBbböæTöb†Ræ7W'&Væ7’Â5U%$Tä5•ô”E2’’&WGW&âçVÆÃ°Ğ¢f÷"†6öç7B¶²ÂÖ…Òöbµ²væÖRrÂE$eEôÄ”Ô•E2ææÖUÒÂ²vFW67&—F–öârÂE$eEôÄ”Ô•E2æFW67&—F–öåÒÂ²vvÔæ÷FW2rÂE$eEôÄ”Ô•E2ævÔæ÷FW5ÒÂ²v–ÖvRrÂE$eEôÄ”Ô•E2æ–ÖvUÕÒ26öç7B’–b†U¶µÒÓÒVæFVf–æVBbb—5FW‡B†U¶µÒÂÖ‚’’&WGW&âçVÆÃ°Ğ¢–b‚÷D&ööÂ†Ræ–FVçF–f–VB’ÇÂ÷D&ööÂ†RææõG&ç6fW"’ÇÂ÷D&ööÂ†Rç6ÇfvV&ÆR’’&WGW&âçVÆÃ°Ğ¢6öç7BVçG'“¢Æö÷DG&gDVçG'’Ò²¶W“¢Ræ¶W’Â6FVv÷'“¢Ræ6FVv÷'’ÂVçF—G“¢RçVçF—G’Ó°Ğ¢f÷"†6öç7B²öb²v&6T–BrÂw&&—G’rÂv—FVÔÆWfVÂrÂv7W'&Væ7’rÂvæÖRrÂvFW67&—F–öârÂvvÔæ÷FW2rÂv–ÖvRrÂv–FVçF–f–VBrÂvæõG&ç6fW"rÂw6ÇfvV&ÆRuÒ26öç7B’–b†U¶µÒÓÒVæFVf–æVB’†VçG'’2Væ¶æ÷vâ2&V6÷&CÇ7G&–ærÂVæ¶æ÷vãâ•¶µÒÒU¶µÓ°Ğ¢&WGW&â²¶–æC¢vFBrÂVçG'’Ó°Ğ§ĞĞ Ğ¦W‡÷'BG—R'6U&W7VÇBÒ²ö³¢G'VS²6öÖÖæC¢6öÖÖæBÒÂ²ö³¢fÇ6S²W'&÷#¢7G&–ærÓ°Ğ Ğ¦W‡÷'BgVæ7F–öâ'6T6öÖÖæB‡&s¢Væ¶æ÷vâ“¢'6U&W7VÇB°Ğ¢6öç7B&BÒ‡v‡“¢7G&–ær“¢'6U&W7VÇBÓâ‡²ö³¢fÇ6RÂW'&÷#¢–çfÆ–B6öÖÖæC¢G·v‡—ÒæÒ“°Ğ¢–b‚—4ö&¢‡&r’ÇÂG—Vöb&rçG—RÓÒw7G&–ærr’&WGW&â&B‚vÖ—76–ærG—Rr“°Ğ¢6öç7B2Ò&s°Ğ¢7v—F6‚†2çG—R’°Ğ¢66RvÖ÷fRs Ğ¢66RwÆ6Rs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4†–Â†2çFò’’&WGW&â&B‚wFö¶Vä–B÷Fòr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢2çG—RÂFö¶Vä–C¢2çFö¶Vä–BÂFó¢²¢2çFòçÂ#¢2çFòç"ÒÒÓ°Ğ¢66Rv'6VæÄvVæW&FRs¢°Ğ¢–b‚—4–B†2ç7FvVD–B’ÇÂ—4–B†2æ&6T–B’ÇÂöæTöb†2ç&&—G’Â²væ÷&ÖÂrÂvÖv–2rÂw&&RuÒ26öç7B’ÇÂ—4–çB†2æ—FVÔÆWfVÂÂÔ…ô•DTÕôÄUdTÂ’ÇÂ2æ—FVÔÆWfVÂÂÇÂG—Vöb2æ–FVçF–f–VBÓÒv&ööÆVâr’&WGW&â&B‚v'6VæÄvVæW&FRr“°Ğ¢–b†2çVçF—G’ÓÒVæFVf–æVBbb‚—4–çB†2çVçF—G’Â“’’ÇÂ2çVçF—G’Â’’&WGW&â&B‚wVçF—G’r“°Ğ¢–b†2æ6÷VçBÓÒVæFVf–æVBbb‚—4–çB†2æ6÷VçBÂÔ…ô4õTåB’ÇÂ2æ6÷VçBÂ’’&WGW&â&B‚v6÷VçBr“°Ğ¢–b†2æv—fUFòÓÒVæFVf–æVBbb—4–B†2æv—fUFò’’&WGW&â&B‚vv—fUFòr“°Ğ¢òòäõDS¢æWfW"66WB6Æ–VçB6VVB(	2F†R6W'fW"–æ¦V7G2—B†’çG2’àĞ¢&WGW&â°Ğ¢ö³¢G'VRÀĞ¢6öÖÖæC¢²G—S¢v'6VæÄvVæW&FRrÂ7FvVD–C¢2ç7FvVD–BÂ&6T–C¢2æ&6T–BÂ&&—G“¢2ç&&—G’Â—FVÔÆWfVÃ¢2æ—FVÔÆWfVÂÂ–FVçF–f–VC¢2æ–FVçF–f–VBÂâââ†2çVçF—G’ÓÒVæFVf–æVBò²VçF—G“¢2çVçF—G’Ò¢·Ò’Ââââ†2æ6÷VçBÓÒVæFVf–æVBò²6÷VçC¢2æ6÷VçBÒ¢·Ò’Ââââ†2æv—fUFòÓÒVæFVf–æVBò²v—fUFó¢2æv—fUFòÒ¢·Ò’ÒÀĞ¢Ó°Ğ¢ĞĞ¢66RvÆö÷DG&gD7&VFRs¢°Ğ¢–b‚—4–B†2æG&gD–B’ÇÂ2æG&gD–BæÆVæwF‚âCÇÂöæTöb†2æVæ6÷VçFW"ÂTä4õTåDU%2’ÇÂ†2ç&VfW&Væ6TÆWfVÂÓÒVæFVf–æVBbb‚—4–çB†2ç&VfW&Væ6TÆWfVÂÂ#’ÇÂ2ç&VfW&Væ6TÆWfVÂÂ’’’&WGW&â&B‚vÆö÷DG&gD7&VFRr“°Ğ¢–b‚'&’æ—4'&’†2æ6FVv÷&–W2’ÇÂ2æ6FVv÷&–W2æÆVæwF‚â$ôÄÄTEô4DTtõ$”U2æÆVæwF‚ÇÂ2æ6FVv÷&–W2æWfW'’‚‡‚’ÓâöæTöb‡‚Â$ôÄÄTEô4DTtõ$”U2’’’&WGW&â&B‚v6FVv÷&–W2r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷DG&gD7&VFRrÂG&gD–C¢2æG&gD–BÂVæ6÷VçFW#¢2æVæ6÷VçFW"Ââââ†2ç&VfW&Væ6TÆWfVÂÓÒVæFVf–æVBò²&VfW&Væ6TÆWfVÃ¢2ç&VfW&Væ6TÆWfVÂ2çVÖ&W"Ò¢·Ò’Â6FVv÷&–W3¢²ââææWr6WB†2æ6FVv÷&–W22G—Vöb$ôÄÄTEô4DTtõ$”U2•ÒÒÓ°Ğ¢ĞĞ¢66RvÆö÷E&öÆÅ7F'Bs¢°Ğ¢–b‚—4–B†2ç&öÆÄ–B’ÇÂ2ç&öÆÄ–BæÆVæwF‚âCÇÂ'&’æ—4'&’†2ç7FvVD–G2’ÇÂ2ç7FvVD–G2æÆVæwF‚ÇÂ2ç7FvVD–G2æÆVæwF‚âÔ…ôõTåõ$ôÄÅ2ÇÂ2ç7FvVD–G2æWfW'’†—4–B’’&WGW&â&B‚vÆö÷E&öÆÅ7F'Br“°Ğ¢–b‚'&’æ—4'&’†2çFö¶Vä–G2’ÇÂ2çFö¶Vä–G2æÆVæwF‚ÇÂ2çFö¶Vä–G2æÆVæwF‚âSÇÂ2çFö¶Vä–G2æWfW'’†—4–B’ÇÂ—4–çB†2æÖ–çWFW2Â$ôÄÅôÔ”åUDU2æÖ‚’ÇÂ2æÖ–çWFW2Â$ôÄÅôÔ”åUDU2æÖ–â’&WGW&â&B‚vÆö÷E&öÆÅ7F'Br“°Ğ¢–b†2ç66VæT–BÓÒVæFVf–æVBbb‡G—Vöb2ç66VæT–BÓÒw7G&–ærrÇÂõå³Ó–Öe×³‡ÒÕ³Ó–Öe×³GÒÕ³Ó–Öe×³GÒÕ³Ó–Öe×³GÒÕ³Ó–Öe×³'ÒBö’çFW7B†2ç66VæT–B’’’&WGW&â&B‚vÆö÷E&öÆÅ7F'Br“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷E&öÆÅ7F'BrÂ&öÆÄ–C¢2ç&öÆÄ–BÂ7FvVD–G3¢²âââ†2ç7FvVD–G227G&–æuµÒ•ÒÂFö¶Vä–G3¢²âââ†2çFö¶Vä–G227G&–æuµÒ•ÒÂÖ–çWFW3¢2æÖ–çWFW2Ââââ‡G—Vöb2ç66VæT–BÓÓÒw7G&–ærrò²66VæT–C¢2ç66VæT–BÒ¢·Ò’ÒÓ°Ğ¢ĞĞ¢66RvÖW&6†çE6WGWs¢°Ğ¢–b‚†2æ7F—fRÓÒVæFVf–æVBbbG—Vöb2æ7F—fRÓÒv&ööÆVâr’ÇÂ†2ææÖRÓÒVæFVf–æVBbb—5FW‡B†2ææÖRÂÔU$4„åEôÄ”Ô•E2ææÖR’’ÇÂ†2ævöÆBÓÒVæFVf–æVBbb‚—4–çB†2ævöÆBÂÔU$4„åEôÄ”Ô•E2ævöÆB’ÇÂ2ævöÆBÂ’’ÇÂ†2æ'W•&FRÓÒVæFVf–æVBbb‚—4–çB†2æ'W•&FRÂ’ÇÂ2æ'W•&FRÂ’’’&WGW&â&B‚vÖW&6†çE6WGWr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÖW&6†çE6WGWrÂâââ†2æ7F—fRÓÒVæFVf–æVBò²7F—fS¢2æ7F—fR2&ööÆVâÒ¢·Ò’Ââââ†2ææÖRÓÒVæFVf–æVBò²æÖS¢2ææÖR27G&–ærÒ¢·Ò’Ââââ†2ævöÆBÓÒVæFVf–æVBò²vöÆC¢2ævöÆB2çVÖ&W"Ò¢·Ò’Ââââ†2æ'W•&FRÓÒVæFVf–æVBò²'W•&FS¢2æ'W•&FR2çVÖ&W"Ò¢·Ò’ÒÓ°Ğ¢ĞĞ¢66RvÖW&6†çE7Fö6´FBs Ğ¢–b‚—4–B†2ç7FvVD–B’ÇÂ—4–çB†2ç&–6RÂÔU$4„åEôÄ”Ô•E2ç&–6R’ÇÂ2ç&–6RÂÇÂöæTöb†2æ7W'&Væ7’Â5U%$Tä5•ô”E2’’&WGW&â&B‚vÖW&6†çE7Fö6´FBr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÖW&6†çE7Fö6´FBrÂ7FvVD–C¢2ç7FvVD–BÂ&–6S¢2ç&–6RÂ7W'&Væ7“¢2æ7W'&Væ7’ÒÓ°Ğ¢66RvÖW&6†çE7Fö6µWFFRs Ğ¢–b‚—4–B†2ç7Fö6´–B’ÇÂ—4–çB†2ç&–6RÂÔU$4„åEôÄ”Ô•E2ç&–6R’ÇÂ2ç&–6RÂÇÂöæTöb†2æ7W'&Væ7’Â5U%$Tä5•ô”E2’’&WGW&â&B‚vÖW&6†çE7Fö6µWFFRr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÖW&6†çE7Fö6µWFFRrÂ7Fö6´–C¢2ç7Fö6´–BÂ&–6S¢2ç&–6RÂ7W'&Væ7“¢2æ7W'&Væ7’ÒÓ°Ğ¢66RvÖW&6†çE7Fö6µ&VÖ÷fRs Ğ¢–b‚—4–B†2ç7Fö6´–B’’&WGW&â&B‚vÖW&6†çE7Fö6µ&VÖ÷fRr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÖW&6†çE7Fö6µ&VÖ÷fRrÂ7Fö6´–C¢2ç7Fö6´–BÒÓ°Ğ¢66RvÖW&6†çD'W’s Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2ç7Fö6´–B’ÇÂ—4–çB†2çVçF—G’Â““’’ÇÂ2çVçF—G’ÂÇÂ—4–çB†2æÖW&6†çE&WbÂS’’ÇÂ—4–çB†2æ7W'&Væ7•&WbÂS’’’&WGW&â&B‚vÖW&6†çD'W’r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÖW&6†çD'W’rÂFö¶Vä–C¢2çFö¶Vä–BÂ7Fö6´–C¢2ç7Fö6´–BÂVçF—G“¢2çVçF—G’ÂÖW&6†çE&Wc¢2æÖW&6†çE&WbÂ7W'&Væ7•&Wc¢2æ7W'&Væ7•&WbÒÓ°Ğ¢66RvÖW&6†çE6VÆÂs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2æ—FVÔ–B’ÇÂ—4–çB†2çVçF—G’Â““’’ÇÂ2çVçF—G’ÂÇÂ—4–çB†2ç&WbÂS’’ÇÂ—4–çB†2æÖW&6†çE&WbÂS’’’&WGW&â&B‚vÖW&6†çE6VÆÂr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÖW&6†çE6VÆÂrÂFö¶Vä–C¢2çFö¶Vä–BÂ—FVÔ–C¢2æ—FVÔ–BÂVçF—G“¢2çVçF—G’Â&Wc¢2ç&WbÂÖW&6†çE&Wc¢2æÖW&6†çE&WbÒÓ°Ğ¢66RvÆö÷E&öÆÄ6†ö÷6Rs Ğ¢–b‚—4–B†2ç&öÆÄ–B’ÇÂ—4–B†2çFö¶Vä–B’ÇÂöæTöb†2æ6†ö–6RÂÄôõEô4„ô”4U2’’&WGW&â&B‚vÆö÷E&öÆÄ6†ö÷6Rr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷E&öÆÄ6†ö÷6RrÂ&öÆÄ–C¢2ç&öÆÄ–BÂFö¶Vä–C¢2çFö¶Vä–BÂ6†ö–6S¢2æ6†ö–6RÒÓ°Ğ¢66RvÆö÷E&öÆÄ6Æ–ÔW‡—&VBs Ğ¢–b‚—4–B†2ç&öÆÄ–B’ÇÂ—4–B†2çFö¶Vä–B’’&WGW&â&B‚vÆö÷E&öÆÄ6Æ–ÔW‡—&VBr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷E&öÆÄ6Æ–ÔW‡—&VBrÂ&öÆÄ–C¢2ç&öÆÄ–BÂFö¶Vä–C¢2çFö¶Vä–BÒÓ°Ğ¢66RvÆö÷E&öÆÅ&W6öÇfRs Ğ¢66RvÆö÷E&öÆÄ6æ6VÂs¢°Ğ¢–b‚—4–B†2ç&öÆÄ–B’’&WGW&â&B†2çG—R“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢2çG—RÂ&öÆÄ–C¢2ç&öÆÄ–BÒÓ°Ğ¢ĞĞ¢66RvÆö÷DG&gDVF—Bs¢°Ğ¢–b‚—4–çB†2ç&WbÂS’’ÇÂ—4ö&¢†2æ÷’’&WGW&â&B‚vÆö÷DG&gDVF—Br“°Ğ¢6öç7B÷Ò'6TG&gD÷†2æ÷“°Ğ¢–b‚÷’&WGW&â&B‚v÷r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷DG&gDVF—BrÂ&Wc¢2ç&WbÂ÷ÒÓ°Ğ¢ĞĞ¢66RvÆö÷DG&gD&÷fRs Ğ¢–b‚—4–çB†2ç&WbÂS’’’&WGW&â&B‚vÆö÷DG&gD&÷fRr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷DG&gD&÷fRrÂ&Wc¢2ç&WbÒÓ°Ğ¢66RvÆö÷DG&gDF—66&Bs Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vÆö÷DG&gDF—66&BrÒÓ°Ğ¢66Rv'6VæÄv—fRs Ğ¢–b‚—4–B†2ç7FvVD–B’ÇÂ—4–B†2çFö¶Vä–B’’&WGW&â&B‚v'6VæÄv—fRr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢v'6VæÄv—fRrÂ7FvVD–C¢2ç7FvVD–BÂFö¶Vä–C¢2çFö¶Vä–BÒÓ°Ğ¢66Rv'6VæÄF—66&Bs Ğ¢–b‚—4–B†2ç7FvVD–B’’&WGW&â&B‚v'6VæÄF—66&Br“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢v'6VæÄF—66&BrÂ7FvVD–C¢2ç7FvVD–BÒÓ°Ğ¢66RvvÔw&çD7W'&Væ7’s Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂöæTöb†2æ7W'&Væ7’Â5U%$Tä5•ô”E2’ÇÂ—4–çB†2æÖ÷VçBÂÔ…ô5U%$Tä5’’ÇÂ2æÖ÷VçBÓÓÒ’&WGW&â&B‚vvÔw&çD7W'&Væ7’r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÔw&çD7W'&Væ7’rÂFö¶Vä–C¢2çFö¶Vä–BÂ7W'&Væ7“¢2æ7W'&Væ7’ÂÖ÷VçC¢2æÖ÷VçBÒÓ°Ğ¢66RvvÕ&Wfö¶T—FVÒs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2æ—FVÔ–B’ÇÂ†2ç&V6öâÓÒVæFVf–æVBbb—5FW‡B†2ç&V6öâÂ#’’’&WGW&â&B‚vvÕ&Wfö¶T—FVÒr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÕ&Wfö¶T—FVÒrÂFö¶Vä–C¢2çFö¶Vä–BÂ—FVÔ–C¢2æ—FVÔ–BÂâââ‡G—Vöb2ç&V6öâÓÓÒw7G&–ærrbb2ç&V6öâçG&–Ò‚’ò²&V6öã¢2ç&V6öâçG&–Ò‚’ç6Æ–6RƒÂ#’Ò¢·Ò’ÒÓ°Ğ¢66RvvÕ6WD—FVÔÆö6²s Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2æ—FVÔ–B’ÇÂG—Vöb2æÆö6¶VBÓÒv&ööÆVâr’&WGW&â&B‚vvÕ6WD—FVÔÆö6²r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÕ6WD—FVÔÆö6²rÂFö¶Vä–C¢2çFö¶Vä–BÂ—FVÔ–C¢2æ—FVÔ–BÂÆö6¶VC¢2æÆö6¶VBÒÓ°Ğ¢66Rv—FVÔ–FVçF–g’s Ğ¢66Rv—FVÕ&W&öÆÂs Ğ¢66Rv—FVÕ6ÇfvRs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2æ—FVÔ–B’ÇÂ—4–çB†2ç&WbÂS’’’&WGW&â&B†2çG—R“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢2çG—RÂFö¶Vä–C¢2çFö¶Vä–BÂ—FVÔ–C¢2æ—FVÔ–BÂ&Wc¢2ç&WbÒÓ°Ğ¢66Rv—FVÔVvÖVçBs Ğ¢66Rv—FVÔ66VæBs Ğ¢66Rv—FVÔ7F—fFRs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2æ—FVÔ–B’ÇÂ—4–çB†2ç&WbÂS’’’&WGW&â&B†2çG—R“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢2çG—RÂFö¶Vä–C¢2çFö¶Vä–BÂ—FVÔ–C¢2æ—FVÔ–BÂ&Wc¢2ç&WbÒÓ°Ğ¢66RwG&ç6×WFTg&vÖVçG2s Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–çB†2ç6WG2ÂS’ÇÂ2ç6WG2ÂÇÂ—4–çB†2æ7W'&Væ7•&WbÂS’’’&WGW&â&B‚wG&ç6×WFTg&vÖVçG2r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢wG&ç6×WFTg&vÖVçG2rÂFö¶Vä–C¢2çFö¶Vä–BÂ6WG3¢2ç6WG2Â7W'&Væ7•&Wc¢2æ7W'&Væ7•&WbÒÓ°Ğ¢66Rv'6VæÄvVæW&FUVæ—VRs Ğ¢–b‚—4–B†2ç7FvVD–B’ÇÂ—4–B†2çVæ—VT–B’ÇÂ†2æv—fUFòÓÒVæFVf–æVBbb—4–B†2æv—fUFò’’’&WGW&â&B‚v'6VæÄvVæW&FUVæ—VRr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢v'6VæÄvVæW&FUVæ—VRrÂ7FvVD–C¢2ç7FvVD–BÂVæ—VT–C¢2çVæ—VT–BÂâââ†2æv—fUFòÓÒVæFVf–æVBò²v—fUFó¢2æv—fUFòÒ¢·Ò’ÒÓ°Ğ¢66RvvÕF–ÖUGv—7Bs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂöæTöb†2æ7F–öâÂ²w&W6öÇfRrÂv6æ6VÂuÒ26öç7B’’&WGW&â&B‚vvÕF–ÖUGv—7Br“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÕF–ÖUGv—7BrÂFö¶Vä–C¢2çFö¶Vä–BÂ7F–öã¢2æ7F–öâÒÓ°Ğ¢66RvvÕ6WD7V&T66W72s Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂG—Vöb2çW&ÖæVçBÓÒv&ööÆVâr’&WGW&â&B‚vvÕ6WD7V&T66W72r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÕ6WD7V&T66W72rÂFö¶Vä–C¢2çFö¶Vä–BÂW&ÖæVçC¢2çW&ÖæVçBÒÓ°Ğ¢66RvvÕ6WD7V&U&öw&W76–öâs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–çB†2æÆWfVÂÂR’’&WGW&â&B‚vvÕ6WD7V&U&öw&W76–öâr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÕ6WD7V&U&öw&W76–öârÂFö¶Vä–C¢2çFö¶Vä–BÂÆWfVÃ¢2æÆWfVÂÒÓ°Ğ¢66Rv7V&UWw&FRs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–çB†2æW‡V7FVDÆWfVÂÂR’ÇÂ—4–çB†2æ7W'&Væ7•&WbÂS’’’&WGW&â&B‚v7V&UWw&FRr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢v7V&UWw&FRrÂFö¶Vä–C¢2çFö¶Vä–BÂW‡V7FVDÆWfVÃ¢2æW‡V7FVDÆWfVÂÂ7W'&Væ7•&Wc¢2æ7W'&Væ7•&WbÒÓ°Ğ¢66RvvÕ&V6†&vT—FVÒs Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–B†2æ—FVÔ–B’’&WGW&â&B‚vvÕ&V6†&vT—FVÒr“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢vvÕ&V6†&vT—FVÒrÂFö¶Vä–C¢2çFö¶Vä–BÂ—FVÔ–C¢2æ—FVÔ–BÒÓ°Ğ¢66Rv6öÖ&–æTg&vÖVçG2s Ğ¢–b‚—4–B†2çFö¶Vä–B’ÇÂ—4–çB†2ç6WG2ÂS’ÇÂ2ç6WG2ÂÇÂ—4–çB†2æ7W'&Væ7•&WbÂS’’’&WGW&â&B‚v6öÖ&–æTg&vÖVçG2r“°Ğ¢&WGW&â²ö³¢G'VRÂ6öÖÖæC¢²G—S¢v6öÖ&–æTg&vÖVçG2rÂFö¶Vä–C¢2çFö¶Vä–BÂ6WG3¢2ç6WG2Â7W'&Væ7•&Wc¢2æ7W'&Væ7•&WbÒÓ°Ğ¢66Rw6WD—FVÕ'VÆW2s¢°Ğ¢–b†2ç'VÆW2ÓÓÒçVÆÂ’&WGW&â²ö³¢G'VRÂ6öÖÖæC­¸×Ëh‘éì¶»§q«^tÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈ\Nˆ	ÜÙ]\X\˜[˜ÙIËÚÙ[’YˆËÚÙ[’YNÃBˆYˆ
-Ë]HOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Õ^
-Ë]KŒ
-JH™]\›ˆ˜Y
-	İ]IÊNÃBˆİ]]HHË]NÃBˆCBˆYˆ
-Ë›˜[YHOOH[™Yš[™Y
-HÃBˆYˆ
-\[ÙˆË›˜[YHOOH	Üİš[™ÉÈXË›˜[YKš[J
-HË›˜[YK›[™İˆ
-H™]\›ˆ˜Y
-	Û˜[YIÊNÃBˆİ]›˜[YHHË›˜[YNÃBˆCBˆYˆ
-Ë˜›ÙU\HOOH[™Yš[™Y
-HÃBˆYˆ
-[Û™SÙŠË˜›ÙU\K“ÑWÕTTÊJH™]\›ˆ˜Y
-	Ø›ÙU\IÊNÃBˆİ]˜›ÙU\HHË˜›ÙU\NÃBˆCBˆYˆ
-Ë˜ÛÛÜˆOOH[™Yš[™Y
-HÃBˆYˆ
-Z^
-Ë˜ÛÛÜŠJH™]\›ˆ˜Y
-	ØÛÛÜ‰ÊNÃBˆİ]˜ÛÛÜˆHË˜ÛÛÜÃBˆCBˆYˆ
-Ë˜XØÙ[OOH[™Yš[™Y
-HÃBˆYˆ
-Z^
-Ë˜XØÙ[
-JH™]\›ˆ˜Y
-	ØXØÙ[	ÊNÃBˆİ]˜XØÙ[HË˜XØÙ[ÃBˆCBˆYˆ
-Ë›X\šÙ\ˆOOH[™Yš[™Y
-HÃBˆYˆ
-[Û™SÙŠË›X\šÙ\‹PT’ÑT—ÔÕSTÊJH™]\›ˆ˜Y
-	ÛX\šÙ\‰ÊNÃBˆİ]›X\šÙ\ˆHË›X\šÙ\ÃBˆCBˆYˆ
-Ëš[š]X[ÈOOH[™Yš[™Y
-HÃBˆYˆ
-\[ÙˆËš[š]X[ÈOOH	Üİš[™ÉÈËš[š]X[Ë›[™İˆŠH™]\›ˆ˜Y
-	Ú[š]X[ÉÊNÃBˆİ]š[š]X[ÈHËš[š]X[ÎÃBˆCBˆYˆ
-Øš™XİšÙ^\Êİ]
-K›[™İOOHŠH™]\›ˆ˜Y
-	Û›İ[™ÈÈÚ[™ÙIÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆİ]\ÈÛÛ[X[™NÃBˆCBˆØ\ÙH	ÙÛT™\İÜ™PÚ\˜Xİ\‰ÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-JH™]\›ˆ˜Y
-	İÚÙ[’Y	ÊNÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈ\Nˆ	ÙÛT™\İÜ™PÚ\˜Xİ\‰ËÚÙ[’YˆËÚÙ[’YNÃBˆYˆ
-ËšY[]HOOH[™Yš[™Y
-HÃBˆÛÛœİHHËšY[]NÃBˆÛÛœİ^H
-ˆ[šÛ›İÛŠHOˆˆOOH[™Yš[™Y
-\[ÙˆˆOOH	Üİš[™ÉÈ	‰ˆ×ˆÖÌNXKYKQ—^ÍŸIË\İ
-ŠJNÃBˆYˆ
-Z\ÓØšŠJH\[ÙˆK›˜[YHOOH	Üİš[™ÉÈZK›˜[YKš[J
-HK›˜[YK›[™İˆ\[ÙˆK]HOOH	Üİš[™ÉÈK]K›[™İˆŒZ^
-K˜ÛÛÜŠHZ^
-K˜XØÙ[
-H
-K›X\šÙ\ˆOOH[™Yš[™Y	‰ˆ[Û™SÙŠK›X\šÙ\‹PT’ÑT—ÔÕSTÊJH
-Kš[š]X[ÈOOH[™Yš[™Y	‰ˆ
-\[ÙˆKš[š]X[ÈOOH	Üİš[™ÉÈKš[š]X[Ë›[™İˆŠJJCBˆ™]\›ˆ˜Y
-	ÚY[]IÊNÃBˆİ]šY[]HHÈ˜[YNˆK›˜[YK]NˆK]K‹‹ŠK˜ÛÛÜˆÈÈÛÛÜˆK˜ÛÛÜˆHˆßJK‹‹ŠK˜XØÙ[ÈÈXØÙ[ˆK˜XØÙ[HˆßJK‹‹ŠK›X\šÙ\ˆÈÈX\šÙ\ˆK›X\šÙ\ˆHˆßJK‹‹ŠKš[š]X[ÈÈÈ[š]X[ÎˆKš[š]X[ÈHˆßJHNÃBˆCBˆYˆ
-Ë™\]Z\Y[OOH[™Yš[™Y
-HÃBˆÛÛœİHHË™\]Z\Y[ÃBˆYˆ
-Z\ÓØšŠJHZ\ÓØšŠKœÛİÊH
-K˜Xİ]™TÙ]OOHH	‰ˆK˜Xİ]™TÙ]OOHŠH\[ÙˆKœ™\İ[™ÈOOH	Ø›ÛÛX[‰ÈP\œ˜^Kš\Ğ\œ˜^JKœ™\İ[™ÒÙY\
-JH™]\›ˆ˜Y
-	Ù\]Z\Y[	ÊNÃBˆÛÛœİÛİÎˆ™XÛÜ™İš[™Ëİš[™ÏˆHßNÃBˆ›Üˆ
-ÛÛœİÚË—HÙˆØš™Xİ™[šY\ÊKœÛİÊJHÃBˆYˆ
-[Û™SÙŠËTURTÔÓÕÊHZ\ÒY
-ŠJH™]\›ˆ˜Y
-	Ù\]Z\Y[œÛİÉÊNÃBˆÛİÖÚ×HHÃBˆCBˆYˆ
-YKœ™\İ[™ÒÙY\™]™\J
-
-HOˆÛ™SÙŠTURTÔÓÕÊJJH™]\›ˆ˜Y
-	Ù\]Z\Y[œ™\İ[™ÒÙY\	ÊNÃBˆYˆ
-KÛÒ[™YÜš\ÈOOH[™Yš[™Y	‰ˆ
-P\œ˜^Kš\Ğ\œ˜^JKÛÒ[™YÜš\ÊHKÛÒ[™YÜš\Ë›[™İˆŒYKÛÒ[™YÜš\Ë™]™\J\ÒY
-JJH™]\›ˆ˜Y
-	Ù\]Z\Y[ÛÒ[™YÜš\ÉÊNÃBˆİ]™\]Z\Y[HÈÛİË‹‹ŠKÛÒ[™YÜš\ÈÈÈÛÒ[™YÜš\ÎˆË‹‹›™]ÈÙ]
-KÛÒ[™YÜš\È\Èİš[™Ö×JWHHˆßJKXİ]™TÙ]ˆK˜Xİ]™TÙ]™\İ[™ÎˆKœ™\İ[™Ë™\İ[™ÒÙY\ˆKœ™\İ[™ÒÙY\\È\]Z\Ûİ×HNÃBˆCBˆYˆ
-[İ]šY[]H	‰ˆ[İ]™\]Z\Y[
-H™]\›ˆ˜Y
-	Û›İ[™ÈÈ™\İÜ™IÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆİ]\ÈÛÛ[X[™NÃBˆCBˆØ\ÙH	ÜÙ]Ø[Ú[™ÔÜYY	ÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\Ò[
-ËœÜYYŒ
-H
-ËœÜYY\È[X™\ŠHJH™]\›ˆ˜Y
-	İÚÙ[’YÜÜYY	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÜÙ]Ø[Ú[™ÔÜYY	ËÚÙ[’YˆËÚÙ[’YÜYYˆËœÜYY\È[X™\ˆHNÃBˆØ\ÙH	Ù\]Z\][IÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-H[Û™SÙŠËœÛİTURTÔÓÕÊJH™]\›ˆ˜Y
-	İÚÙ[’YÚ][RYÜÛİ	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	Ù\]Z\][IËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RYÛİˆËœÛİHNÃBˆØ\ÙH	ÜÙ]ÙX\Û‘Üš\	ÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-H\[ÙˆËÛÒ[™YOOH	Ø›ÛÛX[‰ÊH™]\›ˆ˜Y
-	İÚÙ[’YÚ][RYİÛÒ[™Y	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÜÙ]ÙX\Û‘Üš\	ËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RYÛÒ[™YˆËÛÒ[™YHNÃBˆØ\ÙH	İ[™\]Z\Ûİ	ÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-H[Û™SÙŠËœÛİTURTÔÓÕÊJH™]\›ˆ˜Y
-	İÚÙ[’YÜÛİ	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	İ[™\]Z\Ûİ	ËÚÙ[’YˆËÚÙ[’YÛİˆËœÛİHNÃBˆØ\ÙH	ÜÙ]ÙX\Û”Ù]	ÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-H
-ËœÙ]OOHH	‰ˆËœÙ]OOHŠJH™]\›ˆ˜Y
-	İÚÙ[’YÜÙ]	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÜÙ]ÙX\Û”Ù]	ËÚÙ[’YˆËÚÙ[’YÙ]ˆËœÙ]HNÃBˆØ\ÙH	ÜÙ]™\İ[™ÉÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-H\[ÙˆËœ™\İ[™ÈOOH	Ø›ÛÛX[‰ÊH™]\›ˆ˜Y
-	İÚÙ[’YÜ™\İ[™ÉÊNÃBˆYˆ
-ËšÙY\OOH[™Yš[™Y	‰ˆ
-P\œ˜^Kš\Ğ\œ˜^JËšÙY\
-HËšÙY\›[™İˆTURTÔÓÕË›[™İXËšÙY\™]™\J
-ÊHOˆÛ™SÙŠËTURTÔÓÕÊJJJH™]\›ˆ˜Y
-	ÚÙY\	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÜÙ]™\İ[™ÉËÚÙ[’YˆËÚÙ[’Y™\İ[™ÎˆËœ™\İ[™Ë‹‹ŠËšÙY\ÈÈÙY\ˆËšÙY\\È\]Z\Ûİ×HHˆßJHHNÃBˆCBˆØ\ÙH	ÜÙ]][Q\]Z\	ÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-HZ\Ò[
-Ëœ™]‹WÌÌÌ
-JH™]\›ˆ˜Y
-	İÚÙ[’YÚ][RYÜ™]‰ÊNÃBˆYˆ
-Ë™ÛSØÚÙYOOH[™Yš[™Y	‰ˆ\[ÙˆË™ÛSØÚÙYOOH	Ø›ÛÛX[‰ÊH™]\›ˆ˜Y
-	ÙÛSØÚÙY	ÊNÃBˆYˆ
-Ë™\]Z\OOH[
-H™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÜÙ]][Q\]Z\	ËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RY™]ˆËœ™]‹\]Z\ˆ[HNÃBˆÛÛœİHH\œÙR][Q\]Z\
-Ë™\]Z\
-NÃBˆYˆ
-YJH™]\›ˆ˜Y
-	Ù\]Z\	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÜÙ]][Q\]Z\	ËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RY™]ˆËœ™]‹\]Z\ˆK‹‹ŠË™ÛSØÚÙYOOH[™Yš[™YÈÈÛSØÚÙYˆË™ÛSØÚÙYHˆßJHHNÃBˆCBˆØ\ÙH	ÜÙ]\]Z\ÛÛ™šYÉÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-JH™]\›ˆ˜Y
-	İÚÙ[’Y	ÊNÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈ\Nˆ	ÜÙ]\]Z\ÛÛ™šYÉËÚÙ[’YˆËÚÙ[’YNÃBˆYˆ
-Ë[˜\›[Ü™YXš[]HOOH[™Yš[™Y
-HÃBˆYˆ
-Ë[˜\›[Ü™YXš[]HOOH[	‰ˆ[Û™SÙŠË[˜\›[Ü™YXš[]KP’SUQTÊJH™]\›ˆ˜Y
-	İ[˜\›[Ü™YXš[]IÊNÃBˆİ][˜\›[Ü™YXš[]HHË[˜\›[Ü™YXš[]NÃBˆCBˆYˆ
-Ë˜XÓİ\ˆOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Ò[
-Ë˜XÓİ\‹Œ
-JH™]\›ˆ˜Y
-	ØXÓİ\‰ÊNÃBˆİ]˜XÓİ\ˆHË˜XÓİ\ÃBˆCBˆYˆ
-Ë˜XÓİ\“X™[OOH[™Yš[™Y
-HÃBˆYˆ
-Z\Õ^
-Ë˜XÓİ\“X™[Œ
-JH™]\›ˆ˜Y
-	ØXÓİ\“X™[	ÊNÃBˆİ]˜XÓİ\“X™[HË˜XÓİ\“X™[ÃBˆCBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆİ]\ÈÛÛ[X[™NÃBˆCBˆØ\ÙH	Ú[”™\]Y\İ][IÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëœ™\]Y\İY
-HZ\Õ^
-Ë›˜[YKS•‘S•Ô–WÓSRUË›˜[YJHZ\Ò[
-Ëœ]X[]KS•‘S•Ô–WÓSRUËœ]X[]JH
-Ëœ]X[]H\È[X™\ŠHHZ\Õ^
-Ë™\ØÜš\[Û‹S•‘S•Ô–WÓSRUË™\ØÜš\[ÛŠJH™]\›ˆ˜Y
-	Ú][H™\]Y\İ	ÊNÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈ\Nˆ	Ú[”™\]Y\İ][IËÚÙ[’YˆËÚÙ[’Y™\]Y\İYˆËœ™\]Y\İY˜[YNˆË›˜[YK]X[]NˆËœ]X[]K\ØÜš\[ÛˆË™\ØÜš\[ÛˆNÃBˆYˆ
-Ë››İ\ÈOOH[™Yš[™Y
-HÈYˆ
-Z\Õ^
-Ë››İ\ËS•‘S•Ô–WÓSRUË››İ\ÊJH™]\›ˆ˜Y
-	Û›İ\ÉÊNÈİ]››İ\ÈHË››İ\ÎÈCBˆYˆ
-Ë˜ÛÛZ[™\ˆOOH[™Yš[™Y
-HÈYˆ
-Z\ÒY
-Ë˜ÛÛZ[™\ŠJH™]\›ˆ˜Y
-	ØÛÛZ[™\‰ÊNÈİ]˜ÛÛZ[™\ˆHË˜ÛÛZ[™\ÈCBˆYˆ
-ËÙZYÚÙÈOOH[™Yš[™Y
-HÈYˆ
-\[ÙˆËÙZYÚÙÈOOH	Û[X™\‰ÈS[X™\‹š\Ñš[š]JËÙZYÚÙÊHËÙZYÚÙÈËÙZYÚÙÈˆŒ
-H™]\›ˆ˜Y
-	İÙZYÚÙÉÊNÈİ]ÙZYÚÙÈHËÙZYÚÙÎÈCBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆİ]\ÈÛÛ[X[™NÃBˆCBˆØ\ÙH	ÙÛT™]šY]Ò][T™\]Y\İ	ÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëœ™\]Y\İY
-H[Û™SÙŠË™XÚ\Ú[Û‹ÉØ\›İ™IË	Ü™Z™Xİ	×H\ÈÛÛœİ
-JH™]\›ˆ˜Y
-	Ú][H™\]Y\İ™]šY]ÉÊNÃBˆ]Y]Îˆ™XÛÜ™İš[™Ë[šÛ›İÛˆ[™Yš[™YÃBˆYˆ
-Ë™Y]ÈOOH[™Yš[™Y
-HÃBˆYˆ
-Z\ÓØšŠË™Y]ÊJH™]\›ˆ˜Y
-	ÙY]ÉÊNÃBˆY]ÈHßNÃBˆ›Üˆ
-ÛÛœİÚÙ^KX^HÙˆÖÉÛ˜[YIËS•‘S•Ô–WÓSRUË›˜[YWKÉÙ\ØÜš\[Û‰ËS•‘S•Ô–WÓSRUË™\ØÜš\[Û—KÉÛ›İ\ÉËS•‘S•Ô–WÓSRUË››İ\×WH\ÈÛÛœİ
-HÃBˆÛÛœİ˜[YHHË™Y]ÖÚÙ^WNÈYˆ
-˜[YHOOH[™Yš[™Y
-HÈYˆ
-Z\Õ^
-˜[YKX^
-JH™]\›ˆ˜Y
-Ù^JNÈY]ÖÚÙ^WHH˜[YNÈCBˆCBˆYˆ
-Ë™Y]Ëœ]X[]HOOH[™Yš[™Y
-HÈYˆ
-Z\Ò[
-Ë™Y]Ëœ]X[]KS•‘S•Ô–WÓSRUËœ]X[]JH
-Ë™Y]Ëœ]X[]H\È[X™\ŠHJH™]\›ˆ˜Y
-	Ü]X[]IÊNÈY]Ëœ]X[]HHË™Y]Ëœ]X[]NÈCBˆYˆ
-Ë™Y]ËÙZYÚÙÈOOH[™Yš[™Y
-HÈYˆ
-\[ÙˆË™Y]ËÙZYÚÙÈOOH	Û[X™\‰ÈS[X™\‹š\Ñš[š]JË™Y]ËÙZYÚÙÊHË™Y]ËÙZYÚÙÈË™Y]ËÙZYÚÙÈˆŒ
-H™]\›ˆ˜Y
-	İÙZYÚÙÉÊNÈY]ËÙZYÚÙÈHË™Y]ËÙZYÚÙÎÈCBˆYˆ
-Ë™Y]Ë˜ÛÛZ[™\ˆOOH[™Yš[™Y
-HÈYˆ
-Z\ÒY
-Ë™Y]Ë˜ÛÛZ[™\ŠJH™]\›ˆ˜Y
-	ØÛÛZ[™\‰ÊNÈY]Ë˜ÛÛZ[™\ˆHË™Y]Ë˜ÛÛZ[™\ÈCBˆYˆ
-SØš™XİšÙ^\ÊY]ÊK›[™İ
-HY]ÈH[™Yš[™YÃBˆCBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	ÙÛT™]šY]Ò][T™\]Y\İ	ËÚÙ[’YˆËÚÙ[’Y™\]Y\İYˆËœ™\]Y\İYXÚ\Ú[ÛˆË™XÚ\Ú[Û‹‹‹ŠY]ÈÈÈY]ÈHˆßJHHNÃBˆCBˆØ\ÙH	Ú[Y][IÎƒBˆØ\ÙH	Ú[•\]R][IÎˆÃBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-JH™]\›ˆ˜Y
-	İÚÙ[’YÚ][RY	ÊNÃBˆÛÛœİİ]ˆ™XÛÜ™İš[™Ë[šÛ›İÛˆHÈ\NˆË\KÚÙ[’YˆËÚÙ[’Y][RYˆËš][RYNÃBˆYˆ
-Ë\HOOH	Ú[•\]R][IÊHÃBˆYˆ
-Z\Ò[
-Ëœ™]‹WÌÌÌ
-JH™]\›ˆ˜Y
-	Ü™]‰ÊNÃBˆİ]œ™]ˆHËœ™]ÃBˆCBˆYˆ
-Ë\HOOH	Ú[Y][IÈË›˜[YHOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Õ^
-Ë›˜[YKS•‘S•Ô–WÓSRUË›˜[YJJH™]\›ˆ˜Y
-	Û˜[YIÊNÃBˆİ]›˜[YHHË›˜[YNÃBˆCBˆYˆ
-Ëœ]X[]HOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Ò[
-Ëœ]X[]KS•‘S•Ô–WÓSRUËœ]X[]JH
-Ëœ]X[]H\È[X™\ŠH
-H™]\›ˆ˜Y
-	Ü]X[]IÊNÃBˆİ]œ]X[]HHËœ]X[]NÃBˆCBˆYˆ
-Ë™\ØÜš\[ÛˆOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Õ^
-Ë™\ØÜš\[Û‹S•‘S•Ô–WÓSRUË™\ØÜš\[ÛŠJH™]\›ˆ˜Y
-	Ù\ØÜš\[Û‰ÊNÃBˆİ]™\ØÜš\[ÛˆHË™\ØÜš\[ÛÃBˆCBˆYˆ
-Ë››İ\ÈOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Õ^
-Ë››İ\ËS•‘S•Ô–WÓSRUË››İ\ÊJH™]\›ˆ˜Y
-	Û›İ\ÉÊNÃBˆİ]››İ\ÈHË››İ\ÎÃBˆCBˆYˆ
-Ë˜ÛÛZ[™\ˆOOH[™Yš[™Y
-HÃBˆYˆ
-Z\ÒY
-Ë˜ÛÛZ[™\ŠJH™]\›ˆ˜Y
-	ØÛÛZ[™\‰ÊNÃBˆİ]˜ÛÛZ[™\ˆHË˜ÛÛZ[™\ÃBˆCBˆYˆ
-ËÙZYÚÙÈOOH[™Yš[™Y
-HÃBˆYˆ
-\[ÙˆËÙZYÚÙÈOOH	Û[X™\‰ÈS[X™\‹š\Ñš[š]JËÙZYÚÙÊHËÙZYÚÙÈËÙZYÚÙÈˆŒ
-H™]\›ˆ˜Y
-	İÙZYÚÙÉÊNÃBˆİ]ÙZYÚÙÈHËÙZYÚÙÎÃBˆCBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆİ]\ÈÛÛ[X[™NÃBˆCBˆØ\ÙH	Ú[“[İ™R][IÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-HZ\Ò[
-Ëœ™]‹WÌÌÌ
-HZ\ÒY
-Ë˜ÛÛZ[™\ŠJH™]\›ˆ˜Y
-	İÚÙ[’YÚ][RYÜ™]‹ØÛÛZ[™\‰ÊNÃBˆYˆ
-Ë˜™Y›Ü™R][RYOOH[™Yš[™Y	‰ˆË˜™Y›Ü™R][RYOOH[	‰ˆZ\ÒY
-Ë˜™Y›Ü™R][RY
-JH™]\›ˆ˜Y
-	Ø™Y›Ü™R][RY	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	Ú[“[İ™R][IËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RY™]ˆËœ™]‹ÛÛZ[™\ˆË˜ÛÛZ[™\‹‹‹ŠË˜™Y›Ü™R][RYÈÈ™Y›Ü™R][RYˆË˜™Y›Ü™R][RY\Èİš[™ÈHˆßJHHNÃBˆØ\ÙH	Ú[”Ü]İXÚÉÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-HZ\ÒY
-Ë›™]Ò][RY
-HZ\Ò[
-Ëœ™]‹WÌÌÌ
-HZ\Ò[
-Ëœ]X[]KS•‘S•Ô–WÓSRUËœ]X[]JJH™]\›ˆ˜Y
-	ÜÜ]	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	Ú[”Ü]İXÚÉËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RY™]ˆËœ™]‹]X[]NˆËœ]X[]K™]Ò][RYˆË›™]Ò][RYHNÃBˆØ\ÙH	Ú[“Y\™ÙTİXÚÉÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-HZ\ÒY
-Ëš[Ò][RY
-HZ\Ò[
-Ëœ™]‹WÌÌÌ
-HZ\Ò[
-Ëš[Ô™]‹WÌÌÌ
-JH™]\›ˆ˜Y
-	ÛY\™ÙIÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	Ú[“Y\™ÙTİXÚÉËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RY™]ˆËœ™]‹[Ò][RYˆËš[Ò][RY[Ô™]ˆËš[Ô™]ˆHNÃBˆØ\ÙH	Ú[”™[[İ™R][IÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ëš][RY
-HZ\Ò[
-Ëœ™]‹WÌÌÌ
-JH™]\›ˆ˜Y
-	İÚÙ[’YÚ][RYÜ™]‰ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	Ú[”™[[İ™R][IËÚÙ[’YˆËÚÙ[’Y][RYˆËš][RY™]ˆËœ™]ˆHNÃBˆØ\ÙH	Ú[YÛÛZ[™\‰ÎƒBˆØ\ÙH	Ú[”™[˜[YPÛÛZ[™\‰ÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ë˜ÛÛZ[™\’Y
-HZ\Õ^
-Ë›˜[YKS•‘S•Ô–WÓSRUË˜ÛÛZ[™\“˜[YJJH™]\›ˆ˜Y
-	İÚÙ[’YØÛÛZ[™\’YÛ˜[YIÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\NˆË\KÚÙ[’YˆËÚÙ[’YÛÛZ[™\’YˆË˜ÛÛZ[™\’Y˜[YNˆË›˜[YHHNÃBˆØ\ÙH	Ú[”™[[İ™PÛÛZ[™\‰ÎƒBˆYˆ
-Z\ÒY
-ËÚÙ[’Y
-HZ\ÒY
-Ë˜ÛÛZ[™\’Y
-JH™]\›ˆ˜Y
-	İÚÙ[’YØÛÛZ[™\’Y	ÊNÃBˆ™]\›ˆÈÚÎˆYKÛÛ[X[™ˆÈ\Nˆ	Ú[”™[[İ™PÛÛZ[™\‰ËÚÙ[’YˆËÚÙ[’YÛÛZ[™\’YˆË˜ÛÛZ[™\’YHNÃBˆY˜][ƒBˆ™]\›ˆ˜Y
-[šÛ›İÛˆ\H‰Ôİš[™ÊË\JKœÛXÙJÌŠ_H˜
-NÃBˆCBŸCBƒB‹ÊŠˆÛÛ[X[™\\ÈH^Y\ˆX^H]™\ˆÙ[™
-İÛˆÚ\˜Xİ\œÈÛ›JKˆ]™\][™È[ÙH\ÈÓK[Û›Kˆ
-‹ÃB™^ÜÛÛœİVQT—ĞÓÓSPS‘Îˆ™XYÛ›TÙ]ÛÛ[X[™Éİ\I×OˆH™]ÈÙ]
-ÉÛ[İ™IË‹‹ÒTPÕT—ĞÓÓSPS‘×JNÃBƒB™^ÜÈ\ÒY\ÓØš‹\Ò[NÃBƒB˜ÛÛœİP’SUQTÈHÉÜİ‰Ë	Ù^	Ë	ØÛÛ‰Ë	Ú[	Ë	İÚ\ÉË	ØÚI×H\ÈÛÛœİÃBƒB‹ÊŠˆİšXİ˜[Y][ÛˆÙˆX[X[HYš[™Y\]Z\Y[›Ü\Y\È
-›È[šÛ›İÛˆÙ^\Ë›İ[™Y˜[Y\ÊKˆ
-‹ÃB™^Ü[˜İ[Ûˆ\œÙR][Q\]Z\
-ˆ[šÛ›İÛŠNˆ][Q\]Z\[ÃBˆYˆ
-Z\ÓØšŠŠH[Û™SÙŠ‹šÚ[™USWÒÒS‘ÊJH™]\›ˆ[ÃBˆÛÛœİİ]ˆ][Q\]Z\HÈÚ[™ˆ‹šÚ[™NÃBˆÛÛœİ[İÙYÙ^\ÈH™]ÈÙ]
-ÉÚÚ[™	Ë	Ø\›[Ü•\IË	Ø\›[Ü˜\ÙIË	ØXĞ›Û\ÉË	Ø]XÚĞ›Û\ÉË	Ù[XYÙIË	İ™\œØ][Q[XYÙIË	Ù[XYÙU\IË	Ü›Ü\Y\ÉË	Ü›ÙšXÚY[	Ë	ÙÛSØÚÙY	×JNÃBˆYˆ
-Øš™XİšÙ^\ÊŠKœÛÛYJ
-ÊHOˆX[İÙYÙ^\Ëš\ÊÊJJH™]\›ˆ[ÃBˆYˆ
-‹˜\›[Ü•\HOOH[™Yš[™Y
-HÃBˆYˆ
-[Û™SÙŠ‹˜\›[Ü•\KÉÛYÚ	Ë	ÛYY][IË	ÚX]I×H\ÈÛÛœİ
-JH™]\›ˆ[ÃBˆİ]˜\›[Ü•\HH‹˜\›[Ü•\NÃBˆCBˆYˆ
-‹˜\›[Ü˜\ÙHOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Ò[
-‹˜\›[Ü˜\ÙKÌ
-H
-‹˜\›[Ü˜\ÙH\È[X™\ŠH
-H™]\›ˆ[ÃBˆİ]˜\›[Ü˜\ÙHH‹˜\›[Ü˜\ÙH\È[X™\ÃBˆCBˆ›Üˆ
-ÛÛœİÈÙˆÉØXĞ›Û\ÉË	Ø]XÚĞ›Û\É×H\ÈÛÛœİ
-HÃBˆYˆ
-–Ú×HOOH[™Yš[™Y
-HÛÛ[YNÃBˆYˆ
-Z\Ò[
-–Ú×KL
-JH™]\›ˆ[ÃBˆİ]Ú×HH–Ú×H\È[X™\ÃBˆCBˆYˆ
-‹™[XYÙHOOH[™Yš[™Y
-HÃBˆYˆ
-\[Ùˆ‹™[XYÙHOOH	Üİš[™ÉÈK×ŠÌKŸY
-ŸLLŸŒ
-JÊ—
-×Ê—ÌKŸY
-ŸLLŸŒ
-JOßÌKŸJIÚK\İ
-‹™[XYÙKš[J
-JJH™]\›ˆ[ÃBˆİ]™[XYÙHH‹™[XYÙKš[J
-KÓİÙ\Ø\ÙJ
-NÃBˆCBˆYˆ
-‹™\œØ][Q[XYÙHOOH[™Yš[™Y
-HÃBˆYˆ
-\[Ùˆ‹™\œØ][Q[XYÙHOOH	Üİš[™ÉÈK×—ÌKŸY
-ŸLLŸŒ
-JÊ—
-×Ê—ÌKŸY
-ŸLLŸŒ
-JOÉÚK\İ
-‹™\œØ][Q[XYÙKš[J
-JJH™]\›ˆ[ÃBˆİ]™\œØ][Q[XYÙHH‹™\œØ][Q[XYÙKš[J
-KÓİÙ\Ø\ÙJ
-NÃBˆCBˆYˆ
-‹™[XYÙU\HOOH[™Yš[™Y
-HÃBˆYˆ
-Z\Õ^
-‹™[XYÙU\KÌ
-JH™]\›ˆ[ÃBˆİ]™[XYÙU\HH‹™[XYÙU\Kš[J
-NÃBˆCBˆYˆ
-‹œ›Ü\Y\ÈOOH[™Yš[™Y
-HÃBˆYˆ
-P\œ˜^Kš\Ğ\œ˜^J‹œ›Ü\Y\ÊH‹œ›Ü\Y\Ë›[™İˆL]‹œ›Ü\Y\Ë™]™\J
-
-HOˆÛ™SÙŠÑPTÓ—Ô“ÔT•QTÊJJH™]\›ˆ[ÃBˆİ]œ›Ü\Y\ÈHË‹‹›™]ÈÙ]
-‹œ›Ü\Y\È\ÈÙX\Û”›Ü\V×JWNÃBˆCBˆYˆ
-İ]™\œØ][Q[XYÙHOOH[™Yš[™Y	‰ˆ
-[İ]œ›Ü\Y\ÏËš[˜ÛY\Ê	İ™\œØ][IÊHİ]œ›Ü\Y\Ëš[˜ÛY\Ê	İÛËZ[™Y	ÊJJH™]\›ˆ[ÃBˆYˆ
-‹œ›ÙšXÚY[OOH[™Yš[™Y
-HÃBˆYˆ
-\[Ùˆ‹œ›ÙšXÚY[OOH	Ø›ÛÛX[‰ÊH™]\›ˆ[ÃBˆİ]œ›ÙšXÚY[H‹œ›ÙšXÚY[ÃBˆCBˆ™]\›ˆİ]ÃBŸCBƒB
+/**
+ * Strict runtime validation of commands received from browsers.
+ * Anything that does not match the expected shape exactly is rejected before
+ * it reaches the game logic.
+ */
+import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
+import { INVENTORY_LIMITS } from '../game/inventory.js';
+import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
+import { CURRENCY_IDS, MAX_CURRENCY } from '../game/items/currency.js';
+import { MAX_COUNT, type DraftOp } from '../game/items/loot.js';
+import { MERCHANT_LIMITS } from '../game/items/merchant.js';
+import { LOOT_CHOICES, MAX_OPEN_ROLLS, ROLL_MINUTES } from '../game/items/partyLoot.js';
+import { DRAFT_LIMITS, ENCOUNTERS, LOOT_CATEGORIES, ROLLED_CATEGORIES, type LootDraftEntry } from '../game/items/lootDraft.js';
+import { BODY_TYPES, MARKER_STYLES } from '../game/types.js';
+import { parseBeast } from '../game/beasts.js';
+import { TERRAIN_ORDER } from '../game/terrain.js';
+
+type Obj = Record<string, unknown>;
+
+import { EQUIP_SLOTS, ITEM_KINDS, WEAPON_PROPERTIES, type EquipSlot, type ItemEquip, type WeaponProperty } from '../game/equipment.js';
+
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64 && /^[\w.-]+$/.test(v);
+const isInt = (v: unknown, lim = 1000): v is number => typeof v === 'number' && Number.isInteger(v) && Math.abs(v) <= lim;
+const isAxial = (v: unknown): v is { q: number; r: number } => isObj(v) && isInt(v.q) && isInt(v.r);
+/** Text field: string within the length limit (2Ã— for safety; the rules trim to the exact limit). */
+const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max * 2;
+const oneOf = <T extends string>(v: unknown, opts: readonly T[]): v is T => typeof v === 'string' && (opts as readonly string[]).includes(v);
+
+const optBool = (v: unknown) => v === undefined || typeof v === 'boolean';
+/** A loot draft edit; text is length-checked here and trimmed/normalised by the rules (lootDraft.ts). */
+function parseDraftOp(o: Obj): DraftOp | null {
+  if (o.kind === 'remove') return isId(o.key) ? { kind: 'remove', key: o.key } : null;
+  if (o.kind === 'set') {
+    if (!isId(o.key)) return null;
+    if (o.quantity !== undefined && (!isInt(o.quantity, DRAFT_LIMITS.quantity) || o.quantity < 1)) return null;
+    if (o.itemLevel !== undefined && (!isInt(o.itemLevel, MAX_ITEM_LEVEL) || o.itemLevel < 1)) return null;
+    if (o.rarity !== undefined && !oneOf(o.rarity, ['normal', 'magic', 'rare'] as const)) return null;
+    if (!optBool(o.identified)) return null;
+    return { kind: 'set', key: o.key, ...(o.quantity !== undefined ? { quantity: o.quantity as number } : {}), ...(o.itemLevel !== undefined ? { itemLevel: o.itemLevel as number } : {}), ...(o.rarity !== undefined ? { rarity: o.rarity as 'normal' } : {}), ...(o.identified !== undefined ? { identified: o.identified as boolean } : {}) };
+  }
+  if (o.kind !== 'add' || !isObj(o.entry)) return null;
+  const e = o.entry;
+  if (!isId(e.key) || !oneOf(e.category, LOOT_CATEGORIES) || !isInt(e.quantity, DRAFT_LIMITS.quantity) || e.quantity < 1) return null;
+  if (e.baseId !== undefined && !isId(e.baseId)) return null;
+  if (e.rarity !== undefined && !oneOf(e.rarity, ['normal', 'magic', 'rare'] as const)) return null;
+  if (e.itemLevel !== undefined && (!isInt(e.itemLevel, MAX_ITEM_LEVEL) || e.itemLevel < 1)) return null;
+  if (e.currency !== undefined && !oneOf(e.currency, CURRENCY_IDS)) return null;
+  for (const [k, max] of [['name', DRAFT_LIMITS.name], ['description', DRAFT_LIMITS.description], ['gmNotes', DRAFT_LIMITS.gmNotes], ['image', DRAFT_LIMITS.image]] as const) if (e[k] !== undefined && !isText(e[k], max)) return null;
+  if (!optBool(e.identified) || !optBool(e.noTransfer) || !optBool(e.salvageable)) return null;
+  const entry: LootDraftEntry = { key: e.key, category: e.category, quantity: e.quantity };
+  for (const k of ['baseId', 'rarity', 'itemLevel', 'currency', 'name', 'description', 'gmNotes', 'image', 'identified', 'noTransfer', 'salvageable'] as const) if (e[k] !== undefined) (entry as unknown as Record<string, unknown>)[k] = e[k];
+  return { kind: 'add', entry };
+}
+
+export type ParseResult = { ok: true; command: Command } | { ok: false; error: string };
+
+export function parseCommand(raw: unknown): ParseResult {
+  const bad = (why: string): ParseResult => ({ ok: false, error: `Invalid command: ${why}.` });
+  if (!isObj(raw) || typeof raw.type !== 'string') return bad('missing type');
+  const c = raw;
+  switch (c.type) {
+    case 'move':
+    case 'place':
+      if (!isId(c.tokenId) || !isAxial(c.to)) return bad('tokenId/to');
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, to: { q: c.to.q, r: c.to.r } } };
+    case 'arsenalGenerate': {
+      if (!isId(c.stagedId) || !isId(c.baseId) || !oneOf(c.rarity, ['normal', 'magic', 'rare'] as const) || !isInt(c.itemLevel, MAX_ITEM_LEVEL) || c.itemLevel < 1 || typeof c.identified !== 'boolean') return bad('arsenalGenerate');
+      if (c.quantity !== undefined && (!isInt(c.quantity, 99) || c.quantity < 1)) return bad('quantity');
+      if (c.count !== undefined && (!isInt(c.count, MAX_COUNT) || c.count < 1)) return bad('count');
+      if (c.giveTo !== undefined && !isId(c.giveTo)) return bad('giveTo');
+      // NOTE: never accept a client seed â€“ the server injects it (api.ts).
+      return {
+        ok: true,
+        command: { type: 'arsenalGenerate', stagedId: c.stagedId, baseId: c.baseId, rarity: c.rarity, itemLevel: c.itemLevel, identified: c.identified, ...(c.quantity !== undefined ? { quantity: c.quantity } : {}), ...(c.count !== undefined ? { count: c.count } : {}), ...(c.giveTo !== undefined ? { giveTo: c.giveTo } : {}) },
+      };
+    }
+    case 'lootDraftCreate': {
+      if (!isId(c.draftId) || c.draftId.length > 40 || !oneOf(c.encounter, ENCOUNTERS) || (c.referenceLevel !== undefined && (!isInt(c.referenceLevel, 20) || c.referenceLevel < 1))) return bad('lootDraftCreate');
+      if (!Array.isArray(c.categories) || c.categories.length > ROLLED_CATEGORIES.length || !c.categories.every((x) => oneOf(x, ROLLED_CATEGORIES))) return bad('categories');
+      return { ok: true, command: { type: 'lootDraftCreate', draftId: c.draftId, encounter: c.encounter, ...(c.referenceLevel !== undefined ? { referenceLevel: c.referenceLevel as number } : {}), categories: [...new Set(c.categories as typeof ROLLED_CATEGORIES)] } };
+    }
+    case 'lootRollStart': {
+      if (!isId(c.rollId) || c.rollId.length > 40 || !Array.isArray(c.stagedIds) || !c.stagedIds.length || c.stagedIds.length > MAX_OPEN_ROLLS || !c.stagedIds.every(isId)) return bad('lootRollStart');
+      if (!Array.isArray(c.tokenIds) || !c.tokenIds.length || c.tokenIds.length > 50 || !c.tokenIds.every(isId) || !isInt(c.minutes, ROLL_MINUTES.max) || c.minutes < ROLL_MINUTES.min) return bad('lootRollStart');
+      if (c.sceneId !== undefined && (typeof c.sceneId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.sceneId))) return bad('lootRollStart');
+      return { ok: true, command: { type: 'lootRollStart', rollId: c.rollId, stagedIds: [...(c.stagedIds as string[])], tokenIds: [...(c.tokenIds as string[])], minutes: c.minutes, ...(typeof c.sceneId === 'string' ? { sceneId: c.sceneId } : {}) } };
+    }
+    case 'merchantSetup': {
+      if ((c.active !== undefined && typeof c.active !== 'boolean') || (c.name !== undefined && !isText(c.name, MERCHANT_LIMITS.name)) || (c.gold !== undefined && (!isInt(c.gold, MERCHANT_LIMITS.gold) || c.gold < 0)) || (c.buyRate !== undefined && (!isInt(c.buyRate, 100) || c.buyRate < 0))) return bad('merchantSetup');
+      return { ok: true, command: { type: 'merchantSetup', ...(c.active !== undefined ? { active: c.active as boolean } : {}), ...(c.name !== undefined ? { name: c.name as string } : {}), ...(c.gold !== undefined ? { gold: c.gold as number } : {}), ...(c.buyRate !== undefined ? { buyRate: c.buyRate as number } : {}) } };
+    }
+    case 'merchantStockAdd':
+      if (!isId(c.stagedId) || !isInt(c.price, MERCHANT_LIMITS.price) || c.price < 1 || !oneOf(c.currency, CURRENCY_IDS)) return bad('merchantStockAdd');
+      return { ok: true, command: { type: 'merchantStockAdd', stagedId: c.stagedId, price: c.price, currency: c.currency } };
+    case 'merchantStockUpdate':
+      if (!isId(c.stockId) || !isInt(c.price, MERCHANT_LIMITS.price) || c.price < 1 || !oneOf(c.currency, CURRENCY_IDS)) return bad('merchantStockUpdate');
+      return { ok: true, command: { type: 'merchantStockUpdate', stockId: c.stockId, price: c.price, currency: c.currency } };
+    case 'merchantStockRemove':
+      if (!isId(c.stockId)) return bad('merchantStockRemove');
+      return { ok: true, command: { type: 'merchantStockRemove', stockId: c.stockId } };
+    case 'merchantBuy':
+      if (!isId(c.tokenId) || !isId(c.stockId) || !isInt(c.quantity, 999) || c.quantity < 1 || !isInt(c.merchantRev, 1e9) || !isInt(c.currencyRev, 1e9)) return bad('merchantBuy');
+      return { ok: true, command: { type: 'merchantBuy', tokenId: c.tokenId, stockId: c.stockId, quantity: c.quantity, merchantRev: c.merchantRev, currencyRev: c.currencyRev } };
+    case 'merchantSell':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.quantity, 999) || c.quantity < 1 || !isInt(c.rev, 1e9) || !isInt(c.merchantRev, 1e9)) return bad('merchantSell');
+      return { ok: true, command: { type: 'merchantSell', tokenId: c.tokenId, itemId: c.itemId, quantity: c.quantity, rev: c.rev, merchantRev: c.merchantRev } };
+    case 'lootRollChoose':
+      if (!isId(c.rollId) || !isId(c.tokenId) || !oneOf(c.choice, LOOT_CHOICES)) return bad('lootRollChoose');
+      return { ok: true, command: { type: 'lootRollChoose', rollId: c.rollId, tokenId: c.tokenId, choice: c.choice } };
+    case 'lootRollClaimExpired':
+      if (!isId(c.rollId) || !isId(c.tokenId)) return bad('lootRollClaimExpired');
+      return { ok: true, command: { type: 'lootRollClaimExpired', rollId: c.rollId, tokenId: c.tokenId } };
+    case 'lootRollResolve':
+    case 'lootRollCancel': {
+      if (!isId(c.rollId)) return bad(c.type);
+      return { ok: true, command: { type: c.type, rollId: c.rollId } };
+    }
+    case 'lootDraftEdit': {
+      if (!isInt(c.rev, 1e9) || !isObj(c.op)) return bad('lootDraftEdit');
+      const op = parseDraftOp(c.op);
+      if (!op) return bad('op');
+      return { ok: true, command: { type: 'lootDraftEdit', rev: c.rev, op } };
+    }
+    case 'lootDraftApprove':
+      if (!isInt(c.rev, 1e9)) return bad('lootDraftApprove');
+      return { ok: true, command: { type: 'lootDraftApprove', rev: c.rev } };
+    case 'lootDraftDiscard':
+      return { ok: true, command: { type: 'lootDraftDiscard' } };
+    case 'arsenalGive':
+      if (!isId(c.stagedId) || !isId(c.tokenId)) return bad('arsenalGive');
+      return { ok: true, command: { type: 'arsenalGive', stagedId: c.stagedId, tokenId: c.tokenId } };
+    case 'arsenalDiscard':
+      if (!isId(c.stagedId)) return bad('arsenalDiscard');
+      return { ok: true, command: { type: 'arsenalDiscard', stagedId: c.stagedId } };
+    case 'gmGrantCurrency':
+      if (!isId(c.tokenId) || !oneOf(c.currency, CURRENCY_IDS) || !isInt(c.amount, MAX_CURRENCY) || c.amount === 0) return bad('gmGrantCurrency');
+      return { ok: true, command: { type: 'gmGrantCurrency', tokenId: c.tokenId, currency: c.currency, amount: c.amount } };
+    case 'gmRevokeItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || (c.reason !== undefined && !isText(c.reason, 120))) return bad('gmRevokeItem');
+      return { ok: true, command: { type: 'gmRevokeItem', tokenId: c.tokenId, itemId: c.itemId, ...(typeof c.reason === 'string' && c.reason.trim() ? { reason: c.reason.trim().slice(0, 120) } : {}) } };
+    case 'gmSetItemLock':
+      if (!isId(c.tokenId) || !isId(c.itemId) || typeof c.locked !== 'boolean') return bad('gmSetItemLock');
+      return { ok: true, command: { type: 'gmSetItemLock', tokenId: c.tokenId, itemId: c.itemId, locked: c.locked } };
+    case 'itemIdentify':
+    case 'itemReroll':
+    case 'itemSalvage':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1e9)) return bad(c.type);
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'itemAugment':
+    case 'itemAscend':
+    case 'itemActivate':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1e9)) return bad(c.type);
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'transmuteFragments':
+      if (!isId(c.tokenId) || !isInt(c.sets, 500) || c.sets < 1 || !isInt(c.currencyRev, 1e9)) return bad('transmuteFragments');
+      return { ok: true, command: { type: 'transmuteFragments', tokenId: c.tokenId, sets: c.sets, currencyRev: c.currencyRev } };
+    case 'arsenalGenerateUnique':
+      if (!isId(c.stagedId) || !isId(c.uniqueId) || (c.giveTo !== undefined && !isId(c.giveTo))) return bad('arsenalGenerateUnique');
+      return { ok: true, command: { type: 'arsenalGenerateUnique', stagedId: c.stagedId, uniqueId: c.uniqueId, ...(c.giveTo !== undefined ? { giveTo: c.giveTo } : {}) } };
+    case 'gmTimeTwist':
+      if (!isId(c.tokenId) || !oneOf(c.action, ['resolve', 'cancel'] as const)) return bad('gmTimeTwist');
+      return { ok: true, command: { type: 'gmTimeTwist', tokenId: c.tokenId, action: c.action } };
+    case 'gmSetCubeAccess':
+      if (!isId(c.tokenId) || typeof c.permanent !== 'boolean') return bad('gmSetCubeAccess');
+      return { ok: true, command: { type: 'gmSetCubeAccess', tokenId: c.tokenId, permanent: c.permanent } };
+    case 'gmSetCubeProgression':
+      if (!isId(c.tokenId) || !isInt(c.level, 5)) return bad('gmSetCubeProgression');
+      return { ok: true, command: { type: 'gmSetCubeProgression', tokenId: c.tokenId, level: c.level } };
+    case 'cubeUpgrade':
+      if (!isId(c.tokenId) || !isInt(c.expectedLevel, 5) || !isInt(c.currencyRev, 1e9)) return bad('cubeUpgrade');
+      return { ok: true, command: { type: 'cubeUpgrade', tokenId: c.tokenId, expectedLevel: c.expectedLevel, currencyRev: c.currencyRev } };
+    case 'gmRechargeItem':
+      if (!isId(c.tokenId) || !isId(c.itemId)) return bad('gmRechargeItem');
+      return { ok: true, command: { type: 'gmRechargeItem', tokenId: c.tokenId, itemId: c.itemId } };
+    case 'combineFragments':
+      if (!isId(c.tokenId) || !isInt(c.sets, 500) || c.sets < 1 || !isInt(c.currencyRev, 1e9)) return bad('combineFragments');
+      return { ok: true, command: { type: 'combineFragments', tokenId: c.tokenId, sets: c.sets, currencyRev: c.currencyRev } };
+    case 'setItemRules': {
+      if (c.rules === null) return { ok: true, command: { type: 'setItemRules', rules: null } };
+      if (!isObj(c.rules)) return bad('rules');
+      const rules: Record<string, number> = {};
+      for (const [k, v] of Object.entries(c.rules)) {
+        if (!(k in ITEM_RULE_LIMITS) || !isInt(v, 1000)) return bad(`rules.${k}`);
+        rules[k] = v;
+      }
+      return { ok: true, command: { type: 'setItemRules', rules } };
+    }
+    case 'setCosmetics': {
+      if (!isId(c.tokenId) || !isObj(c.selected)) return bad('setCosmetics');
+      const selected: Record<string, string | null> = {};
+      for (const [k, v] of Object.entries(c.selected)) {
+        if (!oneOf(k, ['frame', 'wreath', 'ornament', 'background', 'border', 'title'] as const) || (v !== null && !isId(v))) return bad('selected');
+        selected[k] = v as string | null;
+      }
+      return { ok: true, command: { type: 'setCosmetics', tokenId: c.tokenId, selected } };
+    }
+    case 'gmCosmetic':
+      if (!isId(c.tokenId) || !isId(c.cosmeticId) || typeof c.grant !== 'boolean') return bad('gmCosmetic');
+      return { ok: true, command: { type: 'gmCosmetic', tokenId: c.tokenId, cosmeticId: c.cosmeticId, grant: c.grant } };
+    case 'setSneak':
+      if (!isId(c.tokenId) || typeof c.on !== 'boolean') return bad('setSneak');
+      return { ok: true, command: { type: 'setSneak', tokenId: c.tokenId, on: c.on } };
+    case 'gmSetBeast': {
+      const b = parseBeast(c.beast);
+      if (typeof b === 'string') return bad(b);
+      return { ok: true, command: { type: 'gmSetBeast', beast: b } };
+    }
+    case 'gmRemoveBeast':
+      if (typeof c.beastId !== 'string' || !/^gm-[a-z0-9-]{1,40}$/.test(c.beastId)) return bad('beastId');
+      return { ok: true, command: { type: 'gmRemoveBeast', beastId: c.beastId } };
+    case 'endDay':
+    case 'advancePhase':
+      return { ok: true, command: { type: c.type } };
+    case 'setDay':
+      if (!isInt(c.day) || (c.phase !== undefined && !oneOf(c.phase, ['day', 'night'] as const))) return bad('day');
+      return { ok: true, command: { type: 'setDay', day: c.day, ...(c.phase ? { phase: c.phase as 'day' | 'night' } : {}) } };
+    case 'adjustMovePoints':
+    case 'adjustMaxMovePoints':
+    case 'adjustVisionRadius':
+    case 'adjustVisionBonus':
+      if (!isId(c.tokenId) || !isInt(c.delta, 100)) return bad('tokenId/delta');
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, delta: c.delta } };
+    case 'toggleShare':
+      if (!isId(c.tokenId)) return bad('tokenId');
+      return { ok: true, command: { type: 'toggleShare', tokenId: c.tokenId } };
+    case 'toggleController':
+      if (!isId(c.tokenId) || !isId(c.controllerId)) return bad('tokenId/controllerId');
+      return { ok: true, command: { type: 'toggleController', tokenId: c.tokenId, controllerId: c.controllerId } };
+    case 'setTeamVisibility':
+      if (!isId(c.teamId) || !oneOf(c.visibility, ['auto', 'hidden', 'revealed'] as const)) return bad('teamId/visibility');
+      return { ok: true, command: { type: 'setTeamVisibility', teamId: c.teamId, visibility: c.visibility } };
+    case 'setTeamStrategy':
+      if (!isId(c.teamId) || !oneOf(c.strategy, ['manual', 'patrol', 'forage', 'flee', 'pursue', 'rest'] as const)) return bad('teamId/strategy');
+      return { ok: true, command: { type: 'setTeamStrategy', teamId: c.teamId, strategy: c.strategy } };
+    case 'setTracking':
+      if (!isId(c.teamId) || !oneOf(c.mode, ['none', 'approx', 'exact'] as const)) return bad('teamId/mode');
+      return { ok: true, command: { type: 'setTracking', teamId: c.teamId, mode: c.mode } };
+    case 'setSiteVisibility':
+      if (!isId(c.siteId) || !oneOf(c.visibility, ['public', 'onSight', 'hidden'] as const)) return bad('siteId/visibility');
+      return { ok: true, command: { type: 'setSiteVisibility', siteId: c.siteId, visibility: c.visibility } };
+    case 'triggerEvent':
+      if (!isId(c.eventId)) return bad('eventId');
+      return { ok: true, command: { type: 'triggerEvent', eventId: c.eventId } };
+    case 'decideEvent': {
+      if (!isId(c.eventId) || !oneOf(c.decision, ['approve', 'reject', 'postpone'] as const)) return bad('eventId/decision');
+      if (c.postpone !== undefined && !oneOf(c.postpone, ['nextPhase', 'nextDay'] as const)) return bad('postpone');
+      const cmd: Record<string, unknown> = { type: 'decideEvent', eventId: c.eventId, decision: c.decision };
+      if (c.postpone !== undefined) cmd.postpone = c.postpone;
+      if (c.edits !== undefined) {
+        if (!isObj(c.edits)) return bad('edits');
+        const e = c.edits;
+        if ((e.name !== undefined && !isText(e.name, 80)) || (e.description !== undefined && !isText(e.description, 1000)) || (e.announce !== undefined && typeof e.announce !== 'boolean')) return bad('edits');
+        cmd.edits = { ...(e.name !== undefined ? { name: e.name } : {}), ...(e.description !== undefined ? { description: e.description } : {}), ...(e.announce !== undefined ? { announce: e.announce } : {}) };
+      }
+      return { ok: true, command: cmd as Command };
+    }
+    case 'createEvent': {
+      if (!isId(c.eventId) || !isText(c.name, 80) || !isText(c.description, 1000) || typeof c.announce !== 'boolean') return bad('event');
+      if (!Array.isArray(c.hexes) || c.hexes.length > 400 || !c.hexes.every((k) => typeof k === 'string' && /^-?\d{1,3},-?\d{1,3}$/.test(k))) return bad('hexes');
+      if (!Array.isArray(c.effects) || !c.effects.length || c.effects.length > 5) return bad('effects');
+      const effects: unknown[] = [];
+      for (const e of c.effects) {
+        if (!isObj(e)) return bad('effect');
+        if (e.type === 'setTerrain' && oneOf(e.terrain, TERRAIN_ORDER)) effects.push({ type: 'setTerrain', terrain: e.terrain });
+        else if (e.type === 'revealSite' && isId(e.siteId)) effects.push({ type: 'revealSite', siteId: e.siteId });
+        else if (e.type === 'modifyMovePoints' && isInt(e.amount, 20)) effects.push({ type: 'modifyMovePoints', amount: e.amount });
+        else return bad('effect');
+      }
+      return { ok: true, command: { type: 'createEvent', eventId: c.eventId, name: c.name, description: c.description, hexes: c.hexes as string[], effects, announce: c.announce } as Command };
+    }
+    case 'announce':
+      if (!oneOf(c.category, ['general', 'warning', 'death', 'world', 'custom'] as const) || !isText(c.title, 80) || !c.title.trim() || !isText(c.text, 500)) return bad('announcement');
+      return { ok: true, command: { type: 'announce', category: c.category, title: c.title, text: c.text } };
+    case 'setShrink': {
+      if (c.enabled !== undefined && typeof c.enabled !== 'boolean') return bad('enabled');
+      if (c.mode !== undefined && !oneOf(c.mode, ['danger', 'closed'] as const)) return bad('mode');
+      const cmd: Command = { type: 'setShrink' };
+      if (c.enabled !== undefined) cmd.enabled = c.enabled as boolean;
+      if (c.mode !== undefined) cmd.mode = c.mode as 'danger' | 'closed';
+      return { ok: true, command: cmd };
+    }
+    case 'setAppearance': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      const hex = (v: unknown) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+      const out: Record<string, unknown> = { type: 'setAppearance', tokenId: c.tokenId };
+      if (c.title !== undefined) {
+        if (!isText(c.title, 60)) return bad('title');
+        out.title = c.title;
+      }
+      if (c.name !== undefined) {
+        if (typeof c.name !== 'string' || !c.name.trim() || c.name.length > 40) return bad('name');
+        out.name = c.name;
+      }
+      if (c.bodyType !== undefined) {
+        if (!oneOf(c.bodyType, BODY_TYPES)) return bad('bodyType');
+        out.bodyType = c.bodyType;
+      }
+      if (c.color !== undefined) {
+        if (!hex(c.color)) return bad('color');
+        out.color = c.color;
+      }
+      if (c.accent !== undefined) {
+        if (!hex(c.accent)) return bad('accent');
+        out.accent = c.accent;
+      }
+      if (c.marker !== undefined) {
+        if (!oneOf(c.marker, MARKER_STYLES)) return bad('marker');
+        out.marker = c.marker;
+      }
+      if (c.initials !== undefined) {
+        if (typeof c.initials !== 'string' || c.initials.length > 6) return bad('initials');
+        out.initials = c.initials;
+      }
+      if (Object.keys(out).length === 2) return bad('nothing to change');
+      return { ok: true, command: out as Command };
+    }
+    case 'gmRestoreCharacter': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      const out: Record<string, unknown> = { type: 'gmRestoreCharacter', tokenId: c.tokenId };
+      if (c.identity !== undefined) {
+        const i = c.identity;
+        const hex = (v: unknown) => v === undefined || (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v));
+        if (!isObj(i) || typeof i.name !== 'string' || !i.name.trim() || i.name.length > 40 || typeof i.title !== 'string' || i.title.length > 60 || !hex(i.color) || !hex(i.accent) || (i.marker !== undefined && !oneOf(i.marker, MARKER_STYLES)) || (i.initials !== undefined && (typeof i.initials !== 'string' || i.initials.length > 6)))
+          return bad('identity');
+        out.identity = { name: i.name, title: i.title, ...(i.color ? { color: i.color } : {}), ...(i.accent ? { accent: i.accent } : {}), ...(i.marker ? { marker: i.marker } : {}), ...(i.initials ? { initials: i.initials } : {}) };
+      }
+      if (c.equipment !== undefined) {
+        const e = c.equipment;
+        if (!isObj(e) || !isObj(e.slots) || (e.activeSet !== 1 && e.activeSet !== 2) || typeof e.resting !== 'boolean' || !Array.isArray(e.restingKeep)) return bad('equipment');
+        const slots: Record<string, string> = {};
+        for (const [k, v] of Object.entries(e.slots)) {
+          if (!oneOf(k, EQUIP_SLOTS) || !isId(v)) return bad('equipment.slots');
+          slots[k] = v;
+        }
+        if (!e.restingKeep.every((x) => oneOf(x, EQUIP_SLOTS))) return bad('equipment.restingKeep');
+        if (e.twoHandedGrips !== undefined && (!Array.isArray(e.twoHandedGrips) || e.twoHandedGrips.length > 20 || !e.twoHandedGrips.every(isId))) return bad('equipment.twoHandedGrips');
+        out.equipment = { slots, ...(e.twoHandedGrips ? { twoHandedGrips: [...new Set(e.twoHandedGrips as string[])] } : {}), activeSet: e.activeSet, resting: e.resting, restingKeep: e.restingKeep as EquipSlot[] };
+      }
+      if (!out.identity && !out.equipment) return bad('nothing to restore');
+      return { ok: true, command: out as Command };
+    }
+    case 'setWalkingSpeed':
+      if (!isId(c.tokenId) || !isInt(c.speedFt, 200) || (c.speedFt as number) < 5) return bad('tokenId/speedFt');
+      return { ok: true, command: { type: 'setWalkingSpeed', tokenId: c.tokenId, speedFt: c.speedFt as number } };
+    case 'equipItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/itemId/slot');
+      return { ok: true, command: { type: 'equipItem', tokenId: c.tokenId, itemId: c.itemId, slot: c.slot } };
+    case 'setWeaponGrip':
+      if (!isId(c.tokenId) || !isId(c.itemId) || typeof c.twoHanded !== 'boolean') return bad('tokenId/itemId/twoHanded');
+      return { ok: true, command: { type: 'setWeaponGrip', tokenId: c.tokenId, itemId: c.itemId, twoHanded: c.twoHanded } };
+    case 'unequipSlot':
+      if (!isId(c.tokenId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/slot');
+      return { ok: true, command: { type: 'unequipSlot', tokenId: c.tokenId, slot: c.slot } };
+    case 'setWeaponSet':
+      if (!isId(c.tokenId) || (c.set !== 1 && c.set !== 2)) return bad('tokenId/set');
+      return { ok: true, command: { type: 'setWeaponSet', tokenId: c.tokenId, set: c.set } };
+    case 'setResting': {
+      if (!isId(c.tokenId) || typeof c.resting !== 'boolean') return bad('tokenId/resting');
+      if (c.keep !== undefined && (!Array.isArray(c.keep) || c.keep.length > EQUIP_SLOTS.length || !c.keep.every((k) => oneOf(k, EQUIP_SLOTS)))) return bad('keep');
+      return { ok: true, command: { type: 'setResting', tokenId: c.tokenId, resting: c.resting, ...(c.keep ? { keep: c.keep as EquipSlot[] } : {}) } };
+    }
+    case 'setItemEquip': {
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000)) return bad('tokenId/itemId/rev');
+      if (c.gmLocked !== undefined && typeof c.gmLocked !== 'boolean') return bad('gmLocked');
+      if (c.equip === null) return { ok: true, command: { type: 'setItemEquip', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, equip: null } };
+      const e = parseItemEquip(c.equip);
+      if (!e) return bad('equip');
+      return { ok: true, command: { type: 'setItemEquip', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, equip: e, ...(c.gmLocked !== undefined ? { gmLocked: c.gmLocked } : {}) } };
+    }
+    case 'setEquipConfig': {
+      if (!isId(c.tokenId)) return bad('tokenId');
+      const out: Record<string, unknown> = { type: 'setEquipConfig', tokenId: c.tokenId };
+      if (c.unarmoredAbility !== undefined) {
+        if (c.unarmoredAbility !== null && !oneOf(c.unarmoredAbility, ABILITIES)) return bad('unarmoredAbility');
+        out.unarmoredAbility = c.unarmoredAbility;
+      }
+      if (c.acOther !== undefined) {
+        if (!isInt(c.acOther, 20)) return bad('acOther');
+        out.acOther = c.acOther;
+      }
+      if (c.acOtherLabel !== undefined) {
+        if (!isText(c.acOtherLabel, 60)) return bad('acOtherLabel');
+        out.acOtherLabel = c.acOtherLabel;
+      }
+      return { ok: true, command: out as Command };
+    }
+    case 'invRequestItem': {
+      if (!isId(c.tokenId) || !isId(c.requestId) || !isText(c.name, INVENTORY_LIMITS.name) || !isInt(c.quantity, INVENTORY_LIMITS.quantity) || (c.quantity as number) < 1 || !isText(c.description, INVENTORY_LIMITS.description)) return bad('item request');
+      const out: Record<string, unknown> = { type: 'invRequestItem', tokenId: c.tokenId, requestId: c.requestId, name: c.name, quantity: c.quantity, description: c.description };
+      if (c.notes !== undefined) { if (!isText(c.notes, INVENTORY_LIMITS.notes)) return bad('notes'); out.notes = c.notes; }
+      if (c.container !== undefined) { if (!isId(c.container)) return bad('container'); out.container = c.container; }
+      if (c.weightKg !== undefined) { if (typeof c.weightKg !== 'number' || !Number.isFinite(c.weightKg) || c.weightKg < 0 || c.weightKg > 2000) return bad('weightKg'); out.weightKg = c.weightKg; }
+      return { ok: true, command: out as Command };
+    }
+    case 'gmReviewItemRequest': {
+      if (!isId(c.tokenId) || !isId(c.requestId) || !oneOf(c.decision, ['approve', 'reject'] as const)) return bad('item request review');
+      let edits: Record<string, unknown> | undefined;
+      if (c.edits !== undefined) {
+        if (!isObj(c.edits)) return bad('edits');
+        edits = {};
+        for (const [key, max] of [['name', INVENTORY_LIMITS.name], ['description', INVENTORY_LIMITS.description], ['notes', INVENTORY_LIMITS.notes]] as const) {
+          const value = c.edits[key]; if (value !== undefined) { if (!isText(value, max)) return bad(key); edits[key] = value; }
+        }
+        if (c.edits.quantity !== undefined) { if (!isInt(c.edits.quantity, INVENTORY_LIMITS.quantity) || (c.edits.quantity as number) < 1) return bad('quantity'); edits.quantity = c.edits.quantity; }
+        if (c.edits.weightKg !== undefined) { if (typeof c.edits.weightKg !== 'number' || !Number.isFinite(c.edits.weightKg) || c.edits.weightKg < 0 || c.edits.weightKg > 2000) return bad('weightKg'); edits.weightKg = c.edits.weightKg; }
+        if (c.edits.container !== undefined) { if (!isId(c.edits.container)) return bad('container'); edits.container = c.edits.container; }
+        if (!Object.keys(edits).length) edits = undefined;
+      }
+      return { ok: true, command: { type: 'gmReviewItemRequest', tokenId: c.tokenId, requestId: c.requestId, decision: c.decision, ...(edits ? { edits } : {}) } };
+    }
+    case 'invAddItem':
+    case 'invUpdateItem': {
+      if (!isId(c.tokenId) || !isId(c.itemId)) return bad('tokenId/itemId');
+      const out: Record<string, unknown> = { type: c.type, tokenId: c.tokenId, itemId: c.itemId };
+      if (c.type === 'invUpdateItem') {
+        if (!isInt(c.rev, 1_000_000_000)) return bad('rev');
+        out.rev = c.rev;
+      }
+      if (c.type === 'invAddItem' || c.name !== undefined) {
+        if (!isText(c.name, INVENTORY_LIMITS.name)) return bad('name');
+        out.name = c.name;
+      }
+      if (c.quantity !== undefined) {
+        if (!isInt(c.quantity, INVENTORY_LIMITS.quantity) || (c.quantity as number) < 0) return bad('quantity');
+        out.quantity = c.quantity;
+      }
+      if (c.description !== undefined) {
+        if (!isText(c.description, INVENTORY_LIMITS.description)) return bad('description');
+        out.description = c.description;
+      }
+      if (c.notes !== undefined) {
+        if (!isText(c.notes, INVENTORY_LIMITS.notes)) return bad('notes');
+        out.notes = c.notes;
+      }
+      if (c.container !== undefined) {
+        if (!isId(c.container)) return bad('container');
+        out.container = c.container;
+      }
+      if (c.weightKg !== undefined) {
+        if (typeof c.weightKg !== 'number' || !Number.isFinite(c.weightKg) || c.weightKg < 0 || c.weightKg > 2000) return bad('weightKg');
+        out.weightKg = c.weightKg;
+      }
+      return { ok: true, command: out as Command };
+    }
+    case 'invMoveItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000) || !isId(c.container)) return bad('tokenId/itemId/rev/container');
+      if (c.beforeItemId !== undefined && c.beforeItemId !== null && !isId(c.beforeItemId)) return bad('beforeItemId');
+      return { ok: true, command: { type: 'invMoveItem', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, container: c.container, ...(c.beforeItemId ? { beforeItemId: c.beforeItemId as string } : {}) } };
+    case 'invSplitStack':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isId(c.newItemId) || !isInt(c.rev, 1_000_000_000) || !isInt(c.quantity, INVENTORY_LIMITS.quantity)) return bad('split');
+      return { ok: true, command: { type: 'invSplitStack', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, quantity: c.quantity, newItemId: c.newItemId } };
+    case 'invMergeStack':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isId(c.intoItemId) || !isInt(c.rev, 1_000_000_000) || !isInt(c.intoRev, 1_000_000_000)) return bad('merge');
+      return { ok: true, command: { type: 'invMergeStack', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev, intoItemId: c.intoItemId, intoRev: c.intoRev } };
+    case 'invRemoveItem':
+      if (!isId(c.tokenId) || !isId(c.itemId) || !isInt(c.rev, 1_000_000_000)) return bad('tokenId/itemId/rev');
+      return { ok: true, command: { type: 'invRemoveItem', tokenId: c.tokenId, itemId: c.itemId, rev: c.rev } };
+    case 'invAddContainer':
+    case 'invRenameContainer':
+      if (!isId(c.tokenId) || !isId(c.containerId) || !isText(c.name, INVENTORY_LIMITS.containerName)) return bad('tokenId/containerId/name');
+      return { ok: true, command: { type: c.type, tokenId: c.tokenId, containerId: c.containerId, name: c.name } };
+    case 'invRemoveContainer':
+      if (!isId(c.tokenId) || !isId(c.containerId)) return bad('tokenId/containerId');
+      return { ok: true, command: { type: 'invRemoveContainer', tokenId: c.tokenId, containerId: c.containerId } };
+    default:
+      return bad(`unknown type "${String(c.type).slice(0, 32)}"`);
+  }
+}
+
+/** Command types a player may ever send (own characters only). Everything else is GM-only. */
+export const PLAYER_COMMANDS: ReadonlySet<Command['type']> = new Set(['move', ...CHARACTER_COMMANDS]);
+
+export { isId, isObj, isInt };
+
+const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+
+/** Strict validation of manually defined equipment properties (no unknown keys, bounded values). */
+export function parseItemEquip(v: unknown): ItemEquip | null {
+  if (!isObj(v) || !oneOf(v.kind, ITEM_KINDS)) return null;
+  const out: ItemEquip = { kind: v.kind };
+  const allowedKeys = new Set(['kind', 'armorType', 'armorBase', 'acBonus', 'attackBonus', 'damage', 'versatileDamage', 'damageType', 'properties', 'proficient', 'gmLocked']);
+  if (Object.keys(v).some((k) => !allowedKeys.has(k))) return null;
+  if (v.armorType !== undefined) {
+    if (!oneOf(v.armorType, ['light', 'medium', 'heavy'] as const)) return null;
+    out.armorType = v.armorType;
+  }
+  if (v.armorBase !== undefined) {
+    if (!isInt(v.armorBase, 30) || (v.armorBase as number) < 0) return null;
+    out.armorBase = v.armorBase as number;
+  }
+  for (const k of ['acBonus', 'attackBonus'] as const) {
+    if (v[k] === undefined) continue;
+    if (!isInt(v[k], 10)) return null;
+    out[k] = v[k] as number;
+  }
+  if (v.damage !== undefined) {
+    if (typeof v.damage !== 'string' || !/^(\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?|\d{1,2})$/i.test(v.damage.trim())) return null;
+    out.damage = v.damage.trim().toLowerCase();
+  }
+  if (v.versatileDamage !== undefined) {
+    if (typeof v.versatileDamage !== 'string' || !/^\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?$/i.test(v.versatileDamage.trim())) return null;
+    out.versatileDamage = v.versatileDamage.trim().toLowerCase();
+  }
+  if (v.damageType !== undefined) {
+    if (!isText(v.damageType, 30)) return null;
+    out.damageType = v.damageType.trim();
+  }
+  if (v.properties !== undefined) {
+    if (!Array.isArray(v.properties) || v.properties.length > 10 || !v.properties.every((p) => oneOf(p, WEAPON_PROPERTIES))) return null;
+    out.properties = [...new Set(v.properties as WeaponProperty[])];
+  }
+  if (out.versatileDamage !== undefined && (!out.properties?.includes('versatile') || out.properties.includes('two-handed'))) return null;
+  if (v.proficient !== undefined) {
+    if (typeof v.proficient !== 'boolean') return null;
+    out.proficient = v.proficient;
+  }
+  return out;
+}
+
