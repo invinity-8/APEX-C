@@ -57,6 +57,6 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 - Es wurde keine Supabase-Testdatenbank oder kostenpflichtige Ressource angelegt.
 - Keine Produktionsmigration, kein Produktions-Storage-Upload oder produktiver Schreibzugriff.
-- Vercel-Preview für den PR-Head `0bb50d80d715a31fb2ff0f857a3ed2c172fdcb8c` ist `READY`; `/api/apex?op=version` antwortet mit HTTP 200, `0.9.0`, Branch `feat/apex-09-closeout` und PR `48`. Keine Production-Bereitstellung, Promotion oder PR-Merge.
+- Vercel-Preview für den geprüften PR-Commit `d8b3c27c48b37cd89f516a62f5e3a0a5fd036914` ist `READY`; `/api/apex?op=version` antwortet mit HTTP 200, `0.9.0`, Branch `feat/apex-09-closeout` und PR `48`. Keine Production-Bereitstellung, Promotion oder PR-Merge.
 - Keine Migration in diesem Branch: Journal-Backlinks verwenden vorhandene Journalfelder; TS-Konfiguration ist build-only.
 - **Freigabe:** APEX 0.9 noch nicht als vollständig finalabgenommen bezeichnen. Branch, Preview und aktuelle isolierte SQL-CI sind bereit; Rollenbrowserabnahme und die in der Matrix benannten P1-Funktions-/Visualnachweise bleiben offen.

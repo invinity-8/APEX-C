@@ -9,7 +9,7 @@ Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, Ty
 
 - PRs #41–#47 sind gemergt. PR #47 ist kein offener Merge-Kandidat; es wird kein Ersatz dafür eröffnet.
 - Der auslösende Stand `df8090f` ist als Vercel-Production-Deployment `READY` bestätigt. `/api/apex?op=health` lieferte HTTP 200, `ok: true`, Schema 6, vollständige Migrationen und keine Fehler. Die bestätigten Migrationszeilen enden bei `20261106100000`; `apex-asset-packs` ist privat.
-- Vercel Preview für aktuellen PR-Head `0bb50d80d715a31fb2ff0f857a3ed2c172fdcb8c` ist `READY`; die echte Preview-Startseite liefert HTTP 200 und `/api/apex?op=version` bestätigt HTTP 200, `0.9.0`, Branch `feat/apex-09-closeout` und PR `48`. Dies ist eine Preview, kein Produktions-Deployment.
+- Vercel Preview für geprüften PR-Commit `d8b3c27c48b37cd89f516a62f5e3a0a5fd036914` ist `READY`; die echte Preview-Startseite liefert HTTP 200 und `/api/apex?op=version` bestätigt HTTP 200, `0.9.0`, Branch `feat/apex-09-closeout` und PR `48`. Dies ist eine Preview, kein Produktions-Deployment.
 - Die ursprüngliche Function-Verarbeitung meldete TS2688 für `node` und `vite/client`. Der Branch entfernt die globale `types`-Liste und referenziert Vite-Client-Typen nur im Client-Quellbaum. TypeScript-/Buildchecks lokal und der aktuelle Vercel-Build sind grün. Der Version-Endpunkt bestätigt die aktuelle Preview-API, ersetzt jedoch keinen GM-/Player-Datenbankablauf. Production wurde nicht neu bereitgestellt.
 
 ## Akzeptanzmatrix
