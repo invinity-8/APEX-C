@@ -561,7 +561,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
         notes: text(cmd.notes, L.notes) || undefined,
         container: cmd.container ?? containers[0].id,
         // no weight given → rough estimate from the name (SRD gear table), editable afterwards
-        weightKg: cmd.weightKg !== undefined ? Math.round(cmd.weightKg * 100) / 100 : estimateWeightKg(name),
+        weightKg: cmd.weightKg !== undefined ? Math.round(cmd.weightKg * 1000) / 1000 : estimateWeightKg(name),
         rev: 0,
       });
       break;
@@ -582,7 +582,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
         if (placement) return fail(prev, placement);
         item.container = cmd.container;
       }
-      if (cmd.weightKg !== undefined) item.weightKg = Math.round(cmd.weightKg * 100) / 100;
+      if (cmd.weightKg !== undefined) item.weightKg = Math.round(cmd.weightKg * 1000) / 1000;
       if ((cmd.quantity !== undefined || cmd.weightKg !== undefined) && item.container) {
         const tooHeavy = holdingRefusal(t, { ...item, quantity: 0 }, item.container, clamp(Math.round(cmd.quantity ?? item.quantity), 0, L.quantity));
         if (tooHeavy) return fail(prev, tooHeavy);
@@ -707,7 +707,26 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
   const eq = () => (t.equipment ??= emptyEquipment());
   switch (cmd.type) {
     case 'equipItem': {
-      const err = equipItem(t, cmd.itemId, cmd.slot);
+      const source = t.inventory.find((i) => i.id === cmd.itemId);
+      if (!source) return fail(prev, T.itemGone);
+      let targetId = source.id;
+      // Slots represent one physical item. A stable per-source/per-slot identity also makes a
+      // retried command reuse the already-created copy instead of splitting the stack twice.
+      const splitId = `equipped-${stringHash(`${source.id}:${cmd.slot}`).toString(36)}`;
+      const priorSplit = t.inventory.find((item) => item.id === splitId);
+      if (priorSplit) targetId = splitId;
+      else if (source.quantity > 1) {
+        if (t.inventory.length >= INVENTORY_LIMITS.items) return fail(prev, T.inventoryFull);
+        source.quantity -= 1;
+        source.rev = (source.rev ?? 0) + 1;
+        const equipped = structuredClone(source);
+        equipped.id = splitId;
+        equipped.quantity = 1;
+        equipped.rev = 0;
+        t.inventory.push(equipped);
+        targetId = splitId;
+      }
+      const err = equipItem(t, targetId, cmd.slot);
       if (err) return fail(prev, EQUIP_ERROR[err]);
       break;
     }
