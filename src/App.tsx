@@ -33,7 +33,7 @@ import { SceneDirector } from './components/SceneDirector';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 
-type View = 'map' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
+type View = 'map' | 'scenes' | 'character' | 'inventory' | 'merchant' | 'arsenal' | 'feedback';
 
 interface Toast {
   id: number;
@@ -287,7 +287,7 @@ export default function App({ game }: { game: GameApi }) {
             id="gm-campaign"
             tabs={[
               { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
-              { id: 'scenes', label: 'Scene Director', render: () => <SceneDirector version={online.version} /> },
+              { id: 'scenes', label: 'Scenes', render: () => <SceneQuickAccess open={() => setScreen('scenes')} /> },
               { id: 'journal', label: 'Journal', render: () => <PlayerJournal /> },
               { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
             ]}
@@ -357,6 +357,7 @@ export default function App({ game }: { game: GameApi }) {
   const myToken = view.tokens.find((t) => t.id === view.viewerId) ?? null;
   const tabs: Array<{ id: View; label: string }> = [
     { id: 'map', label: '🗺 Map' },
+    ...(isGm && game.online ? [{ id: 'scenes' as View, label: '🧭 Scenes' }] : []),
     { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
     { id: 'inventory', label: '🎒 Inventory' },
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
@@ -401,10 +402,10 @@ export default function App({ game }: { game: GameApi }) {
       <Header
         game={game}
         notify={notify}
-        area={screen === 'map' ? 'Map' : screen === 'character' ? 'Character' : screen === 'inventory' ? 'Inventory' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
+        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'inventory' ? 'Inventory' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
       />
-      <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Player navigation">
+      <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Main navigation">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -450,6 +451,8 @@ export default function App({ game }: { game: GameApi }) {
           )}
           {screen === 'feedback' && isGm && game.online ? (
             <FeedbackInbox online={game.online} notify={notify} />
+          ) : screen === 'scenes' && isGm && game.online ? (
+            <SceneDirector version={game.online.version} />
           ) : screen === 'arsenal' && isGm && state ? (
             <ArsenalPanel state={state} run={run} />
           ) : screen === 'merchant' && !isGm && view.merchant && myToken ? (
@@ -517,6 +520,13 @@ export default function App({ game }: { game: GameApi }) {
       </div>
     </div>
   );
+}
+
+function SceneQuickAccess({ open }: { open: () => void }) {
+  return <div className="space-y-2">
+    <p className="text-xs text-marble-400">Browse, edit and privately preview campaign scenes in the full workspace.</p>
+    <button className="btn btn-gold w-full" onClick={open}>Open Full View</button>
+  </div>;
 }
 
 /** Players: compact daily-movement indicator at the bottom of the map (the gold reach area stays primary). */
