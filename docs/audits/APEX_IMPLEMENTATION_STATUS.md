@@ -15,7 +15,7 @@
 ## Implementiert, aber noch nicht produktionsverifiziert
 
 - Die drei vorangegangenen Änderungen aus PRs #41–43: Szenenbibliothek/Forest-Editor, Itemanfragen/Ausrüstung und Spellbook-/Loot-Basiseinstieg sind in `main`. Die PRs meldeten Tests und Builds erfolgreich; für #41–43 gab es jedoch keinen vollständigen rollenbasierten Browserlauf auf einer zugänglichen Preview.
-- Die neuen Navigationsänderungen in diesem Branch brauchen noch den Branch-Build und Browserklicks als GM, Zauberwirker und Nichtzauberwirker.
+- Die neuen Navigationsänderungen in diesem Branch bestehen den GitHub-Workflow-Build. Browserklicks als GM, Zauberwirker und Nichtzauberwirker sind noch offen; die Preview-URL leitet auf Vercel-Login um.
 
 ## Teilweise implementiert
 
@@ -47,6 +47,7 @@
 
 ## Noch nicht ausgeführt
 
-- Kein Typecheck, Unit/API-Test oder Build **auf dem neuen Remote-Branch** in dieser Runde.
-- Kein Browser-E2E: bisherige PRs dokumentieren, dass lokale Browserports in der verwalteten Umgebung nicht erreichbar waren und geschützte Preview-Anmeldung erforderlich war.
+- GitHub-Workflow für den Remote-Branch erfolgreich: Migrationsguard, Unit/API-Tests, TypeScript/Production-Build sowie isolierte Migration-, RLS- und Scene-Transaktionstests.
+- Vercel Preview ist `READY` für den PR-Commit. Der Browser wurde auf die Vercel-Loginseite umgeleitet; kein GM-/Spieler-E2E und keine Screenshots.
+- Die „Production database deployed and secure“-Workflowstufe wurde beim PR absichtlich übersprungen (sie läuft nur nach Push auf `main` oder manuellem Start). Kein Produktionsdeployment und keine Produktionsmigration.
 - Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
