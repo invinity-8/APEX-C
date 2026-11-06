@@ -19,7 +19,7 @@
 
 ## Teilweise implementiert
 
-- **Szenen:** vier Kategorien, Bibliothek, Entwürfe, Editor, Vorschau und Spielerzuweisungen existieren. Ein klarer Map-GM-Fokus und Map-Szenenwechsel unabhängig von Spielerzuweisungen sind noch kein geschlossener Ablauf.
+- **Szenen:** vier Kategorien, Bibliothek, Entwürfe, Editor, Vorschau und Spielerzuweisungen existieren. PR #45 ergänzt einen GM-Fokus auf veröffentlichte Szenen, Tokenpositionen und explizite Split-Party-/Sanctuary-Transfers. Fog-/Encounter-/Loot-/Event-Bedienung direkt auf fokussierten Szenen und die Rollen-Browserabnahme stehen noch aus.
 - **Spellbook:** eigene Top-Level-Route und Grundfelder existieren. Strukturierte Regeldetails, erlaubte Spell-Referenzen, Klassenregeln, vorbereitete Zauber und Casting-Effekte fehlen.
 - **Charakter, Fähigkeiten und Ressourcen:** Sheets, Import, History und Fähigkeiten existieren. Es fehlt eine einheitliche Regelquelle für abgeleitete Werte und eine klare Synchronisierung zwischen Sheet-Ressourcen und Spielressourcen.
 - **Inventar, Ausrüstung, Händler und Loot:** Kernpfade sind vorhanden und getestet. Vielseitige Waffen, Carry-Movement-Penalties, Legacy-Kompatibilität und vollständige Itemübergabe brauchen weitere Abnahme.
@@ -30,7 +30,7 @@
 
 | Priorität | Arbeit | Relevante Bereiche | Abhängigkeiten | Abnahmekriterien | Aufwand |
 |---|---|---|---|---|---|
-| P0 | Map-Campaign-Director: GM-Fokus getrennt von Spielerszenen, Switch Scene, Sanctuary- und Split-Party-Workflow | `App.tsx`, `SceneDirector.tsx`, `sceneRuntime.ts`, API/DB | Kein DB-Wechsel, falls bestehende Scene-Runtime reicht; andernfalls additive Migration | GM wechselt Fokus, ohne Zuweisungen zu ändern; selektive Spielerzuweisung; Spieler sehen ausschließlich eigene Szene; Reload/Reconnect erhält Zustand | Groß |
+| P0 | Live-Kontrollen für fokussierte Szenen und Sichtbarkeits-/Fog-Workflow | `CampaignMapDirector.tsx`, `SceneSurface.tsx`, `sceneRuntime.ts` | Map-Fokus aus PR #45 | Fog-/Sichtbarkeitsregeln im GM-Szenenmodus vollständig steuerbar; Events/Announcements/Loot/Encounter bleiben mit fokussierter Szene verknüpft; Reconnect erhält Fokus und korrekte Spielerzuweisungen | Groß |
 | P0 | Sichere Kenney-Asset-Auslieferung und erster 2.5D-Preview-Renderer | Supabase Storage, API, Map-Renderer | Private Allowlist/Manifest und serverseitige URL-Ausgabe; lizenzierte Sprites | gleiche Karte mit Classic/2.5D; Token/Hex/Fog/Movement unverändert; Browser-Screenshot und Messwerte bei Radius 39 und 78; Abbruch/Fallback bei Fehlern | Groß |
 | P1 | Spell-Daten- und Klassenregeln vervollständigen | `sheet.ts`, `CharacterPanel.tsx`, `ClassAbilities.tsx` | Regelentscheidung, vertrauenswürdige lizenzierte Referenzdaten | Metadaten/Details und Vorbereitung basieren auf einer autoritativen Quelle; fehlende Beschreibung eindeutig markiert; keine erfundenen proprietären Texte | Groß |
 | P1 | Abgeleitete Werte, Waffen, Effekte und Ressourcen vereinheitlichen | `sheet.ts`, `equipment.ts`, `commands.ts`, `ClassAbilities.tsx` | Regelmodell / Systemgrenzen | Level, Equipment, AC, Waffen, Slot-/Resource-Verbrauch und unterstützte temporäre Effekte propagieren konsistent; Konflikt-/Negativtests vorhanden | Groß |
@@ -47,7 +47,7 @@
 
 ## Noch nicht ausgeführt
 
-- GitHub-Workflow für den Remote-Branch erfolgreich: Migrationsguard, Unit/API-Tests, TypeScript/Production-Build sowie isolierte Migration-, RLS- und Scene-Transaktionstests.
-- Vercel Preview ist `READY` für den PR-Commit. Der Browser wurde auf die Vercel-Loginseite umgeleitet; kein GM-/Spieler-E2E und keine Screenshots.
-- Die „Production database deployed and secure“-Workflowstufe wurde beim PR absichtlich übersprungen (sie läuft nur nach Push auf `main` oder manuellem Start). Kein Produktionsdeployment und keine Produktionsmigration.
+- Für PR #45: erneute Migration-, Unit/API-, TypeScript-/Build- sowie isolierte RLS-/Scene-Transaktionstests sind nach dem Map-Director-Code noch ausstehend.
+- Vercel Preview für PR #45 wird nach einem initialen TypeScript-Fehler erneut gebaut; Browserzugriff leitete zur Vercel-Loginseite um. Kein GM-/Spieler-E2E und keine Screenshots.
+- Die „Production database deployed and secure“-Workflowstufe läuft nur nach Push auf `main` oder manuellem Start. Kein Produktionsdeployment und keine Produktionsmigration.
 - Keine Produktionsmigration, kein Storage-Schreibzugriff, kein Merge und kein Produktionsdeployment.
