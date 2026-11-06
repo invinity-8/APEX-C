@@ -9,8 +9,8 @@ Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, Ty
 
 - PRs #41–#47 sind gemergt. PR #47 ist kein offener Merge-Kandidat; es wird kein Ersatz dafür eröffnet.
 - Der auslösende Stand `df8090f` ist als Vercel-Production-Deployment `READY` bestätigt. `/api/apex?op=health` lieferte HTTP 200, `ok: true`, Schema 6, vollständige Migrationen und keine Fehler. Die bestätigten Migrationszeilen enden bei `20261106100000`; `apex-asset-packs` ist privat.
-- Vercel Preview für PR-Commit `2ca20e52ff76566128e7992a6c3412775341a54d` ist `READY`; `/api/apex?op=version` bestätigt HTTP 200, `0.9.0`, exakt diesen Commit, Branch `feat/apex-09-closeout`, Preview-Umgebung und PR `48`. Dies ist eine Preview, kein Produktions-Deployment.
-- Die ursprüngliche Function-Verarbeitung meldete TS2688 für `node` und `vite/client`. Der Branch entfernt die globale `types`-Liste und referenziert Vite-Client-Typen nur im Client-Quellbaum. TypeScript-/Buildchecks lokal und der aktuelle Vercel-Build sind grün. Der Version-Endpunkt bestätigt die aktuelle Preview-API, ersetzt jedoch keinen GM-/Player-Datenbankablauf. Production wurde nicht neu bereitgestellt.
+- Vercel Preview für Commit `d8a5a91aa50a6505de16452612a6f2b7131a9705` ist `READY`; `/api/apex?op=version` bestätigte HTTP 200, `0.9.0`, diesen Commit, Branch `feat/apex-09-closeout`, Preview und PR `48`. Das ist nicht der aktuelle Head `2e0097139558036d0afd7dcaa05cb36fe44afdc1`: dessen automatischer Vercel-Build wurde wegen des kostenlosen täglichen Build-Limits abgelehnt. Es ist kein Produktions-Deployment.
+- Die ursprüngliche Function-Verarbeitung meldete TS2688 für `node` und `vite/client`. Der Branch entfernt die globale `types`-Liste und referenziert Vite-Client-Typen nur im Client-Quellbaum. Lokaler TypeScript-/Produktionsbuild sowie GitHub-CI für den aktuellen Code-Head sind grün. Der verfügbare Versionsendpunkt ersetzt keinen GM-/Player-Datenbankablauf. Production wurde nicht neu bereitgestellt.
 
 ## Akzeptanzmatrix
 
@@ -37,11 +37,10 @@ Methode: Code- und Testabgleich, Migration Guard, vollständige lokale Tests, Ty
 - `pnpm run test`: bestanden; 46 Dateien / 383 Tests.
 - `pnpm run typecheck`: bestanden.
 - `pnpm run build`: bestanden; bestehende Warnungen zu Vite-native-config-Imports und Client-Chunks über 500 kB.
-- PR-CI Run `42272548223` auf Commit `2ca20e52ff76566128e7992a6c3412775341a54d`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der Production-DB-Job wurde übersprungen.
+- PR-CI Run `42275143706` (Workflow 167) auf Code-Commit `2e0097139558036d0afd7dcaa05cb36fe44afdc1`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der Production-DB-Job wurde übersprungen.
 - Isolierte Postgres-Migrations-/RLS-/Scene-Transaktionsprüfung: CI Run `42270359126` auf Head `b0def743dd81b7779f8e1e65dfab60787524d740` bestanden; Production-DB-Job übersprungen.
 - Echter GM-/Player-Browserlauf: nicht bestanden/nicht gelaufen, weil der Harness-Playwright-Treiber fehlt und der verfügbare Browser die lokale Mock-URL nicht erreichen kann. Kein Ergebnis daraus wird als Abnahme gewertet.
-- PR-CI Run `42272548223` auf Commit `2ca20e52ff76566128e7992a6c3412775341a54d`: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Transaktionschecks bestanden. Der production-db-Deployment-Job ist korrekt übersprungen; es gab keinen Produktionsschreibzugriff.
 
 ## Abschlussentscheidung
 
-Die Produktionsbasis ist gesund und PR #47 ist bereits Teil davon. Dieser Closeout behebt paginierte Journal-Backlinks, hebt den Paketstand auf 0.9.0 und vervollständigt die servervalidierte Versatile-Griff-/Würfelanzeige. Preview, aktuelle isolierte SQL-/RLS-/Scene-CI, TypeScript und Build sind grün. APEX 0.9 ist **noch nicht für die abschließende Abnahme freigegeben**: Rollenbrowserabnahme, Szene-/Zauber-Integration sowie Inventory-/Loot-/Kenney-Rollen- und Performanceabnahmen sind offen. Es wurde keine neue Migration vorbereitet, da die Änderungen keine Datenbankschemaänderung benötigen.
+Die Produktionsbasis `df8090f` wurde beim vorherigen Health-Check als gesund bestätigt; sie ist nicht dieser Branch und wurde nicht neu geprüft/bereitgestellt. Dieser Closeout ergänzt paginierte Journal-Backlinks, setzt `0.9.0` und implementiert servervalidierten Versatile-Griff samt Mage Armor-Casting. GitHub-CI, lokale Tests, TypeScript und Build bestehen für den aktuellen Code-Head. Der Vercel-Preview ist nur für den vorherigen Code-Commit verifiziert; der aktuelle Preview-Build wurde durch das kostenlose Tageslimit blockiert. APEX 0.9 ist **noch nicht abschließend abgenommen**: Rollenbrowserabnahme, Szene-/Zauber-Integration sowie Inventory-/Loot-/Kenney-Rollen- und Performanceabnahmen sind offen. Es wurde keine neue Migration vorbereitet, da die Änderungen keine Datenbankschemaänderung benötigen.
