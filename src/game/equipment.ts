@@ -37,6 +37,8 @@ export interface ItemEquip {
   /** Weapons: magic/other attack bonus, damage dice, damage type, properties, proficiency. */
   attackBonus?: number;
   damage?: string;
+  /** Alternate damage dice for a versatile weapon gripped with both hands. */
+  versatileDamage?: string;
   damageType?: string;
   properties?: WeaponProperty[];
   proficient?: boolean;
@@ -46,6 +48,8 @@ export interface ItemEquip {
 
 export interface Equipment {
   slots: Partial<Record<EquipSlot, string>>;
+  /** Equipped versatile weapon item ids currently gripped with two hands. */
+  twoHandedGrips?: string[];
   activeSet: 1 | 2;
   /** Resting / Unarmored preset: everything except the kept slots counts as taken off. */
   resting: boolean;
@@ -159,6 +163,13 @@ export function reconcileEquipment(t: Token): void {
     const m = t.inventory.find((i) => i.id === eq.slots[main]);
     if (eq.slots[off] && isTwoHanded(m?.equip)) delete eq.slots[off];
   }
+  if (eq.twoHandedGrips) {
+    const valid = new Set((['main1', 'main2'] as const).flatMap((slot) => {
+      const item = t.inventory.find((i) => i.id === eq.slots[slot]);
+      return item?.equip?.kind === 'weapon' && item.equip.properties?.includes('versatile') && !item.equip.properties.includes('two-handed') && item.equip.versatileDamage ? [item.id] : [];
+    }));
+    eq.twoHandedGrips = eq.twoHandedGrips.filter((id) => valid.has(id));
+  }
 }
 
 // ---------------------------------------------------------------- SRD suggestions (confirmed by a person)
@@ -188,17 +199,17 @@ export const WEAPON_PRESETS: Record<string, ItemEquip> = {
   Handaxe: { kind: 'weapon', damage: '1d6', damageType: 'slashing', properties: ['light', 'thrown'] },
   Javelin: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['thrown'] },
   Mace: { kind: 'weapon', damage: '1d6', damageType: 'bludgeoning', properties: [] },
-  Quarterstaff: { kind: 'weapon', damage: '1d6', damageType: 'bludgeoning', properties: ['versatile'] },
+  Quarterstaff: { kind: 'weapon', damage: '1d6', versatileDamage: '1d8', damageType: 'bludgeoning', properties: ['versatile'] },
   Sickle: { kind: 'weapon', damage: '1d4', damageType: 'slashing', properties: ['light'] },
-  Spear: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['thrown', 'versatile'] },
+  Spear: { kind: 'weapon', damage: '1d6', versatileDamage: '1d8', damageType: 'piercing', properties: ['thrown', 'versatile'] },
   Shortbow: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['ranged', 'two-handed', 'ammunition'] },
   'Light crossbow': { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['ranged', 'two-handed', 'loading', 'ammunition'] },
   Scimitar: { kind: 'weapon', damage: '1d6', damageType: 'slashing', properties: ['finesse', 'light'] },
   Shortsword: { kind: 'weapon', damage: '1d6', damageType: 'piercing', properties: ['finesse', 'light'] },
-  Longsword: { kind: 'weapon', damage: '1d8', damageType: 'slashing', properties: ['versatile'] },
+  Longsword: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', damageType: 'slashing', properties: ['versatile'] },
   Rapier: { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['finesse'] },
-  Warhammer: { kind: 'weapon', damage: '1d8', damageType: 'bludgeoning', properties: ['versatile'] },
-  Battleaxe: { kind: 'weapon', damage: '1d8', damageType: 'slashing', properties: ['versatile'] },
+  Warhammer: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', damageType: 'bludgeoning', properties: ['versatile'] },
+  Battleaxe: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', damageType: 'slashing', properties: ['versatile'] },
   Greatsword: { kind: 'weapon', damage: '2d6', damageType: 'slashing', properties: ['heavy', 'two-handed'] },
   Greataxe: { kind: 'weapon', damage: '1d12', damageType: 'slashing', properties: ['heavy', 'two-handed'] },
   Longbow: { kind: 'weapon', damage: '1d8', damageType: 'piercing', properties: ['ranged', 'heavy', 'two-handed', 'ammunition'] },
@@ -224,7 +235,7 @@ export interface CalcStep {
 
 export interface DerivedStats {
   ac: { value: number | null; steps: CalcStep[]; source: 'derived' | 'imported' | 'none'; imported: number | null; note?: string };
-  attacks: Array<{ slot: EquipSlot; name: string; toHit: number | null; damage: string; steps: CalcStep[]; properties: WeaponProperty[]; extra: string[] }>;
+  attacks: Array<{ slot: EquipSlot; itemId: string; name: string; toHit: number | null; damage: string; twoHandedGrip: boolean; steps: CalcStep[]; properties: WeaponProperty[]; extra: string[] }>;
   /** APEX 0.6: character-wide bonuses from modifiers on equipped, identified items of the active set. */
   bonuses: ItemBonuses;
   abilityMods: Partial<Record<Ability, number>>;
@@ -352,7 +363,7 @@ export function abilityMods(sheet: CharacterSheet): Partial<Record<Ability, numb
   return out;
 }
 
-export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment'>, rules: ItemRules = DEFAULT_ITEM_RULES): DerivedStats {
+export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment' | 'armorWornAt'>, rules: ItemRules = DEFAULT_ITEM_RULES, nowMs = Date.now()): DerivedStats {
   const eq = equipmentOf(token);
   const mods = abilityMods(sheet);
   const pb = num(sheet.combat.find((c) => /^proficiency bonus$/i.test(c.label))?.value);
@@ -362,8 +373,11 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     .map((s) => ({ slot: s, item: eq.slots[s] ? items.get(eq.slots[s]!) : undefined }))
     .filter((x): x is { slot: EquipSlot; item: Item } => !!x.item?.equip);
   const allEquipped = EQUIP_SLOTS.map((s) => (eq.slots[s] ? items.get(eq.slots[s]!) : undefined)).filter((i): i is Item => !!i?.equip);
+  const armor = worn.find((w) => w.slot === 'chest' && w.item.equip!.kind === 'armor')?.item;
+  const mageArmor = sheet.spellEffects.find((effect) => effect.kind === 'mageArmor');
+  const mageArmorActive = !!mageArmor && Date.parse(mageArmor.expiresAt) > nowMs && !armor && !(token.armorWornAt && Date.parse(token.armorWornAt) > Date.parse(mageArmor.castAt));
   const bonuses = itemBonuses(worn, rules);
-  const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther;
+  const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther || mageArmorActive;
 
   // ---- Armor Class
   let ac: DerivedStats['ac'];
@@ -380,7 +394,6 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
   } else {
     const steps: CalcStep[] = [];
     const dex = mods.dex;
-    const armor = worn.find((w) => w.slot === 'chest' && w.item.equip!.kind === 'armor')?.item;
     let value: number;
     if (armor && armor.equip!.armorBase) {
       const e = armor.equip!;
@@ -392,6 +405,10 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
       else if (cap !== 0) steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
       else steps.push({ label: 'Dexterity does not apply (heavy armour)', value: 0, op: 'cap' });
       value += add;
+    } else if (mageArmorActive) {
+      value = 13 + dex;
+      steps.push({ label: 'Mage Armor (active): base AC 13', value: 13, op: '=' });
+      steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
     } else {
       value = 10 + dex;
       steps.push({ label: eq.resting ? 'Unarmored (resting): 10' : 'Unarmored: 10', value: 10, op: '=' });
@@ -456,12 +473,66 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     }
     const isOff = w.slot === 'off1' || w.slot === 'off2';
     const dmgMod = m !== undefined && !(isOff && m > 0) ? m + (e.attackBonus ?? 0) : (e.attackBonus ?? 0);
-    const dmg = e.damage ? `${e.damage}${dmgMod ? (dmgMod > 0 ? `+${dmgMod}` : `${dmgMod}`) : ''}${e.damageType ? ` ${e.damageType}` : ''}` : '—';
+    const twoHandedGrip = !!((w.slot === 'main1' || w.slot === 'main2') && eq.twoHandedGrips?.includes(w.item.id) && props.includes('versatile') && !props.includes('two-handed') && e.versatileDamage);
+    const damageDice = twoHandedGrip ? e.versatileDamage : e.damage;
+    const dmg = damageDice ? `${damageDice}${dmgMod ? (dmgMod > 0 ? `+${dmgMod}` : `${dmgMod}`) : ''}${e.damageType ? ` ${e.damageType}` : ''}` : '—';
     const flat = wm.flat.map((f) => ` + ${f.value} ${f.damage}`).join('');
     const extra = [...wm.banes, ...(wm.flatCapped ? [`Flat damage capped at ${rules.flatDamageCap}`] : [])];
-    attacks.push({ slot: w.slot, name: w.item.name, toHit, damage: dmg + flat + (isOff ? ' (off hand)' : ''), steps, properties: props, extra });
+    attacks.push({ slot: w.slot, itemId: w.item.id, name: w.item.name, toHit, damage: dmg + flat + (isOff ? ' (off hand)' : ''), twoHandedGrip, steps, properties: props, extra });
   }
   return { ac, attacks, bonuses, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
+}
+
+export interface EquipmentPreview {
+  slot: EquipSlot;
+  currentItem: Item | null;
+  candidateItem: Item;
+  current: DerivedStats;
+  candidate: DerivedStats;
+}
+
+/** Compute an equip comparison locally through the same slot and derived-stat rules as the live character sheet. */
+export function previewEquipStats(
+  sheet: CharacterSheet,
+  token: Pick<Token, 'inventory' | 'equipment' | 'armorWornAt'>,
+  itemId: string,
+  rules: ItemRules = DEFAULT_ITEM_RULES,
+  nowMs = Date.now(),
+): EquipmentPreview | { reason: string } {
+  const item = token.inventory.find((candidate) => candidate.id === itemId);
+  if (!item) return { reason: 'This item is no longer in the inventory.' };
+  if (!item.equip) return { reason: 'This item has no equipment properties.' };
+  if (item.identified === false) return { reason: 'Identify this item to compare its hidden modifiers.' };
+  const equipment = equipmentOf(token);
+  if (slotOfItem(equipment, itemId)) return { reason: 'This item is already equipped.' };
+  const activeSet = equipment.activeSet;
+  const handSlots: EquipSlot[] = activeSet === 1 ? ['main1', 'off1'] : ['main2', 'off2'];
+  const preferredSlots: EquipSlot[] = item.equip.kind === 'weapon' || item.equip.kind === 'focus'
+    ? handSlots
+    : item.equip.kind === 'shield' ? [handSlots[1]]
+      : item.equip.kind === 'armor' ? ['chest']
+        : item.equip.kind === 'ring' ? ['ring1', 'ring2']
+          : [item.equip.kind];
+  const occupiedSlot = preferredSlots.find((candidateSlot) => activeSlots(equipment).includes(candidateSlot) && equipment.slots[candidateSlot] && token.inventory.find((candidate) => candidate.id === equipment.slots[candidateSlot])?.equip?.kind === item.equip?.kind);
+  const slot = occupiedSlot ?? suggestSlot(equipment, item);
+  if (!slot) return { reason: 'There is no compatible active equipment slot for this item.' };
+
+  const current = deriveStats(sheet, token, rules, nowMs);
+  const trial = {
+    inventory: structuredClone(token.inventory),
+    equipment: structuredClone(equipment),
+    armorWornAt: token.armorWornAt,
+  } as Token;
+  const error = equipItem(trial, itemId, slot);
+  if (error) return { reason: error === 'twoHandedOff' ? 'This weapon does not fit the active hand slot.' : 'This item cannot be equipped in a matching active slot.' };
+  const currentItemId = equipment.slots[slot];
+  return {
+    slot,
+    currentItem: currentItemId ? token.inventory.find((candidate) => candidate.id === currentItemId) ?? null : null,
+    candidateItem: item,
+    current,
+    candidate: deriveStats(sheet, trial, rules, nowMs),
+  };
 }
 
 export const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);

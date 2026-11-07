@@ -9,7 +9,8 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Command } from '../game/commands';
-import { emptySheet, newEntryId, type CharacterSheet, type SheetEntry, type SheetResource, type SheetSkill, type SheetSpell } from '../game/sheet';
+import { emptySheet, newEntryId, spellMatchesQuery, type CharacterSheet, type SheetEntry, type SheetResource, type SheetSkill, type SheetSpell } from '../game/sheet';
+import { activeMageArmor, isWearingArmor } from '../game/spells';
 import type { TokenView } from '../game/visibility';
 import type { SheetPayload } from '../server/protocol';
 import type { DispatchResult, GameApi } from '../state/gameApi';
@@ -78,6 +79,8 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const [baseVersion, setBaseVersion] = useState(0);
   const [conflict, setConflict] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [castingSpellId, setCastingSpellId] = useState<string | null>(null);
+  const [, forceSpellExpiryRefresh] = useState(0);
   const [importing, setImporting] = useState(false);
   const details = token.details;
 
@@ -146,12 +149,41 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
     else notify(r.error);
   };
 
+  const castSpell = async (spellId: string) => {
+    if (!data || draft || castingSpellId) return;
+    setCastingSpellId(spellId);
+    try {
+      const r = await game.sheets.ability(token.id, { action: 'castMageArmor', spellId, expectedVersion: data.version });
+      if (r.ok) {
+        setData(r.sheet);
+        const effect = r.sheet.sheet.spellEffects.find((candidate) => candidate.kind === 'mageArmor');
+        notify(effect ? `Mage Armor is active until ${new Date(effect.expiresAt).toLocaleString()}.` : 'Mage Armor cast.', 'info');
+      } else {
+        if (r.conflict) setData(r.conflict);
+        notify(r.error);
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Mage Armor could not be cast.');
+    } finally {
+      setCastingSpellId(null);
+    }
+  };
+
   const sheet = draft ?? data?.sheet ?? emptySheet();
   const editing = !!draft;
   const set = (patch: Partial<CharacterSheet>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const changedElsewhere = editing && data && data.version !== baseVersion;
   const build = sheet.details.find((d) => /race, class|class & level|^class$/i.test(d.label))?.value;
   const canEditSheet = tab !== 'appearance' && tab !== 'history';
+  const wearsArmor = details ? isWearingArmor(details) : false;
+  const mageArmorEffect = wearsArmor ? null : activeMageArmor(sheet, details?.armorWornAt);
+  useEffect(() => {
+    if (!mageArmorEffect) return;
+    const delay = Date.parse(mageArmorEffect.expiresAt) - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => forceSpellExpiryRefresh((version) => version + 1), delay + 1);
+    return () => window.clearTimeout(timer);
+  }, [mageArmorEffect?.expiresAt]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-3 p-3" aria-label={`Character sheet of ${token.name}`}>
@@ -384,10 +416,11 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
         <div className="space-y-3" aria-label="Full spellbook">
           <section className="panel p-3">
             <h2 className="font-display text-2xl font-black text-gold-200">Spellbook</h2>
-            <p className="mt-1 text-xs text-marble-400">Known, prepared and cantrip entries come from this character sheet. Spell slot use remains tracked in Resources.</p>
+            <p className="mt-1 text-xs text-marble-400">Known and prepared spells are recorded here. Supported cast actions spend a matching slot and update the character’s effects.</p>
             {build && <p className="mt-1 text-xs text-marble-500">Character: {build}</p>}
+            {mageArmorEffect && <p className="mt-1 text-xs text-emerald-300">Mage Armor active until {new Date(mageArmorEffect.expiresAt).toLocaleString()}.</p>}
           </section>
-          <SpellsSection sheet={sheet} editing={editing} set={set} onToggle={(id) => void quickSave((s) => toggle(s.spells, id))} />
+          <SpellsSection sheet={sheet} editing={editing} set={set} onToggle={(id) => void quickSave((s) => toggle(s.spells, id))} onCast={castSpell} castingSpellId={castingSpellId} wearingArmor={wearsArmor} />
         </div>
       )}
 
@@ -616,13 +649,14 @@ function SkillSection({ title, rows, editing, onChange, prefix }: { title: strin
   );
 }
 
-function SpellsSection({ sheet, editing, set, onToggle }: { sheet: CharacterSheet; editing: boolean; set: (p: Partial<CharacterSheet>) => void; onToggle: (id: string) => void }) {
+function SpellsSection({ sheet, editing, set, onToggle, onCast, castingSpellId, wearingArmor }: { sheet: CharacterSheet; editing: boolean; set: (p: Partial<CharacterSheet>) => void; onToggle: (id: string) => void; onCast: (id: string) => void; castingSpellId: string | null; wearingArmor: boolean }) {
   const [filter, setFilter] = useState<'prepared' | 'all'>('prepared');
   const [q, setQ] = useState('');
   const spells = sheet.spells;
   const levels = useMemo(() => [...new Set(spells.map((s) => s.level))].sort((a, b) => a - b), [spells]);
   const slots = sheet.resources.filter((r) => /^spell slots/i.test(r.name));
-  const visible = (s: SheetSpell) => (filter === 'all' || s.level === 0 || s.prepared) && (!q || s.name.toLowerCase().includes(q.toLowerCase()));
+  const levelOneSlots = sheet.resources.filter((r) => /^spell slots \(level 1\)$/i.test(r.name));
+  const visible = (s: SheetSpell) => (filter === 'all' || s.level === 0 || s.prepared) && spellMatchesQuery(s, q);
   return (
     <section className="panel p-3 lg:col-span-2">
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -648,21 +682,27 @@ function SpellsSection({ sheet, editing, set, onToggle }: { sheet: CharacterShee
       {editing ? (
         <ListEditor
           rows={spells}
-          make={() => ({ id: newEntryId('sp'), name: '', level: 1, prepared: false, source: '', notes: '' })}
+          make={() => ({ id: newEntryId('sp'), name: '', level: 1, prepared: false, source: '', notes: '', school: '', castingTime: '', range: '', components: '', duration: '', concentration: false, ritual: false, description: '' })}
           render={(s, upd) => (
-            <>
+            <div className="grid w-full gap-1.5 sm:grid-cols-2">
               <input className={input} aria-label="Spell name" placeholder="Spell" value={s.name} onChange={(e) => upd({ ...s, name: e.target.value })} />
-              <select className={`${input} w-24`} aria-label="Spell level" value={s.level} onChange={(e) => upd({ ...s, level: Number(e.target.value), prepared: Number(e.target.value) === 0 || s.prepared })}>
-                {Array.from({ length: 10 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {i === 0 ? 'Cantrip' : `Level ${i}`}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-1 text-[11px] text-marble-300">
-                <input type="checkbox" checked={s.prepared} disabled={s.level === 0} onChange={(e) => upd({ ...s, prepared: e.target.checked })} /> prepared
-              </label>
-            </>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <select className={`${input} w-24`} aria-label="Spell level" value={s.level} onChange={(e) => upd({ ...s, level: Number(e.target.value), prepared: Number(e.target.value) === 0 || s.prepared })}>
+                  {Array.from({ length: 10 }, (_, i) => <option key={i} value={i}>{i === 0 ? 'Cantrip' : `Level ${i}`}</option>)}
+                </select>
+                <label className="flex items-center gap-1 text-[11px] text-marble-300"><input type="checkbox" checked={s.prepared} disabled={s.level === 0} onChange={(e) => upd({ ...s, prepared: e.target.checked })} /> prepared</label>
+                <label className="flex items-center gap-1 text-[11px] text-marble-300"><input type="checkbox" checked={s.concentration} onChange={(e) => upd({ ...s, concentration: e.target.checked })} /> concentration</label>
+                <label className="flex items-center gap-1 text-[11px] text-marble-300"><input type="checkbox" checked={s.ritual} onChange={(e) => upd({ ...s, ritual: e.target.checked })} /> ritual</label>
+              </div>
+              <input className={input} aria-label="Spell school" placeholder="School" value={s.school} onChange={(e) => upd({ ...s, school: e.target.value })} />
+              <input className={input} aria-label="Spell source" placeholder="Class / source" value={s.source} onChange={(e) => upd({ ...s, source: e.target.value })} />
+              <input className={input} aria-label="Casting time" placeholder="Casting time" value={s.castingTime} onChange={(e) => upd({ ...s, castingTime: e.target.value })} />
+              <input className={input} aria-label="Spell range" placeholder="Range" value={s.range} onChange={(e) => upd({ ...s, range: e.target.value })} />
+              <input className={input} aria-label="Spell components" placeholder="Components" value={s.components} onChange={(e) => upd({ ...s, components: e.target.value })} />
+              <input className={input} aria-label="Spell duration" placeholder="Duration" value={s.duration} onChange={(e) => upd({ ...s, duration: e.target.value })} />
+              <textarea className={`${input} min-h-16 sm:col-span-2`} aria-label="Spell description" placeholder="Effect / rules summary" value={s.description} onChange={(e) => upd({ ...s, description: e.target.value })} />
+              <input className={`${input} sm:col-span-2`} aria-label="Spell notes" placeholder="Private notes" value={s.notes} onChange={(e) => upd({ ...s, notes: e.target.value })} />
+            </div>
           )}
           onChange={(next) => set({ spells: next })}
           addLabel="+ Spell"
@@ -676,13 +716,23 @@ function SpellsSection({ sheet, editing, set, onToggle }: { sheet: CharacterShee
               <div className="label mb-1">{lvl === 0 ? 'Cantrips' : `Level ${lvl}`}</div>
               <ul className="grid gap-1 sm:grid-cols-2">
                 {list.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 rounded-md border border-ink-700 px-2 py-1 text-sm">
-                    <span className={`min-w-0 flex-1 truncate ${s.prepared ? 'text-gold-200' : 'text-marble-300'}`}>{s.name}</span>
-                    {s.source && <span className="text-[10px] text-marble-500">{s.source}</span>}
-                    {lvl > 0 && (
-                      <label className="flex items-center gap-1 text-[10px] text-marble-300">
-                        <input type="checkbox" checked={s.prepared} onChange={() => onToggle(s.id)} aria-label={`${s.name} prepared`} /> prepared
-                      </label>
+                  <li key={s.id} className="rounded-md border border-ink-700 px-2 py-1 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className={`min-w-0 flex-1 truncate ${s.prepared ? 'text-gold-200' : 'text-marble-300'}`}>{s.name}</span>
+                      {s.source && <span className="text-[10px] text-marble-500">{s.source}</span>}
+                      {lvl > 0 && <label className="flex items-center gap-1 text-[10px] text-marble-300"><input type="checkbox" checked={s.prepared} onChange={() => onToggle(s.id)} aria-label={`${s.name} prepared`} /> prepared</label>}
+                      {s.name.trim().toLowerCase() === 'mage armor' && <button type="button" className="btn btn-ghost px-2 py-0.5 text-[10px]" aria-label="Cast Mage Armor" disabled={editing || s.level !== 1 || !s.prepared || levelOneSlots.length !== 1 || levelOneSlots[0].current < 1 || wearingArmor || !!castingSpellId} title={wearingArmor ? 'Mage Armor requires the character to be unarmored.' : s.level !== 1 ? 'Mage Armor is a 1st-level spell.' : levelOneSlots.length !== 1 || levelOneSlots[0].current < 1 ? 'A level 1 spell slot is required.' : !s.prepared ? 'Prepare this spell first.' : 'Cast Mage Armor.'} onClick={() => onCast(s.id)}>{castingSpellId === s.id ? 'Casting…' : 'Cast'}</button>}
+                    </div>
+                    {(s.school || s.castingTime || s.range || s.components || s.duration || s.concentration || s.ritual || s.description || s.notes) && (
+                      <details className="mt-1 text-xs text-marble-300">
+                        <summary className="cursor-pointer text-[10px] text-marble-500">Details</summary>
+                        <div className="mt-1 space-y-1">
+                          {(s.school || s.castingTime || s.range || s.components || s.duration) && <p>{[s.school, s.castingTime && `Cast: ${s.castingTime}`, s.range && `Range: ${s.range}`, s.components && `Components: ${s.components}`, s.duration && `Duration: ${s.duration}`].filter(Boolean).join(' · ')}</p>}
+                          {(s.concentration || s.ritual) && <p>{[s.concentration && 'Concentration', s.ritual && 'Ritual'].filter(Boolean).join(' · ')}</p>}
+                          {s.description && <p className="whitespace-pre-wrap">{s.description}</p>}
+                          {s.notes && <p className="whitespace-pre-wrap text-marble-500">Notes: {s.notes}</p>}
+                        </div>
+                      </details>
                     )}
                   </li>
                 ))}

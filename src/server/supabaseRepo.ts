@@ -253,6 +253,15 @@ export class SupabaseRepo implements Repo {
     },
   };
   readonly journalStore: import('./journals.js').JournalStore = {
+    backlinks: async (user, targetId, offset) => {
+      const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
+      const { data, error } = await this.db.from('apex_journals').select(JOURNAL_FIELDS)
+        .eq('campaign_id', user.campaignId).or(visibility).ilike('body', `%[[ref:${targetId}]]%`)
+        .order('pinned', { ascending: false }).order('created_at', { ascending: false }).order('id')
+        .range(offset, offset + 49);
+      if (error) throw new Error(`journal backlinks: ${error.message}`);
+      return data as import('./journals.js').JournalEntry[];
+    },
     get: async (user, id) => {
       const visibility = `owner_id.eq.${user.id},sharing.eq.party${user.role === 'gm' ? ',sharing.eq.gm' : ''}`;
       const { data, error } = await this.db.from('apex_journals').select(JOURNAL_FIELDS).eq('campaign_id', user.campaignId).eq('id', id).or(visibility).maybeSingle();
@@ -302,7 +311,7 @@ export class SupabaseRepo implements Repo {
     },
     get: async (campaignId, id) => {
       const { data, error } = await this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,metadata')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,metadata,published_metadata')
         .eq('campaign_id', campaignId).eq('id', id).maybeSingle();
       if (error) throw new Error(`scene preview: ${error.message}`);
       return data as import('./scenes.js').SceneDefinition | null;

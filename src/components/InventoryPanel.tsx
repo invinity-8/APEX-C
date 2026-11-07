@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Command } from '../game/commands';
-import { SLOT_LABEL, equipmentOf, slotOfItem, suggestSlot, type Equipment } from '../game/equipment';
+import { SLOT_LABEL, equipmentOf, fmt, previewEquipStats, slotOfItem, suggestSlot, type Equipment, type EquipmentPreview } from '../game/equipment';
 import { balanceOf, CURRENCIES } from '../game/items/currency';
 import { canActivate, canAscend, canAugment, canIdentify, canReroll, canSalvage, salvageReward, type Check } from '../game/items/loot';
 import { addableMods } from '../game/items/generate';
@@ -24,6 +24,7 @@ import type { GameApi } from '../state/gameApi';
 import { DEFAULT_CONTAINERS, INVENTORY_LIMITS, canMerge, containerOfItem, isStackable } from '../game/inventory';
 import { newEntryId } from '../game/sheet';
 import type { Item } from '../game/types';
+import type { CharacterSheet } from '../game/sheet';
 import type { TokenView } from '../game/visibility';
 import type { DispatchResult } from '../state/gameApi';
 import { baseItem } from '../game/items/bases';
@@ -58,7 +59,8 @@ const FILTERS: Array<[Filter, string]> = [
 ];
 
 export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, isGm = false, game }: Props) {
-  const strength = useStrength(game, token.id);
+  const sheet = useInventorySheet(game, token.id);
+  const strength = sheet ? strengthScore(sheet) : null;
   const details = token.details;
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
   const items = useMemo(() => details?.inventory ?? [], [details?.inventory]);
@@ -224,6 +226,9 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
         rules={rules}
         onCombine={async (sets, currencyRev) => (await run({ type: 'combineFragments', tokenId: token.id, sets, currencyRev })).ok}
         onTransmute={async (sets, currencyRev) => (await run({ type: 'transmuteFragments', tokenId: token.id, sets, currencyRev })).ok}
+        cubeProgression={details.cubeProgression}
+        cubeCarried={!!details.cubeCarried}
+        onCubeUpgrade={async (expectedLevel, currencyRev) => (await run({ type: 'cubeUpgrade', tokenId: token.id, expectedLevel, currencyRev })).ok}
         lastTransmute={details.lastTransmute}
         transmuteUnlocked={!!details.transmuteUnlocked}
       />
@@ -269,6 +274,7 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
               eq={eq}
               rules={rules}
               isGm={isGm}
+              sheet={sheet}
             />
           );
         })}
@@ -307,6 +313,7 @@ interface CardProps {
   eq: Equipment;
   rules: ItemRules;
   isGm: boolean;
+  sheet: CharacterSheet | null;
 }
 
 function ContainerCard(props: CardProps) {
@@ -399,15 +406,28 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   const [mode, setMode] = useState<'view' | 'edit' | 'split' | 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate'>('view');
   const [inspect, setInspect] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [compare, setCompare] = useState(false);
+  const hovered = useRef(false);
   const [revealed, setRevealed] = useState(false);
   const [reason, setReason] = useState('');
   const structured = !!item.baseId;
   const fixedQty = !!item.rarity || !!item.mods?.length;
   const [draft, setDraft] = useState({ name: item.name, description: item.description, notes: item.notes ?? '', quantity: item.quantity, weightKg: item.weightKg !== undefined ? String(item.weightKg) : '' });
   const [splitQty, setSplitQty] = useState(1);
+  const moveSelect = useRef<HTMLSelectElement>(null);
   const rev = item.rev ?? 0;
   const slot = props.eqSlot(item.id);
-  const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o));
+  const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o, containers));
+  useEffect(() => {
+    const showOnShift = (event: KeyboardEvent) => { if (event.key === 'Shift' && hovered.current) setCompare(true); };
+    const hideOnShiftRelease = (event: KeyboardEvent) => { if (event.key === 'Shift') setCompare(false); };
+    window.addEventListener('keydown', showOnShift);
+    window.addEventListener('keyup', hideOnShiftRelease);
+    return () => { window.removeEventListener('keydown', showOnShift); window.removeEventListener('keyup', hideOnShiftRelease); };
+  }, []);
+  const comparison = compare && props.sheet
+    ? previewEquipStats(props.sheet, { inventory: props.allItems, equipment: props.eq, armorWornAt: token.details?.armorWornAt }, item.id, props.rules)
+    : null;
   const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number; weightKg: number }>) => run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -448,6 +468,10 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
       className={`rounded-lg border bg-ink-800/50 p-2 ${slot ? 'border-gold-600/60' : 'border-ink-600'} ${props.dragId === item.id ? 'opacity-40' : ''}`}
       data-item={item.id}
       draggable
+      onContextMenu={(event) => { event.preventDefault(); setMenu(true); }}
+      onMouseEnter={(event) => { hovered.current = true; setCompare(event.shiftKey); }}
+      onMouseMove={(event) => { if (event.shiftKey) setCompare(true); }}
+      onMouseLeave={() => { hovered.current = false; setCompare(false); }}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData(DND, item.id);
@@ -486,6 +510,9 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           <ItemModLines item={item} />
           {item.description && <p className="text-xs text-marble-300">{item.description}</p>}
           {item.notes && <p className="text-xs italic text-marble-500">{item.notes}</p>}
+          {comparison && ("reason" in comparison
+            ? <p role="status" className="mt-2 rounded border border-ink-600 px-2 py-1 text-[11px] text-marble-400">{comparison.reason}</p>
+            : <EquipmentComparison preview={comparison} />)}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {structured && (
@@ -493,11 +520,9 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
               Inspect
             </button>
           )}
-          {structured && (
-            <button className="btn btn-ghost h-7 px-2 text-[11px]" aria-haspopup="menu" aria-expanded={menu} aria-label={`Actions for ${item.name}`} onClick={() => setMenu((v) => !v)}>
-              Actions ▾
-            </button>
-          )}
+          <button className="btn btn-ghost h-7 px-2 text-[11px]" aria-haspopup="menu" aria-expanded={menu} aria-label={`Actions for ${item.name}`} onClick={() => setMenu((v) => !v)}>
+            Actions ▾
+          </button>
           {!fixedQty && (
             <button className="btn btn-ghost h-7 w-7 px-0" aria-label={`Decrease quantity of ${item.name}`} onClick={() => void update({ quantity: Math.max(0, item.quantity - 1) })}>
             −
@@ -519,7 +544,14 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
           </button>
         </div>
       </div>
-      {menu && structured && <ItemActions {...props} close={() => setMenu(false)} onMode={(m) => (setMenu(false), setMode(m))} onRevealed={() => (setRevealed(true), setInspect(true), window.setTimeout(() => setRevealed(false), 1600))} />}
+      {menu && !structured && <div role="menu" aria-label={`Item options for ${item.name}`} className="mt-1.5 flex flex-wrap gap-1 rounded-lg border border-gold-700/40 bg-ink-950/90 p-1.5 text-xs">
+        {structured && <button role="menuitem" className="btn btn-ghost px-2 py-1" onClick={() => (setMenu(false), setInspect(true))}>Inspect</button>}
+        <button role="menuitem" className="btn btn-ghost px-2 py-1" onClick={() => (setMenu(false), setMode('edit'))}>Edit</button>
+        {isStackable(item) && item.quantity > 1 && <button role="menuitem" className="btn btn-ghost px-2 py-1" onClick={() => (setMenu(false), setSplitQty(1), setMode('split'))}>Split stack</button>}
+        {containers.length > 1 && <button role="menuitem" className="btn btn-ghost px-2 py-1" onClick={() => (setMenu(false), moveSelect.current?.focus())}>Move to container</button>}
+        <button role="menuitem" className="btn btn-ghost px-2 py-1" disabled={!!item.locked && !props.isGm} title={item.locked && !props.isGm ? 'Restricted by the Game Master' : 'Delete item'} onClick={() => (setMenu(false), props.onRemove(item))}>Delete</button>
+      </div>}
+      {menu && structured && <ItemActions {...props} close={() => setMenu(false)} onInspect={() => (setMenu(false), setInspect(true))} onMode={(m) => (setMenu(false), setMode(m))} onRevealed={() => (setRevealed(true), setInspect(true), window.setTimeout(() => setRevealed(false), 1600))} />}
       {mode === 'reroll' && (
         <Confirm
           tone="arcane"
@@ -649,6 +681,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
         <select
+          ref={moveSelect}
           aria-label={`Move ${item.name} to`}
           className="rounded-md border border-ink-600 bg-ink-900 px-1.5 py-0.5 text-[11px] text-marble-300"
           value={containerOfItem(item, containers)}
@@ -695,9 +728,9 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
 }
 
 /** Item action menu: every action is listed; unavailable ones are disabled with the reason shown. */
-function ItemActions(props: CardProps & { item: Item; close: () => void; onMode: (m: 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate') => void; onRevealed: () => void }) {
+function ItemActions(props: CardProps & { item: Item; close: () => void; onInspect: () => void; onMode: (m: 'edit' | 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate') => void; onRevealed: () => void }) {
   const { token, item, run, eq } = props;
-  const purse = { currency: token.details?.currency };
+  const purse = { currency: token.details?.currency, cubeAccess: token.details?.cubeAccess, cubeProgression: token.details?.cubeProgression, inventory: token.details?.inventory ?? [] };
   const actor = props.isGm ? ({ role: 'gm' } as const) : ({ role: 'player', tokenId: token.id } as const);
   const slot = slotOfItem(eq, item.id);
   const target = suggestSlot(eq, item);
@@ -734,6 +767,8 @@ function ItemActions(props: CardProps & { item: Item; close: () => void; onMode:
   rows.push({ label: 'Send to player', check: { ok: false, reason: 'Player-to-player transfers arrive in a later update.' }, act: () => undefined });
   return (
     <div role="menu" aria-label={`Actions for ${item.name}`} className="mt-1.5 grid gap-1 rounded-lg border border-gold-700/40 bg-ink-950/90 p-1.5 text-xs sm:grid-cols-2">
+      <button role="menuitem" className="rounded-md border border-ink-600 px-2 py-1 text-left text-marble-100 hover:border-gold-400/70 hover:bg-gold-400/10" onClick={props.onInspect}>Inspect</button>
+      <button role="menuitem" className="rounded-md border border-ink-600 px-2 py-1 text-left text-marble-100 hover:border-gold-400/70 hover:bg-gold-400/10" onClick={() => props.onMode('edit')}>Edit</button>
       {rows.map((r) => (
         <button
           key={r.label}
@@ -780,19 +815,65 @@ function Confirm({ title, confirm, tone, children, onConfirm, onCancel }: { titl
   );
 }
 
-/** Strength score from the character sheet (one request; refreshed on sheet pings). */
-function useStrength(game: GameApi | undefined, tokenId: string): number | null {
-  const [str, setStr] = useState<number | null>(null);
+/** Character sheet is loaded once for the weight gauge and local equip comparison, refreshed on sheet pings. */
+function useInventorySheet(game: GameApi | undefined, tokenId: string): CharacterSheet | null {
+  const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const sheets = game?.sheets;
+  const revision = sheets?.revision;
   useEffect(() => {
-    if (!sheets) return;
+    if (!sheets) { setSheet(null); return; }
     let live = true;
-    void sheets.load(tokenId).then((r) => live && setStr(r.ok ? strengthScore(r.sheet.sheet) : null));
+    void sheets.load(tokenId).then((r) => live && setSheet(r.ok ? r.sheet.sheet : null));
     return () => {
       live = false;
     };
-  }, [sheets, tokenId]);
-  return str;
+  }, [sheets, tokenId, revision]);
+  return sheet;
+}
+
+function EquipmentComparison({ preview }: { preview: EquipmentPreview }) {
+  const lines: Array<{ label: string; current: string; candidate: string; delta?: number; neutral?: boolean }> = [];
+  const addDelta = (label: string, current: number | null | undefined, candidate: number | null | undefined) => {
+    if (current == null || candidate == null || current === candidate) return;
+    lines.push({ label, current: String(current), candidate: String(candidate), delta: candidate - current });
+  };
+  const addBonus = (label: string, current: number, candidate: number) => addDelta(label, current, candidate);
+
+  addDelta('Armor Class', preview.current.ac.value, preview.candidate.ac.value);
+  const currentAttack = preview.current.attacks.find((attack) => attack.slot === preview.slot);
+  const candidateAttack = preview.candidate.attacks.find((attack) => attack.slot === preview.slot);
+  if (currentAttack?.toHit !== candidateAttack?.toHit) {
+    addDelta('Attack bonus', currentAttack?.toHit, candidateAttack?.toHit);
+  }
+  if (currentAttack?.damage !== candidateAttack?.damage) {
+    lines.push({ label: 'Damage', current: currentAttack?.damage ?? '—', candidate: candidateAttack?.damage ?? '—', neutral: true });
+  }
+
+  const before = preview.current.bonuses;
+  const after = preview.candidate.bonuses;
+  for (const [element, values] of Object.entries(before.resistances)) {
+    const next = after.resistances[element as keyof typeof after.resistances];
+    addBonus(`${element} resistance`, values.reduction, next.reduction);
+  }
+  for (const [key, label] of [['maxHp', 'Maximum HP'], ['initiative', 'Initiative'], ['speed', 'Speed'], ['carry', 'Carry bonus'], ['spellAttack', 'Spell attack'], ['spellDc', 'Spell save DC'], ['thorns', 'Thorns']] as const) {
+    addBonus(label, before[key].value, after[key].value);
+  }
+  for (const ability of new Set([...Object.keys(before.abilities), ...Object.keys(after.abilities)])) addBonus(`${ability.toUpperCase()} bonus`, before.abilities[ability as keyof typeof before.abilities]?.value ?? 0, after.abilities[ability as keyof typeof after.abilities]?.value ?? 0);
+  for (const save of new Set([...Object.keys(before.saves), ...Object.keys(after.saves)])) addBonus(`${save.toUpperCase()} save`, before.saves[save as keyof typeof before.saves]?.value ?? 0, after.saves[save as keyof typeof after.saves]?.value ?? 0);
+  for (const skill of new Set([...Object.keys(before.skills), ...Object.keys(after.skills)])) addBonus(`${skill} check`, before.skills[skill]?.value ?? 0, after.skills[skill]?.value ?? 0);
+
+  const tone = (delta: number | undefined, neutral?: boolean) => neutral || delta === undefined ? 'text-marble-300' : delta > 0 ? 'text-emerald-300' : delta < 0 ? 'text-rose-300' : 'text-marble-300';
+  const show = (line: (typeof lines)[number]) => line.delta === undefined || line.neutral ? `${line.current} → ${line.candidate}` : `${line.current} → ${line.candidate} (${fmt(line.delta)})`;
+  return (
+    <aside aria-label={`Shift comparison for ${preview.slot}`} className="mt-2 rounded-md border border-gold-700/40 bg-ink-950/75 p-2 text-[11px]" data-testid="equipment-comparison">
+      <div className="grid grid-cols-2 gap-2 border-b border-ink-700 pb-1 text-marble-300">
+        <p><span className="block text-[9px] uppercase tracking-wider text-marble-500">Current · {SLOT_LABEL[preview.slot]}</span>{preview.currentItem?.name ?? 'Empty slot'}</p>
+        <p><span className="block text-[9px] uppercase tracking-wider text-marble-500">Candidate</span>{preview.candidateItem.name}</p>
+      </div>
+      {lines.length ? <ul className="mt-1 space-y-0.5">{lines.map((line) => <li key={line.label} className="flex justify-between gap-2"><span className="text-marble-400">{line.label}</span><span className={tone(line.delta, line.neutral)}>{show(line)}</span></li>)}</ul> : <p className="mt-1 text-marble-400">No derived stat changes for this slot.</p>}
+      <p className="mt-1 border-t border-ink-700 pt-1 text-[10px] text-marble-500">Local preview using the active rules. Damage dice are shown side by side without rating one as better.</p>
+    </aside>
+  );
 }
 
 /** Carrying-capacity bonus (lb) from equipped, identified modifiers in active slots. */

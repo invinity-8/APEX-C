@@ -207,6 +207,8 @@ export interface Token {
   speedFt?: number;
   /** APEX 0.5: equipped items (references into `inventory`), weapon sets, resting preset. */
   equipment?: Equipment;
+  /** Server timestamp when active body armour was put on; Mage Armor ends after this point. */
+  armorWornAt?: string;
   /** APEX 0.6: magical currency balances (server-authoritative) and their revision. */
   currency?: Partial<Record<CurrencyId, number>>;
   currencyRev?: number;
@@ -216,6 +218,8 @@ export interface Token {
   cosmetics?: CharacterCosmetics;
   /** APEX 0.7: GM-granted permanent Arcane Transmutation access (otherwise carrying the cube unlocks it). */
   cubeAccess?: boolean;
+  /** APEX 0.9: earned Cube level, unspent Cube Fragments and GM adjustment marker. */
+  cubeProgression?: { level: number; gmOverride?: boolean; legacyEntitlement?: boolean };
   /** APEX 0.7: Sneak mode – each step costs double movement points. Not invisibility: being unseen still needs a Stealth check. */
   sneaking?: boolean;
   /** APEX 0.7: player-uploaded pictures per Wild Shape form (private storage path + cache version; path never sent). */
@@ -373,6 +377,14 @@ export interface WorldMeta {
   createdAt: string;
 }
 
+/** Live narrative message scoped to one published scene. */
+export interface SceneAnnouncement { id: string; sceneId: string; title: string; text: string; createdAt: string }
+export interface SceneEncounterParticipant { id: string; name: string; initiative: number; visible: boolean; tokenId?: string }
+export interface SceneEncounter {
+  id: string; sceneId: string; title: string; round: number; turnIndex: number; version: number;
+  status: 'active' | 'ended'; participants: SceneEncounterParticipant[];
+}
+
 export interface GameState {
   version: number;
   world?: WorldMeta;
@@ -397,6 +409,10 @@ export interface GameState {
   arsenal?: { staged: Item[]; draft?: LootDraft };
   /** APEX 0.7: party loot rolls (Need / Distribute / Pass) – open ones and the recent history. */
   lootRolls?: LootRoll[];
+  /** Scene-bound campaign announcements; bounded and filtered to the viewer's assigned scene. */
+  sceneAnnouncements?: SceneAnnouncement[];
+  /** One current/recent initiative tracker per scene. */
+  sceneEncounters?: Record<string, SceneEncounter>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */
   merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */

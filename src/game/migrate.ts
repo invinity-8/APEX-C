@@ -5,6 +5,7 @@
  */
 import { DEFAULT_PHASE_RULES, STATE_VERSION, type GameState } from './types.js';
 import { estimateWeightKg } from './items/weightGuess.js';
+import { migrateCubeProgression } from './items/cubeProgression.js';
 
 export function migrateState(raw: unknown): GameState {
   if (!raw || typeof raw !== 'object') throw new Error('Not a valid save file.');
@@ -24,6 +25,7 @@ export function migrateState(raw: unknown): GameState {
   state.phase ??= 'day';
   state.config.phases ??= structuredClone(DEFAULT_PHASE_RULES);
   stripLegacy(state);
+  migrateCubeProgression(state);
   state.version = STATE_VERSION;
   return state;
 }

@@ -14,6 +14,7 @@ import { executePartyLoot, PARTY_LOOT_COMMANDS, type PartyLootCommand } from './
 import { estimateWeightKg } from './items/weightGuess.js';
 import { executeMerchant, MERCHANT_COMMANDS, type MerchantCommand } from './items/merchant.js';
 import type { BeastForm } from './beasts.js';
+import { executeSceneOperation, SCENE_OPERATION_COMMANDS, type SceneOperationCommand } from './sceneOperations.js';
 import { cosmetic, type CosmeticKind } from './cosmetics.js';
 
 /** APEX 0.7: sneaking doubles the movement-point cost of every step (= half speed). */
@@ -45,6 +46,7 @@ export type Command =
   | LootCommand
   | PartyLootCommand
   | MerchantCommand
+  | SceneOperationCommand
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'setSneak'; tokenId: string; on: boolean }
@@ -80,7 +82,7 @@ export type Command =
       type: 'gmRestoreCharacter';
       tokenId: string;
       identity?: { name: string; title: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string };
-      equipment?: Pick<Equipment, 'slots' | 'activeSet' | 'resting' | 'restingKeep'>;
+      equipment?: Pick<Equipment, 'slots' | 'twoHandedGrips' | 'activeSet' | 'resting' | 'restingKeep'>;
     }
   | { type: 'invAddItem'; tokenId: string; itemId: string; weightKg?: number; name: string; quantity?: number; description?: string; notes?: string; container?: string }
   | { type: 'invRequestItem'; tokenId: string; requestId: string; name: string; quantity: number; description: string; notes?: string; weightKg?: number; container?: string }
@@ -97,6 +99,7 @@ export type Command =
   | { type: 'setWalkingSpeed'; tokenId: string; speedFt: number }
   // APEX 0.5 – equipment (items stay in the inventory; slots only reference them)
   | { type: 'equipItem'; tokenId: string; itemId: string; slot: EquipSlot }
+  | { type: 'setWeaponGrip'; tokenId: string; itemId: string; twoHanded: boolean }
   | { type: 'unequipSlot'; tokenId: string; slot: EquipSlot }
   | { type: 'setWeaponSet'; tokenId: string; set: 1 | 2 }
   | { type: 'setResting'; tokenId: string; resting: boolean; keep?: EquipSlot[] }
@@ -119,6 +122,7 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'invSplitStack',
   'invMergeStack',
   'equipItem',
+  'setWeaponGrip',
   'unequipSlot',
   'setWeaponSet',
   'setResting',
@@ -126,6 +130,7 @@ export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'itemReroll',
   'itemSalvage',
   'combineFragments',
+  'cubeUpgrade',
   'itemAugment',
   'itemAscend',
   'transmuteFragments',
@@ -227,6 +232,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
   if (LOOT_COMMANDS.has(cmd.type)) return executeLoot(prev, actor, cmd as LootCommand);
   if (PARTY_LOOT_COMMANDS.has(cmd.type)) return executePartyLoot(prev, actor, cmd as PartyLootCommand);
   if (MERCHANT_COMMANDS.has(cmd.type)) return executeMerchant(prev, actor, cmd as MerchantCommand);
+  if (SCENE_OPERATION_COMMANDS.has(cmd.type as SceneOperationCommand['type'])) return executeSceneOperation(prev, cmd as SceneOperationCommand);
   if (cmd.type === 'invRequestItem' || cmd.type === 'gmReviewItemRequest') return executeNarrativeItemRequest(prev, cmd);
   if (cmd.type === 'invAddItem' && actor.role !== 'gm') return fail(prev, 'New inventory items need GM approval. Submit an item request instead.');
   if (cmd.type.startsWith('inv')) return executeInventory(prev, actor, cmd as InventoryCommand);
@@ -508,7 +514,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       }
       if (cmd.equipment) {
         const cur = t.equipment ?? emptyEquipment();
-        t.equipment = { ...cur, slots: { ...cmd.equipment.slots }, activeSet: cmd.equipment.activeSet, resting: cmd.equipment.resting, restingKeep: [...cmd.equipment.restingKeep] };
+        t.equipment = { ...cur, slots: { ...cmd.equipment.slots }, twoHandedGrips: [...(cmd.equipment.twoHandedGrips ?? [])], activeSet: cmd.equipment.activeSet, resting: cmd.equipment.resting, restingKeep: [...cmd.equipment.restingKeep] };
         reconcileEquipment(t);
         syncEquipmentLocations(t);
       }
@@ -729,7 +735,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
       const into = findItem(cmd.intoItemId, cmd.intoRev);
       if (typeof into === 'string') return fail(prev, into);
       if (item === into) return fail(prev, 'An item cannot be merged into itself.');
-      if (!canMerge(item, into)) return fail(prev, 'Only identical plain items can be merged.');
+      if (!canMerge(item, into, containers)) return fail(prev, 'Only identical plain items in the same container can be merged.');
       into.quantity = clamp(into.quantity + item.quantity, 0, L.quantity);
       into.rev = (into.rev ?? 0) + 1;
       t.inventory = t.inventory.filter((i) => i !== item);
@@ -751,8 +757,8 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
 
 // ---------------------------------------------------------------- APEX 0.5 equipment
 
-const EQUIPMENT_COMMANDS: ReadonlySet<Command['type']> = new Set(['equipItem', 'unequipSlot', 'setWeaponSet', 'setResting', 'setItemEquip', 'setEquipConfig']);
-type EquipmentCommand = Extract<Command, { type: 'equipItem' | 'unequipSlot' | 'setWeaponSet' | 'setResting' | 'setItemEquip' | 'setEquipConfig' }>;
+const EQUIPMENT_COMMANDS: ReadonlySet<Command['type']> = new Set(['equipItem', 'setWeaponGrip', 'unequipSlot', 'setWeaponSet', 'setResting', 'setItemEquip', 'setEquipConfig']);
+type EquipmentCommand = Extract<Command, { type: 'equipItem' | 'setWeaponGrip' | 'unequipSlot' | 'setWeaponSet' | 'setResting' | 'setItemEquip' | 'setEquipConfig' }>;
 
 const EQUIP_ERROR: Record<EquipError, string> = {
   noSuchItem: 'This item is no longer in the inventory.',
@@ -797,6 +803,20 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
     case 'unequipSlot':
       unequipSlot(t, cmd.slot);
       break;
+    case 'setWeaponGrip': {
+      const item = t.inventory.find((i) => i.id === cmd.itemId);
+      const mainSlot = (['main1', 'main2'] as const).find((slot) => eq().slots[slot] === cmd.itemId);
+      if (!item || !mainSlot || item.equip?.kind !== 'weapon' || !item.equip.properties?.includes('versatile') || item.equip.properties.includes('two-handed') || !item.equip.versatileDamage) {
+        return fail(prev, 'Only an equipped versatile weapon with a two-handed damage die can change grip.');
+      }
+      const grips = new Set(eq().twoHandedGrips ?? []);
+      if (cmd.twoHanded) {
+        grips.add(item.id);
+        delete eq().slots[mainSlot === 'main1' ? 'off1' : 'off2'];
+      } else grips.delete(item.id);
+      eq().twoHandedGrips = [...grips];
+      break;
+    }
     case 'setWeaponSet':
       eq().activeSet = cmd.set;
       break;
@@ -825,6 +845,7 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
       break;
     }
   }
+  reconcileEquipment(t);
   syncEquipmentLocations(t); // APEX 0.7: the inventory location always follows the slots
   return { ok: true, state };
 }

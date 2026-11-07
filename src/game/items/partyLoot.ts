@@ -44,6 +44,8 @@ export interface LootRollResult {
 
 export interface LootRoll {
   id: string;
+  /** Scene whose assigned party started this roll; omitted for existing campaign-wide rolls. */
+  sceneId?: string;
   /** The item while the roll is open; removed once it has been handed out (see itemName). */
   item?: Item;
   itemName: string;
@@ -66,7 +68,7 @@ export interface LootRoll {
 }
 
 export type PartyLootCommand =
-  | { type: 'lootRollStart'; rollId: string; stagedIds: string[]; tokenIds: string[]; minutes: number; now?: number }
+  | { type: 'lootRollStart'; rollId: string; stagedIds: string[]; tokenIds: string[]; minutes: number; sceneId?: string; now?: number }
   | { type: 'lootRollChoose'; rollId: string; tokenId: string; choice: LootChoice; now?: number; seed?: number }
   | { type: 'lootRollResolve'; rollId: string; now?: number; seed?: number }
   | { type: 'lootRollClaimExpired'; rollId: string; tokenId: string; now?: number; seed?: number }
@@ -202,6 +204,7 @@ export function executePartyLoot(prev: GameState, actor: Actor, cmd: PartyLootCo
     items.forEach((item, n) => {
       state.lootRolls!.push({
         id: `${cmd.rollId}-${n + 1}`,
+        ...(cmd.sceneId ? { sceneId: cmd.sceneId } : {}),
         item: item!,
         itemName: item!.name,
         ...(item!.rarity ? { rarity: item!.rarity } : {}),
@@ -262,8 +265,8 @@ export function executePartyLoot(prev: GameState, actor: Actor, cmd: PartyLootCo
 }
 
 /** Player view of the rolls: items redacted; other characters' choices hidden until the roll is resolved. */
-export function lootRollsView(state: GameState, viewerIds: string[] | 'gm'): LootRoll[] {
-  return (state.lootRolls ?? []).map((r) => {
+export function lootRollsView(state: GameState, viewerIds: string[] | 'gm', sceneId?: string | null): LootRoll[] {
+  return (state.lootRolls ?? []).filter(r => viewerIds === 'gm' || !r.sceneId || r.sceneId === sceneId).map((r) => {
     const v: LootRoll = { ...r, names: Object.fromEntries(r.eligible.map((id) => [id, state.tokens[id]?.name ?? id])), choices: { ...r.choices }, eligible: [...r.eligible], ...(r.results ? { results: r.results.map((x) => ({ ...x, rolls: [...x.rolls] })) } : {}) };
     if (r.item) v.item = viewerIds === 'gm' ? structuredClone(r.item) : redactItem({ ...structuredClone(r.item) });
     if (viewerIds !== 'gm' && r.status === 'open') {

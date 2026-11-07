@@ -13,6 +13,7 @@ import type { Actor, GameState } from '../game/types';
 import { buildGmView, buildPlayerView } from '../game/visibility';
 import type { GameApi, SheetApi } from './gameApi';
 import { emptySheet, parseSheet } from '../game/sheet';
+import { castMageArmor } from '../game/spells';
 import { clearState, loadSession, loadState, parseState, saveSession, saveState, type Session } from './storage';
 
 const firstPlayer = (s: GameState) => Object.values(s.tokens).find((t) => t.kind === 'player')?.id ?? '';
@@ -156,6 +157,12 @@ function useDemoSheets(state: GameState): SheetApi {
       // Demo mode plays the server: the same pure rules as /api/apex?op=sheet.
       const cur = payload(tokenId);
       if (body.expectedVersion !== cur.version) return { ok: false, error: 'Changed elsewhere.', conflict: cur };
+      if (body.action === 'castMageArmor') {
+        const cast = castMageArmor(cur.sheet, state.tokens[tokenId], body.spellId, Date.now());
+        if (!cast.ok) return { ok: false, error: cast.error };
+        write(tokenId, cast.sheet, cur.version + 1);
+        return { ok: true, sheet: payload(tokenId) };
+      }
       const amount = Math.max(0, Math.floor(Number(body.amount) || 0));
       const form = typeof body.formId === 'string' ? findBeast(state.customBeasts, body.formId) : undefined;
       const r =

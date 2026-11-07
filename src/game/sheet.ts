@@ -56,6 +56,36 @@ export interface SheetSpell {
   /** Spellcasting source, e.g. "Druid". */
   source: string;
   notes: string;
+  /** Optional reference details. Older saves omit these fields. */
+  school: string;
+  castingTime: string;
+  range: string;
+  components: string;
+  duration: string;
+  concentration: boolean;
+  ritual: boolean;
+  description: string;
+}
+
+/** Spellbook search includes the structured reference fields players can inspect. */
+export function spellMatchesQuery(spell: SheetSpell, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const searchable = [
+    spell.name, spell.source, spell.school, spell.castingTime, spell.range,
+    spell.components, spell.duration, spell.description, spell.notes,
+    spell.concentration ? 'concentration' : '', spell.ritual ? 'ritual' : '',
+  ];
+  return searchable.some((value) => value.toLowerCase().includes(needle));
+}
+
+/** Server-authored effects currently supported by the spell casting rules. */
+export interface ActiveSpellEffect {
+  id: string;
+  kind: 'mageArmor';
+  spellId: string;
+  castAt: string;
+  expiresAt: string;
 }
 
 /** Numeric resource with an editable name (spell slots, ki, rage, luck …). max null = no maximum. */
@@ -115,6 +145,8 @@ export interface CharacterSheet {
   /** Spellcasting summary per class: ability, attack bonus, save DC … */
   spellcasting: SheetEntry[];
   spells: SheetSpell[];
+  /** Server-managed timed effects; clients cannot add or extend these through ordinary sheet saves. */
+  spellEffects: ActiveSpellEffect[];
   notes: string;
   /** Advanced: unrecognised but possibly meaningful imported fields, kept apart from the sheet. */
   raw: SheetEntry[];
@@ -163,6 +195,7 @@ export const emptySheet = (): CharacterSheet => ({
   abilities: [],
   spellcasting: [],
   spells: [],
+  spellEffects: [],
   notes: '',
   raw: [],
   source: { kind: 'manual' },
@@ -233,8 +266,23 @@ export function parseSheet(raw: unknown): SheetParse {
     const level = typeof o.level === 'number' && Number.isInteger(o.level) && o.level >= 0 && o.level <= 9 ? o.level : null;
     const source = str(o.source ?? '', L.label);
     const notes = str(o.notes ?? '', L.value);
-    if (name === null || level === null || source === null || notes === null) return null;
-    return { id: o.id as string, name, level, prepared: level === 0 || o.prepared === true, source, notes };
+    const school = str(o.school ?? '', L.label);
+    const castingTime = str(o.castingTime ?? '', 120);
+    const range = str(o.range ?? '', 120);
+    const components = str(o.components ?? '', 160);
+    const duration = str(o.duration ?? '', 120);
+    const description = str(o.description ?? '', L.text);
+    if (name === null || level === null || source === null || notes === null || school === null || castingTime === null || range === null || components === null || duration === null || description === null) return null;
+    return { id: o.id as string, name, level, prepared: level === 0 || o.prepared === true, source, notes, school, castingTime, range, components, duration, concentration: o.concentration === true, ritual: o.ritual === true, description };
+  });
+  const spellEffects = list(raw.spellEffects, 'spell effects', (o) => {
+    const spellId = str(o.spellId, 40);
+    const castAt = str(o.castAt, 40);
+    const expiresAt = str(o.expiresAt, 40);
+    const castMs = castAt ? Date.parse(castAt) : NaN;
+    const expiresMs = expiresAt ? Date.parse(expiresAt) : NaN;
+    if (o.kind !== 'mageArmor' || !spellId || !castAt || !expiresAt || !Number.isFinite(castMs) || !Number.isFinite(expiresMs) || expiresMs <= castMs) return null;
+    return { id: o.id as string, kind: 'mageArmor', spellId, castAt: new Date(castMs).toISOString(), expiresAt: new Date(expiresMs).toISOString() };
   });
   const attributes = list(raw.attributes, 'attributes', (o) => {
     const name = str(o.name, L.label);
@@ -255,7 +303,8 @@ export function parseSheet(raw: unknown): SheetParse {
     const text = str(o.text ?? '', L.text);
     return name !== null && text !== null ? { id: o.id as string, name, text } : null;
   });
-  for (const r of [details, appearance, attributes, combat, saves, skills, attacks, resources, abilities, spellcasting, spells, rawFields]) if (typeof r === 'string') return bad(r);
+  for (const r of [details, appearance, attributes, combat, saves, skills, attacks, resources, abilities, spellcasting, spells, spellEffects, rawFields]) if (typeof r === 'string') return bad(r);
+  if ((spellEffects as ActiveSpellEffect[]).filter((effect) => effect.kind === 'mageArmor').length > 1) return bad('duplicate active spell effect');
 
   let hitPoints: HitPoints | null = null;
   if (raw.hitPoints !== null && raw.hitPoints !== undefined) {
@@ -345,6 +394,7 @@ export function parseSheet(raw: unknown): SheetParse {
       abilities: abilities as SheetAbility[],
       spellcasting: spellcasting as SheetEntry[],
       spells: spells as SheetSpell[],
+      spellEffects: spellEffects as ActiveSpellEffect[],
       notes,
       raw: rawFields as SheetEntry[],
       source,
@@ -391,6 +441,7 @@ export function mergeSheets(existing: CharacterSheet, imported: CharacterSheet):
     abilities: mergeList(existing.abilities, imported.abilities, (x) => x.name),
     spellcasting: mergeList(existing.spellcasting, imported.spellcasting, (x) => x.label),
     spells: mergeList(existing.spells, imported.spells, (x) => `${x.level}:${x.name}`),
+    spellEffects: existing.spellEffects,
     notes,
     raw: mergeList(existing.raw, imported.raw, (x) => x.label),
     source: imported.source,
@@ -402,5 +453,5 @@ export function mergeSheets(existing: CharacterSheet, imported: CharacterSheet):
 /** Is the sheet still empty (nothing entered yet)? */
 export const sheetIsEmpty = (s: CharacterSheet) =>
   !s.hitPoints &&
-  ![s.details, s.appearance, s.attributes, s.combat, s.saves, s.skills, s.attacks, s.resources, s.abilities, s.spellcasting, s.spells, s.raw].some((l) => l.length) &&
+  ![s.details, s.appearance, s.attributes, s.combat, s.saves, s.skills, s.attacks, s.resources, s.abilities, s.spellcasting, s.spells, s.spellEffects, s.raw].some((l) => l.length) &&
   !s.notes.trim();

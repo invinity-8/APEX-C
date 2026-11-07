@@ -27,12 +27,15 @@ import type {
   Announcement,
   BodyType,
   NarrativeItemRequest,
+  SceneAnnouncement,
+  SceneEncounter,
 } from './types.js';
 import { containersOf } from './inventory.js';
 import { redactItem } from './items/instance.js';
 import type { BeastForm } from './beasts.js';
 import type { CharacterCosmetics } from './cosmetics.js';
 import type { CurrencyId } from './items/currency.js';
+import { canUseCubeOperation, cubeLevelOf } from './items/cubeProgression.js';
 import { itemRulesOf, type ItemRules } from './items/rules.js';
 import { lootRollsView, type LootRoll } from './items/partyLoot.js';
 import { merchantView, type Merchant } from './items/merchant.js';
@@ -137,6 +140,8 @@ export interface TokenDetails {
   containers?: InventoryContainer[];
   /** APEX 0.5: private like the inventory (owner + GM only). */
   equipment?: Equipment;
+  /** Owner/GM only: invalidates an active Mage Armor effect when body armor is donned. */
+  armorWornAt?: string;
   /** APEX 0.6: magical currency (owner + GM only). */
   currency?: Partial<Record<CurrencyId, number>>;
   currencyRev?: number;
@@ -150,6 +155,11 @@ export interface TokenDetails {
   /** APEX 0.7: Arcane Transmutation unlocked (cube carried or GM entitlement). */
   transmuteUnlocked?: boolean;
   cubeAccess?: boolean;
+  cubeProgression?: Token['cubeProgression'];
+  cubeCarried?: boolean;
+  cubeCanTransmute?: boolean;
+  /** Effective server-computed arena allowance; speed encumbrance never trusts client edits. */
+  movementAllowance?: { maxMovePoints: number; remainingMovePoints: number; speedFt: number; loadState: import('./items/weight.js').LoadState };
 }
 
 export interface TokenView {
@@ -226,6 +236,10 @@ export interface ViewModel {
   lootRolls: LootRoll[];
   /** APEX 0.7: the GM Merchant – players only receive it while it is open (items redacted). */
   merchant: Merchant | null;
+  /** Scene-local announcements only. */
+  sceneAnnouncements: SceneAnnouncement[];
+  /** Scene-local encounter; hidden participants are removed from player views. */
+  sceneEncounter: SceneEncounter | null;
 }
 
 /** Which neighbour directions of `h` lie outside the arena? */
@@ -249,13 +263,15 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.itemRequests?.length ? { itemRequests: structuredClone(t.itemRequests) } : {}),
   containers: withInventory ? containersOf(t).map((c) => ({ ...c })) : undefined,
   equipment: withInventory && t.equipment ? structuredClone(t.equipment) : undefined,
+  ...(withInventory && t.armorWornAt ? { armorWornAt: t.armorWornAt } : {}),
   ...(withInventory ? { currency: { ...(t.currency ?? {}) }, currencyRev: t.currencyRev ?? 0 } : {}),
   ...(withInventory && t.lastTransmute ? { lastTransmute: structuredClone(t.lastTransmute) } : {}),
   ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),
   ...(withInventory && t.bodyType ? { bodyType: t.bodyType } : {}),
   ...(withInventory && t.sneaking ? { sneaking: true } : {}),
-  ...(withInventory && (t.cubeAccess || t.inventory.some((i) => i.baseId === 'apex-imperial-transmutation-cube')) ? { transmuteUnlocked: true } : {}),
+  ...(withInventory && canUseCubeOperation(t, 'transmute') ? { transmuteUnlocked: true } : {}),
   ...(withInventory && t.cubeAccess ? { cubeAccess: true } : {}),
+  ...(withInventory ? { cubeProgression: { ...(t.cubeProgression ?? {}), level: cubeLevelOf(t), ...(t.cubeAccess ? { gmOverride: true } : {}) }, cubeCarried: t.inventory.some(i => i.baseId === 'apex-imperial-transmutation-cube'), cubeCanTransmute: canUseCubeOperation(t, 'transmute') } : {}),
   ...(withInventory && t.beastImages ? { beastImageV: Object.fromEntries(Object.entries(t.beastImages).map(([k, v]) => [k, v.v])) } : {}),
 });
 
@@ -327,6 +343,8 @@ export function buildGmView(state: GameState): ViewModel {
     customBeasts: state.customBeasts ?? [],
     lootRolls: lootRollsView(state, 'gm'),
     merchant: state.merchant ? structuredClone(state.merchant) : null,
+    sceneAnnouncements: structuredClone(state.sceneAnnouncements ?? []),
+    sceneEncounter: null,
   };
 }
 
@@ -350,7 +368,7 @@ function trackersOf(state: GameState): TrackerView[] {
  * coordinates), hidden sites, GM notes, rivals out of sight, events before they
  * happen, GM-only log entries.
  */
-export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
+export function buildPlayerView(state: GameState, viewerId: string, sceneId?: string | null): ViewModel {
   const group = groupOf(state, viewerId);
   const groupIds = new Set(group.map((t) => t.id));
 
@@ -429,6 +447,16 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
       lastSeen: sightings[team.id] ? { pos: { ...sightings[team.id].pos }, day: sightings[team.id].day } : undefined,
     }));
 
+  const encounter = sceneId ? state.sceneEncounters?.[sceneId] : undefined;
+  const visibleEncounter = encounter ? {
+    ...encounter,
+    participants: encounter.participants.filter(p => p.visible || (!!p.tokenId && groupIds.has(p.tokenId))),
+    turnIndex: -1,
+  } : null;
+  if (visibleEncounter && encounter) {
+    const active = encounter.participants[encounter.turnIndex];
+    visibleEncounter.turnIndex = visibleEncounter.participants.findIndex(p => p.id === active?.id);
+  }
   return {
     role: 'player',
     worldId: state.world?.id ?? null,
@@ -449,8 +477,10 @@ export function buildPlayerView(state: GameState, viewerId: string): ViewModel {
     serverTime: new Date().toISOString(),
     itemRules: itemRulesOf(state),
     customBeasts: state.customBeasts ?? [],
-    lootRolls: lootRollsView(state, [viewerId]),
+    lootRolls: lootRollsView(state, [viewerId], sceneId),
     merchant: merchantView(state, redactItem),
+    sceneAnnouncements: sceneId ? (state.sceneAnnouncements ?? []).filter(a => a.sceneId === sceneId).slice(-20).map(a => ({ ...a })) : [],
+    sceneEncounter: visibleEncounter,
   };
 }
 

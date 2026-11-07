@@ -29,6 +29,7 @@ const CHARACTER_FIELDS = [
   'equipment',
   'currency',
   'currencyRev',
+  'cubeProgression',
   'speedFt',
   'maxMovePoints',
   'visionRadius',
@@ -78,7 +79,7 @@ export function reconcileRestore(current: GameState, archived: GameState, choice
     else delete t.containers;
     // Ownership belongs to the present: keep the current equipment references and currency, never the archived
     // ones (an item traded away since must not come back, currency must not be duplicated).
-    for (const f of ['equipment', 'currency', 'currencyRev', 'accent', 'marker', 'portrait', 'titleCustom'] as const) {
+    for (const f of ['equipment', 'currency', 'currencyRev', 'cubeProgression', 'accent', 'marker', 'portrait', 'titleCustom'] as const) {
       if (now[f] !== undefined) (t as unknown as Record<string, unknown>)[f] = structuredClone(now[f]);
       else delete t[f];
     }

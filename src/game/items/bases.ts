@@ -181,7 +181,7 @@ export const BASE_ITEMS: BaseItem[] = [
     name,
     category: 'weapon',
     subtype,
-    equip: { kind: 'weapon', damage, damageType: type, properties: props },
+    equip: { kind: 'weapon', damage, ...(versatile ? { versatileDamage: versatile } : {}), damageType: type, properties: props },
     weight,
     price,
     modTags: ['weapon', subtype.includes('ranged') ? 'ranged' : 'melee'],

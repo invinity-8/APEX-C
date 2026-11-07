@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
 import { executeCommand, type Command } from '../src/game/commands';
+import { canMerge } from '../src/game/inventory';
 import type { GameState } from '../src/game/types';
 
 const P = { role: 'player' as const, tokenId: 'sinna' };
@@ -47,6 +48,32 @@ describe('inventory usability (APEX 0.6)', () => {
     expect(total()).toBe(8);
     expect(ids(s)).not.toContain('b2');
     expect(executeCommand(s, P, { type: 'invMergeStack', tokenId: 'sinna', itemId: 'a', rev: 0, intoItemId: 'b', intoRev: rev(s, 'b') }).ok).toBe(false); // different items
+  });
+
+  it('only merges matching item instances in the same container', () => {
+    let s = setup();
+    const torch = s.tokens.sinna.inventory.find((i) => i.id === 'b')!;
+    const other = { ...torch, id: 'other-torch', quantity: 2, container: 'pockets' };
+    expect(canMerge(torch, other)).toBe(false);
+    expect(executeCommand(s, P, { type: 'invMergeStack', tokenId: 'sinna', itemId: 'b', rev: 0, intoItemId: 'd', intoRev: 0 }).ok).toBe(true);
+
+    const unidentified = { ...torch, identified: false };
+    expect(canMerge(torch, unidentified)).toBe(false);
+    expect(canMerge({ ...torch, baseId: 'torch-a' }, { ...torch, baseId: 'torch-b' })).toBe(false);
+    expect(canMerge({ ...torch, weightKg: 0.1 }, { ...torch, weightKg: 0.2 })).toBe(false);
+    expect(canMerge({ ...torch, bound: true }, torch)).toBe(false);
+  });
+
+  it('rejects cross-container stack merges on the authoritative command path', () => {
+    let s = setup();
+    const source = s.tokens.sinna.inventory.find((i) => i.id === 'b')!;
+    source.container = 'backpack';
+    const destination = s.tokens.sinna.inventory.find((i) => i.id === 'd')!;
+    destination.container = 'pockets';
+    const result = executeCommand(s, P, { type: 'invMergeStack', tokenId: 'sinna', itemId: 'b', rev: 0, intoItemId: 'd', intoRev: 0 });
+    expect(result.ok).toBe(false);
+    expect(s.tokens.sinna.inventory.find((i) => i.id === 'b')?.quantity).toBe(6);
+    expect(s.tokens.sinna.inventory.find((i) => i.id === 'd')?.quantity).toBe(2);
   });
 
   it('equipment-defined items are not stackable; other players cannot touch the inventory', () => {

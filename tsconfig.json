@@ -12,8 +12,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "types": ["vite/client", "node"]
+    "noEmit": true
   },
   "include": ["src", "tests", "api", "dev", "scripts", "vite.config.ts", "vite.mock.config.ts"]
 }

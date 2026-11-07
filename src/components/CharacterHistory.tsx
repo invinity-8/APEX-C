@@ -134,7 +134,7 @@ function Archive({ game, token, sheet, run, notify, onSheet }: { game: GameApi; 
           type: 'gmRestoreCharacter',
           tokenId: token.id,
           ...(identity ? { identity: { name: c.name, title: c.title, color: c.color, ...(c.accent ? { accent: c.accent } : {}), ...(c.marker ? { marker: c.marker } : {}), initials: c.initials } } : {}),
-          ...(equipment && c.equipment ? { equipment: { slots: c.equipment.slots, activeSet: c.equipment.activeSet, resting: c.equipment.resting, restingKeep: c.equipment.restingKeep } } : {}),
+          ...(equipment && c.equipment ? { equipment: { slots: c.equipment.slots, ...(c.equipment.twoHandedGrips ? { twoHandedGrips: c.equipment.twoHandedGrips } : {}), activeSet: c.equipment.activeSet, resting: c.equipment.resting, restingKeep: c.equipment.restingKeep } } : {}),
         });
         if (!res.ok) return;
       }

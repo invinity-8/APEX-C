@@ -19,7 +19,8 @@
  *    with optimistic locking (version check) – concurrent writes cannot overwrite each other.
  */
 import { createDemoState, MAX_RADIUS, MIN_RADIUS } from '../data/demo.js';
-import { CHARACTER_COMMANDS, executeCommand, type Command } from '../game/commands.js';
+import { CHARACTER_COMMANDS, executeCommand, validateMove, type Command } from '../game/commands.js';
+import { SCENE_OPERATION_COMMANDS, type SceneOperationCommand } from '../game/sceneOperations.js';
 import { SEEDED_COMMANDS } from '../game/items/loot.js';
 import { PARTY_LOOT_SEEDED, PARTY_LOOT_TIMED } from '../game/items/partyLoot.js';
 import { medianLevel } from '../game/items/lootDraft.js';
@@ -27,6 +28,8 @@ import { migrateState, stripLegacy } from '../game/migrate.js';
 import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
+import { castMageArmor, isWearingArmor } from '../game/spells.js';
+import { characterMovementLoad } from '../game/items/weight.js';
 import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { buildSnapshot, isSnapshot, restoreSheetParts, sheetLevel, SHEET_PARTS, type SheetPart } from '../game/progression.js';
@@ -548,7 +551,17 @@ async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?:
   if (!characters.length) return { ...base, notice: 'No character has been assigned to your profile yet. Please ask your Game Master.' };
   const active = characters.find((c) => c.id === as)?.id ?? characters[0].id;
   const scene = await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel);
-  const view = buildPlayerView(s.state, active);
+  const view = buildPlayerView(s.state, active, scene.kind === 'scene' ? scene.scene?.id : null);
+  const savedSheet = await repo.loadSheet(user.campaignId, active);
+  const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+  const movement = characterMovementLoad(s.state, s.state.tokens[active], parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+  const ownToken = view.tokens.find(token => token.id === active);
+  if (ownToken?.details) ownToken.details.movementAllowance = {
+    maxMovePoints: movement.maxMovePoints,
+    remainingMovePoints: movement.remainingMovePoints,
+    speedFt: movement.speedFt,
+    loadState: movement.load.state,
+  };
   if (scene.kind !== 'arena') {
     // Non-Arena screens keep only authorized persistent character data, never legacy map intel.
     view.hexes = []; view.hexByKey = {}; view.sites = []; view.trackers = []; view.log = []; view.announcements = [];
@@ -644,6 +657,50 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
         if (body.worldId !== undefined && body.worldId !== worldIdOf(stored.state)) {
           throw new HttpError(409, 'The Game Master has switched to another world. Your view is being reloaded – please repeat your action there if it still makes sense.', 'world_changed');
         }
+        if (user.role === 'gm' && cmd.type === 'lootRollStart' && cmd.sceneId) {
+          if (!repo.sceneRuntime) throw new HttpError(503, 'Scene assignments are unavailable.', 'scene_unavailable');
+          const scene = await repo.sceneRuntime.scene(user.campaignId, cmd.sceneId);
+          if (!scene || scene.is_legacy_arena || scene.is_draft || scene.archived) throw new HttpError(409, 'Choose a published scene before starting scene loot.', 'scene_changed');
+          const [assignments, profiles] = await Promise.all([
+            repo.sceneRuntime.assignments(user.campaignId),
+            repo.profiles(user.campaignId),
+          ]);
+          const assignedUsers = new Set(assignments.filter(assignment => assignment.scene_id === scene.id).map(assignment => assignment.user_id));
+          const eligibleTokens = new Set(profiles.filter(profile => profile.active && profile.role === 'player' && assignedUsers.has(profile.userId))
+            .flatMap(profile => profile.tokenIds).filter(tokenId => stored.state.tokens[tokenId]?.kind === 'player'));
+          if (cmd.tokenIds.some(tokenId => !eligibleTokens.has(tokenId))) throw new HttpError(409, 'Every loot recipient must be assigned to the selected scene.', 'scene_changed');
+        }
+        if (user.role === 'gm' && SCENE_OPERATION_COMMANDS.has(cmd.type as SceneOperationCommand['type'])) {
+          if (!repo.sceneRuntime) throw new HttpError(503, 'Scene assignments are unavailable.', 'scene_unavailable');
+          const op = cmd as SceneOperationCommand;
+          const scene = await repo.sceneRuntime.scene(user.campaignId, op.sceneId);
+          if (!scene || scene.is_legacy_arena || scene.is_draft || scene.archived || scene.revision !== op.publishedRevision) {
+            throw new HttpError(409, 'The published scene changed. Refresh it before using live controls.', 'scene_changed');
+          }
+          const requestedTokenIds = op.type === 'sceneEncounterStart'
+            ? op.participants.flatMap(p => p.tokenId ? [p.tokenId] : [])
+            : op.type === 'sceneEncounterAdd' && op.participant.tokenId ? [op.participant.tokenId] : [];
+          if (requestedTokenIds.length) {
+            const [assignments, profiles] = await Promise.all([
+              repo.sceneRuntime.assignments(user.campaignId),
+              repo.profiles(user.campaignId),
+            ]);
+            const assignedUsers = new Set(assignments.filter(a => a.scene_id === scene.id).map(a => a.user_id));
+            const eligibleTokens = new Set(profiles.filter(p => p.active && p.role === 'player' && assignedUsers.has(p.userId))
+              .flatMap(p => p.tokenIds).filter(id => stored.state.tokens[id]?.kind === 'player'));
+            if (requestedTokenIds.some(id => !eligibleTokens.has(id))) throw new HttpError(409, 'Encounter characters must belong to active players assigned to this scene.', 'scene_changed');
+          }
+        }
+        if (user.role !== 'gm' && (cmd.type === 'lootRollChoose' || cmd.type === 'lootRollClaimExpired')) {
+          const roll = stored.state.lootRolls?.find(candidate => candidate.id === cmd.rollId);
+          if (roll?.sceneId) {
+            if (!repo.sceneRuntime) throw new HttpError(503, 'Scene assignments are unavailable.', 'scene_unavailable');
+            const assignment = await repo.sceneRuntime.assignment(user.campaignId, user.id);
+            if (assignment?.scene_id !== roll.sceneId || !roll.eligible.includes(cmd.tokenId)) {
+              throw new HttpError(409, 'This loot roll is only available to characters assigned to its scene.', 'scene_changed');
+            }
+          }
+        }
 
         let actor: Actor;
         try {
@@ -652,10 +709,29 @@ async function runCommand(user: AuthUser, body: unknown, repo: Repo): Promise<Ca
           await log(false, (e as Error).message);
           throw e;
         }
+        if (cmd.type === 'move') {
+          const token = stored.state.tokens[cmd.tokenId];
+          if (token) {
+            const savedSheet = await repo.loadSheet(user.campaignId, token.id);
+            const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
+            const movement = characterMovementLoad(stored.state, token, parsedSheet.ok ? parsedSheet.sheet : emptySheet());
+            if (movement.load.state === 'over') throw new HttpError(422, `${token.name} is over carrying capacity; reduce the carried load before moving.`, 'rejected');
+            const check = validateMove(stored.state, actor, token.id, cmd.to);
+            if (check.ok && check.cost > movement.remainingMovePoints + 1e-9) {
+              throw new HttpError(422, `Encumbrance leaves only ${movement.remainingMovePoints} movement point(s) today.`, 'rejected');
+            }
+          }
+        }
         const res = executeCommand(stored.state, actor, cmd);
         if (!res.ok) {
           await log(false, res.error);
           throw new HttpError(422, res.error, 'rejected');
+        }
+        const affectedTokenId = 'tokenId' in cmd ? cmd.tokenId : undefined;
+        if (affectedTokenId) {
+          const before = stored.state.tokens[affectedTokenId];
+          const after = res.state.tokens[affectedTokenId];
+          if (before && after && !isWearingArmor(before) && isWearingArmor(after)) after.armorWornAt = new Date().toISOString();
         }
         const version = await repo.saveState(user.campaignId, res.state, stored.version, user.id);
         if (version === null) continue; // somebody else wrote first → re-validate against the fresh state
@@ -889,7 +965,9 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
         await repo.backupSheet(cid, tokenId, buildSnapshot(prevSheet.sheet, state!.tokens[tokenId], label, 'Automatic snapshot before an incremental PDF update.'), cur.version, 'snapshot', user.id);
       }
     } else if (cur && reason !== 'edit') await repo.backupSheet(cid, tokenId, cur.data, cur.version, `Before ${reason === 'import-replace' ? 'import (replace)' : 'import (merge)'}`, user.id);
-    const v = await repo.saveSheet(cid, tokenId, parsed.sheet, body.expectedVersion, user.id);
+    const currentParsed = cur ? parseSheet(cur.data) : null;
+    const safeSheet = { ...parsed.sheet, spellEffects: currentParsed?.ok ? currentParsed.sheet.spellEffects : [] };
+    const v = await repo.saveSheet(cid, tokenId, safeSheet, body.expectedVersion, user.id);
     if (v === null) {
       throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded – please check it and save again.', 'sheet_conflict', undefined, {
         current: await sheetPayload(repo, cid, tokenId, state!),
@@ -921,6 +999,23 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
       if (v !== null) return sheetPayload(repo, cid, tokenId, state!);
     }
     throw new HttpError(409, 'The character sheet is being changed elsewhere right now. Please try again.', 'conflict');
+  }
+  if (body.action === 'castMageArmor') {
+    if (!isId(body.spellId)) throw new HttpError(400, 'Choose a valid spell.');
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER) || body.expectedVersion < 0) throw new HttpError(400, 'Invalid sheet version.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'The character sheet changed in the meantime – the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    const parsed = cur ? parseSheet(cur.data) : null;
+    const sheet = parsed?.ok ? parsed.sheet : emptySheet();
+    const cast = castMageArmor(sheet, state!.tokens[tokenId], body.spellId, Date.now());
+    if (!cast.ok) throw new HttpError(422, cast.error, 'rejected');
+    const version = await repo.saveSheet(cid, tokenId, cast.sheet, body.expectedVersion, user.id);
+    if (version === null) {
+      throw new HttpError(409, 'The character sheet changed in the meantime – the latest version has been loaded.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    return sheetPayload(repo, cid, tokenId, state!);
   }
   // ---- APEX 0.7 class abilities & hit points: server-validated rules, one atomic write with a version check
   const ABILITY_ACTIONS = new Set(['wildShape', 'revert', 'damage', 'heal', 'tempHp', 'sorcery']);

@@ -147,6 +147,8 @@ export class MemoryRepo implements Repo {
   journalRows: Array<import('../src/server/journals').JournalEntry & { campaign_id: string }> = [];
   readonly journalStore: import('../src/server/journals').JournalStore = {
     get: async (user, id) => structuredClone(this.journalRows.find(e => e.campaign_id === user.campaignId && e.id === id && (e.owner_id === user.id || e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm'))) ?? null),
+    backlinks: async (user, targetId, offset) => structuredClone(this.journalRows.filter(e => e.campaign_id === user.campaignId && (e.owner_id === user.id || e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm')) && e.body.includes(`[[ref:${targetId}]]`))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)).slice(offset, offset + 50)),
     list: async (user, offset, mine = false, filters = {}) => structuredClone(this.journalRows.filter(e => e.campaign_id === user.campaignId && (e.owner_id === user.id || (!mine && (e.sharing === 'party' || (user.role === 'gm' && e.sharing === 'gm')))) && (!filters.search || filters.search.toLowerCase().split(/\s+/).every(word=>`${e.title} ${e.body} ${e.category}`.toLowerCase().includes(word))) && (!filters.category || e.category===filters.category) && (!filters.tag || e.tags.includes(filters.tag)))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (filters.sort==='oldest'?a.created_at.localeCompare(b.created_at):b.created_at.localeCompare(a.created_at)) || a.id.localeCompare(b.id)).slice(offset, offset + 50)),
     save: async (user, id, version, draft) => {
@@ -212,6 +214,7 @@ export class MemoryRepo implements Repo {
       if (patch.archived && this.sceneAssignments.some(a => a.campaign_id === campaignId && a.scene_id === id)) return null;
       const notify=('published_metadata' in patch) || ('name' in patch && patch.name!==row.name) || ('archived' in patch && patch.archived!==row.archived);
       Object.assign(row, structuredClone(patch), { revision: revision + 1, updated_at: new Date().toISOString() });
+      if ('published_metadata' in patch && !('published_revision' in patch)) row.published_revision = (row.published_revision ?? 0) + 1;
       const stored=this.states.get(campaignId); if(notify && stored) { this.states.set(campaignId,{state:stored.state,version:stored.version+1}); this.onSceneChange?.(campaignId); }
       return structuredClone(row);
     },

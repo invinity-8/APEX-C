@@ -9,13 +9,18 @@
  * Capacity (SRD 5.1): Strength score × 15 lb. Item "carrying capacity" modifiers (lb) add to it.
  * Variant encumbrance (GM option): above STR × 5 lb "Encumbered" (speed −10 ft), above STR × 10 lb "Heavily
  * encumbered" (speed −20 ft, disadvantage on STR/DEX/CON ability checks, attack rolls and saves).
- * APEX shows the state; it never blocks movement automatically – the GM applies speed penalties (see the
- * movement rules). Magical currency (Seals, Orbs, Fragments) is weightless; Gold Pieces in the purse weigh
+ * APEX applies variant speed penalties and the server blocks movement above carrying capacity. Magical currency
+ * (Seals, Orbs, Fragments) is weightless; Gold Pieces in the purse weigh
  * 50 coins = 1 lb. Free-text items get a rough estimate from their name (weightGuess.ts). Without a Strength score
  * on the sheet the capacity uses STR 10 and says so.
  */
-import type { Item, Token } from '../types.js';
+import type { CharacterSheet } from '../sheet.js';
+import { activeSlots, equipmentOf, type EquipSlot } from '../equipment.js';
+import { movePointsForSpeed, walkingSpeed } from '../resources.js';
+import type { GameState, Item, Token } from '../types.js';
 import { baseItem } from './bases.js';
+import { itemBonuses } from '../equipment.js';
+import { itemRulesOf } from './rules.js';
 
 export const LB_TO_KG = 0.45359237;
 export const lbToKg = (lb: number) => Math.round(lb * LB_TO_KG * 100) / 100;
@@ -89,5 +94,34 @@ export function strengthScore(sheet: { attributes: Array<{ name: string; value: 
   const a = sheet?.attributes.find((x) => /^str/i.test(x.name.trim()));
   const n = a ? Number(/\d+/.exec(a.value)?.[0]) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export interface CharacterMovementLoad {
+  load: CarryLoad;
+  speedFt: number;
+  maxMovePoints: number;
+  spentMovePoints: number;
+  remainingMovePoints: number;
+}
+
+/** Shared authoritative load and movement calculation used by server command guards and the player view. */
+export function characterMovementLoad(state: Pick<GameState, 'itemRules'>, token: Token, sheet: CharacterSheet | null): CharacterMovementLoad {
+  const rules = itemRulesOf(state);
+  const equipment = equipmentOf(token);
+  const items = new Map(token.inventory.map(item => [item.id, item]));
+  const worn = activeSlots(equipment).flatMap((slot: EquipSlot) => {
+    const item = equipment.slots[slot] ? items.get(equipment.slots[slot]!) : undefined;
+    return item?.equip ? [{ slot, item }] : [];
+  });
+  const bonuses = itemBonuses(worn, rules);
+  const load = carryLoad(token, strengthScore(sheet), bonuses.carry.value, rules.encumbranceVariant === 1);
+  const baseSpeed = token.speedFt ?? (sheet ? walkingSpeed(sheet) : null) ?? 30;
+  const penalty = load.state === 'heavily' ? 20 : load.state === 'encumbered' ? 10 : 0;
+  const speedFt = Math.max(0, baseSpeed + bonuses.speed.value - penalty);
+  const adjustedMax = load.state === 'over' || speedFt <= 0 ? 0 : movePointsForSpeed(speedFt);
+  const maxMovePoints = Math.min(Math.max(0, token.maxMovePoints), adjustedMax);
+  const spentMovePoints = Math.max(0, token.maxMovePoints - token.movePoints);
+  const remainingMovePoints = Math.max(0, Math.min(token.movePoints, maxMovePoints - spentMovePoints));
+  return { load, speedFt, maxMovePoints, spentMovePoints, remainingMovePoints };
 }
 

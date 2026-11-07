@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser, Repo } from '../src/server/repo';
 import { emptyMap } from '../src/campaign/maps';
 import { runtimeRequest, type RuntimeScene } from '../src/server/sceneRuntime';
+import { assignmentLocation } from '../src/components/CampaignMapDirector';
 
 const gm: AuthUser = {
   id: 'gm-user', campaignId: 'campaign', profileKey: 'gm', displayName: 'GM',
@@ -12,6 +13,20 @@ const player = {
   role: 'player' as const, tokenIds: ['token-1'], userId: 'player-user', active: true,
 };
 const sceneId = '11111111-1111-4111-8111-111111111111';
+
+describe('Map assignment locations', () => {
+  const scenes = [{ id: sceneId, name: 'Forest' }];
+
+  it('shows Sanctuary even when the GM has no scene focus', () => {
+    expect(assignmentLocation({ sceneId: null }, null, scenes)).toBe('Sanctuary');
+  });
+
+  it('distinguishes focused, named other, and unavailable scenes', () => {
+    expect(assignmentLocation({ sceneId }, sceneId, scenes)).toBe('here');
+    expect(assignmentLocation({ sceneId }, null, scenes)).toBe('Forest');
+    expect(assignmentLocation({ sceneId: '22222222-2222-4222-8222-222222222222' }, sceneId, scenes)).toBe('another scene');
+  });
+});
 
 function repoFor(scenePatch: Partial<RuntimeScene> | null) {
   const map = emptyMap('region');

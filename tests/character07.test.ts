@@ -107,11 +107,12 @@ describe('character tokens', () => {
 
   it('gmRestoreCharacter is GM-only and drops slots of items no longer owned', () => {
     const s = createDemoState({ radius: 6, seed: 2 });
-    s.tokens.sinna.inventory = [{ id: 'own', name: 'Sword', kind: 'weapon', description: '', quantity: 1, equip: { kind: 'weapon', damage: '1d8' } }];
-    const cmd = { type: 'gmRestoreCharacter' as const, tokenId: 'sinna', equipment: { slots: { main1: 'own', ring1: 'sold-ring' }, activeSet: 1 as const, resting: false, restingKeep: [] } };
+    s.tokens.sinna.inventory = [{ id: 'own', name: 'Sword', kind: 'weapon', description: '', quantity: 1, equip: { kind: 'weapon', damage: '1d8', versatileDamage: '1d10', properties: ['versatile'] } }];
+    const cmd = { type: 'gmRestoreCharacter' as const, tokenId: 'sinna', equipment: { slots: { main1: 'own', ring1: 'sold-ring' }, twoHandedGrips: ['own', 'sold-weapon'], activeSet: 1 as const, resting: false, restingKeep: [] } };
     expect(executeCommand(s, { role: 'player', tokenId: 'sinna' }, cmd).ok).toBe(false);
     const r = executeCommand(s, { role: 'gm' }, cmd);
     expect(r.ok && r.state.tokens.sinna.equipment?.slots).toEqual({ main1: 'own' });
+    expect(r.ok && r.state.tokens.sinna.equipment?.twoHandedGrips).toEqual(['own']);
     expect(r.ok && r.state.tokens.sinna.inventory).toHaveLength(1);
   });
 

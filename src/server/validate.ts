@@ -53,6 +53,12 @@ function parseDraftOp(o: Obj): DraftOp | null {
   return { kind: 'add', entry };
 }
 
+const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+function sceneParticipant(v: unknown) {
+  if (!isObj(v) || !isId(v.id) || !isText(v.name, 80) || !v.name.trim() || !isInt(v.initiative, 1000) || v.initiative < -100 || typeof v.visible !== 'boolean' || (v.tokenId !== undefined && !isId(v.tokenId))) return null;
+  return { id: v.id, name: v.name.trim().slice(0, 80), initiative: v.initiative, visible: v.visible, ...(typeof v.tokenId === 'string' ? { tokenId: v.tokenId } : {}) };
+}
+
 export type ParseResult = { ok: true; command: Command } | { ok: false; error: string };
 
 export function parseCommand(raw: unknown): ParseResult {
@@ -83,8 +89,41 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'lootRollStart': {
       if (!isId(c.rollId) || c.rollId.length > 40 || !Array.isArray(c.stagedIds) || !c.stagedIds.length || c.stagedIds.length > MAX_OPEN_ROLLS || !c.stagedIds.every(isId)) return bad('lootRollStart');
       if (!Array.isArray(c.tokenIds) || !c.tokenIds.length || c.tokenIds.length > 50 || !c.tokenIds.every(isId) || !isInt(c.minutes, ROLL_MINUTES.max) || c.minutes < ROLL_MINUTES.min) return bad('lootRollStart');
-      return { ok: true, command: { type: 'lootRollStart', rollId: c.rollId, stagedIds: [...(c.stagedIds as string[])], tokenIds: [...(c.tokenIds as string[])], minutes: c.minutes } };
+      if (c.sceneId !== undefined && (typeof c.sceneId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.sceneId))) return bad('lootRollStart');
+      return { ok: true, command: { type: 'lootRollStart', rollId: c.rollId, stagedIds: [...(c.stagedIds as string[])], tokenIds: [...(c.tokenIds as string[])], minutes: c.minutes, ...(typeof c.sceneId === 'string' ? { sceneId: c.sceneId } : {}) } };
     }
+    case 'sceneAnnounce':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.announcementId) || !isText(c.title, 120) || !c.title.trim() || !isText(c.text, 1000) || !c.text.trim()) return bad('sceneAnnounce');
+      return { ok: true, command: { type: 'sceneAnnounce', sceneId: c.sceneId, publishedRevision: c.publishedRevision, announcementId: c.announcementId, title: c.title.trim(), text: c.text.trim() } };
+    case 'sceneAnnouncementDismiss':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.announcementId)) return bad('sceneAnnouncementDismiss');
+      return { ok: true, command: { type: 'sceneAnnouncementDismiss', sceneId: c.sceneId, publishedRevision: c.publishedRevision, announcementId: c.announcementId } };
+    case 'sceneEncounterStart': {
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isText(c.title, 120) || !c.title.trim() || !Array.isArray(c.participants) || !c.participants.length || c.participants.length > 50) return bad('sceneEncounterStart');
+      const participants = c.participants.map(sceneParticipant);
+      if (participants.some(p => !p) || new Set(participants.map(p => p!.id)).size !== participants.length) return bad('sceneEncounterStart participants');
+      return { ok: true, command: { type: 'sceneEncounterStart', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, title: c.title.trim(), participants: participants as NonNullable<typeof participants[number]>[] } };
+    }
+    case 'sceneEncounterAdd': {
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1) return bad('sceneEncounterAdd');
+      const participant = sceneParticipant(c.participant); if (!participant) return bad('sceneEncounterAdd participant');
+      return { ok: true, command: { type: 'sceneEncounterAdd', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participant } };
+    }
+    case 'sceneEncounterRemove':
+    case 'sceneEncounterAdvance':
+    case 'sceneEncounterEnd':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1) return bad(c.type);
+      if (c.type === 'sceneEncounterRemove') {
+        if (!isId(c.participantId)) return bad('sceneEncounterRemove');
+        return { ok: true, command: { type: c.type, sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participantId: c.participantId } };
+      }
+      return { ok: true, command: { type: c.type, sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion } };
+    case 'sceneEncounterVisibility':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1 || !isId(c.participantId) || typeof c.visible !== 'boolean') return bad('sceneEncounterVisibility');
+      return { ok: true, command: { type: 'sceneEncounterVisibility', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participantId: c.participantId, visible: c.visible } };
+    case 'sceneEncounterInitiative':
+      if (!isUuid(c.sceneId) || !isInt(c.publishedRevision, 1_000_000_000) || c.publishedRevision < 1 || !isId(c.encounterId) || !isInt(c.expectedVersion, 1_000_000_000) || c.expectedVersion < 1 || !isId(c.participantId) || !isInt(c.initiative, 1000) || c.initiative < -100) return bad('sceneEncounterInitiative');
+      return { ok: true, command: { type: 'sceneEncounterInitiative', sceneId: c.sceneId, publishedRevision: c.publishedRevision, encounterId: c.encounterId, expectedVersion: c.expectedVersion, participantId: c.participantId, initiative: c.initiative } };
     case 'merchantSetup': {
       if ((c.active !== undefined && typeof c.active !== 'boolean') || (c.name !== undefined && !isText(c.name, MERCHANT_LIMITS.name)) || (c.gold !== undefined && (!isInt(c.gold, MERCHANT_LIMITS.gold) || c.gold < 0)) || (c.buyRate !== undefined && (!isInt(c.buyRate, 100) || c.buyRate < 0))) return bad('merchantSetup');
       return { ok: true, command: { type: 'merchantSetup', ...(c.active !== undefined ? { active: c.active as boolean } : {}), ...(c.name !== undefined ? { name: c.name as string } : {}), ...(c.gold !== undefined ? { gold: c.gold as number } : {}), ...(c.buyRate !== undefined ? { buyRate: c.buyRate as number } : {}) } };
@@ -163,6 +202,12 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'gmSetCubeAccess':
       if (!isId(c.tokenId) || typeof c.permanent !== 'boolean') return bad('gmSetCubeAccess');
       return { ok: true, command: { type: 'gmSetCubeAccess', tokenId: c.tokenId, permanent: c.permanent } };
+    case 'gmSetCubeProgression':
+      if (!isId(c.tokenId) || !isInt(c.level, 5)) return bad('gmSetCubeProgression');
+      return { ok: true, command: { type: 'gmSetCubeProgression', tokenId: c.tokenId, level: c.level } };
+    case 'cubeUpgrade':
+      if (!isId(c.tokenId) || !isInt(c.expectedLevel, 5) || !isInt(c.currencyRev, 1e9)) return bad('cubeUpgrade');
+      return { ok: true, command: { type: 'cubeUpgrade', tokenId: c.tokenId, expectedLevel: c.expectedLevel, currencyRev: c.currencyRev } };
     case 'gmRechargeItem':
       if (!isId(c.tokenId) || !isId(c.itemId)) return bad('gmRechargeItem');
       return { ok: true, command: { type: 'gmRechargeItem', tokenId: c.tokenId, itemId: c.itemId } };
@@ -327,7 +372,8 @@ export function parseCommand(raw: unknown): ParseResult {
           slots[k] = v;
         }
         if (!e.restingKeep.every((x) => oneOf(x, EQUIP_SLOTS))) return bad('equipment.restingKeep');
-        out.equipment = { slots, activeSet: e.activeSet, resting: e.resting, restingKeep: e.restingKeep as EquipSlot[] };
+        if (e.twoHandedGrips !== undefined && (!Array.isArray(e.twoHandedGrips) || e.twoHandedGrips.length > 20 || !e.twoHandedGrips.every(isId))) return bad('equipment.twoHandedGrips');
+        out.equipment = { slots, ...(e.twoHandedGrips ? { twoHandedGrips: [...new Set(e.twoHandedGrips as string[])] } : {}), activeSet: e.activeSet, resting: e.resting, restingKeep: e.restingKeep as EquipSlot[] };
       }
       if (!out.identity && !out.equipment) return bad('nothing to restore');
       return { ok: true, command: out as Command };
@@ -338,6 +384,9 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'equipItem':
       if (!isId(c.tokenId) || !isId(c.itemId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/itemId/slot');
       return { ok: true, command: { type: 'equipItem', tokenId: c.tokenId, itemId: c.itemId, slot: c.slot } };
+    case 'setWeaponGrip':
+      if (!isId(c.tokenId) || !isId(c.itemId) || typeof c.twoHanded !== 'boolean') return bad('tokenId/itemId/twoHanded');
+      return { ok: true, command: { type: 'setWeaponGrip', tokenId: c.tokenId, itemId: c.itemId, twoHanded: c.twoHanded } };
     case 'unequipSlot':
       if (!isId(c.tokenId) || !oneOf(c.slot, EQUIP_SLOTS)) return bad('tokenId/slot');
       return { ok: true, command: { type: 'unequipSlot', tokenId: c.tokenId, slot: c.slot } };
@@ -468,7 +517,7 @@ const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 export function parseItemEquip(v: unknown): ItemEquip | null {
   if (!isObj(v) || !oneOf(v.kind, ITEM_KINDS)) return null;
   const out: ItemEquip = { kind: v.kind };
-  const allowedKeys = new Set(['kind', 'armorType', 'armorBase', 'acBonus', 'attackBonus', 'damage', 'damageType', 'properties', 'proficient', 'gmLocked']);
+  const allowedKeys = new Set(['kind', 'armorType', 'armorBase', 'acBonus', 'attackBonus', 'damage', 'versatileDamage', 'damageType', 'properties', 'proficient', 'gmLocked']);
   if (Object.keys(v).some((k) => !allowedKeys.has(k))) return null;
   if (v.armorType !== undefined) {
     if (!oneOf(v.armorType, ['light', 'medium', 'heavy'] as const)) return null;
@@ -487,6 +536,10 @@ export function parseItemEquip(v: unknown): ItemEquip | null {
     if (typeof v.damage !== 'string' || !/^(\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?|\d{1,2})$/i.test(v.damage.trim())) return null;
     out.damage = v.damage.trim().toLowerCase();
   }
+  if (v.versatileDamage !== undefined) {
+    if (typeof v.versatileDamage !== 'string' || !/^\d{1,2}d(4|6|8|10|12|20)(\s*\+\s*\d{1,2}d(4|6|8|10|12|20))?$/i.test(v.versatileDamage.trim())) return null;
+    out.versatileDamage = v.versatileDamage.trim().toLowerCase();
+  }
   if (v.damageType !== undefined) {
     if (!isText(v.damageType, 30)) return null;
     out.damageType = v.damageType.trim();
@@ -495,6 +548,7 @@ export function parseItemEquip(v: unknown): ItemEquip | null {
     if (!Array.isArray(v.properties) || v.properties.length > 10 || !v.properties.every((p) => oneOf(p, WEAPON_PROPERTIES))) return null;
     out.properties = [...new Set(v.properties as WeaponProperty[])];
   }
+  if (out.versatileDamage !== undefined && (!out.properties?.includes('versatile') || out.properties.includes('two-handed'))) return null;
   if (v.proficient !== undefined) {
     if (typeof v.proficient !== 'boolean') return null;
     out.proficient = v.proficient;

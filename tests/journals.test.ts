@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { journalMarkdown, journalRequest, parseJournal, type JournalDraft, type JournalEntry, type JournalStore } from '../src/server/journals';
 import type { AuthUser } from '../src/server/repo';
+import { MemoryRepo } from './memoryRepo';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const user = { id, campaignId: 'campaign', role: 'player' } as AuthUser;
 const draft: JournalDraft = { title: 'Personal secret', body: '# Memories\n\nText', category: 'Personal Notes', tags: ['quest'], pinned: false, sharing: 'private', scene_id: null, game_date: 'Day 3' };
 const entry = { ...draft, id, owner_id: user.id, created_at: '2026-11-05T12:00:00Z', updated_at: '2026-11-05T12:00:00Z', version: 1 } as JournalEntry;
-const storage = (): JournalStore => ({ list: vi.fn().mockResolvedValue([entry]), get: vi.fn().mockResolvedValue(null), save: vi.fn().mockResolvedValue(entry), remove: vi.fn().mockResolvedValue(true) });
+const storage = (): JournalStore => ({ list: vi.fn().mockResolvedValue([entry]), backlinks: vi.fn().mockResolvedValue([entry]), get: vi.fn().mockResolvedValue(entry), save: vi.fn().mockResolvedValue(entry), remove: vi.fn().mockResolvedValue(true) });
 
 describe('personal campaign journals', () => {
   it('validates sizes, visibility and references without trusting ownership fields', () => {
@@ -28,6 +29,31 @@ describe('personal campaign journals', () => {
     vi.mocked(store.get).mockResolvedValue(null);
     expect((await journalRequest(user, 'GET', { id }, null, store)).status).toBe(404);
     expect((await journalRequest(user, 'GET', { id: 'not-an-id' }, null, store)).status).toBe(400);
+  });
+  it('loads paginated backlinks through the visibility-filtered store and validates reference IDs', async () => {
+    const store = storage();
+    expect(await journalRequest(user, 'GET', { backlinks: id, offset: '50' }, null, store)).toEqual({ status: 200, body: { entries: [entry], nextOffset: null } });
+    expect(store.backlinks).toHaveBeenCalledWith(user, id, 50);
+    expect((await journalRequest(user, 'GET', { backlinks: 'private-id' }, null, store)).status).toBe(400);
+    vi.mocked(store.get).mockResolvedValue(null);
+    expect(await journalRequest(user, 'GET', { backlinks: id }, null, store)).toEqual({ status: 200, body: { entries: [], nextOffset: null } });
+    expect(store.backlinks).toHaveBeenCalledTimes(1);
+  });
+  it('paginates backlinks without exposing private entries owned by another player', async () => {
+    const repo = new MemoryRepo();
+    const visible = Array.from({ length: 51 }, (_, index) => ({
+      ...entry, id: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      owner_id: `other-player-${index}`, sharing: 'party' as const, body: `Mentions [[ref:${id}]]`,
+      created_at: new Date(Date.UTC(2026, 0, index + 1)).toISOString(), campaign_id: user.campaignId,
+    }));
+    repo.journalRows.push({ ...entry, campaign_id: user.campaignId }, ...visible, { ...visible[0], id: '20000000-0000-4000-8000-000000000001', sharing: 'private', campaign_id: user.campaignId });
+    const first = await journalRequest(user, 'GET', { backlinks: id }, null, repo.journalStore);
+    expect(first.status).toBe(200);
+    expect((first.body as { entries: JournalEntry[]; nextOffset: number | null }).entries).toHaveLength(50);
+    expect((first.body as { entries: JournalEntry[]; nextOffset: number | null }).nextOffset).toBe(50);
+    const second = await journalRequest(user, 'GET', { backlinks: id, offset: '50' }, null, repo.journalStore);
+    expect((second.body as { entries: JournalEntry[]; nextOffset: number | null }).entries).toHaveLength(1);
+    expect(JSON.stringify([first.body, second.body])).not.toContain('20000000-0000-4000-8000-000000000001');
   });
   it('rejects stale saves and deletes without acknowledging success', async () => {
     const store = storage(); vi.mocked(store.save).mockResolvedValue(null); vi.mocked(store.remove).mockResolvedValue(false);

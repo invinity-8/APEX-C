@@ -11,6 +11,7 @@ export interface JournalEntry {
 export type JournalDraft = Pick<JournalEntry, 'title' | 'body' | 'category' | 'tags' | 'pinned' | 'sharing' | 'scene_id' | 'game_date' | 'image_id'>;
 export interface JournalStore {
   list(user: AuthUser, offset: number, mine?: boolean, filters?: JournalFilters): Promise<JournalEntry[]>;
+  backlinks(user: AuthUser, targetId: string, offset: number): Promise<JournalEntry[]>;
   get(user: AuthUser, id: string): Promise<JournalEntry | null>;
   save(user: AuthUser, id: string, version: number, draft: JournalDraft): Promise<JournalEntry | null>;
   remove(user: AuthUser, id: string, version: number): Promise<boolean>;
@@ -27,6 +28,15 @@ export function parseJournal(value: unknown): JournalDraft | null {
 export async function journalRequest(user: AuthUser, method: string, query: Record<string, string | undefined>, body: unknown, store?: JournalStore, repo?: import('./repo.js').Repo): Promise<SceneResult> {
   if (!store) return { status: 503, body: { error: 'Journal storage unavailable.' } };
   if (method === 'GET') {
+    if (query.backlinks) {
+      if (!uuid(query.backlinks)) return { status: 400, body: { error: 'Invalid reference ID.' } };
+      const offset = Number(query.offset ?? 0);
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000) return { status: 400, body: { error: 'Invalid page.' } };
+      // Do not disclose even the existence of backlinks for a target the caller cannot read.
+      if (!await store.get(user, query.backlinks)) return { status: 200, body: { entries: [], nextOffset: null } };
+      const entries = await store.backlinks(user, query.backlinks, offset);
+      return { status: 200, body: { entries, nextOffset: entries.length === 50 ? offset + 50 : null } };
+    }
     if (query.id) {
       if (!uuid(query.id)) return { status: 400, body: { error: 'Invalid entry ID.' } };
       const entry = await store.get(user, query.id);

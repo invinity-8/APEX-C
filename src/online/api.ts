@@ -92,6 +92,7 @@ export const api = {
   sceneAssign: (sceneId: string | null, targets: { userId: string; revision: number }[], requestId: string) => request<{ ok: boolean; error?: string }>('POST', 'scene-runtime', {}, { sceneId, targets, requestId }),
   sceneAction: (id: string, revision: number, action: string, fields: Record<string, unknown> = {}) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { ...fields, id, revision, action }),
   journalList: (offset = 0, mine = false, filters:import('../server/journals').JournalFilters={}) => request<{ entries: import('../server/journals').JournalEntry[]; nextOffset: number | null; ownerId: string }>('GET', 'journal', { offset: String(offset), mine: mine ? '1' : undefined, ...filters }),
+  journalBacklinks: (id: string, offset = 0) => request<{ entries: import('../server/journals').JournalEntry[]; nextOffset: number | null }>('GET', 'journal', { backlinks: id, offset: String(offset) }),
   journalRead: (id: string) => request<{ entry: import('../server/journals').JournalEntry }>('GET', 'journal', { id }),
   journalSave: (id: string, version: number, entry: import('../server/journals').JournalDraft) => request<{ entry: import('../server/journals').JournalEntry }>('POST', 'journal', {}, { action: 'save', id, version, entry }),
   journalDelete: (id: string, version: number) => request<{ deleted: boolean }>('POST', 'journal', {}, { action: 'delete', id, version }),

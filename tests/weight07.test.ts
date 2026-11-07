@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
 import { executeCommand, type Command } from '../src/game/commands';
-import { carryLoad, holdingContainerId, itemWeightKg, itemWeightGrams, lbToKg } from '../src/game/items/weight';
+import { carryLoad, characterMovementLoad, holdingContainerId, itemWeightKg, itemWeightGrams, lbToKg } from '../src/game/items/weight';
+import { emptySheet } from '../src/game/sheet';
 import type { GameState } from '../src/game/types';
 
 const GM = { role: 'gm' as const };
@@ -58,6 +59,22 @@ describe('carry weight (kg)', () => {
     expect(carryLoad(s.tokens.sinna, 5, 0, true).state).toBe('heavily');
     expect(carryLoad(s.tokens.sinna, 3, 0, true).state).toBe('over');
     expect(carryLoad(s.tokens.sinna, null, 0, true)).toMatchObject({ assumedStrength: true, state: carryLoad(s.tokens.sinna, 10, 0, true).state }); // no STR → STR 10 assumed
+  });
+
+  it('reduces daily movement under variant thresholds and blocks movement beyond carrying capacity', () => {
+    const sheet = emptySheet();
+    sheet.attributes.push({ id: 'str', name: 'Strength', value: '10', modifier: '0' });
+    const s = fresh();
+    const token = s.tokens.sinna;
+    token.speedFt = 30;
+    token.maxMovePoints = 8;
+    token.movePoints = 8;
+    token.inventory = [{ id: 'pack', name: 'Pack', kind: 'misc', description: '', quantity: 1, weightKg: lbToKg(60) }];
+    s.itemRules = { encumbranceVariant: 1 };
+    expect(characterMovementLoad(s, token, sheet)).toMatchObject({ load: { state: 'encumbered' }, speedFt: 20, maxMovePoints: 5, remainingMovePoints: 5 });
+
+    token.inventory[0].weightKg = lbToKg(151);
+    expect(characterMovementLoad(s, token, sheet)).toMatchObject({ load: { state: 'over' }, maxMovePoints: 0, remainingMovePoints: 0 });
   });
 });
 

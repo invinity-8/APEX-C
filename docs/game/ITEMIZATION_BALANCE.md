@@ -284,7 +284,7 @@ Each is labelled `situational` or `cosmetic` on the item.
 - Only one postponed turn can exist at a time. Retries are refused (item revision and charge state).
 - Recharge: once per long rest, by the GM (*Recharge*).
 
-## 13. Currency Vault & Imperial Transmutation Cube (APEX 0.7)
+## 13. Currency Vault & Imperial Transmutation Cube (APEX 0.7 / 0.9)
 
 - **Currency Vault:** a compact grid with original APEX glyphs; no Path of Exile artwork or layout is copied.
   - Groups: *Orbs & seals* (Seal of Revelation, Orb of Renewal, Augmentation, Ascension) and *Materials* (Arcane
@@ -293,14 +293,21 @@ Each is labelled `situational` or `cosmetic` on the item.
     below.
   - All existing balances are kept as they were.
 - **Imperial Transmutation Cube** (base item `apex-imperial-transmutation-cube`): an original APEX artifact (basalt
-  cube with gold bands). It unlocks **Arcane Transmutation**, which turns fragments into random Orbs.
-  - **Unlock rule:** the character must **currently carry** a cube (it has a persistent item id and an owner), or
-    the GM has granted **permanent access** (*Arsenal → Magical currency → Arcane Transmutation access*). If the
-    cube is revoked, lost or deleted, access ends again unless permanent access was granted.
-  - **The server enforces it** (`hasCube` in `transmuteFragments`); a locked button is only the explanation.
-  - **Not locked:** balances, identification, rerolls, Augmentation/Ascension and combining fragments into Orbs of
-    Renewal.
-  - The GM grants the cube like any item ("Generate & give") or puts it in a loot table.
+  cube with gold bands). It progresses through levels 0–5; the player-facing bar displays level, fragments, and
+  unlocked/locked operations. New Cube grants start at level 0; a Cube or a prior entitlement is needed to begin.
+  - Level 1: Basic Transmutation. Level 2: Renewal operations (reroll). Level 3: Augmentation. Level 4: Ascension.
+    Level 5 is reserved and has no operation in APEX 0.9.
+  - Cube Fragments (`cubeFragment`) are their own purse currency and are never consumed as Arcane Fragments.
+    Defaults cost 3 / 6 / 9 / 12 / 15 fragments to advance to levels 1 / 2 / 3 / 4 / 5; the GM can tune each cost
+    under **Arsenal → Balance** and grant/remove fragments under **Purse & currency**.
+  - Every player upgrade validates the carried Cube/entitlement, expected level, current purse revision, balance and
+    configured cost on the server before spending. GM level adjustments are separately authorized.
+  - Existing saves with a carried Cube or permanent GM entitlement migrate to level 4, preserving the crafting rights
+    they had before progression. Level 1+ is an earned persistent unlock even if the physical Cube is later lost.
+    Characters without a progression-bearing Cube retain their prior 0.7 behavior; the new level gates apply when
+    they receive a new Cube progression record.
+  - The GM grants a new Cube like any item ("Generate & give") or puts it in a loot table; permanent legacy access
+    remains a separate GM toggle.
 
 ## 14. Additional modifier families & GM loot drafts (APEX 0.7)
 
