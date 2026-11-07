@@ -10,8 +10,8 @@
  * Player views only contain known hexes: the outline and size of the arena cannot be
  * read from the data, the SVG bounds, the zoom limits or the scroll range.
  */
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
-import { fromPixel, hexCorners, hexKey, parseKey, type HexKey } from '../../game/hex';
+import { useImperativeHandle, useMemo, useState, type Ref } from 'react';
+import { hexCorners, hexKey, parseKey, type HexKey } from '../../game/hex';
 import { pathTo, type ReachInfo } from '../../game/movement';
 import { TERRAIN } from '../../game/terrain';
 import { fmt } from '../../game/text';
@@ -24,7 +24,8 @@ import { LightCanvas, usePrefersReducedMotion } from './LightCanvas';
 import { AtmosphereCanvas } from './AtmosphereCanvas';
 import { MapDefs } from './MapDefs';
 import { LastSeenMarker, SiteMarker, TokenStack, TrackerMarker } from './Markers';
-import { TerrainCanvas, type Transform } from './TerrainCanvas';
+import { TerrainCanvas } from './TerrainCanvas';
+import { useHexViewport } from './useHexViewport';
 
 export interface MapHandle {
   focus: (key: HexKey) => void;
@@ -51,13 +52,8 @@ const MAX_K = 3.5;
 
 export function ArenaMap(props: Props) {
   const { view, selectedTokenId, selectedHex, reach, fullReach, explain, placeMode, overlayFog, hiddenTeamIds } = props;
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const [tf, setTf] = useState<Transform | null>(null);
   const [hover, setHover] = useState<HexKey | null>(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
-  const drag = useRef<{ x: number; y: number; moved: boolean; pointers: Map<number, { x: number; y: number }>; pinch?: number } | null>(null);
-  const suppressClick = useRef(false);
   const reducedMotion = usePrefersReducedMotion();
   // APEX 0.5 atmosphere overlay – a personal display preference (localStorage only)
   const [atmosphere, setAtmosphereState] = useState(() => {
@@ -95,47 +91,12 @@ export function ArenaMap(props: Props) {
     return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
   }, [view.hexes]);
 
-  const fitK = useMemo(() => {
-    if (!size.w) return 1;
-    return Math.min(size.w / (bounds.x1 - bounds.x0), size.h / (bounds.y1 - bounds.y0));
-  }, [size, bounds]);
-  // Zoom limit derives from the KNOWN area only, so it reveals nothing about the arena size.
-  const minK = Math.max(0.08, Math.min(0.5, fitK * 0.6));
-
-  const fit = useCallback(() => {
-    const k = Math.max(minK, Math.min(isGm ? MAX_K : 1.4, fitK));
-    setTf({ k, x: size.w / 2 - ((bounds.x0 + bounds.x1) / 2) * k, y: size.h / 2 - ((bounds.y0 + bounds.y1) / 2) * k });
-  }, [minK, fitK, size, bounds, isGm]);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setSize({ w: e.contentRect.width, h: e.contentRect.height }));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Fit once initially and whenever the GM's arena size or the player's perspective changes.
-  const fittedFor = useRef('');
-  useEffect(() => {
-    const sig = `${view.role}:${view.viewerId}:${view.mapRadius}`;
-    if (size.w > 0 && fittedFor.current !== sig) {
-      fittedFor.current = sig;
-      fit();
-    }
-  }, [size, view.role, view.viewerId, view.mapRadius, fit]);
-
-  const zoomAt = useCallback(
-    (factor: number, px: number, py: number) => {
-      setTf((t) => {
-        if (!t) return t;
-        const k = Math.max(minK, Math.min(MAX_K, t.k * factor));
-        const f = k / t.k;
-        return { k, x: px - (px - t.x) * f, y: py - (py - t.y) * f };
-      });
-    },
-    [minK],
-  );
+  const { wrapRef, size, tf, setTf, zoomAt, fit, onPointerDown, onKeyDown, keyAt: keyAtRaw, consumeDragClick, dragging } = useHexViewport({
+    bounds,
+    maxK: MAX_K,
+    fitMaxK: isGm ? MAX_K : 1.4,
+    fitSignature: `${view.role}:${view.viewerId}:${view.mapRadius}`,
+  });
 
   useImperativeHandle(props.mapRef, () => ({
     focus: (key: HexKey) => {
@@ -147,104 +108,13 @@ export function ArenaMap(props: Props) {
     },
   }));
 
-  // Wheel zoom (non-passive so the page does not scroll).
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - rect.left, e.clientY - rect.top);
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [zoomAt]);
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
-    const d = drag.current ?? { x: e.clientX, y: e.clientY, moved: false, pointers: new Map() };
-    d.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (d.pointers.size === 1) {
-      d.x = e.clientX;
-      d.y = e.clientY;
-      d.moved = false;
-    }
-    drag.current = d;
-  };
-
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      const d = drag.current;
-      if (!d || !d.pointers.has(e.pointerId)) return;
-      const prev = d.pointers.get(e.pointerId)!;
-      d.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (d.pointers.size === 2) {
-        const [a, b] = [...d.pointers.values()];
-        const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        if (d.pinch) {
-          const rect = wrapRef.current!.getBoundingClientRect();
-          zoomAt(dist / d.pinch, (a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top);
-        }
-        d.pinch = dist;
-        d.moved = true;
-        return;
-      }
-      if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return;
-      d.moved = true;
-      const dx = e.clientX - prev.x;
-      const dy = e.clientY - prev.y;
-      setTf((t) => (t ? { ...t, x: t.x + dx, y: t.y + dy } : t));
-    };
-    const up = (e: PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      d.pointers.delete(e.pointerId);
-      d.pinch = undefined;
-      if (d.pointers.size === 0) {
-        suppressClick.current = d.moved;
-        drag.current = null;
-      }
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-    };
-  }, [zoomAt]);
-
   /** Screen position → known hex key (unknown space is not interactive). */
-  const keyAt = (clientX: number, clientY: number): HexKey | null => {
-    if (!tf || !wrapRef.current) return null;
-    const r = wrapRef.current.getBoundingClientRect();
-    const k = hexKey(fromPixel((clientX - r.left - tf.x) / tf.k, (clientY - r.top - tf.y) / tf.k, HEX_SIZE));
-    return view.hexByKey[k] ? k : null;
-  };
+  const keyAt = (clientX: number, clientY: number): HexKey | null => keyAtRaw(clientX, clientY, (k) => !!view.hexByKey[k]);
 
   const handleClick = (e: React.MouseEvent) => {
-    if (suppressClick.current) {
-      suppressClick.current = false;
-      return;
-    }
+    if (consumeDragClick()) return;
     const key = keyAt(e.clientX, e.clientY);
     if (key) props.onHexClick(key);
-  };
-
-  // Keyboard: arrows pan, +/- zoom, 0 fits.
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    const step = 60;
-    const pan = (dx: number, dy: number) => setTf((t) => (t ? { ...t, x: t.x + dx, y: t.y + dy } : t));
-    if (e.key === 'ArrowLeft') pan(step, 0);
-    else if (e.key === 'ArrowRight') pan(-step, 0);
-    else if (e.key === 'ArrowUp') pan(0, step);
-    else if (e.key === 'ArrowDown') pan(0, -step);
-    else if (e.key === '+' || e.key === '=') zoomAt(1.25, size.w / 2, size.h / 2);
-    else if (e.key === '-') zoomAt(0.8, size.w / 2, size.h / 2);
-    else if (e.key === '0') fit();
-    else return;
-    e.preventDefault();
   };
 
   // Group tokens per hex
@@ -292,7 +162,7 @@ export function ArenaMap(props: Props) {
       ref={wrapRef}
       className="explore-bg relative h-full w-full touch-none overflow-hidden select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/50"
       style={{
-        cursor: drag.current?.moved ? 'grabbing' : placeMode ? 'crosshair' : 'default',
+        cursor: dragging() ? 'grabbing' : placeMode ? 'crosshair' : 'default',
         backgroundPosition: tf ? `${tf.x}px ${tf.y}px` : undefined,
         backgroundSize: `${bgSize}px ${bgSize}px, cover`,
       }}
@@ -304,7 +174,7 @@ export function ArenaMap(props: Props) {
       onPointerMove={(e) => {
         const r = wrapRef.current!.getBoundingClientRect();
         setMouse({ x: e.clientX - r.left, y: e.clientY - r.top });
-        if (!drag.current?.moved) {
+        if (!dragging()) {
           const k = keyAt(e.clientX, e.clientY);
           if (k !== hover) setHover(k);
         }
@@ -381,7 +251,7 @@ export function ArenaMap(props: Props) {
         )}
       </svg>
 
-      {hoverHex && !drag.current?.moved && (
+      {hoverHex && !dragging() && (
         <div
           className="pointer-events-none absolute z-20 max-w-64 rounded-lg border border-gold-700/50 bg-ink-900/95 px-3 py-2 text-xs shadow-xl"
           style={{ left: Math.min(mouse.x + 16, size.w - 260), top: Math.min(mouse.y + 16, size.h - 150) }}

@@ -188,3 +188,78 @@ describe('server rule: Import Spells changes only the spell list', () => {
     });
   });
 });
+
+describe('spell preparation limit', () => {
+  const limitSheet = (prepared: number, limit = '2'): CharacterSheet => ({
+    ...emptySheet(),
+    spellcasting: [{ id: 'sc-prep', label: 'Spells to prepare', value: limit }],
+    spells: [
+      spell({ id: 'sp-c', name: 'Shillelagh', level: 0, prepared: true }),
+      ...['A', 'B', 'C', 'D'].map((n, i) => spell({ id: `sp-${n}`, name: n, level: 1, prepared: i < prepared })),
+    ],
+  });
+
+  it('reads the limit from sinna.pdf', () => {
+    expect(readSpellsFromPdf(fillable).limits).toEqual([{ label: 'Spells to prepare', value: '5', source: 'spellcasting_prepare:Druid:1' }]);
+  });
+
+  it('counts only prepared spells of level 1+ and allows reducing an over-limit sheet', async () => {
+    const { preparationStatus, preparationViolation, preparationLimitRaised } = await import('../src/game/spellPreparation');
+    expect(preparationStatus(limitSheet(2))).toEqual([{ cls: null, limit: 2, count: 2, over: false, label: 'Spells to prepare' }]);
+    expect(preparationViolation(limitSheet(2), limitSheet(3))).toBe('Too many prepared spells: 3 of 2. Unprepare another spell first.');
+    expect(preparationViolation(limitSheet(4), limitSheet(3))).toBeNull(); // reducing is always allowed
+    expect(preparationViolation(null, limitSheet(2))).toBeNull();
+    expect(preparationLimitRaised(limitSheet(2), limitSheet(2, '9'))).toBe(true);
+    expect(preparationLimitRaised(limitSheet(2), limitSheet(2, '1'))).toBe(false);
+    // Multiclass: each limit counts its own class.
+    const multi: CharacterSheet = { ...emptySheet(), spellcasting: [{ id: 'a', label: 'Spells to prepare (Druid)', value: '1' }, { id: 'b', label: 'Spells to prepare (Cleric)', value: '1' }], spells: [spell({ id: 'x', name: 'X', source: 'Druid', prepared: true }), spell({ id: 'y', name: 'Y', source: 'Cleric', prepared: true })] };
+    expect(preparationStatus(multi).map((s) => s.over)).toEqual([false, false]);
+  });
+
+  describe('API', () => {
+    const CID = 'c-prep';
+    let repo: MemoryRepo;
+    const call = (method: string, op: string, body: unknown, cookie?: string, query: Record<string, string> = {}) =>
+      handleApi({ method, op, query, body, ip: '203.0.113.5', headers: { host: 'apex.test', ...(method === 'POST' ? { 'x-apex-csrf': '1', origin: 'https://apex.test' } : {}), ...(cookie ? { cookie } : {}) } } as ApiRequest, repo);
+    const login = async (p: string, pw: string) => (await call('POST', 'login', { profile: p, password: pw })).cookies![0].split(';')[0];
+    let hannah: string, gm: string;
+    beforeEach(async () => {
+      resetSchemaCache();
+      repo = new MemoryRepo();
+      repo.campaigns.push({ id: CID, slug: 'main', name: 'T' });
+      seedProfiles(repo, CID);
+      repo.states.set(CID, { state: createDemoState({ radius: 8, seed: 2 }), version: 1 });
+      await activate(repo, CID, 'hannah', 'hannah-pass-1');
+      await activate(repo, CID, 'gm', 'gm-secret-pass');
+      hannah = await login('hannah', 'hannah-pass-1');
+      gm = await login('gm', 'gm-secret-pass');
+      expect((await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: limitSheet(2), expectedVersion: 0 }, gm)).status).toBe(200);
+    });
+
+    it('players cannot prepare more than the limit or raise it by hand; the GM can override', async () => {
+      const over = await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: limitSheet(3), expectedVersion: 1 }, hannah);
+      expect(over.status).toBe(422);
+      expect((over.body as { error: string }).error).toMatch(/3 of 2/);
+      expect((await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: limitSheet(2, '9'), expectedVersion: 1 }, hannah)).status).toBe(422);
+      expect((await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: limitSheet(1), expectedVersion: 1 }, hannah)).status).toBe(200);
+      expect((await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: limitSheet(4), expectedVersion: 2 }, gm)).status).toBe(200);
+    });
+
+    it('Import Spells sets the PDF limit and refuses a player import that prepares too many', async () => {
+      const base = limitSheet(0, '1');
+      const incoming = readSpellsFromPdf(fillable);
+      const spells = applySpellImport(base.spells, planSpellImport(base.spells, incoming.spells));
+      // 5 leveled spells from the cards are prepared; with limit 1 a player is refused …
+      expect((await call('POST', 'sheet', { action: 'save', tokenId: 'sinna', sheet: base, expectedVersion: 1 }, gm)).status).toBe(200);
+      const refused = await call('POST', 'sheet', { action: 'importSpells', tokenId: 'sinna', spells, expectedVersion: 2 }, hannah);
+      expect(refused.status).toBe(422);
+      // … but with the PDF's own limit (5) the import is valid and the limit is stored.
+      const ok = await call('POST', 'sheet', { action: 'importSpells', tokenId: 'sinna', spells, limits: incoming.limits.map(({ label, value }) => ({ label, value })), expectedVersion: 2 }, hannah);
+      expect(ok.status).toBe(200);
+      const saved = (ok.body as SheetPayload).sheet;
+      expect(saved.spellcasting).toEqual([{ id: 'sc-prep', label: 'Spells to prepare', value: '5' }]);
+      expect(saved.spells.filter((s) => s.level > 0 && s.prepared)).toHaveLength(5);
+      expect((await call('POST', 'sheet', { action: 'importSpells', tokenId: 'sinna', spells, limits: [{ label: 'Hit points', value: '99' }], expectedVersion: 3 }, hannah)).status).toBe(400);
+    });
+  });
+});

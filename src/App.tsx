@@ -229,7 +229,7 @@ export default function App({ game }: { game: GameApi }) {
   // APEX 0.7 consolidation: related panels share one widget (tabs inside); pages that have a navigation tab
   // (Character, Inventory, Arsenal, Feedback, Merchant) are not duplicated as widgets.
   // Game: scene selection, player locations and scene tools are ordinary widgets (GM online).
-  const director = useGameDirector({ game, enabled: isGm && !!game.online, run });
+  const director = useGameDirector({ game, enabled: isGm && !!game.online, run, active: screen === 'map' });
   // Arena tools only appear while the Arena is on the table; their placement is kept meanwhile.
   const arenaOff = isGm ? director.enabled && !director.arenaShown : !!game.scene && game.scene.kind !== 'arena';
   const widgets: WidgetDef[] = [];
@@ -524,7 +524,7 @@ export default function App({ game }: { game: GameApi }) {
           defaults={defaults}
           storageKey={layoutKey(announceScope, role)}
           center={
-        <MapStage zoomable={director.enabled ? director.zoomable : !!game.scene && game.scene.kind === 'scene'}>
+        <MapStage zoomable={director.enabled ? director.zoomable : !!game.scene && game.scene.kind === 'scene' && !game.scene.scene?.map.hex}>
           {director.enabled ? director.renderMap(arenaNode) : game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> : arenaNode}
         </MapStage>
           }

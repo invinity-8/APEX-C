@@ -1,7 +1,9 @@
 import { distance, fromPixel, toPixel } from '../game/hex.js';
 import type { MapNode, SceneMap } from './maps.js';
+import { hexAt, hexCentre, hexMovementCost } from './hexScene.js';
 export interface Point { x: number; y: number }
 export function snappedPoint(map: SceneMap, p: Point): Point {
+  if (map.hex) return hexCentre(map, hexAt(map, p));
   if (map.grid === 'square') return { x: (Math.floor(p.x / map.cell) + .5) * map.cell, y: (Math.floor(p.y / map.cell) + .5) * map.cell };
   if (map.grid === 'hex') return toPixel(fromPixel(p.x, p.y, map.cell / 2), map.cell / 2);
   return p;
@@ -18,6 +20,11 @@ export function segmentRectangle(a: Point, b: Point, r: Pick<MapNode, 'x' | 'y' 
   return [lo, hi];
 }
 export function movementCost(map: SceneMap, start: Point, end: Point): { ok: true; cost: number } | { ok: false; error: string } {
+  if (map.hex) {
+    // Arena rules: cheapest path over passable hexes, cost = terrain of each entered hex × units per hex.
+    const r = hexMovementCost(map, start, end);
+    return r.ok ? { ok: true, cost: r.cost } : r;
+  }
   if (!Number.isFinite(end.x) || !Number.isFinite(end.y) || end.x < 0 || end.y < 0 || end.x > map.width || end.y > map.height) return { ok: false, error: 'Destination is outside the map.' };
   if (map.nodes.some(n => n.kind === 'wall' && segmentRectangle(start, end, n))) return { ok: false, error: 'The path is blocked.' };
   let cells = Math.hypot(end.x - start.x, end.y - start.y) / map.cell;

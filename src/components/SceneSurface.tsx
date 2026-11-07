@@ -4,6 +4,9 @@ import { api } from '../online/api';
 import { hexCorners } from '../game/hex';
 import type { SceneMap } from '../campaign/maps';
 import { useMapZoom } from './map/MapStage';
+import { HexSceneMap, type SceneToken } from './map/HexSceneMap';
+import { hexReach } from '../campaign/hexScene';
+import type { TokenView } from '../game/visibility';
 
 export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | 'width' | 'height'>; id: string }) {
   if (map.grid === 'none') return null;
@@ -14,7 +17,7 @@ export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | '
 }
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
-export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void }) {
+export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const zoom = useMapZoom();
   const id = snapshot.scene?.map.playerBackgroundAsset;
@@ -26,6 +29,21 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   const positions = tokenLabels
     ? (snapshot.motion?.tokens ?? []).filter(position => tokenLabels.some(token => token.tokenId === position.tokenId))
     : point ? [{ tokenId: tokenId ?? 'party', x: point.x, y: point.y }] : [];
+  if (map.hex) {
+    // Battle and region scenes: the Arena hex engine with this scene's content.
+    const view = (id: string) => tokenViews.find(t => t.id === id);
+    // Assigned characters that have not moved yet stand on the spawn (the server starts them there too).
+    const spawnNode = map.nodes.find(n => n.kind === 'spawn');
+    const waiting = spawnNode ? (tokenLabels ?? []).filter(t => !positions.some(p => p.tokenId === t.tokenId)).map(t => ({ tokenId: t.tokenId, x: spawnNode.x, y: spawnNode.y })) : [];
+    const tokens: SceneToken[] = [...positions, ...waiting].map(p => {
+      const marker = tokenLabels?.find(t => t.tokenId === p.tokenId);
+      return { tokenId: p.tokenId, x: p.x, y: p.y, name: marker?.name ?? (category === 'world' ? 'Party' : name), color: marker?.color ?? color, view: view(p.tokenId) };
+    });
+    const own = point && reachBudget !== null && reachBudget > 0 ? hexReach(map, point, reachBudget) : null;
+    return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit} per hex · mouse wheel zooms, drag pans</p>
+      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} selectedTokenId={tokenId ?? null} reach={own} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
+    </section>;
+  }
   function destination(e: PointerEvent<SVGSVGElement>) {
     if (!onDestination) return;
     const rect = e.currentTarget.getBoundingClientRect();

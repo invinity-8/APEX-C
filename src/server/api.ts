@@ -30,6 +30,7 @@ import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { castMageArmor, isWearingArmor } from '../game/spells.js';
 import { importSpellList } from '../game/spellImport.js';
+import { preparationLimitRaised, preparationViolation } from '../game/spellPreparation.js';
 import { characterMovementLoad } from '../game/items/weight.js';
 import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
 import { findBeast } from '../game/beastCatalog.js';
@@ -967,6 +968,14 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
       }
     } else if (cur && reason !== 'edit') await repo.backupSheet(cid, tokenId, cur.data, cur.version, `Before ${reason === 'import-replace' ? 'import (replace)' : 'import (merge)'}`, user.id);
     const currentParsed = cur ? parseSheet(cur.data) : null;
+    // Spell preparation limit: players cannot prepare more than allowed or raise their own limit by hand
+    // (sheet imports may set it from the PDF). The GM may override for house rules.
+    if (user.role !== 'gm') {
+      const before = currentParsed?.ok ? currentParsed.sheet : null;
+      if (reason === 'edit' && preparationLimitRaised(before, parsed.sheet)) throw new HttpError(422, 'Only the GM can change the spell preparation limit (or import it from the character PDF).');
+      const violation = preparationViolation(before, parsed.sheet);
+      if (violation) throw new HttpError(422, violation);
+    }
     const safeSheet = { ...parsed.sheet, spellEffects: currentParsed?.ok ? currentParsed.sheet.spellEffects : [] };
     const v = await repo.saveSheet(cid, tokenId, safeSheet, body.expectedVersion, user.id);
     if (v === null) {
@@ -1011,8 +1020,10 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
     }
     const parsedCur = cur ? parseSheet(cur.data) : null;
     const base: CharacterSheet = parsedCur?.ok ? parsedCur.sheet : emptySheet();
-    const r = importSpellList(base, body.spells);
+    const r = importSpellList(base, body.spells, body.limits ?? []);
     if (!r.ok) throw new HttpError(400, r.error);
+    const violation = user.role === 'gm' ? null : preparationViolation(base, r.sheet);
+    if (violation) throw new HttpError(422, violation);
     if (cur) await repo.backupSheet(cid, tokenId, cur.data, cur.version, 'Before spell import (PDF)', user.id);
     const v = await repo.saveSheet(cid, tokenId, r.sheet, body.expectedVersion, user.id);
     if (v === null) {
