@@ -355,10 +355,9 @@ export default function App({ game }: { game: GameApi }) {
 
   const myToken = view.tokens.find((t) => t.id === view.viewerId) ?? null;
   const tabs: Array<{ id: View; label: string }> = [
-    { id: 'map', label: '🗺 Map' },
+    { id: 'map', label: '🗺 Game' },
     ...(isGm && game.online ? [{ id: 'scenes' as View, label: '🧭 Scenes' }] : []),
-    { id: 'character', label: isGm ? '📜 Character sheets' : '📜 Character' },
-    { id: 'spells', label: '✨ Spells' },
+    { id: 'character', label: '📜 Character' },
     ...(game.online ? [{ id: 'journal' as View, label: '📖 Journal' }] : []),
     { id: 'inventory', label: '🎒 Inventory' },
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),

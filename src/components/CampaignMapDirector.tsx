@@ -208,8 +208,8 @@ export function CampaignMapDirector({ game, enabled, openScenes, run, children }
   if (!enabled || !online) return <>{children}</>;
   const canPlace = !!focus?.scene && ['battle', 'region'].includes(focus.scene.category) && allowedTokens.length > 0;
 
-  return <div className="flex h-full min-h-0 flex-col overflow-auto">
-    <section className="border-b border-gold-700/30 bg-ink-950/90 p-3" aria-label="Live campaign map controls">
+  return <div className="game-table">
+    <section className="game-table-tools bg-ink-950/90 p-3" aria-label="Live campaign map controls">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-52 flex-1">
           <p className="eyebrow">Live campaign director</p>
@@ -225,7 +225,7 @@ export function CampaignMapDirector({ game, enabled, openScenes, run, children }
           </label>
           <button className="btn btn-gold" type="button" disabled={busy || !selection} onClick={() => changeFocus(selection)}>Switch Scene</button>
           <button className="btn btn-ghost" type="button" disabled={busy || !focusId} onClick={() => changeFocus(null)}>Arena</button>
-          <button className="btn btn-ghost" type="button" onClick={openScenes}>Scene Library</button>
+          <button className="btn btn-ghost" type="button" onClick={openScenes}>Edit scene library</button>
         </form>
       </div>
       <form className="mt-2 flex gap-2" onSubmit={searchScenes}>
@@ -234,6 +234,12 @@ export function CampaignMapDirector({ game, enabled, openScenes, run, children }
         <button className="btn btn-ghost" disabled={busy}>Search</button>
         {nextOffset !== null && <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => void loadMoreScenes()}>More</button>}
       </form>
+      <nav className="game-scene-list" aria-label="Switch published scene">
+        {publishedScenes.map(scene => <button key={scene.id} type="button" className="btn btn-ghost" disabled={busy} aria-current={focusId === scene.id ? 'true' : undefined} onClick={() => { setSelection(scene.id); changeFocus(scene.id); }}>
+          <span>{scene.name}</span><small>{focusId === scene.id ? 'Current scene' : 'Switch to scene'}</small>
+        </button>)}
+        {!publishedScenes.length && <p className="text-xs text-marble-400">No published scenes match this search.</p>}
+      </nav>
       {focus && <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Players in this scene">
         <strong className="text-xs text-marble-300">Assigned here:</strong>
         {assignedHere.length ? assignedHere.map(player => <span key={player.userId} className="chip">{player.name}</span>) : <span className="text-xs text-marble-500">No players assigned</span>}
@@ -289,7 +295,7 @@ export function CampaignMapDirector({ game, enabled, openScenes, run, children }
       {error && <p role="alert" className="mt-2 text-sm text-blood-200">{error}</p>}
       {notice && <p role="status" className="mt-2 text-sm text-gold-200">{notice}</p>}
     </section>
-    <div className="min-h-0 flex-1 overflow-auto" aria-label="Campaign map">
+    <div className="game-table-map" aria-label="Campaign map">
       {focus?.scene
         ? <SceneSurface snapshot={focus} tokenLabels={markers} onDestination={placeMode ? placeToken : undefined} />
         : children}
