@@ -239,6 +239,8 @@ export interface SpellPdfResult {
   spells: ImportedSpell[];
   /** Short description of what was found, for the review header. */
   summary: string;
+  /** "Spells to prepare" limits printed on the sheet (Aurora: one per spellcasting class). */
+  limits: Array<{ label: string; value: string; source: string }>;
 }
 
 /**
@@ -247,7 +249,11 @@ export interface SpellPdfResult {
  */
 export function readSpellsFromPdf(x: Extracted): SpellPdfResult {
   const cards = parseSpellCards(x);
-  const listRows = mapExtraction(x).rows.filter((r) => r.kind === 'spell');
+  const mapped = mapExtraction(x).rows;
+  const listRows = mapped.filter((r) => r.kind === 'spell');
+  const limits = mapped
+    .filter((r) => r.kind === 'spellcasting' && /^spells to prepare\b/i.test(r.label) && /^\d{1,3}$/.test(r.value.trim()))
+    .map((r) => ({ label: r.label.trim(), value: r.value.trim(), source: r.source }));
   const spells = [...cards];
   for (const row of listRows) {
     const name = tidy(row.value || row.label);
@@ -300,7 +306,7 @@ export function readSpellsFromPdf(x: Extracted): SpellPdfResult {
   }
   for (const s of spells) s.uncertain = [...new Set(s.uncertain)];
   const summary = `${cards.length} spell card${cards.length === 1 ? '' : 's'}${listRows.length ? ` · ${listRows.length} entries in the spell list` : ''}`;
-  return { spells, summary };
+  return { spells, summary: summary + (limits.length ? ` · preparation limit ${limits.map((l) => l.value).join(' / ')}` : ''), limits };
 }
 
 // ---------------------------------------------------------------- comparison with the spellbook

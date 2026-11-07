@@ -11,6 +11,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNo
 import type { Command } from '../game/commands';
 import { emptySheet, newEntryId, spellMatchesQuery, type CharacterSheet, type SheetEntry, type SheetResource, type SheetSkill, type SheetSpell } from '../game/sheet';
 import { activeMageArmor, isWearingArmor } from '../game/spells';
+import { preparationStatus, preparationViolation } from '../game/spellPreparation';
 import type { TokenView } from '../game/visibility';
 import type { SheetPayload } from '../server/protocol';
 import type { DispatchResult, GameApi } from '../state/gameApi';
@@ -430,7 +431,16 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
             {build && <p className="mt-1 text-xs text-marble-500">Character: {build}</p>}
             {mageArmorEffect && <p className="mt-1 text-xs text-emerald-300">Mage Armor active until {new Date(mageArmorEffect.expiresAt).toLocaleString()}.</p>}
           </section>
-          <SpellsSection sheet={sheet} editing={editing} set={set} onToggle={(id) => void quickSave((s) => toggle(s.spells, id))} onCast={castSpell} castingSpellId={castingSpellId} wearingArmor={wearsArmor} />
+          <SpellsSection sheet={sheet} editing={editing} set={set} isGm={isGm} onToggle={(id) => {
+            if (!data) return;
+            // Preparation limit: players cannot exceed it (the server refuses as well); the GM is warned.
+            const after = structuredClone(data.sheet);
+            toggle(after.spells, id);
+            const violation = preparationViolation(data.sheet, after);
+            if (violation && !isGm) return notify(violation);
+            if (violation) notify(`${violation.replace(' Unprepare another spell first.', '')} – GM override.`, 'info');
+            void quickSave((s) => toggle(s.spells, id));
+          }} onCast={castSpell} castingSpellId={castingSpellId} wearingArmor={wearsArmor} />
         </div>
       )}
 
@@ -543,9 +553,11 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
           <SpellImport
             characterName={token.name}
             existing={data.sheet.spells}
+            spellcasting={data.sheet.spellcasting}
+            isGm={isGm}
             onClose={() => setImportingSpells(false)}
-            onSave={async (spells) => {
-              const r = await sheets.ability(token.id, { action: 'importSpells', spells, expectedVersion: data.version });
+            onSave={async (spells, limits) => {
+              const r = await sheets.ability(token.id, { action: 'importSpells', spells, limits, expectedVersion: data.version });
               if (r.ok) {
                 setData(r.sheet);
                 notify(r.sheet.message ?? 'Spells imported.', 'info');
@@ -679,7 +691,8 @@ function SkillSection({ title, rows, editing, onChange, prefix }: { title: strin
   );
 }
 
-function SpellsSection({ sheet, editing, set, onToggle, onCast, castingSpellId, wearingArmor }: { sheet: CharacterSheet; editing: boolean; set: (p: Partial<CharacterSheet>) => void; onToggle: (id: string) => void; onCast: (id: string) => void; castingSpellId: string | null; wearingArmor: boolean }) {
+function SpellsSection({ sheet, editing, set, isGm, onToggle, onCast, castingSpellId, wearingArmor }: { sheet: CharacterSheet; editing: boolean; set: (p: Partial<CharacterSheet>) => void; isGm: boolean; onToggle: (id: string) => void; onCast: (id: string) => void; castingSpellId: string | null; wearingArmor: boolean }) {
+  const preparation = preparationStatus(sheet);
   const [filter, setFilter] = useState<'prepared' | 'all'>('prepared');
   const [q, setQ] = useState('');
   const spells = sheet.spells;
@@ -704,6 +717,20 @@ function SpellsSection({ sheet, editing, set, onToggle, onCast, castingSpellId, 
           </>
         )}
       </div>
+      {preparation.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2 text-xs" data-testid="preparation-status">
+          {preparation.map((p) => (
+            <span key={p.label} className={`chip ${p.over ? 'border-blood-400/60 text-red-300' : p.count === p.limit ? 'text-gold-200' : 'text-marble-300'}`}>
+              Prepared{p.cls ? ` (${p.cls})` : ''}: {p.count} / {p.limit}
+            </span>
+          ))}
+          {preparation.some((p) => p.over) && (
+            <span role="alert" className="text-red-300">
+              {isGm ? 'Over the preparation limit (GM override).' : editing ? 'Too many prepared spells – saving is refused until you unprepare some.' : 'Too many prepared spells – unprepare some before preparing new ones.'}
+            </span>
+          )}
+        </div>
+      )}
       {slots.length > 0 && (
         <p className="mb-2 text-xs text-marble-300">
           {slots.map((s) => `${s.name}: ${s.current}${s.max !== null ? ` / ${s.max}` : ''}`).join(' · ')} <span className="text-marble-500">(adjust in Resources)</span>

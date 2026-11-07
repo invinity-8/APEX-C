@@ -5,7 +5,8 @@
  * notes and every other part of the character stay byte-for-byte unchanged.
  */
 import { useId, useMemo, useRef, useState } from 'react';
-import type { SheetSpell } from '../game/sheet';
+import type { SheetEntry, SheetSpell } from '../game/sheet';
+import { applyPreparationLimits, preparationStatus } from '../game/spellPreparation';
 import { extractPdf, MAX_PDF_BYTES, PdfImportError } from '../sheetImport/extract';
 import { applySpellImport, planSpellImport, readSpellsFromPdf, SPELL_FIELD_LABEL, type ImportedSpell, type SpellField, type SpellPlanRow } from '../sheetImport/spellCards';
 import { Spinner } from './brand';
@@ -13,9 +14,13 @@ import { Spinner } from './brand';
 interface Props {
   characterName: string;
   existing: SheetSpell[];
+  /** Current spellcasting entries (holds the "Spells to prepare" limit). */
+  spellcasting: SheetEntry[];
+  /** Players cannot save an import that exceeds the preparation limit; the GM is only warned. */
+  isGm: boolean;
   onClose: () => void;
-  /** Saves the final spell list; resolves to an error message or null. */
-  onSave: (spells: SheetSpell[]) => Promise<string | null>;
+  /** Saves the final spell list (and optionally the PDF's preparation limit); resolves to an error message or null. */
+  onSave: (spells: SheetSpell[], limits: Array<{ label: string; value: string }>) => Promise<string | null>;
 }
 
 type Step = { kind: 'pick' } | { kind: 'reading'; name: string } | { kind: 'review'; fileName: string; summary: string } | { kind: 'error'; message: string };
@@ -25,13 +30,15 @@ const uncertainCls = 'border-amber-400/70 bg-amber-950/20';
 const TEXT_FIELDS: Array<Extract<SpellField, 'school' | 'castingTime' | 'range' | 'components' | 'duration' | 'source'>> = ['school', 'castingTime', 'range', 'components', 'duration', 'source'];
 const show = (v: string | number | boolean, f: SpellField) => (typeof v === 'boolean' ? (v ? 'yes' : 'no') : f === 'level' ? (v === 0 ? 'Cantrip' : `Level ${v}`) : String(v) || '—');
 
-export function SpellImport({ characterName, existing, onClose, onSave }: Props) {
+export function SpellImport({ characterName, existing, spellcasting, isGm, onClose, onSave }: Props) {
   const [step, setStep] = useState<Step>({ kind: 'pick' });
   const [spells, setSpells] = useState<ImportedSpell[]>([]);
   // User decisions keyed by plan row (include) and row+field (apply), kept while values are corrected.
   const [include, setInclude] = useState<Record<string, boolean>>({});
   const [apply, setApply] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const [pdfLimits, setPdfLimits] = useState<Array<{ label: string; value: string; source: string }>>([]);
+  const [useLimits, setUseLimits] = useState(true);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -61,6 +68,8 @@ export function SpellImport({ characterName, existing, onClose, onSave }: Props)
         return;
       }
       setSpells(result.spells);
+      setPdfLimits(result.limits);
+      setUseLimits(true);
       setInclude({});
       setApply({});
       setStep({ kind: 'review', fileName: file.name, summary: result.summary });
@@ -80,11 +89,20 @@ export function SpellImport({ characterName, existing, onClose, onSave }: Props)
     );
   };
 
+  const limitsToSend = useLimits ? pdfLimits.map(({ label, value }) => ({ label, value })) : [];
+  const resulting = useMemo(() => {
+    const spellsAfter = applySpellImport(existing, plan, () => 'preview');
+    return preparationStatus({ spellcasting: applyPreparationLimits(spellcasting, limitsToSend, () => 'preview'), spells: spellsAfter });
+  }, [existing, plan, spellcasting, useLimits, pdfLimits]);
+  const overLimit = resulting.filter((r) => r.over);
+  const limitsChanged = limitsToSend.some((l) => spellcasting.find((e) => e.label.trim().toLowerCase() === l.label.toLowerCase())?.value !== l.value);
+  const blocked = !isGm && overLimit.length > 0;
+
   const save = async () => {
     setBusy(true);
     setError('');
     const next = applySpellImport(existing, plan);
-    const message = await onSave(next);
+    const message = await onSave(next, limitsToSend);
     setBusy(false);
     if (message) setError(message);
     else onClose();
@@ -229,6 +247,33 @@ export function SpellImport({ characterName, existing, onClose, onSave }: Props)
                 );
               })}
             </ul>
+            <section className="rounded-md border border-ink-700 p-2 text-xs" aria-label="Spell preparation limit">
+              <h3 className="font-semibold text-gold-200">Preparation limit</h3>
+              {pdfLimits.length ? (
+                <label className="mt-1 flex items-center gap-2 text-marble-200">
+                  <input type="checkbox" checked={useLimits} onChange={(e) => setUseLimits(e.target.checked)} />
+                  Use the PDF value: {pdfLimits.map((l) => `${l.label} ${l.value}`).join(' · ')}
+                  {(() => {
+                    const cur = pdfLimits.map((l) => spellcasting.find((e) => e.label.trim().toLowerCase() === l.label.toLowerCase())?.value).filter(Boolean);
+                    return cur.length ? <span className="text-marble-500">(current: {cur.join(' / ')})</span> : <span className="text-marble-500">(not set yet)</span>;
+                  })()}
+                </label>
+              ) : (
+                <p className="mt-1 text-marble-400">The PDF does not state how many spells can be prepared.</p>
+              )}
+              {resulting.length ? (
+                <ul className="mt-1 space-y-0.5" data-testid="prepared-after-import">
+                  {resulting.map((r) => (
+                    <li key={r.label} className={r.over ? 'text-red-300' : 'text-marble-300'}>
+                      Prepared after import{r.cls ? ` (${r.cls})` : ''}: {r.count} / {r.limit}
+                      {r.over ? (isGm ? ' – over the limit (GM override allowed)' : ' – over the limit. Untick “prepared” on some spells (Correct values) before saving.') : ''}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-marble-500">No preparation limit is recorded, so the number of prepared spells is not checked.</p>
+              )}
+            </section>
             {error && (
               <p role="alert" className="text-sm text-red-300">
                 {error}
@@ -241,7 +286,7 @@ export function SpellImport({ characterName, existing, onClose, onSave }: Props)
               <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
                 Cancel
               </button>
-              <button className="btn btn-gold" onClick={() => void save()} disabled={busy || (!counts.add && !counts.update)}>
+              <button className="btn btn-gold" onClick={() => void save()} disabled={busy || blocked || (!counts.add && !counts.update && !limitsChanged)}>
                 {busy ? 'Saving…' : 'Save spells'}
               </button>
             </div>

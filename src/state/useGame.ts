@@ -159,7 +159,7 @@ function useDemoSheets(state: GameState): SheetApi {
       const cur = payload(tokenId);
       if (body.expectedVersion !== cur.version) return { ok: false, error: 'Changed elsewhere.', conflict: cur };
       if (body.action === 'importSpells') {
-        const r = importSpellList(cur.sheet, body.spells);
+        const r = importSpellList(cur.sheet, body.spells, body.limits ?? []);
         if (!r.ok) return { ok: false, error: r.error };
         write(tokenId, r.sheet, cur.version + 1);
         return { ok: true, sheet: { ...payload(tokenId), message: `${r.added} spell${r.added === 1 ? '' : 's'} added, ${r.changed} updated.` } };
