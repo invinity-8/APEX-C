@@ -3,7 +3,6 @@ import type { GameApi } from '../state/gameApi';
 import { CharacterPortrait } from './CharacterVisuals';
 import { api, ApiError } from '../online/api';
 import { SceneSurface } from './SceneSurface';
-import { regionMilesPerHour } from '../campaign/maps';
 import { WorldTravel } from './WorldTravel';
 import type { SanctuarySettings } from '../server/sanctuary';
 
@@ -47,27 +46,50 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   </section>;
   if (!scene.scene) return null;
   const { category } = scene.scene;
-  const ledger = scene.motion?.budgets[me?.id ?? ''];
   const liveEncounter = game.view.sceneEncounter?.status === 'active' ? game.view.sceneEncounter : null;
   const liveTurn = liveEncounter && liveEncounter.turnIndex >= 0 ? liveEncounter.participants[liveEncounter.turnIndex] : null;
-  const speed = (me?.details?.speedFt ?? 30) / (me?.details?.sneaking ? 2 : 1);
-  const remaining = category === 'battle' ? speed - (ledger?.tacticalSpent ?? 0) : regionMilesPerHour(speed) - (ledger?.regionSpent ?? 0);
+  const mv = scene.movement;
+  const myTurn = !!liveTurn?.tokenId && liveTurn.tokenId === me?.id;
+  const free = mv?.mode === 'free';
+  const remaining = mv ? Math.max(0, mv.allowance - mv.spent) : 0;
+  const canMove = !!mv?.canMove && (free || remaining > 0);
+  async function endTurn() {
+    if (!liveEncounter || !scene?.scene || pendingRef.current) return;
+    pendingRef.current = true; setPending(true); setMessage('');
+    try { const r = await api.sceneTurn({ action: 'endTurn', sceneId: scene.scene.id, encounterId: liveEncounter.id, turnSerial: liveEncounter.turnSerial ?? 0 }); setMoveMode(false); setMessage(r.message ?? 'Turn ended.'); game.online?.refresh(); }
+    catch (e) { setMessage(String(e)); game.online?.refresh(); }
+    finally { pendingRef.current = false; setPending(false); }
+  }
+  const status = !mv ? '' : free ? 'Free movement – no initiative running.' : mv.mode === 'turn' ? (myTurn ? `Your turn · ${remaining.toFixed(0)} ft left` : mv.reason ?? 'Waiting for your turn.') : `${remaining.toFixed(1)} of ${mv.allowance.toFixed(1)} miles left today (day ${scene.clock?.day ?? 1}${scene.clock?.phase === 'night' ? ', night' : ''})`;
   return <div className="player-scene">
-    {['battle', 'region'].includes(category) && <div className="journal-toolbar"><button className="btn btn-gold" disabled={pending || !!uncertain} aria-pressed={moveMode} onClick={() => setMoveMode(!moveMode)}>{moveMode ? 'Cancel movement' : 'Move your character'}</button><span>{Math.max(0, remaining).toFixed(2)} {category === 'battle' ? 'feet this round' : 'miles this hour'} remaining</span></div>}
-    {moveMode && <p>Choose a destination on the map. The server checks distance, terrain and walls.</p>}
+    {liveEncounter && <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me?.id ?? null} />}
+    {['battle', 'region'].includes(category) && <div className="journal-toolbar">
+      <button className="btn btn-gold" disabled={pending || !!uncertain || !canMove} aria-pressed={moveMode} onClick={() => setMoveMode(!moveMode)}>{moveMode ? 'Cancel movement' : 'Move your character'}</button>
+      {myTurn && <button className="btn btn-gold" disabled={pending} onClick={() => void endTurn()} data-testid="end-turn">End turn</button>}
+      <span role="status" data-testid="movement-status">{status}</span>
+    </div>}
+    {moveMode && <p>Choose a destination on the map. The server checks your path, terrain, walls and {free ? 'nothing else – movement is free' : mv?.mode === 'turn' ? 'your speed this turn' : 'how far you can travel today'}.</p>}
     {message && <p role="status">{message}</p>}
     {uncertain && <button className="btn btn-ghost" disabled={pending} onClick={() => void send(uncertain)}>Verify or retry previous movement</button>}
     {!!game.view.sceneAnnouncements.length && <section className="mx-auto my-2 w-full max-w-4xl space-y-2" aria-label="Scene announcements">
       {game.view.sceneAnnouncements.map(item => <article key={item.id} className="rounded-lg border border-gold-700/60 bg-ink-950/90 p-3"><p className="eyebrow">Scene event</p><h2 className="font-display text-lg text-gold-200">{item.title}</h2><p className="whitespace-pre-wrap text-sm text-marble-200">{item.text}</p></article>)}
     </section>}
-    {liveEncounter && <section className="mx-auto my-2 w-full max-w-4xl rounded-lg border border-blood-700/50 bg-ink-950/90 p-3" aria-label="Live encounter tracker">
-      <div className="flex flex-wrap items-center gap-2"><p className="eyebrow flex-1">Encounter · Round {liveEncounter.round}</p>{liveTurn && <span className="chip">Current turn: {liveTurn.name}</span>}</div>
-      <h2 className="font-display text-lg text-marble-100">{liveEncounter.title}</h2>
-      <ol className="mt-2 flex flex-wrap gap-1.5 text-xs">{liveEncounter.participants.map((participant, index) => <li key={participant.id} className={`chip ${liveEncounter.turnIndex === index ? 'border-gold-500 text-gold-200' : ''}`}>{participant.name} · {participant.initiative}</li>)}</ol>
-      {!liveTurn && <p className="mt-1 text-xs text-marble-500">The current turn is hidden by the Game Master.</p>}
-    </section>}
-    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode ? Math.max(0, remaining) : null} onDestination={moveMode ? move : undefined} />
+    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode && !free ? remaining : null} onDestination={moveMode ? move : undefined} />
     {category === 'world' && scene.travel && <WorldTravel sceneId={scene.scene.id} sceneRevision={scene.scene.revision} assignmentRevision={scene.assignmentRevision} map={scene.scene.map} travel={scene.travel} onChanged={() => game.online?.refresh()} />}
-    <p>The Game Master controls scene transitions and the next movement interval.</p>
+    <p>The Game Master controls scene transitions{category === 'region' ? ', day and night' : category === 'battle' ? ' and initiative' : ''}.</p>
   </div>;
+}
+
+/** Turn order across the top of the map: portraits in initiative order, the active turn highlighted. */
+function InitiativeBar({ encounter, tokens, myTokenId }: { encounter: NonNullable<GameApi['view']['sceneEncounter']>; tokens: GameApi['view']['tokens']; myTokenId: string | null }) {
+  return <section className="initiative-bar" aria-label={`Initiative, round ${encounter.round}`} data-testid="initiative-bar">
+    <span className="initiative-round">Round {encounter.round}</span>
+    <ol>{encounter.participants.map((p, i) => {
+      const t = p.tokenId ? tokens.find(x => x.id === p.tokenId) : undefined;
+      return <li key={p.id} aria-current={encounter.turnIndex === i ? 'true' : undefined} className={p.tokenId && p.tokenId === myTokenId ? 'is-mine' : ''} title={`${p.name} · initiative ${p.initiative}`}>
+        {t ? <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online color={t.color} accent={t.accent} initials={t.initials} name={t.name} size={40} /> : <span className="initiative-npc">{p.name.slice(0, 2)}</span>}
+        <small>{p.name}</small><em>{p.initiative}</em>
+      </li>;
+    })}</ol>
+  </section>;
 }

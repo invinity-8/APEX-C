@@ -19,7 +19,7 @@ export const SCENE_OPERATION_COMMANDS = new Set<SceneOperationCommand['type']>([
 const MAX_ANNOUNCEMENTS = 100;
 const MAX_PARTICIPANTS = 50;
 const fail = (state: GameState, error: string) => ({ ok: false as const, state, error });
-const orderParticipants = (rows: SceneEncounterParticipant[]) => [...rows].sort((a, b) => b.initiative - a.initiative || a.id.localeCompare(b.id));
+export const orderParticipants = (rows: SceneEncounterParticipant[]) => [...rows].sort((a, b) => b.initiative - a.initiative || (b.bonus ?? 0) - (a.bonus ?? 0) || a.id.localeCompare(b.id));
 const validParticipant = (p: SceneEncounterParticipant) => !!p && typeof p.id === 'string' && p.id.length > 0 && p.id.length <= 64
   && typeof p.name === 'string' && !!p.name.trim() && p.name.trim().length <= 80
   && Number.isInteger(p.initiative) && p.initiative >= -100 && p.initiative <= 1000
@@ -52,7 +52,7 @@ export function executeSceneOperation(prev: GameState, cmd: SceneOperationComman
     if (prev.sceneEncounters?.[cmd.sceneId]?.status === 'active') return fail(prev, 'End the current encounter before starting another.');
     const state = structuredClone(prev);
     state.sceneEncounters = { ...(state.sceneEncounters ?? {}), [cmd.sceneId]: {
-      id: cmd.encounterId, sceneId: cmd.sceneId, title: cmd.title.trim(), round: 1, turnIndex: 0, version: 1,
+      id: cmd.encounterId, sceneId: cmd.sceneId, title: cmd.title.trim(), round: 1, turnIndex: 0, version: 1, turnSerial: 1,
       status: 'active', participants: orderParticipants(participants.map(p => ({ ...p, name: p.name.trim() }))),
     } };
     return { ok: true as const, state };
@@ -92,6 +92,7 @@ export function executeSceneOperation(prev: GameState, cmd: SceneOperationComman
   } else if (cmd.type === 'sceneEncounterEnd') {
     encounter.status = 'ended';
   }
+  if (encounter.participants[encounter.turnIndex]?.id !== activeId || cmd.type === 'sceneEncounterAdvance') encounter.turnSerial = (encounter.turnSerial ?? 0) + 1;
   encounter.version++;
   return { ok: true as const, state };
 }

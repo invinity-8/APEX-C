@@ -89,7 +89,55 @@ export class MemoryRepo implements Repo {
   sceneClockRows = new Map<string, { round: number; hour: number }>();
   sceneKnownRows = new Map<string, Record<string, import('../src/campaign/maps').MapNode>>();
   sceneMotionRequests = new Map<string, string>();
+  sceneLedgerRows = new Map<string, { epoch: string; spent: number }>();
+  sceneVisionRows = new Map<string, Set<string>>();
   readonly sceneMotion: import('../src/server/sceneMotion').SceneMotion = {
+    localSnapshot: async (campaignId, sceneId, userId, tokenIds) => {
+      const tokens = tokenIds.map(id => this.sceneTokenRows.get(`${campaignId}:${sceneId}:${id}`)).filter((v): v is import('../src/server/sceneMotion').SceneTokenPosition => !!v)
+        .map(t => { const l = this.sceneLedgerRows.get(`${campaignId}:${sceneId}:${t.tokenId}`); return { tokenId: t.tokenId, x: t.x, y: t.y, version: t.version, epoch: l?.epoch ?? null, spent: l?.spent ?? 0 }; });
+      return structuredClone({ tokens, known: Object.values(this.sceneKnownRows.get(`${campaignId}:${sceneId}:${userId}`) ?? {}), seen: [...(this.sceneVisionRows.get(`${campaignId}:${sceneId}:${userId}`) ?? [])] });
+    },
+    rememberVision: async (campaignId, sceneId, userId, seen) => {
+      if (!this.memberList.some(m => m.campaignId === campaignId && m.userId === userId)) return;
+      const key = `${campaignId}:${sceneId}:${userId}`;
+      this.sceneVisionRows.set(key, new Set([...(this.sceneVisionRows.get(key) ?? []), ...seen]));
+    },
+    // Mirrors apex_write_scene_motion_v2 (supabase/migrations/20261108120000_apex_scene_local_time.sql).
+    localWrite: async (user, input, cost, allowance, epoch, discovered, seen) => {
+      const profile = this.profileList.find(p => p.campaignId === user.campaignId && p.userId === user.id && p.active);
+      const stored = this.states.get(user.campaignId); if (!profile || !stored) return { ok: false, error: 'Unavailable.' };
+      const requestKey = `${user.campaignId}:${input.requestId}`, payload = JSON.stringify({ actor: user.id, input });
+      if (this.sceneMotionRequests.has(requestKey)) return { ok: this.sceneMotionRequests.get(requestKey) === payload };
+      const token = stored.state.tokens[input.tokenId as string];
+      if (!token || (profile.role !== 'gm' && (!profile.tokenIds.includes(token.id) || input.action !== 'move'))) return { ok: false, error: 'Character is not controlled by you.' };
+      const scene = this.sceneRows.find(s => s.campaign_id === user.campaignId && s.id === input.sceneId);
+      if (!scene || scene.is_legacy_arena || scene.is_draft || scene.archived || (scene.published_revision ?? 0) !== input.sceneRevision) return { ok: false, error: 'Scene changed.' };
+      const assignment = this.sceneAssignments.find(a => a.campaign_id === user.campaignId && a.user_id === user.id);
+      if (profile.role !== 'gm' && (!assignment || assignment.scene_id !== scene.id || assignment.revision !== input.assignmentRevision)) return { ok: false, error: 'Assignment changed.' };
+      const key = `${user.campaignId}:${scene.id}:${token.id}`, old = this.sceneTokenRows.get(key);
+      if ((old?.version ?? 0) !== input.tokenVersion) return { ok: false, error: 'Token changed.' };
+      if (input.action !== 'place') {
+        const enc = stored.state.sceneEncounters?.[scene.id];
+        if (scene.category === 'region') { if (epoch !== `d:${stored.state.sceneClocks?.[scene.id]?.day ?? 1}`) return { ok: false, error: 'The scene day changed. Refresh before moving.' }; }
+        else if (epoch === 'free') { if (enc?.status === 'active') return { ok: false, error: 'Initiative started. Wait for your turn.' }; }
+        else {
+          if (enc?.status !== 'active' || epoch !== `t:${enc.id}:${enc.turnSerial ?? 0}`) return { ok: false, error: 'The turn changed. Refresh before moving.' };
+          if (profile.role !== 'gm' && enc.participants[enc.turnIndex]?.tokenId !== token.id) return { ok: false, error: 'It is not your turn.' };
+        }
+        const ledger = this.sceneLedgerRows.get(key), spent = ledger?.epoch === epoch ? ledger.spent : 0;
+        if (cost <= 0 || spent + cost > allowance + 1e-6) return { ok: false, error: 'Movement exceeds what is left this turn or day.' };
+        this.sceneLedgerRows.set(key, { epoch, spent: spent + cost });
+      }
+      this.sceneTokenRows.set(key, { tokenId: token.id, x: input.x as number, y: input.y as number, version: (old?.version ?? 0) + 1, tacticalSpent: 0, regionSpent: 0 });
+      const owner = this.profileList.find(p => p.campaignId === user.campaignId && p.role === 'player' && p.tokenIds.includes(token.id));
+      if (owner) {
+        const knowledgeKey = `${user.campaignId}:${scene.id}:${owner.userId}`;
+        this.sceneKnownRows.set(knowledgeKey, { ...this.sceneKnownRows.get(knowledgeKey), ...Object.fromEntries(discovered.map(n => [n.id, structuredClone(n)])) });
+        this.sceneVisionRows.set(knowledgeKey, new Set([...(this.sceneVisionRows.get(knowledgeKey) ?? []), ...seen]));
+      }
+      this.sceneMotionRequests.set(requestKey, payload); this.states.set(user.campaignId, { state: stored.state, version: stored.version + 1 }); this.onSceneChange?.(user.campaignId);
+      return { ok: true };
+    },
     snapshot: async (campaignId, sceneId, userId, tokenIds) => {
       const tokens = tokenIds.map(id => this.sceneTokenRows.get(`${campaignId}:${sceneId}:${id}`)).filter((v): v is import('../src/server/sceneMotion').SceneTokenPosition => !!v).map(t => ({ ...t, ...(this.sceneBudgetRows.get(`${campaignId}:${t.tokenId}`) ?? { tacticalSpent: 0, regionSpent: 0 }) }));
       return structuredClone({ tokens, ...(this.sceneClockRows.get(campaignId) ?? { round: 0, hour: 0 }), known: Object.values(this.sceneKnownRows.get(`${campaignId}:${sceneId}:${userId}`) ?? {}), budgets: Object.fromEntries(tokenIds.map(id => [id, this.sceneBudgetRows.get(`${campaignId}:${id}`) ?? { tacticalSpent: 0, regionSpent: 0 }])) });

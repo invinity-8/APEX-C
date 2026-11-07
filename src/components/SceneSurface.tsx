@@ -40,8 +40,12 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       return { tokenId: p.tokenId, x: p.x, y: p.y, name: marker?.name ?? (category === 'world' ? 'Party' : name), color: marker?.color ?? color, view: view(p.tokenId) };
     });
     const own = point && reachBudget !== null && reachBudget > 0 ? hexReach(map, point, reachBudget) : null;
-    return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit} per hex · mouse wheel zooms, drag pans</p>
-      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} selectedTokenId={tokenId ?? null} reach={own} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
+    // Scene-local light: region night like the Arena; battle lighting dim/dark.
+    const clock = snapshot.clock;
+    const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
+    const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
+    return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p>
+      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={tokenId ?? null} reach={own} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
     </section>;
   }
   function destination(e: PointerEvent<SVGSVGElement>) {

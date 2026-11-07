@@ -91,7 +91,7 @@ export function Orb({ label, halves, size = 112, testId, shield = 0 }: { label: 
 }
 
 /** Loads the sheet once per change (sheet ping), shows the orbs and the authorised controls. */
-export function VitalsPanel({ game, token, canEdit }: { game: GameApi; token: TokenView; canEdit: boolean }) {
+export function VitalsPanel({ game, token, canEdit, arenaMovement = true }: { game: GameApi; token: TokenView; canEdit: boolean; /** Arena daily MP – hidden while the character is on a scene. */ arenaMovement?: boolean }) {
   const { sheets } = game;
   const [data, setData] = useState<{ sheet: CharacterSheet; version: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -219,7 +219,7 @@ export function VitalsPanel({ game, token, canEdit }: { game: GameApi; token: To
         );
       })}
 
-      {d && (
+      {d && arenaMovement && (
         <p className="text-[11px] text-marble-500" data-testid="movement-rule">
           Movement {d.movePoints}/{d.maxMovePoints} MP per day
           {speed ? ` · walking speed ${speed} ft → ${movePointsForSpeed(speed)} MP${d.speedFt === speed ? '' : ' (the GM applies speed changes)'}` : ''}

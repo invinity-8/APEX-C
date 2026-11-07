@@ -1,5 +1,5 @@
 import { emptyMap, type MapNode, type SceneMap } from './maps.js';
-import { newHexScene, type HexPreset } from './hexScene.js';
+import { REGION_DEFAULT_RADIUS, newHexScene, type HexPreset } from './hexScene.js';
 
 /**
  * Starter templates. Battle and region maps are always Arena-style hex maps (hexScene.ts); celestial
@@ -10,25 +10,27 @@ export const SCENE_TEMPLATES = [
   { id: 'planetary-system', category: 'celestial', name: 'Blank planetary system' },
   { id: 'parchment-world', category: 'world', name: 'Blank parchment world map' },
   { id: 'connected-world', category: 'world', name: 'Connected-location travel map' },
-  { id: 'hex-forest', category: 'battle', name: 'Forest clearing (hex)' },
-  { id: 'hex-river', category: 'battle', name: 'River with ford (hex)' },
-  { id: 'hex-ruins', category: 'battle', name: 'Old ruins (hex)' },
-  { id: 'hex-wild', category: 'battle', name: 'Wilderness – Arena generator (hex)' },
-  { id: 'hex-battle', category: 'battle', name: 'Open grassland (hex)' },
-  { id: 'hex-region', category: 'region', name: 'Wilderness region (hex)' },
-  { id: 'hex-region-forest', category: 'region', name: 'Forested region (hex)' },
-  { id: 'hex-region-blank', category: 'region', name: 'Open region (hex)' },
+  { id: 'hex-forest', category: 'battle', name: 'Forest clearing (5-ft hexes)' },
+  { id: 'hex-river', category: 'battle', name: 'Stream with ford (5-ft hexes)' },
+  { id: 'hex-ruins', category: 'battle', name: 'Ruined building (5-ft hexes)' },
+  { id: 'hex-dungeon', category: 'battle', name: 'Dungeon rooms & corridors (5-ft hexes)' },
+  { id: 'hex-battle', category: 'battle', name: 'Open field (5-ft hexes)' },
+  { id: 'hex-region', category: 'region', name: 'Wilderness region – Arena generator (3-mi hexes)' },
+  { id: 'hex-region-forest', category: 'region', name: 'Forested region (3-mi hexes)' },
+  { id: 'hex-region-blank', category: 'region', name: 'Open region (3-mi hexes)' },
 ] as const;
-const LEGACY: Record<string, string> = { 'square-battle': 'hex-battle', 'image-battle': 'hex-battle' };
+const LEGACY: Record<string, string> = { 'square-battle': 'hex-battle', 'image-battle': 'hex-battle', 'hex-wild': 'hex-forest' };
 const HEX: Record<string, { preset: HexPreset; radius: number }> = {
-  'hex-forest': { preset: 'forest', radius: 9 },
-  'hex-river': { preset: 'river', radius: 9 },
-  'hex-ruins': { preset: 'ruins', radius: 9 },
-  'hex-wild': { preset: 'wilderness', radius: 10 },
+  // Battle maps: 5 ft per hex – radius 10 ≈ 100 ft across.
+  'hex-forest': { preset: 'forest', radius: 10 },
+  'hex-river': { preset: 'river', radius: 10 },
+  'hex-ruins': { preset: 'ruins', radius: 10 },
+  'hex-dungeon': { preset: 'dungeon', radius: 12 },
   'hex-battle': { preset: 'blank', radius: 8 },
-  'hex-region': { preset: 'wilderness', radius: 14 },
-  'hex-region-forest': { preset: 'forest', radius: 14 },
-  'hex-region-blank': { preset: 'blank', radius: 12 },
+  // Region maps: Arena size (radius 12 = 469 hexes, 3 mi each).
+  'hex-region': { preset: 'wilderness', radius: REGION_DEFAULT_RADIUS },
+  'hex-region-forest': { preset: 'forest', radius: REGION_DEFAULT_RADIUS },
+  'hex-region-blank': { preset: 'blank', radius: REGION_DEFAULT_RADIUS },
 };
 
 /** Default for a new battle/region draft without a chosen template. */

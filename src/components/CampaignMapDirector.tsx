@@ -298,14 +298,15 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     });
   }
 
-  function advanceInterval() {
+  /** Scene time & initiative (scene-local; the Arena clock is never touched). */
+  function sceneTurn(input: Record<string, unknown>) {
     const scene = shownScene;
     if (!scene) return;
     void guarded(async () => {
-      const interval = scene.category === 'battle' ? 'round' : 'hour';
-      await api.sceneMove({ action: 'advance', requestId: crypto.randomUUID(), interval, expected: interval === 'round' ? (snapshot?.motion?.round ?? 0) : (snapshot?.motion?.hour ?? 0) });
+      const r = await api.sceneTurn({ sceneId: scene.id, ...input });
+      setNotice(r.message ?? 'Done.');
+      game.online?.refresh();
       setSnapshot(await api.sceneFocus(scene.id));
-      setNotice(interval === 'round' ? 'Next tactical round.' : 'Next exploration hour.');
     });
   }
 
@@ -492,6 +493,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     ),
   };
 
+  const clock = snapshot?.clock;
+  const encounter = shownScene && game.gmState?.sceneEncounters?.[shownScene.id]?.status === 'active' ? game.gmState.sceneEncounters[shownScene.id] : null;
   const placeable = !!shownScene && ['battle', 'region'].includes(shownScene.category) && markers.length > 0;
   const toolsWidget: WidgetDef = {
     id: 'game-scene-tools',
@@ -523,13 +526,61 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               </button>
             </div>
           )}
-          {snapshot?.motion && ['battle', 'region'].includes(shownScene.category) && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-marble-400">{shownScene.category === 'battle' ? `Round ${snapshot.motion.round}` : `Hour ${snapshot.motion.hour}`}</span>
-              <button className="btn btn-ghost" type="button" disabled={busy} onClick={advanceInterval}>
-                {shownScene.category === 'battle' ? 'Next round' : 'Next hour'}
-              </button>
+          {clock && shownScene.category === 'region' && (
+            <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="scene-time">
+              <span className="text-marble-300">
+                Day {clock.day} · {clock.phase === 'night' ? '🌙 Night' : '☀ Day'} · travel 24 mi (8 hexes) per day at speed 30
+              </span>
+              {clock.phase === 'day' ? (
+                <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => sceneTurn({ action: 'clock', expectedVersion: clock.version, phase: 'night' })}>
+                  Begin night
+                </button>
+              ) : (
+                <button className="btn btn-gold" type="button" disabled={busy} onClick={() => sceneTurn({ action: 'clock', expectedVersion: clock.version, nextDay: true })}>
+                  Begin day {clock.day + 1}
+                </button>
+              )}
             </div>
+          )}
+          {clock && shownScene.category === 'battle' && (
+            <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Battle lighting" data-testid="scene-lighting">
+              <span className="text-marble-300">Light:</span>
+              {(['bright', 'dim', 'dark'] as const).map((l) => (
+                <button key={l} type="button" className="btn btn-ghost" aria-pressed={clock.lighting === l} disabled={busy || clock.lighting === l} onClick={() => sceneTurn({ action: 'clock', expectedVersion: clock.version, lighting: l })}>
+                  {l === 'bright' ? '☀ Bright' : l === 'dim' ? '◐ Dim' : '🌑 Dark'}
+                </button>
+              ))}
+            </div>
+          )}
+          {shownScene.category === 'battle' && (
+            <section className="space-y-1 text-xs" aria-label="Initiative" data-testid="gm-initiative">
+              <h3 className="font-bold text-marble-300">Initiative{encounter ? ` · round ${encounter.round}` : ' · off (free movement)'}</h3>
+              {encounter ? (
+                <>
+                  <ol className="space-y-0.5">
+                    {encounter.participants.map((p, i) => (
+                      <li key={p.id} className={`flex items-center gap-2 rounded px-1 ${i === encounter.turnIndex ? 'bg-gold-400/20 text-gold-200' : 'text-marble-300'}`} aria-current={i === encounter.turnIndex ? 'true' : undefined}>
+                        <span className="w-6 text-right tabular-nums">{p.initiative}</span>
+                        <span className="flex-1">{p.name}</span>
+                        {i === encounter.turnIndex && <em className="not-italic">active</em>}
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-gold" type="button" disabled={busy} onClick={() => sceneTurn({ action: 'endTurn', encounterId: encounter.id, turnSerial: encounter.turnSerial ?? 0 })}>
+                      Next turn
+                    </button>
+                    <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => sceneTurn({ action: 'endInitiative' })}>
+                      End initiative
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button className="btn btn-gold" type="button" disabled={busy || !markers.length} onClick={() => sceneTurn({ action: 'startInitiative' })}>
+                  Start initiative (roll for everyone here)
+                </button>
+              )}
+            </section>
           )}
           {shownScene.category === 'world' && travel?.sceneId === shownScene.id && (
             <WorldTravel key={`travel-${shownScene.id}`} gm sceneId={shownScene.id} sceneRevision={shownScene.revision} assignmentRevision={0} map={shownScene.map} travel={travel.data} onChanged={() => void api.sceneTravelState(shownScene.id).then((data) => setTravel({ sceneId: shownScene.id, data })).catch((e) => setError(String(e)))} />

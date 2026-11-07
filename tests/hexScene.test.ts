@@ -9,7 +9,7 @@ import {
   classifyColour,
   convertLegacyMap,
   decodeTerrain,
-  encodeTerrain,
+  encodeTiles,
   generateHexScene,
   hexAt,
   hexCentre,
@@ -27,7 +27,7 @@ import { sceneTemplate } from '../src/campaign/templates';
 import { publicMap } from '../src/server/sceneRuntime';
 import { hexCount, hexKey } from '../src/game/hex';
 
-const plainsMap = (radius = 5): SceneMap => hexSceneMap(emptyMap('battle'), encodeTerrain(radius, () => 'plains'));
+const plainsMap = (radius = 5): SceneMap => hexSceneMap(emptyMap('battle'), encodeTiles(radius, 'battle', () => 'grass'));
 const east = (map: SceneMap, q: number, r = 0) => hexCentre(map, { q, r });
 
 describe('hex scene data', () => {
@@ -69,20 +69,20 @@ describe('hex movement (server rule)', () => {
     const map = plainsMap();
     expect(snappedPoint(map, { x: east(map, 2).x + 7, y: east(map, 2).y - 5 })).toEqual(east(map, 2));
     expect(movementCost(map, east(map, 0), east(map, 3))).toEqual({ ok: true, cost: 15 });
-    map.hex = paintHexes(map.hex!, [hexKey({ q: 1, r: 0 }), hexKey({ q: 2, r: 0 })], 'forest');
-    // Forest costs 2 per hex, so the path bends around it when cheaper.
+    map.hex = paintHexes(map.hex!, [hexKey({ q: 1, r: 0 }), hexKey({ q: 2, r: 0 })], 'undergrowth');
+    // Undergrowth costs 2 per hex (difficult terrain), so the path bends around it when cheaper.
     const r = hexMovementCost(map, east(map, 0), east(map, 3));
     expect(r.ok && r.cost).toBe(20);
   });
 
   it('blocks impassable destinations and walls of water', () => {
     const map = plainsMap(3);
-    map.hex = paintHexes(map.hex!, [hexKey({ q: 2, r: 0 })], 'water');
-    expect(movementCost(map, east(map, 0), east(map, 2))).toEqual({ ok: false, error: 'Lake cannot be entered.' });
+    map.hex = paintHexes(map.hex!, [hexKey({ q: 2, r: 0 })], 'wall');
+    expect(movementCost(map, east(map, 0), east(map, 2))).toEqual({ ok: false, error: 'Wall cannot be entered.' });
     expect(movementCost(map, east(map, 0), { x: 1, y: 1 })).toMatchObject({ ok: false });
     // Ring of water around the centre: nothing outside can be reached.
     const ring = ['1,0', '1,-1', '0,-1', '-1,0', '-1,1', '0,1'];
-    map.hex = paintHexes(map.hex!, ring, 'water');
+    map.hex = paintHexes(map.hex!, ring, 'deep');
     expect(movementCost(map, east(map, 0), east(map, 3))).toEqual({ ok: false, error: 'No passable path to that hex.' });
   });
 
@@ -115,7 +115,7 @@ describe('picture import and conversion', () => {
     expect(t.size).toBe(hexCount(4));
   });
 
-  it('converts an old drawn battle map: trees become forest, water stays water, the spawn is kept', () => {
+  it('converts an old drawn battle map into 5-ft tiles: trees, deep water, the spawn is kept', () => {
     const old = emptyMap('battle');
     old.nodes = [
       { id: 'entry', x: 600, y: 400, label: 'Arrival', description: '', kind: 'spawn', visible: false, width: 50, height: 50, targetScene: null },
@@ -128,8 +128,8 @@ describe('picture import and conversion', () => {
     const t = decodeTerrain(map.hex!);
     const left = hexAt(map, { x: map.width * 0.15, y: map.height / 2 });
     const right = hexAt(map, { x: map.width * 0.85, y: map.height / 2 });
-    expect(t.get(hexKey(left))).toBe('forest');
-    expect(t.get(hexKey(right))).toBe('water');
+    expect(t.get(hexKey(left))).toBe('tree');
+    expect(t.get(hexKey(right))).toBe('deep');
     expect(movementCost(map, map.nodes[0], map.nodes[0]).ok).toBe(true);
     expect(parseMap(map)).not.toBeNull();
   });

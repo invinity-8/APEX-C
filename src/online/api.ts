@@ -82,6 +82,8 @@ export const api = {
   sanctuarySave: (settings: import('../server/sanctuary').SanctuarySettings) => request<import('../server/sanctuary').SanctuarySettings>('POST', 'sanctuary', {}, settings),
   sceneTravelState: (sceneId: string) => request<import('../server/sceneTravel').TravelSnapshot>('GET', 'scene-travel', { sceneId }),
   sceneTravelAction: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string }>('POST', 'scene-travel', {}, input),
+  /** Scene time and initiative: endTurn (players: own turn), startInitiative / endInitiative / clock (GM). */
+  sceneTurn: (input: Record<string, unknown>) => request<{ ok: boolean; message?: string; error?: string }>('POST', 'scene-turn', {}, input),
   sceneMove: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string }>('POST', 'scene-motion', {}, input),
   playerScenePreview: (player: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { player }),
   sceneFocus: (sceneId: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { focus: sceneId }),

@@ -76,13 +76,18 @@ describe('campaign engine API integration',()=>{
       {id:'npc-hidden',name:'Hidden guard',initiative:19,visible:false},
       {id:'npc-wolf',name:'Wolf',initiative:5,visible:true},
     ];
+    // Arriving on a battle map starts initiative automatically; end it to set up a manual encounter.
+    expect(repo.states.get(cid)!.state.sceneEncounters?.[scene.id]?.status).toBe('active');
+    expect((await request('gm','scene-turn',{action:'endInitiative',sceneId:scene.id})).status).toBe(200);
     const started=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneEncounterStart',sceneId:scene.id,publishedRevision:revision,encounterId:'encounter-live',title:'Gate skirmish',participants}});
     expect(started.status).toBe(200);
     hannah=(await request('hannah','state')).body as PlayerPayload;
     jean=(await request('jean','state')).body as PlayerPayload;
     expect(hannah.view?.sceneEncounter?.participants.map(p=>p.id)).toEqual(['pc-sinna','npc-wolf']);
     expect(hannah.view?.sceneEncounter?.turnIndex).toBe(-1);
-    expect(jean.view?.sceneEncounter).toBeNull();
+    // Jean only sees the initiative of her own battle map (started automatically on arrival).
+    expect(jean.view?.sceneEncounter?.sceneId).toBe(other.id);
+    expect(jean.view?.sceneEncounter?.participants.map(p=>p.id)).toEqual([`pc-${user('jean').tokenIds[0]}`]);
 
     const advance=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{type:'sceneEncounterAdvance',sceneId:scene.id,publishedRevision:revision,encounterId:'encounter-live',expectedVersion:1}});
     expect(advance.status).toBe(200);
@@ -99,18 +104,20 @@ describe('campaign engine API integration',()=>{
   });
   it('revalidates assigned encounter participants after a concurrent scene transfer',async()=>{
     const scene=await battle(); await assign(scene.id,0);
+    expect((await request('gm','scene-turn',{action:'endInitiative',sceneId:scene.id})).status).toBe(200);
     repo.beforeSave=()=>{ void repo.sceneRuntime.transition({id:user('gm').userId,campaignId:cid,role:'gm'} as AuthUser,null,[{userId:user('hannah').userId,revision:1}],crypto.randomUUID()); };
     const response=await request('gm','command',{campaignId:cid,requestId:crypto.randomUUID(),command:{
       type:'sceneEncounterStart',sceneId:scene.id,publishedRevision:scene.published_revision!,encounterId:'raced-assignment',title:'Assignment race',
       participants:[{id:'pc-sinna',tokenId:'sinna',name:'Sinna',initiative:12,visible:true}],
     }});
     expect(response.status).toBe(409);
-    expect(repo.states.get(cid)!.state.sceneEncounters?.[scene.id]).toBeUndefined();
+    expect(repo.states.get(cid)!.state.sceneEncounters?.[scene.id]?.id).not.toBe('raced-assignment');
     const afterTransfer=(await request('hannah','state')).body as PlayerPayload;
     expect(afterTransfer.scene?.kind).toBe('sanctuary');
   });
   it('revalidates the published scene revision after a concurrent republish',async()=>{
     const scene=await battle(); await assign(scene.id,0);
+    expect((await request('gm','scene-turn',{action:'endInitiative',sceneId:scene.id})).status).toBe(200);
     repo.beforeSave=()=>{
       const row=repo.sceneRows.find(item=>item.campaign_id===cid&&item.id===scene.id)!;
       void repo.sceneCatalog.update(cid,scene.id,row.revision,{published_metadata:row.published_metadata});
@@ -165,7 +172,7 @@ describe('campaign engine API integration',()=>{
     expect(await repo.saveSheet(cid,'sinna',sheet,0,user('gm').userId)).toBe(1);
     const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,...east(scene,5),requestId:crypto.randomUUID()});
     expect(response.status).toBe(422);
-    expect((response.body as {error:string}).error).toMatch(/encumbrance leaves 20/i);
+    expect((response.body as {error:string}).error).toMatch(/only 20 feet of movement left this turn/i);
     expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)).toBeUndefined();
   });
   it('falls back to Sanctuary for missing or invalid assignments',async()=>{

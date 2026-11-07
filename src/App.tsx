@@ -312,7 +312,7 @@ export default function App({ game }: { game: GameApi }) {
         render: () =>
           me ? (
             <div className="space-y-3">
-              <VitalsPanel game={game} token={me} canEdit />
+              <VitalsPanel game={game} token={me} canEdit arenaMovement={!arenaOff} />
               <CharacterSummary game={game} token={me} />
             </div>
           ) : null,
@@ -321,6 +321,7 @@ export default function App({ game }: { game: GameApi }) {
         id: 'party',
         title: 'Party & Intel',
         icon: '⚑',
+        inactive: arenaOff,
         render: () => (
           <WidgetTabs
             id="party"
@@ -339,6 +340,7 @@ export default function App({ game }: { game: GameApi }) {
       id: 'chronicle',
       title: 'Arena Chronicle',
       icon: '📜',
+      inactive: arenaOff,
       render: () => (
         <WidgetTabs
           id="chronicle"
@@ -446,6 +448,7 @@ export default function App({ game }: { game: GameApi }) {
         notify={notify}
         area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'journal' ? 'Journal' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
+        arenaClock={isGm ? director.arenaShown : !game.scene || game.scene.kind === 'arena'}
       />
       <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Main navigation">
         {tabs.map((t) => (
