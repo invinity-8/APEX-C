@@ -1,11 +1,13 @@
 # APEX 0.9 – Implementierungsstatus und Handover
 
-Stand: 2026-11-06
+Stand: 2026-11-07
 Produktionsbasis: `df8090fad406677f26830952861c7b092f4beff0`; PRs #41–#47 sind gemergt.
-Abschlussbranch: `feat/apex-09-closeout`; PR #48 offen und mergebar, bereit zur manuellen Prüfung. Aktueller PR-Head `e4b36e8c75decc46c59696132d39bd5eef81fc07` enthält Szenenmitteilungen, Initiative-Tracker, sicheres Stack-Merge, Rechtsklick-Itemaktionen und lokale Shift-Hover-Vergleichsvorschau. GitHub Actions Run `42363491943` und die read-only Preview-Health-Prüfung auf genau diesem Head sind erfolgreich.
+Abschlussbranch: `feat/apex-09-closeout`; PR #48 offen und mergebar, bereit zur manuellen Prüfung. Aktueller PR-Head `f8e0715ebf669bc70e3403a4aaac14c4c48a4f22` enthält den geprüften Codebaum plus aktualisierte Handover-Dokumente. GitHub Actions Run `42363723344` und die read-only Preview-Health-Prüfung auf genau diesem Head sind erfolgreich.
 Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Production-Deployment-Aktion durchgeführt.
 
-## Implementiert und automatisiert geprüft
+## Implementiert und getestet; Production nicht verifiziert
+
+Dieser Status belegt lokale Regressionen und CI für den aktuellen PR-Head. Er belegt keine Production-Bereitstellung oder GM-/Player-Rollenabnahme. Die zugehörige Preview-Health-Prüfung ist read-only.
 
 - **PR #47 Journalreferenzen:** People-/Places-Ziele werden als UUID-Referenzen gespeichert; die Zielauflösung läuft durch sichtbarkeitsgeprüfte Journal-Leseoperationen.
 - **Journal-Backlinks (dieser Branch):** Rückverweise kommen nicht mehr nur aus der sichtbaren Journal-Liste. Neuer Server-/Store-Pfad filtert dieselbe Kampagne nach Benutzer- und Rollenfreigabe und liefert Seiten mit 50 Einträgen. UI erlaubt „Load older backlinks“. Invalid UUIDs und fehlende Seiten werden abgewiesen. Regressionstest ergänzt.
@@ -21,7 +23,7 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 - **Inventar-Stack-Merge (dieser Abschlusslauf):** Zusammenführen ist nur für identische, nicht individualisierte Gegenstände im selben Behälter möglich. Servercommand und UI verwenden dieselbe Prüfung; Basis-ID, Gewicht, Identifikation, Bindung/Sperre, Notizen und Herkunfts-/Änderungshistorie dürfen nicht abweichen. Regressionstests und CI Run `42297021062` sichern die Regel sowie unveränderte Mengen bei abgelehntem Cross-Container-Merge.
 - **Inventar-Itemvergleich und Itemaktionen (dieser Abschlusslauf):** Shift-Hover zeigt lokale Vorher/Nachher-Werte für AC, Angriff, Schaden, Resistenzen und sonstige Ausrüstungsboni. Die Vorschau nutzt dieselbe Slot- und Derived-Stats-Logik, löst keine API-Abfrage pro Mausbewegung aus und gibt bei nicht identifizierten Items keine versteckten Modifikatoren preis. Rechtsklick und Actions-Knopf öffnen jeweils dasselbe passende Aktionsmenü; die Menü-Dopplung wurde entfernt. Pure Regressionstests bestehen lokal und in GitHub Actions Run `42363491943`.
 - **Automatisierte Ergebnisse vor diesem Schritt:** GitHub-CI Run `42289602511` für Remote-Code-Head `0ecfc7eac79cb653891539331f0ed97701d4bc61` ist vollständig erfolgreich: Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Checks. Production-DB-Job wurde übersprungen. Vercel Preview scheiterte am kostenlosen Tageslimit. Keine Production-Bereitstellung.
-- **Aktueller Abschlusslauf:** Lokal bestanden: Migration Guard (12 registrierte, keine pending), 48 Testdateien / 406 Tests, TypeScript und Produktionsbuild. GitHub Actions Run `42363491943` auf PR-Head `e4b36e8c75decc46c59696132d39bd5eef81fc07` bestand Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Checks; der Production-DB-Job wurde übersprungen. Zugehörige Vercel-Preview war `READY`; read-only `/api/apex?op=version` meldete 0.9.0, PR 48 und denselben Commit, `/api/apex?op=health` meldete `ok: true`, Schema 6/6, vollständige Migrationen und keine Fehler. Kein GM-/Player-Browserablauf durchgeführt. Build-Warnungen: bestehende Vite-native-config-Imports ohne Dateiendung und Client-Chunks über 500 kB.
+- **Aktueller Abschlusslauf:** Lokal bestanden: Migration Guard (12 registrierte, keine pending), 48 Testdateien / 406 Tests, TypeScript und Produktionsbuild. GitHub Actions Run `42363723344` auf PR-Head `f8e0715ebf669bc70e3403a4aaac14c4c48a4f22` bestand Migration Guard, Gesamttests, TypeScript/Build und isolierte Migration-/RLS-/Scene-Checks; der Production-DB-Job wurde übersprungen. Zugehörige Vercel-Preview war `READY`; read-only `/api/apex?op=version` meldete 0.9.0, PR 48 und denselben Commit, `/api/apex?op=health` meldete `ok: true`, Schema 6/6, vollständige Migrationen und keine Fehler. Kein GM-/Player-Browserablauf durchgeführt. Build-Warnungen: bestehende Vite-native-config-Imports ohne Dateiendung und Client-Chunks über 500 kB.
 - **Produktionsstatus der Ausgangsbasis:** read-only `/api/apex?op=health` HTTP 200 mit `ok: true`, schemaVersion 6, migrationsComplete true und leeren Missing-/Unknown-/Error-Listen; Vercel Deployment für `df8090f` meldete READY. Das belegt den Ausgangsstand, nicht die Änderungen dieses Branches.
 
 ## Bereits gemergte Funktionen – Code vorhanden; Browserabnahme offen
@@ -42,11 +44,11 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 
 ## Nicht verifiziert / blockiert
 
-- **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden; der lokale Mockserver startete, aber der verfügbare Browser erreichte `localhost:5174` nicht (`ERR_CONNECTION_TIMED_OUT`). Die Preview des aktuellen PR-Code-Heads `ca9bce892e6c936c273b6ba1cb1fdddf43aa804e` wurde read-only geprüft: Version/Health HTTP 200, `0.9.0`, Health `ok: true`, Schema 6/6, Migrationen vollständig, keine Fehler. Das ersetzt keinen GM-/Player-Rollenablauf. Keine Kampagnendaten wurden geschrieben.
-- **Isolierte DB-Prüfung:** lokal nicht ausgeführt; GitHub-CI Run `42294465027` hat Migration Guard und isolierte Migrationen/RLS/Scene-Transaktionen gegen Wegwerf-Postgres auf dem aktuellen Code-Head erfolgreich geprüft; Production-DB-Job wurde übersprungen. Neuer Szenencode verwendet ausschließlich bestehende JSON-Spalten und fügt keine Migration hinzu.
+- **GM-/Player-Browserabnahme:** nicht durchgeführt. Der isolierte Harness (`vite.mock.config.ts`, MemoryRepo) ist vorhanden; der lokale Mockserver startete, aber der verfügbare Browser erreichte `localhost:5174` nicht (`ERR_CONNECTION_TIMED_OUT`). Die Preview des aktuellen PR-Heads `f8e0715ebf669bc70e3403a4aaac14c4c48a4f22` wurde read-only geprüft: Version/Health HTTP 200, `0.9.0`, Health `ok: true`, Schema 6/6, Migrationen vollständig, keine Fehler. Das ersetzt keinen GM-/Player-Rollenablauf. Keine Kampagnendaten wurden geschrieben.
+- **Isolierte DB-Prüfung:** lokal nicht ausgeführt; GitHub Actions Run `42363723344` hat Migration Guard und isolierte Migrationen/RLS/Scene-Transaktionen gegen Wegwerf-Postgres auf dem aktuellen PR-Head erfolgreich geprüft; Production-DB-Job wurde übersprungen. Dieser Branch fügt keine Migration hinzu.
 - **Production:** keine neue Production-Bereitstellung oder Promotion. Die aktuelle read-only Health-Abfrage bezog sich ausschließlich auf die Preview und änderte keine Daten.
 - **Kenney visuell/Performance:** keine Classic-/2.5D-Screenshots und keine 39-/78-Radius-Metriken erhoben.
-- **Isolierte SQL/RLS/Scene-Prüfungen:** in der lokalen Windows-Arbeitsumgebung fehlen `psql`, Docker und Bash. GitHub-Workflow `42294465027` hat die isolierten Prüfungen für den aktuellen Code-Head bestanden; dieser Branch ändert kein Datenbankschema.
+- **Isolierte SQL/RLS/Scene-Prüfungen:** in der lokalen Windows-Arbeitsumgebung fehlen `psql`, Docker und Bash. GitHub-Workflow `42363723344` hat die isolierten Prüfungen für den aktuellen PR-Head bestanden; dieser Branch ändert kein Datenbankschema.
 - **Live-Status:** die aktuellen Codeänderungen dieses Branches sind weder gemergt noch live; nur die oben benannte `df8090f`-Produktionsbasis ist live verifiziert.
 
 ## Priorisierte offene Abnahme- und Implementierungsaufgaben
@@ -62,10 +64,15 @@ Keine Produktionsmigration, Daten-/Storageänderung, automatische Merge- oder Pr
 | P1 | Kenney-Visual- und Performanceabnahme | gleiche Mock-Szene/Kamera und Netzwerkbedingungen für Classic/2.5D, Radius 39 und 78; Screenshots, Latenz, Downloadbytes, Ladezeit, Reaktionszeit, Renderdauer; keine Asset-Uploads |
 | P1 | Cube-Progression-Rollenabnahme | Local/API-Tests decken getrennte Währungen, Upgrade, Levelzugriff und Legacy-Erhalt ab; im Browser mit GM und Player Upgrade, Reload, Kostenänderung, Revocation/Legacy-Rechte und Level-5-Hinweis abnehmen |
 
+## Fehlend und verschoben
+
+- **Fehlend:** Vollständige Combat-Aktionen mit Angriffswurf, Treffer-/Schadensauflösung und Zugregeln; kanonische Klassen-/Zauber-Vorbereitungsregeln und weitere servervalidierte Cast-Aktionen; Player-to-player Itemtransfer. Die Transferaktion ist im Itemmenü sichtbar deaktiviert und als spätere Funktion markiert.
+- **Verschoben:** Visueller Kenney-Overhaul, Screenshotvergleich und Messungen für Radius 39/78; Produktions-Health- und API-Prüfung nach Owner-Merge; breite Systemvereinheitlichung für APEX 0.10. Diese Punkte brauchen keine Änderung an PR #48 für den manuellen Releasekandidaten.
+
 ## Kosten, Daten und Release-Status
 
 - Es wurde keine Supabase-Testdatenbank oder kostenpflichtige Ressource angelegt.
 - Keine Produktionsmigration, kein Produktions-Storage-Upload oder produktiver Schreibzugriff.
-- Vercel Code-Preview für `ca9bce892e6c936c273b6ba1cb1fdddf43aa804e`: `READY`; Version-/Health-Endpunkte read-only mit HTTP 200, Version 0.9.0, Health `ok: true`, Schema 6/6, Migrationen komplett, Fehlerliste leer. Der danach erstellte reine Dokumentations-Head `982001ece427bf65adc823aa6a2b054d5147531d` kann wegen des kostenlosen Tageslimits nicht neu gebaut werden. Keine Production-Bereitstellung, Promotion oder PR-Merge.
+- Vercel Code-Preview für aktuellen PR-Head `f8e0715ebf669bc70e3403a4aaac14c4c48a4f22`: `READY`; Version-/Health-Endpunkte read-only mit HTTP 200, Version 0.9.0, Health `ok: true`, Schema 6/6, Migrationen komplett, Fehlerliste leer. Keine Production-Bereitstellung, Promotion oder PR-Merge.
 - Keine Supabase-Migration in diesem Branch: Journal-Backlinks und Cube-Progression verwenden bestehende Journal-/State-JSON-Felder; TS-Konfiguration ist build-only. Der Code-Migrationspfad initialisiert optionale Progression beim Laden älterer Savegames.
-- **Freigabe:** APEX 0.9 noch nicht als vollständig finalabgenommen bezeichnen. Lokaler Arbeitsstand und GitHub Actions Run `42363491943` bestehen 48 Testdateien/406 Tests, TypeScript, Produktionsbuild und Migration Guard; isolierte Migration-/RLS-/Scene-Checks sind grün, der Production-DB-Job wurde übersprungen. Die Preview auf diesem Code-Head lieferte read-only Health `ok: true`, Schema 6/6. Rollenbrowserabnahme, weitere Zauber-/Klassenintegration sowie Inventory-/Kenney-Rollen- und Performancebelege bleiben offen; vollständige Kampfaktionen sind nicht implementiert.
+- **Freigabe:** PR #48 ist mergebar und bereit für manuelle Review-/Playtests. APEX 0.9 ist noch nicht als vollständig finalabgenommen zu bezeichnen, bis Rollenbrowserabnahme und die benannten Integrationsbelege erfolgen. Der aktuelle PR-Head besteht lokale Tests (48 Dateien/406 Tests), TypeScript, Produktionsbuild, Migration Guard, GitHub Actions Run `42363723344` und read-only Preview-Health. Weitere Zauber-/Klassenintegration, vollständige Kampfaktionen sowie Inventory-/Kenney-Rollen- und Performancebelege bleiben offen.
