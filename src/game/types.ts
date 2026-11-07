@@ -379,11 +379,16 @@ export interface WorldMeta {
 
 /** Live narrative message scoped to one published scene. */
 export interface SceneAnnouncement { id: string; sceneId: string; title: string; text: string; createdAt: string }
-export interface SceneEncounterParticipant { id: string; name: string; initiative: number; visible: boolean; tokenId?: string }
+export interface SceneEncounterParticipant { id: string; name: string; initiative: number; visible: boolean; tokenId?: string; /** Initiative modifier (tie-breaker: higher first). */ bonus?: number }
 export interface SceneEncounter {
   id: string; sceneId: string; title: string; round: number; turnIndex: number; version: number;
   status: 'active' | 'ended'; participants: SceneEncounterParticipant[];
+  /** Increases whenever the active turn changes; movement budgets are per turn (scene motion epoch). */
+  turnSerial?: number;
 }
+
+/** Scene-local time and light (independent of the Arena day/night). */
+export interface SceneClockState { day: number; phase: 'day' | 'night'; lighting: 'bright' | 'dim' | 'dark'; version: number }
 
 export interface GameState {
   version: number;
@@ -413,6 +418,8 @@ export interface GameState {
   sceneAnnouncements?: SceneAnnouncement[];
   /** One current/recent initiative tracker per scene. */
   sceneEncounters?: Record<string, SceneEncounter>;
+  /** Scene-local clocks (region day/night, battle lighting). Never touched by the Arena. */
+  sceneClocks?: Record<string, SceneClockState>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */
   merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */

@@ -5,11 +5,12 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { ORIGIN, hexCorners, hexKey, hexesInRange, parseKey, type Axial, type HexKey } from '../../game/hex';
-import { TERRAIN, type TerrainType } from '../../game/terrain';
 import type { HexView, TokenView, ViewModel } from '../../game/visibility';
 import { fmt } from '../../game/text';
 import type { MapNode, SceneMap } from '../../campaign/maps';
-import { decodeTerrain, hexAt, sceneElevation } from '../../campaign/hexScene';
+import { decodeTiles, hexAt, sceneElevation, tileSetOf } from '../../campaign/hexScene';
+import type { TerrainType } from '../../game/terrain';
+import { paintBattleChunk } from './battlePainter';
 import { HEX_SIZE, boundaryPath, center } from './geometry';
 import { LightCanvas, usePrefersReducedMotion } from './LightCanvas';
 import { MapDefs } from './MapDefs';
@@ -33,7 +34,10 @@ interface Props {
   tokens?: SceneToken[];
   /** Show hidden markers and the spawn (GM editor / GM table). */
   gm?: boolean;
-  phase?: 'day' | 'night';
+  /** Night darkens the map like the Arena; dusk is half-dark (dim light). */
+  phase?: 'day' | 'dusk' | 'night';
+  /** Player fog per hex ('v' visible, 'e' remembered, '.' unknown). Absent = everything visible (GM). */
+  fog?: string;
   selectedTokenId?: string | null;
   /** Gold movement area (hex → cost in hex steps), like the Arena reach. */
   reach?: Map<HexKey, { cost: number }> | null;
@@ -48,7 +52,7 @@ interface Props {
 const MAX_K = 3.5;
 const NO_TEAMS = new Set<string>();
 
-export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day', selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex }: Props) {
+export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex }: Props) {
   const reducedMotion = usePrefersReducedMotion();
   const [hover, setHover] = useState<HexKey | null>(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -56,17 +60,23 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
   const ox = map.width / 2, oy = map.height / 2;
   const toWorld = (p: { x: number; y: number }) => ({ x: p.x - ox, y: p.y - oy });
 
-  const { hexes, byKey } = useMemo(() => {
+  const battle = tileSetOf(map.hex) === 'battle';
+  const { hexes, byKey, defs } = useMemo(() => {
     const out: HexView[] = [];
+    const tiles = map.hex ? decodeTiles(map.hex) : new Map();
     if (map.hex) {
-      const terrain = decodeTerrain(map.hex);
-      for (const h of hexesInRange(ORIGIN, map.hex.radius)) {
-        const t = terrain.get(hexKey(h));
-        if (t) out.push({ key: hexKey(h), q: h.q, r: h.r, terrain: t, fog: 'visible', zone: 'safe', elevation: sceneElevation(h, t) });
-      }
+      hexesInRange(ORIGIN, map.hex.radius).forEach((h, i) => {
+        const t = tiles.get(hexKey(h));
+        const f = fog ? fog[i] : 'v';
+        if (!t || f === '.' || f === undefined) return;
+        const view: HexView = battle
+          ? { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe' }
+          : { key: hexKey(h), q: h.q, r: h.r, terrain: t.id as TerrainType, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe', elevation: sceneElevation(h, t.id as TerrainType) };
+        out.push(view);
+      });
     }
-    return { hexes: out, byKey: Object.fromEntries(out.map((h) => [h.key, h])) as Record<HexKey, HexView> };
-  }, [map.hex]);
+    return { hexes: out, byKey: Object.fromEntries(out.map((h) => [h.key, h])) as Record<HexKey, HexView>, defs: tiles };
+  }, [map.hex, fog, battle]);
 
   const bounds = useMemo(() => {
     const r = (map.hex?.radius ?? 4) + 1.5;
@@ -78,7 +88,7 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
   const known = (k: HexKey) => !!byKey[k];
 
   // Arena-style light layer (water glints, motes) without Arena sites or party torches.
-  const lightView = useMemo(() => ({ phase, hexes, hexByKey: byKey, sites: [], tokens: [] }) as unknown as ViewModel, [phase, hexes, byKey]);
+  const lightView = useMemo(() => ({ phase: phase === 'day' ? 'day' : 'night', hexes, hexByKey: byKey, sites: [], tokens: [] }) as unknown as ViewModel, [phase, hexes, byKey]);
 
   const stacks = useMemo(() => {
     const m = new Map<HexKey, SceneToken[]>();
@@ -100,9 +110,9 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
     return { fill, edge: boundaryPath(reach.keys(), (k) => reach.has(k), parseKey) };
   }, [reach]);
 
-  const markers = map.nodes.filter((n) => n.kind !== 'wall' && n.kind !== 'area' && (gm || (n.visible && n.kind !== 'spawn')));
+  const markers = map.nodes.filter((n) => n.kind !== 'wall' && n.kind !== 'area' && (gm || (n.visible && n.kind !== 'spawn')) && (!fog || !!byKey[hexKey(hexAt(map, n))]));
   const hoverHex = hover ? byKey[hover] : null;
-  const hoverTerrain = hoverHex?.terrain as TerrainType | undefined;
+  const hoverTile = hover ? defs.get(hover) : undefined;
   const hoverMarker = hover ? markers.find((n) => hexKey(hexAt(map, n)) === hover) : null;
   const hoverTokens = hover ? stacks.find(([k]) => k === hover)?.[1] ?? [] : [];
   const tf = vp.tf;
@@ -154,13 +164,20 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
         onHexClick(k, { x: c.x + ox, y: c.y + oy });
       }}
     >
-      <TerrainCanvas hexes={hexes} byKey={byKey} overlayFog={null} fogUnknown={false} tf={tf} size={vp.size} />
-      <div className={`atmo atmo-day ${phase === 'night' ? 'opacity-0' : 'opacity-100'}`} aria-hidden="true" />
-      <div className={`atmo atmo-night ${phase === 'night' ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" />
+      <TerrainCanvas hexes={hexes} byKey={byKey} overlayFog={null} fogUnknown={!!fog && !battle} tf={tf} size={vp.size} paintChunk={battle ? paintBattleChunk : undefined} />
+      <div className={`atmo atmo-day ${phase === 'day' ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" />
+      <div className="atmo atmo-night" style={{ opacity: phase === 'night' ? 1 : phase === 'dusk' ? 0.5 : 0 }} aria-hidden="true" />
       <LightCanvas view={lightView} tf={tf} size={vp.size} reducedMotion={reducedMotion} />
 
       <svg width={vp.size.w} height={vp.size.h} className="absolute inset-0 block">
         <MapDefs />
+        <defs>
+          <radialGradient id="scene-light-glow">
+            <stop offset="0%" stopColor="#ffd98a" stopOpacity="0.55" />
+            <stop offset="60%" stopColor="#ffb347" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#ffb347" stopOpacity="0" />
+          </radialGradient>
+        </defs>
         {tf && (
           <g transform={`translate(${tf.x},${tf.y}) scale(${tf.k})`}>
             {reachShape && (
@@ -175,7 +192,10 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
               const spawn = n.kind === 'spawn';
               return (
                 <g key={n.id} transform={`translate(${p.x},${p.y})`} pointerEvents="none" opacity={n.visible || spawn ? 1 : 0.6}>
-                  {n.kind === 'label' ? null : (
+                  {n.kind === 'light' && <circle r={((n.lightFt ?? 30) / 5) * HEX_SIZE * 1.6} fill="url(#scene-light-glow)" opacity={phase === 'day' ? 0.25 : 0.9} />}
+                  {n.kind === 'label' ? null : n.kind === 'light' ? (
+                    <circle r={HEX_SIZE * 0.32} fill="#ffcf6b" stroke="#7a4a12" strokeWidth={2} />
+                  ) : (
                     <polygon points={hexCorners(0, 0, HEX_SIZE * 0.55)} fill={spawn ? 'rgba(110,200,140,.35)' : 'rgba(217,189,118,.85)'} stroke={spawn ? '#9fe2b0' : '#3a2c14'} strokeWidth={1.5} />
                   )}
                   <text y={n.kind === 'label' ? 4 : -HEX_SIZE * 0.75} textAnchor="middle" fontSize={n.kind === 'label' ? 14 : 11} fill="#f3e4bd" stroke="#000" strokeWidth={3} paintOrder="stroke" fontFamily="Georgia, serif">
@@ -204,15 +224,19 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
         )}
       </svg>
 
-      {hoverHex && hoverTerrain && !vp.dragging() && (
+      {hoverHex && hoverTile && !vp.dragging() && (
         <div className="pointer-events-none absolute z-20 max-w-64 rounded-lg border border-gold-700/50 bg-ink-900/95 px-3 py-2 text-xs shadow-xl" style={{ left: Math.min(mouse.x + 16, vp.size.w - 260), top: Math.min(mouse.y + 16, vp.size.h - 120) }}>
           <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold text-marble-50">{TERRAIN[hoverTerrain].label}</span>
+            <span className="font-semibold text-marble-50">{hoverTile.label}</span>
             <span className="text-marble-500">
               {hoverHex.q}|{hoverHex.r}
             </span>
           </div>
-          <div className="text-marble-300">{TERRAIN[hoverTerrain].cost === null ? 'Impassable' : `Cost: ${fmt(TERRAIN[hoverTerrain].cost! * map.unitsPerCell)} ${unit}`}</div>
+          <div className="text-marble-300">
+            {hoverTile.cost === null ? 'Impassable' : `Cost: ${fmt(hoverTile.cost * map.unitsPerCell)} ${unit}`}
+            {hoverTile.blocksSight ? ' · blocks sight' : ''}
+            {hoverHex.fog === 'explored' ? <span className="text-marble-500"> · remembered</span> : null}
+          </div>
           {reach?.has(hover!) && <div className="text-gold-200">→ reachable · {fmt(reach.get(hover!)!.cost * map.unitsPerCell)} {unit}</div>}
           {hoverMarker && <div className="mt-1 text-gold-300">◆ {hoverMarker.label || hoverMarker.kind}</div>}
           {hoverTokens.length > 0 && <div className="mt-1 text-marble-100">{hoverTokens.map((t) => t.name).join(', ')}</div>}

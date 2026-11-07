@@ -70,7 +70,8 @@ import { WorldConflictError, type FeedbackRow, type ArchiveKind, type AuthUser, 
 import { EXPECTED_MIGRATIONS, REQUIRED_SCHEMA_VERSION } from './schema.js';
 import { sceneRequest } from './scenes.js';
 import { journalRequest } from './journals.js';
-import { runtimeRequest, sceneSnapshot } from './sceneRuntime.js';
+import { runtimeRequest, sceneContext, sceneSnapshot } from './sceneRuntime.js';
+import { sceneTurnRequest } from './sceneTurns.js';
 import { assetRequest } from './sceneAssets.js';
 import { motionRequest } from './sceneMotion.js';
 import { travelRequest } from './sceneTravel.js';
@@ -182,6 +183,7 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
     if (req.op === 'scene-runtime') return await runtimeRequest(user, req.method, req.query, req.body, repo);
     if (req.op === 'scene-assets') return await assetRequest(user, req.method, req.query, req.body, repo);
     if (req.op === 'scene-motion') return await motionRequest(user, req.method, req.body, repo, req.query);
+    if (req.op === 'scene-turn') return await sceneTurnRequest(user, req.method, req.body, repo);
     if (req.op === 'scene-travel') return await travelRequest(user, req.method, req.query, req.body, repo);
     if (req.op === 'sanctuary') return await sanctuaryRequest(user, req.method, req.body, repo);
     if (req.op === 'journal-images') return await journalImageRequest(user, req.method, req.query, req.body, repo);
@@ -552,7 +554,7 @@ async function campaignPayload(user: AuthUser, repo: Repo, as?: string, stored?:
   if (!s) return { ...base, notice: 'The Game Master has not opened the arena yet.' };
   if (!characters.length) return { ...base, notice: 'No character has been assigned to your profile yet. Please ask your Game Master.' };
   const active = characters.find((c) => c.id === as)?.id ?? characters[0].id;
-  const scene = await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel);
+  const scene = await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel, await sceneContext(repo, user.campaignId, s.state));
   const view = buildPlayerView(s.state, active, scene.kind === 'scene' ? scene.scene?.id : null);
   const savedSheet = await repo.loadSheet(user.campaignId, active);
   const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());

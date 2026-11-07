@@ -1,6 +1,9 @@
 import { parseMap, type SceneMap } from '../campaign/maps.js';
 import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
+import { clockFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
+import type { SceneClockState } from '../game/types.js';
+import { initiativeForArrivals } from './sceneTurns.js';
 
 export interface SceneSnapshot {
   viewer?: { tokenId: string; name: string; color: string };
@@ -9,6 +12,12 @@ export interface SceneSnapshot {
   spawn?: { x: number; y: number };
   motion?: import('./sceneMotion.js').MotionSnapshot;
   travel?: import('./sceneTravel.js').TravelSnapshot;
+  /** Scene-local time and light (battle/region). */
+  clock?: SceneClockState;
+  /** Player fog per hex: 'v' visible, 'e' remembered, '.' unknown (terrain of unknown hexes is not sent). */
+  fog?: string;
+  /** The viewer's movement budget (turn / free / day). */
+  movement?: ViewerMovement;
 }
 export interface SceneAssignment { user_id: string; scene_id: string | null; revision: number; spawn_x: number | null; spawn_y: number | null }
 export interface RuntimeScene { id: string; name: string; category: SceneCategory; revision: number; is_legacy_arena: boolean; is_draft: boolean; archived: boolean; published_metadata: unknown }
@@ -25,7 +34,7 @@ export function publicMap(value: unknown): Omit<SceneMap, 'gmNotes'> | null {
   const ids = new Set(nodes.map(n => n.id));
   return { ...rest, backgroundAsset: map.playerBackgroundAsset, revealBackground: false, nodes, routes: map.routes.filter(r => r.visible && ids.has(r.from) && ids.has(r.to)) };
 }
-export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, motionStore?: import('./sceneMotion.js').SceneMotion, travelStore?: import('./sceneTravel.js').SceneTravel): Promise<SceneSnapshot> {
+export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, motionStore?: import('./sceneMotion.js').SceneMotion, travelStore?: import('./sceneTravel.js').SceneTravel, ctx?: SceneViewContext): Promise<SceneSnapshot> {
   if (!runtime) return { kind: 'arena', assignmentRevision: 0 };
   const a = await runtime.assignment(user.campaignId, user.id);
   // The migration explicitly backfills existing memberships. Missing/new assignments are safe Sanctuary.
@@ -36,7 +45,22 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
   if (s.is_legacy_arena) return { kind: 'arena', assignmentRevision: a.revision };
   const map = publicMap(s.published_metadata);
   if (!map) return { kind: 'sanctuary', assignmentRevision: a.revision };
-  const motion = await motionStore?.snapshot(user.campaignId, s.id, user.id, user.tokenIds);
+  const full = parseMap(s.published_metadata)!;
+  const local = ctx && motionStore && (s.category === 'battle' || s.category === 'region') ? await motionStore.localSnapshot(user.campaignId, s.id, user.id, user.tokenIds) : null;
+  const motion = local ? motionShape(local, ctx!.state, s.id) : await motionStore?.snapshot(user.campaignId, s.id, user.id, user.tokenIds);
+  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement'> = {};
+  if (local && ctx?.state) {
+    const clock = clockFor(ctx.state, s.id);
+    const positions = user.tokenIds.map(id => local.tokens.find(t => t.tokenId === id) ?? (a.spawn_x !== null && a.spawn_y !== null ? { tokenId: id, x: a.spawn_x, y: a.spawn_y } : null)).filter((p): p is { tokenId: string; x: number; y: number } => !!p);
+    extra = { clock };
+    if (full.hex) {
+      // Server-side fog: unknown hexes are removed from the map before it leaves the server.
+      const fogged = fogMap(full, await visionFor(ctx, full, clock, positions), local.seen);
+      if (fogged) { map.hex = fogged.hex; extra.fog = fogged.fog; }
+    }
+    const tokenId = user.tokenIds.find(id => ctx.state!.tokens[id]);
+    if (tokenId) extra.movement = movementFor(ctx.state, s.id, s.category as 'battle' | 'region', tokenId, user.role === 'gm', await sheetOf(ctx, tokenId), local);
+  }
   if (motion) {
     const known = motion.known.filter(n => n.kind !== 'spawn').map(n => ({ ...n, targetScene: null, discoverable: false }));
     map.nodes = [...known.filter(n => !map.nodes.some(current => current.id === n.id)), ...map.nodes];
@@ -45,13 +69,19 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
   }
   const travel = s.category === 'world' ? await travelStore?.snapshot(user, s.id) : undefined;
   if (travel) { const known = new Set(map.nodes.map(n => n.id)); if (!known.has(travel.partyNode ?? '')) travel.partyNode = null; travel.proposals = travel.proposals.filter(p => known.has(p.from_node) && known.has(p.to_node)); }
-  return { kind: 'scene', assignmentRevision: a.revision, scene: { id: s.id, name: s.name, category: s.category, revision: s.revision, map }, motion, travel, ...(a.spawn_x !== null && a.spawn_y !== null ? { spawn: { x: a.spawn_x, y: a.spawn_y } } : {}) };
+  return { kind: 'scene', assignmentRevision: a.revision, scene: { id: s.id, name: s.name, category: s.category, revision: s.revision, map }, motion, travel, ...extra, ...(a.spawn_x !== null && a.spawn_y !== null ? { spawn: { x: a.spawn_x, y: a.spawn_y } } : {}) };
+}
+
+/** Game state + sheet loader for scene-local rules (vision, darkvision, speed, initiative). */
+export async function sceneContext(repo: Repo, campaignId: string, state?: import('../game/types.js').GameState | null): Promise<SceneViewContext> {
+  const s = state === undefined ? (await repo.loadState(campaignId))?.state ?? null : state;
+  return { state: s, loadSheet: async (tokenId) => { const row = await repo.loadSheet(campaignId, tokenId); return row ? parseStoredSheet(row.data) : null; } };
 }
 
 export async function runtimeRequest(user: AuthUser, method: string, query: Record<string, string | undefined>, body: unknown, repo: Repo): Promise<SceneResult> {
   if (!repo.sceneRuntime) return { status: 503, body: { error: 'Scene runtime unavailable.' } };
   if (method === 'GET') {
-    if (user.role !== 'gm') return { status: 200, body: await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel) };
+    if (user.role !== 'gm') return { status: 200, body: await sceneSnapshot(user, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel, await sceneContext(repo, user.campaignId)) };
     const profiles = (await repo.profiles(user.campaignId)).filter(p => p.active && p.role === 'player');
     if (query.focus) {
       if (!/^[0-9a-f-]{36}$/i.test(query.focus)) return { status: 400, body: { error: 'Invalid focus scene.' } };
@@ -68,7 +98,9 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
       ]);
       const assignedProfiles = profiles.filter(p => p.active && p.role === 'player' && assignments.some(a => a.user_id === p.userId && a.scene_id === focus.id));
       const tokenIds = [...new Set(assignedProfiles.flatMap(p => p.tokenIds))].filter(id => !!stored?.state.tokens[id]).slice(0, 100);
-      const motion = tokenIds.length && repo.sceneMotion
+      const local = tokenIds.length && repo.sceneMotion && (focus.category === 'battle' || focus.category === 'region')
+        ? await repo.sceneMotion.localSnapshot(user.campaignId, focus.id, user.id, tokenIds) : null;
+      const motion = local ? motionShape(local, stored?.state ?? null, focus.id) : tokenIds.length && repo.sceneMotion
         ? await repo.sceneMotion.snapshot(user.campaignId, focus.id, user.id, tokenIds)
         : undefined;
       const focusMap = { ...map, playerBackgroundAsset: map.backgroundAsset ?? map.playerBackgroundAsset };
@@ -76,12 +108,13 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
         kind: 'scene', assignmentRevision: 0,
         scene: { id: focus.id, name: focus.name, category: focus.category, revision: focus.revision, map: focusMap },
         ...(motion ? { motion } : {}),
+        clock: clockFor(stored?.state ?? null, focus.id),
       } };
     }
     if (query.player) {
       const p = profiles.find(p => p.userId === query.player);
       if (!p) return { status: 404, body: { error: 'Player not found.' } };
-      const snapshot = await sceneSnapshot({ ...user, id: p.userId, role: 'player', tokenIds: p.tokenIds }, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel);
+      const snapshot = await sceneSnapshot({ ...user, id: p.userId, role: 'player', tokenIds: p.tokenIds }, repo.sceneRuntime, repo.sceneMotion, repo.sceneTravel, await sceneContext(repo, user.campaignId));
       const state = await repo.loadState(user.campaignId);
       const character = state?.state.tokens[p.tokenIds[0]];
       if (character) snapshot.viewer = { tokenId: character.id, name: character.name, color: character.color };
@@ -104,5 +137,11 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
     targets.push({ userId: item.userId, revision: item.revision });
   }
   const result = await repo.sceneRuntime.transition(user, v.sceneId as string | null, targets, v.requestId);
-  return { status: result.ok ? 200 : 409, body: result };
+  // Arriving on a battle map starts (or joins) initiative: order is rolled on the server.
+  let initiative: string | undefined;
+  if (result.ok && typeof v.sceneId === 'string') {
+    const destination = await repo.sceneRuntime.scene(user.campaignId, v.sceneId);
+    if (destination?.category === 'battle' && !destination.is_legacy_arena) initiative = await initiativeForArrivals(user, repo, destination.id, targets.map(t => t.userId)).catch(() => 'Initiative could not be rolled – start it in Scene tools.');
+  }
+  return { status: result.ok ? 200 : 409, body: { ...result, ...(initiative ? { initiative } : {}) } };
 }

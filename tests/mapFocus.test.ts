@@ -45,7 +45,7 @@ function repoFor(scenePatch: Partial<RuntimeScene> | null) {
     },
     profiles: vi.fn(async () => [player]),
     loadState: vi.fn(async () => ({ state: { tokens: { 'token-1': {} } } })),
-    sceneMotion: { snapshot: vi.fn(async () => motion) },
+    sceneMotion: { snapshot: vi.fn(async () => motion), localSnapshot: vi.fn(async () => ({ tokens: motion.tokens.map(t => ({ tokenId: t.tokenId, x: t.x, y: t.y, version: t.version, epoch: null, spent: 0 })), known: [], seen: [] })) },
   } as unknown as Repo;
   return { repo, map, motion };
 }
@@ -55,8 +55,9 @@ describe('GM published scene focus', () => {
     const { repo, map, motion } = repoFor({});
     const result = await runtimeRequest(gm, 'GET', { focus: sceneId }, undefined, repo);
     expect(result.status).toBe(200);
-    expect(result.body).toMatchObject({ kind: 'scene', scene: { id: sceneId, name: 'Forest', revision: 5, map }, motion });
-    expect(repo.sceneMotion!.snapshot).toHaveBeenCalledWith('campaign', sceneId, 'gm-user', ['token-1']);
+    expect(result.body).toMatchObject({ kind: 'scene', scene: { id: sceneId, name: 'Forest', revision: 5, map }, motion: { tokens: [{ tokenId: 'token-1', x: 100, y: 100, version: 4 }] }, clock: { day: 1, phase: 'day' } });
+    // Scene-local positions (schema 7) – the campaign-wide interval ledger is no longer read.
+    expect(repo.sceneMotion!.localSnapshot).toHaveBeenCalledWith('campaign', sceneId, 'gm-user', ['token-1']);
   });
 
   it.each([

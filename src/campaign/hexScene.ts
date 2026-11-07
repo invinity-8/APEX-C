@@ -1,44 +1,89 @@
 /**
- * Hex scenes: every battle and region map uses the Arena engine – axial hex tiles with the Arena's
- * terrain types, painter, movement costs and path finding – with scene-specific content.
+ * Hex scenes: every battle and region map uses the Arena engine (axial hexes, chunked canvas painter,
+ * path finding, wheel zoom) with scene-specific content and one of two tile sets:
+ *  - region: the Arena terrain types at Arena scale – 3 miles per hex, 8 hexes per day at speed 30;
+ *  - battle: 5-foot tiles (walls, trees, boulders, floors, water …) where line of sight matters.
  *
- * Storage (inside the scene's map JSON, no migration): `hex = { radius, terrain }`, where `terrain`
- * has one character per hex in hexesInRange(ORIGIN, radius) order. '.' means "no hex" (outside the
- * playable shape). Scene coordinates stay positive pixels so the existing movement/placement
- * revision checks and the SQL bounds check keep working: hex (0,0) sits at the map centre.
+ * Storage (inside the scene's map JSON, no migration): `hex = { radius, terrain, set? }`, where
+ * `terrain` has one character per hex in hexesInRange(ORIGIN, radius) order; '.' means "no hex".
+ * Scene coordinates stay positive pixels: hex (0,0) sits at the map centre.
  *
- * Pure functions – shared by the editor, the renderers and the server movement rules.
+ * Pure functions – shared by the editor, the renderers and the server movement/vision rules.
  */
 import { ORIGIN, distance, fromPixel, hexKey, hexesInRange, hexCount, neighbors, parseKey, toPixel, type Axial, type HexKey } from '../game/hex.js';
 import { dijkstra, pathTo } from '../game/movement.js';
 import { generateArena } from '../game/mapgen.js';
 import { hash2, valueNoise } from '../game/rng.js';
-import { TERRAIN, type TerrainType } from '../game/terrain.js';
+import { TERRAIN, TERRAIN_ORDER, type TerrainType } from '../game/terrain.js';
 import type { MapNode, SceneMap } from './maps.js';
 
 /** Same hex size as the Arena renderer (src/components/map/geometry.ts). */
 export const SCENE_HEX_SIZE = 30;
 export const MIN_HEX_RADIUS = 2;
 export const MAX_HEX_RADIUS = 40;
+/** Fixed scales: a battle hex is 5 feet; a region hex is 3 miles (24 miles = 8 hexes per day at speed 30). */
+export const BATTLE_FEET_PER_HEX = 5;
+export const REGION_MILES_PER_HEX = 3;
+export const REGION_HEXES_PER_DAY_AT_30FT = 8;
+/** Region maps default to the Arena's size (radius 12 = 469 hexes). */
+export const REGION_DEFAULT_RADIUS = 12;
 const SQRT3 = Math.sqrt(3);
+
+export type TileSet = 'region' | 'battle';
+export type BattleTile = 'grass' | 'dirt' | 'stone' | 'wood' | 'undergrowth' | 'rubble' | 'shallow' | 'deep' | 'tree' | 'boulder' | 'wall';
+export type TileId = TerrainType | BattleTile;
+
+export interface TileDef {
+  id: TileId;
+  code: string;
+  label: string;
+  /** Cost multiplier to enter (null = impassable). */
+  cost: number | null;
+  /** Blocks line of sight beyond this hex. */
+  blocksSight: boolean;
+  fill: string;
+  description: string;
+}
+
+const REGION_CODES: Record<TerrainType, string> = { plains: 'p', road: 'd', forest: 'f', hills: 'h', mountain: 'm', river: 'r', water: 'w', ruins: 'u', magic: 'x' };
+export const TERRAIN_CODE = REGION_CODES;
+const REGION_TILES: TileDef[] = TERRAIN_ORDER.map((t) => ({ id: t, code: REGION_CODES[t], label: TERRAIN[t].label, cost: TERRAIN[t].cost, blocksSight: t === 'mountain', fill: TERRAIN[t].fill, description: TERRAIN[t].description }));
+const BATTLE_TILES: TileDef[] = [
+  { id: 'grass', code: 'G', label: 'Grass', cost: 1, blocksSight: false, fill: '#6f8a45', description: 'Open ground.' },
+  { id: 'dirt', code: 'D', label: 'Dirt path', cost: 1, blocksSight: false, fill: '#8a6f4a', description: 'Trodden earth.' },
+  { id: 'stone', code: 'S', label: 'Stone floor', cost: 1, blocksSight: false, fill: '#8d8a83', description: 'Flagstones.' },
+  { id: 'wood', code: 'W', label: 'Wooden floor', cost: 1, blocksSight: false, fill: '#8a5f36', description: 'Planks.' },
+  { id: 'undergrowth', code: 'U', label: 'Undergrowth', cost: 2, blocksSight: false, fill: '#4f6e35', description: 'Difficult terrain.' },
+  { id: 'rubble', code: 'R', label: 'Rubble', cost: 2, blocksSight: false, fill: '#7c7166', description: 'Difficult terrain.' },
+  { id: 'shallow', code: 'A', label: 'Shallow water', cost: 2, blocksSight: false, fill: '#4f8fae', description: 'Difficult terrain.' },
+  { id: 'deep', code: 'X', label: 'Deep water', cost: null, blocksSight: false, fill: '#24577a', description: 'Too deep to wade.' },
+  { id: 'tree', code: 'T', label: 'Tree', cost: null, blocksSight: true, fill: '#2d5a2e', description: 'A trunk: blocks movement and sight.' },
+  { id: 'boulder', code: 'B', label: 'Boulder', cost: null, blocksSight: false, fill: '#77736c', description: 'Blocks movement; you can see past it.' },
+  { id: 'wall', code: 'H', label: 'Wall', cost: null, blocksSight: true, fill: '#4a4540', description: 'Blocks movement and sight.' },
+];
+export const TILESETS: Record<TileSet, TileDef[]> = { region: REGION_TILES, battle: BATTLE_TILES };
+const BY_CODE: Record<TileSet, Map<string, TileDef>> = { region: new Map(REGION_TILES.map((t) => [t.code, t])), battle: new Map(BATTLE_TILES.map((t) => [t.code, t])) };
+const BY_ID: Record<TileSet, Map<string, TileDef>> = { region: new Map(REGION_TILES.map((t) => [t.id, t])), battle: new Map(BATTLE_TILES.map((t) => [t.id, t])) };
+export const tileDef = (set: TileSet, id: string): TileDef | undefined => BY_ID[set].get(id);
 
 /** The parts of a scene map the hex rules need. */
 export type HexMapLike = Pick<SceneMap, 'width' | 'height' | 'hex' | 'unitsPerCell'>;
 
 export interface HexSceneData {
   radius: number;
-  /** One code per hex, see TERRAIN_CODE. '.' = no hex. */
+  /** One code per hex (see TILESETS). '.' = no hex. */
   terrain: string;
+  /** Tile set; absent = region (Arena terrain). */
+  set?: 'battle';
 }
-
-export const TERRAIN_CODE: Record<TerrainType, string> = { plains: 'p', road: 'd', forest: 'f', hills: 'h', mountain: 'm', river: 'r', water: 'w', ruins: 'u', magic: 'x' };
-const CODE_TERRAIN: Record<string, TerrainType> = Object.fromEntries(Object.entries(TERRAIN_CODE).map(([t, c]) => [c, t as TerrainType]));
-const VALID = new RegExp(`^[${Object.values(TERRAIN_CODE).join('')}.]+$`);
+export const tileSetOf = (data: Pick<HexSceneData, 'set'> | undefined): TileSet => (data?.set === 'battle' ? 'battle' : 'region');
 
 export function validHexData(v: unknown): v is HexSceneData {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
   const h = v as HexSceneData;
-  return Number.isInteger(h.radius) && h.radius >= MIN_HEX_RADIUS && h.radius <= MAX_HEX_RADIUS && typeof h.terrain === 'string' && h.terrain.length === hexCount(h.radius) && VALID.test(h.terrain);
+  if (h.set !== undefined && h.set !== 'battle') return false;
+  const codes = [...BY_CODE[tileSetOf(h)].keys()].join('');
+  return Number.isInteger(h.radius) && h.radius >= MIN_HEX_RADIUS && h.radius <= MAX_HEX_RADIUS && typeof h.terrain === 'string' && h.terrain.length === hexCount(h.radius) && new RegExp(`^[${codes}.]+$`).test(h.terrain);
 }
 
 /** Pixel size of a hex scene: the whole hexagon plus a two-hex margin. */
@@ -60,26 +105,39 @@ export function hexCentre(map: Pick<SceneMap, 'width' | 'height'>, h: Axial): { 
   return { x: Math.round((o.x + c.x) * 1000) / 1000, y: Math.round((o.y + c.y) * 1000) / 1000 };
 }
 
-export function decodeTerrain(data: HexSceneData): Map<HexKey, TerrainType> {
-  const out = new Map<HexKey, TerrainType>();
+/** Hex → tile definition. */
+export function decodeTiles(data: HexSceneData): Map<HexKey, TileDef> {
+  const set = BY_CODE[tileSetOf(data)];
+  const out = new Map<HexKey, TileDef>();
   hexesInRange(ORIGIN, data.radius).forEach((h, i) => {
-    const t = CODE_TERRAIN[data.terrain[i]];
+    const t = set.get(data.terrain[i]);
     if (t) out.set(hexKey(h), t);
   });
   return out;
 }
-export function encodeTerrain(radius: number, terrainOf: (h: Axial) => TerrainType | null): HexSceneData {
-  return { radius, terrain: hexesInRange(ORIGIN, radius).map((h) => { const t = terrainOf(h); return t ? TERRAIN_CODE[t] : '.'; }).join('') };
+/** Region maps: hex → Arena terrain type. */
+export function decodeTerrain(data: HexSceneData): Map<HexKey, TileId> {
+  return new Map([...decodeTiles(data)].map(([k, t]) => [k, t.id]));
 }
-/** Sets terrain of single hexes (editor brush). Hexes outside the radius are ignored. */
-export function paintHexes(data: HexSceneData, keys: HexKey[], terrain: TerrainType | null): HexSceneData {
+export function encodeTiles(radius: number, set: TileSet, tileOf: (h: Axial) => TileId | null): HexSceneData {
+  const byId = BY_ID[set];
+  const terrain = hexesInRange(ORIGIN, radius).map((h) => { const t = tileOf(h); return (t && byId.get(t)?.code) || '.'; }).join('');
+  return set === 'battle' ? { radius, terrain, set: 'battle' } : { radius, terrain };
+}
+export function encodeTerrain(radius: number, terrainOf: (h: Axial) => TerrainType | null): HexSceneData {
+  return encodeTiles(radius, 'region', terrainOf);
+}
+/** Sets the tile of single hexes (editor brush). Hexes outside the radius are ignored. */
+export function paintHexes(data: HexSceneData, keys: HexKey[], tile: TileId | null): HexSceneData {
+  const code = tile ? BY_ID[tileSetOf(data)].get(tile)?.code : '.';
+  if (!code) return data;
   const index = new Map(hexesInRange(ORIGIN, data.radius).map((h, i) => [hexKey(h), i]));
   const chars = data.terrain.split('');
-  for (const k of keys) { const i = index.get(k); if (i !== undefined) chars[i] = terrain ? TERRAIN_CODE[terrain] : '.'; }
-  return { radius: data.radius, terrain: chars.join('') };
+  for (const k of keys) { const i = index.get(k); if (i !== undefined) chars[i] = code; }
+  return { ...data, terrain: chars.join('') };
 }
 
-/** Deterministic relief for the painter (the Arena stores elevation; scenes derive it). */
+/** Deterministic relief for the Arena painter (the Arena stores elevation; scenes derive it). */
 export function sceneElevation(h: Axial, terrain: TerrainType): number {
   const base = { water: 0.08, river: 0.15, road: 0.3, plains: 0.32, ruins: 0.36, magic: 0.4, forest: 0.42, hills: 0.62, mountain: 0.85 }[terrain];
   return Math.max(0, Math.min(1, base + (hash2(h.q, h.r, 977) - 0.5) * 0.08));
@@ -87,19 +145,29 @@ export function sceneElevation(h: Axial, terrain: TerrainType): number {
 
 // ---------------------------------------------------------------- creation
 
-export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins';
-export const HEX_PRESETS: Array<{ id: HexPreset; label: string }> = [
-  { id: 'wilderness', label: 'Wilderness (Arena generator)' },
-  { id: 'forest', label: 'Forest clearing' },
-  { id: 'river', label: 'River with ford' },
-  { id: 'ruins', label: 'Old ruins' },
-  { id: 'blank', label: 'Open grassland' },
-];
+export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins' | 'dungeon';
+export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> = {
+  region: [
+    { id: 'wilderness', label: 'Wilderness (Arena generator)' },
+    { id: 'forest', label: 'Forested region' },
+    { id: 'river', label: 'River valley with ford' },
+    { id: 'ruins', label: 'Ruined district' },
+    { id: 'blank', label: 'Open grassland' },
+  ],
+  battle: [
+    { id: 'forest', label: 'Forest clearing' },
+    { id: 'river', label: 'Stream with ford' },
+    { id: 'ruins', label: 'Ruined building' },
+    { id: 'dungeon', label: 'Dungeon rooms & corridors' },
+    { id: 'blank', label: 'Open field' },
+  ],
+};
+export const HEX_PRESETS = PRESETS.region;
 
-/** Generates terrain with the Arena generator, then shapes it for the preset. Same seed → same map. */
+/** Region terrain with the Arena generator, shaped for the preset. Same seed → same map. */
 export function generateHexScene(preset: HexPreset, radius: number, seed: number): HexSceneData {
-  const r = Math.max(MIN_HEX_RADIUS, Math.min(MAX_HEX_RADIUS, Math.round(radius)));
-  if (preset === 'blank') return encodeTerrain(r, (h) => (valueNoise(h.q / 5, h.r / 5, seed) > 0.78 ? 'hills' : 'plains'));
+  const r = clampRadius(radius);
+  if (preset === 'blank' || preset === 'dungeon') return encodeTerrain(r, (h) => (valueNoise(h.q / 5, h.r / 5, seed) > 0.78 ? 'hills' : 'plains'));
   const arena = generateArena({ radius: r, seed, landmarkRadius: 0 });
   const base = (h: Axial): TerrainType => arena[hexKey(h)]?.terrain ?? 'plains';
   return encodeTerrain(r, (h) => {
@@ -112,10 +180,7 @@ export function generateHexScene(preset: HexPreset, radius: number, seed: number
         if (d <= Math.max(1, Math.round(r / 4))) return n > 0.8 ? 'hills' : 'plains';
         return n > 0.32 ? 'forest' : n > 0.2 ? 'plains' : 'hills';
       case 'river': {
-        // A river crosses the map; the ford (road) lies near the centre.
-        const bend = Math.round(Math.sin((h.q + seed % 7) / 3) * 1.5);
-        const onRiver = Math.abs(h.r + Math.round(h.q / 2) - bend) <= 0;
-        if (onRiver) return Math.abs(h.q) <= 1 ? 'road' : 'river';
+        if (riverRow(h, seed)) return Math.abs(h.q) <= 1 ? 'road' : 'river';
         if (h.q === 0 || h.q === -1) return Math.abs(h.r) <= 2 ? 'road' : n > 0.55 ? 'forest' : 'plains';
         return n > 0.6 ? 'forest' : n > 0.48 ? 'hills' : 'plains';
       }
@@ -126,23 +191,101 @@ export function generateHexScene(preset: HexPreset, radius: number, seed: number
   });
 }
 
+const riverRow = (h: Axial, seed: number) => h.r + Math.round(h.q / 2) - Math.round(Math.sin((h.q + (seed % 7)) / 3) * 1.5);
+
+/** 5-foot battle tiles. Same seed → same map. */
+export function generateBattleScene(preset: HexPreset, radius: number, seed: number): HexSceneData {
+  const r = clampRadius(radius);
+  const rnd = (h: Axial, salt: number) => hash2(h.q * 7 + salt, h.r * 13 - salt, seed);
+  const ground = (h: Axial): BattleTile => (valueNoise(h.q / 3 + 5, h.r / 3, seed) > 0.72 ? 'dirt' : 'grass');
+  if (preset === 'dungeon') {
+    const rooms: Array<{ c: Axial; r: number }> = [{ c: ORIGIN, r: 2 }];
+    for (let i = 0; i < 8; i++) {
+      const c = { q: Math.round((hash2(i, 1, seed) - 0.5) * 2 * (r - 3)), r: Math.round((hash2(i, 2, seed) - 0.5) * 2 * (r - 3)) };
+      if (distance(c, ORIGIN) <= r - 3) rooms.push({ c, r: 1 + Math.floor(hash2(i, 3, seed) * 2.5) });
+    }
+    const floor = new Set<HexKey>();
+    for (const room of rooms) for (const h of hexesInRange(room.c, room.r)) floor.add(hexKey(h));
+    for (let i = 1; i < rooms.length; i++) for (const h of hexLine(rooms[i - 1].c, rooms[i].c)) floor.add(hexKey(h));
+    return encodeTiles(r, 'battle', (h) => (floor.has(hexKey(h)) ? (rnd(h, 4) > 0.93 ? 'rubble' : 'stone') : 'wall'));
+  }
+  if (preset === 'ruins') {
+    const half = Math.max(2, Math.round(r / 2.5));
+    return encodeTiles(r, 'battle', (h) => {
+      const d = distance(h, ORIGIN);
+      if (d === half) return rnd(h, 1) > 0.78 ? 'rubble' : h.q === 0 || h.r === 0 ? 'stone' : 'wall';
+      if (d < half) return rnd(h, 2) > 0.85 ? 'rubble' : d === 1 && rnd(h, 3) > 0.6 ? 'wall' : 'stone';
+      if (rnd(h, 5) > 0.95) return 'boulder';
+      return rnd(h, 6) > 0.9 ? 'undergrowth' : ground(h);
+    });
+  }
+  if (preset === 'river') {
+    return encodeTiles(r, 'battle', (h) => {
+      const row = riverRow(h, seed);
+      if (Math.abs(h.q) <= 1 && Math.abs(row) <= 1) return row === 0 ? 'shallow' : 'stone';
+      if (row === 0) return 'deep';
+      if (Math.abs(row) === 1) return 'shallow';
+      if (rnd(h, 7) > 0.9) return 'tree';
+      return rnd(h, 8) > 0.85 ? 'undergrowth' : ground(h);
+    });
+  }
+  if (preset === 'forest') {
+    const clearing = Math.max(1, Math.round(r / 3));
+    return encodeTiles(r, 'battle', (h) => {
+      const d = distance(h, ORIGIN);
+      if (d <= clearing) return rnd(h, 9) > 0.9 ? 'undergrowth' : 'grass';
+      const dense = valueNoise(h.q / 4, h.r / 4 + 3, seed);
+      const roll = rnd(h, 10);
+      if (roll < 0.18 + dense * 0.25) return 'tree';
+      if (roll < 0.45 + dense * 0.2) return 'undergrowth';
+      if (roll > 0.97) return 'boulder';
+      return ground(h);
+    });
+  }
+  return encodeTiles(r, 'battle', (h) => (rnd(h, 11) > 0.97 ? 'boulder' : rnd(h, 12) > 0.93 ? 'undergrowth' : ground(h)));
+}
+
+function clampRadius(radius: number) {
+  return Math.max(MIN_HEX_RADIUS, Math.min(MAX_HEX_RADIUS, Math.round(radius)));
+}
+
+/** Hexes on the straight line between two hexes (inclusive). */
+export function hexLine(a: Axial, b: Axial, nudge = 1e-6): Axial[] {
+  const n = distance(a, b);
+  if (n === 0) return [a];
+  const out: Axial[] = [];
+  const as = -a.q - a.r, bs = -b.q - b.r;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const q = a.q + nudge + (b.q - a.q) * t, r = a.r + nudge + (b.r - a.r) * t, s = as - 2 * nudge + (bs - as) * t;
+    let rq = Math.round(q), rr = Math.round(r);
+    const rs = Math.round(s);
+    const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
+    if (dq > dr && dq > ds) rq = -rr - rs;
+    else if (dr > ds) rr = -rq - rs;
+    out.push({ q: rq + 0, r: rr + 0 });
+  }
+  return out;
+}
+
 /** A passable hex near the centre for the default spawn. */
 export function centralPassableHex(data: HexSceneData): Axial {
-  const terrain = decodeTerrain(data);
-  const ok = (h: Axial) => { const t = terrain.get(hexKey(h)); return !!t && TERRAIN[t].cost !== null; };
+  const tiles = decodeTiles(data);
+  const ok = (h: Axial) => { const t = tiles.get(hexKey(h)); return !!t && t.cost !== null; };
   for (let d = 0; d <= data.radius; d++) for (const h of hexesInRange(ORIGIN, d)) if (distance(h, ORIGIN) === d && ok(h)) return h;
   return ORIGIN;
 }
 
-/** Builds a complete hex scene map (keeps the category's units and interval). */
+/** Builds a complete hex scene map. Scale is fixed by the tile set (5 ft or 3 mi per hex). */
 export function hexSceneMap(base: SceneMap, data: HexSceneData, nodes: MapNode[] = []): SceneMap {
   const { width, height } = hexSceneSize(data.radius);
-  return { ...base, width, height, grid: 'none', cell: Math.round(SQRT3 * SCENE_HEX_SIZE * 1000) / 1000, nodes, routes: [], hex: data };
+  const battle = tileSetOf(data) === 'battle';
+  return { ...base, width, height, grid: 'none', cell: Math.round(SQRT3 * SCENE_HEX_SIZE * 1000) / 1000, unit: battle ? 'feet' : 'miles', unitsPerCell: battle ? BATTLE_FEET_PER_HEX : REGION_MILES_PER_HEX, nodes, routes: [], hex: data };
 }
 
-/** New battle/region map: generated terrain and a spawn on a passable hex near the centre. */
-export function newHexScene(base: SceneMap, preset: HexPreset, radius: number, seed: number): SceneMap {
-  const data = generateHexScene(preset, radius, seed);
+/** New battle/region map: generated tiles and a spawn on a passable hex near the centre. */
+export function newHexScene(base: SceneMap, preset: HexPreset, radius: number, seed: number, set: TileSet = base.unit === 'feet' ? 'battle' : 'region'): SceneMap {
+  const data = set === 'battle' ? generateBattleScene(preset, radius, seed) : generateHexScene(preset, radius, seed);
   const map = hexSceneMap(base, data);
   const spawn = hexCentre(map, centralPassableHex(data));
   map.nodes = [{ id: 'entry', x: spawn.x, y: spawn.y, label: 'Arrival', description: '', kind: 'spawn', visible: false, width: 50, height: 50, targetScene: null }];
@@ -150,41 +293,63 @@ export function newHexScene(base: SceneMap, preset: HexPreset, radius: number, s
 }
 
 /**
- * Converts an existing square/free-form battle or region map into a hex scene. Trees, rocks,
- * obstacles and water drawn as objects become terrain; walls become mountains; spawn, locations and
- * labels keep their relative position (snapped to the nearest hex). Nothing is deleted on the
- * server until the GM saves the converted draft.
+ * Converts an old drawn map (before hex scenes) into a hex scene. Trees, rocks, obstacles, water and
+ * walls drawn as objects become tiles; spawn, locations and labels keep their relative position.
  */
 export function convertLegacyMap(map: SceneMap): SceneMap {
-  const radius = Math.max(MIN_HEX_RADIUS, Math.min(MAX_HEX_RADIUS, Math.round(Math.max(map.width, map.height) / Math.max(10, map.cell) / 2)));
-  const target = hexSceneMap(map, { radius, terrain: '' });
+  const set: TileSet = map.unit === 'feet' ? 'battle' : 'region';
+  const radius = clampRadius(Math.max(map.width, map.height) / Math.max(10, map.cell) / 2);
+  const target = hexSceneMap(map, { radius, terrain: '', ...(set === 'battle' ? { set: 'battle' as const } : {}) });
   const sx = map.width / target.width, sy = map.height / target.height;
-  const toOld = (p: { x: number; y: number }) => ({ x: p.x * sx, y: p.y * sy });
   const inside = (p: { x: number; y: number }, n: MapNode) => p.x >= n.x && p.x <= n.x + n.width && p.y >= n.y && p.y <= n.y + n.height;
-  const objectTerrain: Record<string, TerrainType> = { tree: 'forest', rock: 'hills', obstacle: 'ruins', water: 'water' };
-  const data = encodeTerrain(radius, (h) => {
-    const p = toOld(hexCentre(target, h));
+  const pick: Record<string, Record<TileSet, TileId>> = {
+    tree: { battle: 'tree', region: 'forest' }, rock: { battle: 'boulder', region: 'hills' }, obstacle: { battle: 'rubble', region: 'ruins' },
+    water: { battle: 'deep', region: 'water' }, wall: { battle: 'wall', region: 'mountain' }, rough: { battle: 'undergrowth', region: 'hills' }, open: { battle: 'grass', region: 'plains' },
+  };
+  const data = encodeTiles(radius, set, (h) => {
+    const c = hexCentre(target, h);
+    const p = { x: c.x * sx, y: c.y * sy };
     const hits = map.nodes.filter((n) => (n.kind === 'wall' || n.kind === 'area') && inside(p, n));
-    if (hits.some((n) => n.proceduralFeature === 'water')) return 'water';
-    if (hits.some((n) => n.kind === 'wall' && !n.proceduralFeature)) return 'mountain';
+    if (hits.some((n) => n.proceduralFeature === 'water')) return pick.water[set];
+    if (hits.some((n) => n.kind === 'wall' && !n.proceduralFeature)) return pick.wall[set];
     const feature = hits.find((n) => n.proceduralFeature)?.proceduralFeature;
-    if (feature) return objectTerrain[feature];
-    if (hits.some((n) => (n.terrainCost ?? 1) > 1)) return 'hills';
-    return 'plains';
+    if (feature) return pick[feature][set];
+    if (hits.some((n) => (n.terrainCost ?? 1) > 1)) return pick.rough[set];
+    return pick.open[set];
   });
   const kept = map.nodes
     .filter((n) => n.kind === 'spawn' || n.kind === 'location' || n.kind === 'label')
-    .map((n) => {
-      const p = hexCentre(target, clampHex(hexAt(target, { x: n.x / sx, y: n.y / sy }), radius));
-      return { ...n, x: p.x, y: p.y };
-    });
-  const result = hexSceneMap(map, data, kept);
-  const spawn = result.nodes.find((n) => n.kind === 'spawn');
-  if (spawn && !passable(result, hexAt(result, spawn))) {
-    const p = hexCentre(result, centralPassableHex(data));
-    spawn.x = p.x; spawn.y = p.y;
-  }
-  return result;
+    .map((n) => ({ ...n, ...hexCentre(target, clampHex(hexAt(target, { x: n.x / sx, y: n.y / sy }), radius)) }));
+  return withPassableMarkers(hexSceneMap(map, data, kept));
+}
+
+/** Region-terrain battle maps (created before the 5-ft tile set) → battle tiles. */
+export function convertToBattleTiles(map: SceneMap, seed = 1): SceneMap {
+  if (!map.hex || tileSetOf(map.hex) === 'battle') return map;
+  const old = decodeTerrain(map.hex);
+  const data = encodeTiles(map.hex.radius, 'battle', (h) => {
+    const roll = hash2(h.q, h.r, seed);
+    switch (old.get(hexKey(h))) {
+      case undefined: return null;
+      case 'forest': return roll < 0.35 ? 'tree' : roll < 0.75 ? 'undergrowth' : 'grass';
+      case 'mountain': return 'wall';
+      case 'hills': return roll < 0.25 ? 'boulder' : 'rubble';
+      case 'water': return 'deep';
+      case 'river': return 'shallow';
+      case 'road': return 'dirt';
+      case 'ruins': return roll < 0.3 ? 'wall' : roll < 0.65 ? 'rubble' : 'stone';
+      case 'magic': return 'stone';
+      default: return 'grass';
+    }
+  });
+  return withPassableMarkers({ ...hexSceneMap(map, data, map.nodes) });
+}
+
+function withPassableMarkers(map: SceneMap): SceneMap {
+  if (!map.hex) return map;
+  const keys = map.nodes.filter((n) => n.kind === 'spawn' || n.kind === 'location').map((n) => hexKey(hexAt(map, n))).filter((k) => !passable(map, parseKey(k)));
+  if (keys.length) map.hex = paintHexes(map.hex, keys, tileSetOf(map.hex) === 'battle' ? 'grass' : 'plains');
+  return map;
 }
 
 function clampHex(h: Axial, radius: number): Axial {
@@ -196,25 +361,28 @@ function clampHex(h: Axial, radius: number): Axial {
 
 // ---------------------------------------------------------------- movement
 
-export function terrainLookup(map: HexMapLike): (k: HexKey) => TerrainType | undefined {
-  const t = map.hex ? decodeTerrain(map.hex) : new Map<HexKey, TerrainType>();
+export function tileLookup(map: Pick<SceneMap, 'hex'>): (k: HexKey) => TileDef | undefined {
+  const t = map.hex ? decodeTiles(map.hex) : new Map<HexKey, TileDef>();
   return (k) => t.get(k);
 }
-export function passable(map: HexMapLike, h: Axial): boolean {
-  const t = terrainLookup(map)(hexKey(h));
-  return !!t && TERRAIN[t].cost !== null;
+export function terrainLookup(map: Pick<SceneMap, 'hex'>): (k: HexKey) => TileId | undefined {
+  const t = tileLookup(map);
+  return (k) => t(k)?.id;
+}
+export function passable(map: Pick<SceneMap, 'hex'>, h: Axial): boolean {
+  const t = tileLookup(map)(hexKey(h));
+  return !!t && t.cost !== null;
 }
 
-/** Movement on a hex scene: cheapest path by Arena terrain costs × units per hex. */
+/** Movement on a hex scene: cheapest path by tile costs × units per hex (5 ft or 3 mi). */
 export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[] } | { ok: false; error: string } {
-  const lookup = terrainLookup(map);
+  const lookup = tileLookup(map);
   const goal = hexAt(map, end);
-  const goalTerrain = lookup(hexKey(goal));
-  if (!goalTerrain) return { ok: false, error: 'Destination is outside the map.' };
-  if (TERRAIN[goalTerrain].cost === null) return { ok: false, error: `${TERRAIN[goalTerrain].label} cannot be entered.` };
+  const goalTile = lookup(hexKey(goal));
+  if (!goalTile) return { ok: false, error: 'Destination is outside the map.' };
+  if (goalTile.cost === null) return { ok: false, error: `${goalTile.label} cannot be entered.` };
   const from = hexAt(map, start);
-  const costOf = (k: HexKey) => { const t = lookup(k); return t ? TERRAIN[t].cost : null; };
-  const reach = dijkstra(hexKey(from), costOf, Infinity, hexKey(goal));
+  const reach = dijkstra(hexKey(from), (k) => lookup(k)?.cost ?? null, Infinity, hexKey(goal));
   const info = reach.get(hexKey(goal));
   if (!info) return { ok: false, error: 'No passable path to that hex.' };
   return { ok: true, cost: Math.round(info.cost * map.unitsPerCell * 1e6) / 1e6, to: hexCentre(map, goal), path: pathTo(reach, hexKey(goal)) ?? [] };
@@ -222,28 +390,42 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
 
 /** Hexes reachable with a remaining budget (in feet or miles) – the gold movement area. */
 export function hexReach(map: HexMapLike, start: { x: number; y: number }, budgetUnits: number): Map<HexKey, { cost: number; prev: HexKey | null }> {
-  const lookup = terrainLookup(map);
-  const costOf = (k: HexKey) => { const t = lookup(k); return t ? TERRAIN[t].cost : null; };
-  return dijkstra(hexKey(hexAt(map, start)), costOf, Math.max(0, budgetUnits / map.unitsPerCell));
+  const lookup = tileLookup(map);
+  return dijkstra(hexKey(hexAt(map, start)), (k) => lookup(k)?.cost ?? null, Math.max(0, budgetUnits / map.unitsPerCell));
 }
 
 // ---------------------------------------------------------------- image import
 
-/** Reference colours for sampling a picture into terrain (several per terrain). */
-const PALETTE: Array<[TerrainType, number, number, number]> = [
-  ['plains', 123, 138, 69], ['plains', 150, 170, 90], ['plains', 105, 130, 70], ['plains', 190, 195, 120],
-  ['forest', 47, 90, 51], ['forest', 30, 60, 35], ['forest', 60, 105, 55],
-  ['hills', 138, 123, 76], ['hills', 160, 140, 95], ['hills', 120, 100, 60],
-  ['mountain', 119, 112, 106], ['mountain', 160, 155, 150], ['mountain', 80, 75, 72], ['mountain', 225, 225, 230],
-  ['river', 47, 111, 143], ['river', 90, 150, 190], ['river', 120, 175, 210],
-  ['water', 29, 69, 96], ['water', 20, 45, 80], ['water', 40, 90, 150],
-  ['road', 181, 154, 100], ['road', 210, 190, 140], ['road', 200, 170, 120],
-  ['ruins', 139, 116, 88], ['ruins', 110, 95, 85],
-  ['magic', 78, 48, 117], ['magic', 140, 90, 190],
-];
-export function classifyColour(r: number, g: number, b: number): TerrainType {
-  let best: TerrainType = 'plains', bestD = Infinity;
-  for (const [t, pr, pg, pb] of PALETTE) {
+/** Reference colours for sampling a picture into tiles (several per tile). */
+const PALETTES: Record<TileSet, Array<[TileId, number, number, number]>> = {
+  region: [
+    ['plains', 123, 138, 69], ['plains', 150, 170, 90], ['plains', 105, 130, 70], ['plains', 190, 195, 120],
+    ['forest', 47, 90, 51], ['forest', 30, 60, 35], ['forest', 60, 105, 55],
+    ['hills', 138, 123, 76], ['hills', 160, 140, 95], ['hills', 120, 100, 60],
+    ['mountain', 119, 112, 106], ['mountain', 160, 155, 150], ['mountain', 80, 75, 72], ['mountain', 225, 225, 230],
+    ['river', 47, 111, 143], ['river', 90, 150, 190], ['river', 120, 175, 210],
+    ['water', 29, 69, 96], ['water', 20, 45, 80], ['water', 40, 90, 150],
+    ['road', 181, 154, 100], ['road', 210, 190, 140], ['road', 200, 170, 120],
+    ['ruins', 139, 116, 88], ['ruins', 110, 95, 85],
+    ['magic', 78, 48, 117], ['magic', 140, 90, 190],
+  ],
+  battle: [
+    ['grass', 111, 138, 69], ['grass', 140, 165, 85], ['grass', 95, 125, 60],
+    ['dirt', 138, 111, 74], ['dirt', 170, 140, 100], ['dirt', 200, 175, 130],
+    ['stone', 141, 138, 131], ['stone', 175, 170, 160], ['stone', 205, 200, 190],
+    ['wood', 138, 95, 54], ['wood', 160, 115, 70],
+    ['undergrowth', 79, 110, 53], ['undergrowth', 70, 95, 45],
+    ['rubble', 124, 113, 102],
+    ['shallow', 79, 143, 174], ['shallow', 120, 175, 210],
+    ['deep', 36, 87, 122], ['deep', 20, 45, 80],
+    ['tree', 45, 90, 46], ['tree', 25, 55, 30],
+    ['boulder', 119, 115, 108],
+    ['wall', 74, 69, 64], ['wall', 40, 38, 36], ['wall', 15, 15, 15],
+  ],
+};
+export function classifyColour(r: number, g: number, b: number, set: TileSet = 'region'): TileId {
+  let best: TileId = PALETTES[set][0][0], bestD = Infinity;
+  for (const [t, pr, pg, pb] of PALETTES[set]) {
     // "Redmean" weighting – cheap and close enough to perceived colour distance.
     const rm = (r + pr) / 2, dr = r - pr, dg = g - pg, db = b - pb;
     const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
@@ -253,18 +435,17 @@ export function classifyColour(r: number, g: number, b: number): TerrainType {
 }
 
 /**
- * Samples an RGBA picture (PNG/JPG or a rendered PDF page) into hex terrain. The picture is fitted
- * into the hexagon's bounding box; each hex averages five sample points. Hexes outside the picture
- * become '.' when `cropToImage` is set, otherwise grassland.
+ * Samples an RGBA picture (PNG/JPG or a rendered PDF page) into hex tiles. The picture is fitted into
+ * the hexagon's bounding box; each hex averages five sample points.
  */
-export function sampleImageToHex(pixels: Uint8ClampedArray, imgW: number, imgH: number, radius: number, cropToImage = true): HexSceneData {
-  const r = Math.max(MIN_HEX_RADIUS, Math.min(MAX_HEX_RADIUS, Math.round(radius)));
+export function sampleImageToHex(pixels: Uint8ClampedArray, imgW: number, imgH: number, radius: number, cropToImage = true, set: TileSet = 'region'): HexSceneData {
+  const r = clampRadius(radius);
   const box = { w: SQRT3 * SCENE_HEX_SIZE * (2 * r + 1), h: SCENE_HEX_SIZE * (3 * r + 2) };
   const k = Math.min(imgW / box.w, imgH / box.h);
   const ox = imgW / 2, oy = imgH / 2;
   const s = SCENE_HEX_SIZE * 0.45;
   const offsets = [[0, 0], [s, 0], [-s, 0], [0, s], [0, -s]];
-  return encodeTerrain(r, (h) => {
+  return encodeTiles(r, set, (h) => {
     const c = toPixel(h, SCENE_HEX_SIZE);
     let R = 0, G = 0, B = 0, n = 0;
     for (const [dx, dy] of offsets) {
@@ -274,30 +455,30 @@ export function sampleImageToHex(pixels: Uint8ClampedArray, imgW: number, imgH: 
       if (pixels[i + 3] < 32) continue; // transparent
       R += pixels[i]; G += pixels[i + 1]; B += pixels[i + 2]; n++;
     }
-    if (!n) return cropToImage ? null : 'plains';
-    return classifyColour(R / n, G / n, B / n);
+    if (!n) return cropToImage ? null : set === 'battle' ? 'grass' : 'plains';
+    return classifyColour(R / n, G / n, B / n, set);
   });
 }
 
-/** Neighbouring hexes of a key (re-exported for the editor brush). */
+/** Neighbouring hexes of a key (editor brush). */
 export const neighbourKeys = (k: HexKey) => neighbors(parseKey(k)).map(hexKey);
 
-/** Changes the hexagon radius; terrain and markers keep their hex (markers outside are pulled inside). */
+/** Changes the hexagon radius; tiles and markers keep their hex (markers outside are pulled inside). */
 export function resizeHexScene(map: SceneMap, radius: number): SceneMap {
   if (!map.hex) return map;
-  const r = Math.max(MIN_HEX_RADIUS, Math.min(MAX_HEX_RADIUS, Math.round(radius)));
+  const r = clampRadius(radius);
+  const set = tileSetOf(map.hex);
   const old = decodeTerrain(map.hex);
-  const data = encodeTerrain(r, (h) => old.get(hexKey(h)) ?? (distance(h, ORIGIN) > map.hex!.radius ? 'plains' : null));
+  const fill: TileId = set === 'battle' ? 'grass' : 'plains';
+  const data = encodeTiles(r, set, (h) => old.get(hexKey(h)) ?? (distance(h, ORIGIN) > map.hex!.radius ? fill : null));
   const next = hexSceneMap(map, data, []);
   next.nodes = map.nodes.map((n) => ({ ...n, ...hexCentre(next, clampHex(hexAt(map, n), r)) }));
   return next;
 }
 
-/** Replaces the terrain but keeps markers on their hexes (a marker on impassable terrain gets grassland). */
+/** Replaces the tiles but keeps markers on their hexes (a marker on impassable ground gets open ground). */
 export function replaceTerrain(map: SceneMap, data: HexSceneData): SceneMap {
   const next = hexSceneMap(map, data, []);
   next.nodes = map.nodes.map((n) => ({ ...n, ...hexCentre(next, clampHex(hexAt(map, n), data.radius)) }));
-  const keys = next.nodes.filter((n) => n.kind === 'spawn' || n.kind === 'location').map((n) => hexKey(hexAt(next, n))).filter((k) => !passable(next, parseKey(k)));
-  if (keys.length) next.hex = paintHexes(data, keys, 'plains');
-  return next;
+  return withPassableMarkers(next);
 }

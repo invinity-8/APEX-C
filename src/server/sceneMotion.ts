@@ -1,13 +1,18 @@
 import { parseMap, regionMilesPerHour, type MapNode } from '../campaign/maps.js';
 import { movementCost, snappedPoint } from '../campaign/sceneMovement.js';
-import { characterMovementLoad } from '../game/items/weight.js';
-import { emptySheet, parseSheet } from '../game/sheet.js';
 import type { AuthUser, Repo } from './repo.js';
+import { clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
+import { sceneContext } from './sceneRuntime.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
 export interface MotionSnapshot { tokens: SceneTokenPosition[]; round: number; hour: number; known: MapNode[]; budgets: Record<string, { tacticalSpent: number; regionSpent: number }> }
+/** Scene-local motion (schema 7): budget per scene and epoch (turn / free / day), explored hexes. */
+export interface LedgerPosition { tokenId: string; x: number; y: number; version: number; epoch: string | null; spent: number }
+export interface LocalMotionSnapshot { tokens: LedgerPosition[]; known: MapNode[]; seen: string[] }
 export interface SceneMotion {
   snapshot(campaignId: string, sceneId: string, userId: string, tokenIds: string[]): Promise<MotionSnapshot>;
+  localSnapshot(campaignId: string, sceneId: string, userId: string, tokenIds: string[]): Promise<LocalMotionSnapshot>;
+  localWrite(user: AuthUser, input: Record<string, unknown>, cost: number, allowance: number, epoch: string, discovered: MapNode[], seen: string[]): Promise<{ ok: boolean; error?: string }>;
   write(user: AuthUser, input: Record<string, unknown>, cost: number, discovered: MapNode[]): Promise<{ ok: boolean; error?: string }>;
   advance(user: AuthUser, interval: 'round' | 'hour', expected: number, requestId: string): Promise<{ ok: boolean; error?: string }>;
 }
@@ -41,25 +46,36 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   if (!map || !['battle', 'region'].includes(scene.category)) return { status: 400, body: { error: 'This scene uses GM navigation or route travel.' } };
   const assignment = await repo.sceneRuntime.assignment(user.campaignId, user.id);
   if (user.role !== 'gm' && (!assignment || assignment.scene_id !== scene.id || assignment.revision !== v.assignmentRevision)) return { status: 409, body: { error: 'Scene assignment changed.' } };
-  const motion = await repo.sceneMotion.snapshot(user.campaignId, scene.id, user.id, [token.id]);
-  const old = motion.tokens.find(p => p.tokenId === token.id);
-  const start = old ?? { x: assignment?.spawn_x ?? 0, y: assignment?.spawn_y ?? 0 };
+  // Scene-local budgets (schema 7): per scene and per turn / free / day – nothing is shared with the Arena.
+  const ctx = await sceneContext(repo, user.campaignId, state!.state);
+  const local = await repo.sceneMotion.localSnapshot(user.campaignId, scene.id, user.id, [token.id]);
+  const old = local.tokens.find(p => p.tokenId === token.id);
+  const ownerAssignment = user.role === 'gm' ? await ownerAssignmentOf(repo, user.campaignId, token.id) : assignment;
+  const start = old ?? { x: ownerAssignment?.spawn_x ?? 0, y: ownerAssignment?.spawn_y ?? 0 };
   const to = snappedPoint(map, { x: v.x, y: v.y });
   const checked = movementCost(map, v.action === 'place' ? to : start, to);
   if (!checked.ok) return { status: 422, body: { error: checked.error } };
+  const category = scene.category as 'battle' | 'region';
+  const mv = movementFor(state!.state, scene.id, category, token.id, user.role === 'gm', await sheetOf(ctx, token.id), local);
   if (v.action === 'move') {
-    const savedSheet = await repo.loadSheet(user.campaignId, token.id);
-    const parsedSheet = parseSheet(savedSheet?.data ?? emptySheet());
-    const movement = characterMovementLoad(state!.state, token, parsedSheet.ok ? parsedSheet.sheet : emptySheet());
-    if (movement.load.state === 'over') return { status: 422, body: { error: `${token.name} is over carrying capacity; reduce the carried load before moving.` } };
-    const speedFt = Math.max(0, Math.min(token.speedFt ?? 30, movement.speedFt));
-    const intervalAllowance = scene.category === 'battle' ? speedFt : speedFt * 600 / 5280;
-    const baseSpent = scene.category === 'battle' ? (old?.tacticalSpent ?? 0) : (old?.regionSpent ?? 0);
-    const allowance = intervalAllowance / (token.sneaking ? 2 : 1);
-    if (baseSpent + checked.cost > allowance + 1e-9) return { status: 422, body: { error: `Encumbrance leaves ${Math.max(0, allowance - baseSpent)} movement unit(s) in this interval.` } };
+    if (mv.overloaded) return { status: 422, body: { error: `${token.name} is over carrying capacity; reduce the carried load before moving.` } };
+    if (!mv.canMove) return { status: 409, body: { error: mv.reason ?? 'You cannot move right now.' } };
+    if (mv.spent + checked.cost > mv.allowance + 1e-9) {
+      const left = Math.max(0, mv.allowance - mv.spent);
+      return { status: 422, body: { error: `Only ${Math.round(left * 100) / 100} ${mv.unit} of movement left ${mv.mode === 'turn' ? 'this turn' : 'today'}.` } };
+    }
   }
-  const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell))).map(n => ({ ...n, targetScene: null, discoverable: false }));
+  // Exploration: hexes the character sees from start and destination are remembered for its player.
+  const clock = clockFor(state!.state, scene.id);
+  const seen = map.hex ? [...await visionFor(ctx, map, clock, [{ tokenId: token.id, ...start }, { tokenId: token.id, ...to }])] : [];
+  const seenSet = new Set(seen);
+  const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && (map.hex ? seenSet.has(hexKeyAt(map, n)) : Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell)))).map(n => ({ ...n, targetScene: null, discoverable: false }));
   const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: to.x, y: to.y, requestId: v.requestId };
-  const result = await repo.sceneMotion.write(user, input, v.action === 'place' ? 0 : checked.cost, observed);
-  return { status: result.ok ? 200 : 409, body: { ...result, ...(result.ok ? { position: to, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
+  const result = await repo.sceneMotion.localWrite(user, input, v.action === 'place' ? 0 : checked.cost, mv.allowance, mv.epoch, observed, seen);
+  return { status: result.ok ? 200 : 409, body: { ...result, ...(result.ok ? { position: to, spent: mv.spent + (v.action === 'place' ? 0 : checked.cost), allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
+}
+
+async function ownerAssignmentOf(repo: Repo, campaignId: string, tokenId: string) {
+  const owner = (await repo.profiles(campaignId)).find(p => p.active && p.role === 'player' && p.tokenIds.includes(tokenId));
+  return owner ? repo.sceneRuntime!.assignment(campaignId, owner.userId) : null;
 }

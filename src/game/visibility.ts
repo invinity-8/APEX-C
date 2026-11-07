@@ -124,6 +124,8 @@ export interface HexView {
   feature?: HexFeature;
   /** Bitmask of DIRECTIONS that lead outside the arena (bit i = DIRECTIONS[i]). Only for known hexes. */
   edges?: number;
+  /** Battle scenes: 5-ft tile id (src/campaign/hexScene.ts); painted by the battle painter. */
+  tile?: string;
 }
 
 export interface TokenDetails {

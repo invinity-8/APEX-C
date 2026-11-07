@@ -50,7 +50,7 @@ function buildIndex(hexes: HexView[], overlayFog: PaintEnv['overlayFog']): Map<s
   for (const ch of index.values()) {
     ch.hexes.sort((a, b) => a.r - b.r || a.q - b.q);
     ch.sig = ch.hexes
-      .map((h) => `${h.key}${h.terrain}${h.fog[0]}${h.zone[0]}${h.feature ?? ''}${h.edges ?? ''}${overlayFog ? (overlayFog[h.key] ?? '')[0] : ''}`)
+      .map((h) => `${h.key}${h.terrain}${h.tile ?? ''}${h.fog[0]}${h.zone[0]}${h.feature ?? ''}${h.edges ?? ''}${overlayFog ? (overlayFog[h.key] ?? '')[0] : ''}`)
       .join('|');
   }
   return index;
@@ -63,7 +63,10 @@ export function TerrainCanvas({
   fogUnknown,
   tf,
   size,
+  paintChunk,
 }: {
+  /** Alternative painter for a whole chunk (battle scenes); default: the Arena painter. */
+  paintChunk?: (ctx: CanvasRenderingContext2D, hexes: HexView[], env: PaintEnv) => void;
   hexes: HexView[];
   byKey: Record<string, HexView>;
   overlayFog: PaintEnv['overlayFog'];
@@ -79,8 +82,8 @@ export function TerrainCanvas({
   const index = useMemo(() => buildIndex(hexes, overlayFog), [hexes, overlayFog]);
   const env: PaintEnv = useMemo(() => ({ get: (k) => byKey[k], fogUnknown, overlayFog }), [byKey, fogUnknown, overlayFog]);
 
-  const state = useRef({ index, env, tf, size });
-  state.current = { index, env, tf, size };
+  const state = useRef({ index, env, tf, size, paintChunk });
+  state.current = { index, env, tf, size, paintChunk };
 
   useEffect(() => {
     const render = (lod: number, key: string, ch: Chunk): Cached => {
@@ -94,11 +97,14 @@ export function TerrainCanvas({
       ctx.setTransform(lod, 0, 0, lod, -i * CHUNK * lod, -j * CHUNK * lod);
       ctx.clearRect(i * CHUNK, j * CHUNK, CHUNK, CHUNK);
       const e = state.current.env;
+      if (state.current.paintChunk) state.current.paintChunk(ctx, ch.hexes, e);
+      else {
       for (const h of ch.hexes) paintGround(ctx, h, e);
       for (const h of ch.hexes) paintEdges(ctx, h, e);
       for (const h of ch.hexes) paintDetails(ctx, h, e);
       for (const h of ch.hexes) paintSprites(ctx, h, e);
       for (const h of ch.hexes) paintOverlays(ctx, h, e);
+      }
       const entry: Cached = { canvas, sig: ch.sig, px: px * px };
       if (!old) pixels.current += entry.px;
       cache.current.delete(`${lod}:${key}`);
