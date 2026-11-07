@@ -19,6 +19,7 @@ import { api, ApiError } from '../online/api';
 import {
   ARENA_ID,
   assignmentDestination,
+  canMove,
   currentToStored,
   describeTransferError,
   directorReducer,
@@ -338,6 +339,7 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
   if (!online) return { enabled: false, arenaShown: true, zoomable: false, widgets: [], renderMap: (arena) => arena };
 
   const previewing = state.selected !== state.current;
+  const movable = players.filter(canMove);
   const selectedDest = destinationFor(state.selected);
   const entries: Array<{ id: string; name: string; meta: string; thumb?: string | null }> = [
     { id: ARENA_ID, name: 'Arena', meta: 'Arena · hex campaign map', thumb: null },
@@ -375,10 +377,10 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
               Make “{listName(state.selected)}” the current scene?
             </p>
             <p className="mt-1 text-marble-400">
-              Bring all players along? {players.length ? `${transferTargets(players, players.map((p) => p.userId), selectedDest ?? null).length} of ${players.length} would move.` : 'No active players.'} You can still move single players or send them to the Sanctuary afterwards.
+              Bring all players along? {players.length ? `${transferTargets(players, players.map((p) => p.userId), selectedDest ?? null).length} of ${players.length} would move${players.length > movable.length ? ` (${players.length - movable.length} not joined yet)` : ''}.` : 'No active players.'} You can still move single players or send them to the Sanctuary afterwards.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <button className="btn btn-gold" type="button" disabled={busy || !selectedDest || !players.length} onClick={() => switchScene(true)}>
+              <button className="btn btn-gold" type="button" disabled={busy || !selectedDest || !movable.length} onClick={() => switchScene(true)}>
                 Switch and move all players
               </button>
               <button className="btn btn-ghost" type="button" disabled={busy} onClick={() => switchScene(false)}>
@@ -442,7 +444,7 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
     ),
   };
 
-  const allSelected = players.length > 0 && state.selectedPlayers.length === players.length;
+  const allSelected = movable.length > 0 && movable.every((p) => state.selectedPlayers.includes(p.userId));
   const playersWidget: WidgetDef = {
     id: 'game-players',
     title: 'Player locations',
@@ -453,17 +455,17 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
           <legend className="text-xs text-marble-400">Tick players, then send them to the selected scene ({listName(state.selected)}) or to the Sanctuary.</legend>
           {players.length ? (
             players.map((p) => (
-              <label key={p.userId} className="flex items-center gap-2 text-xs text-marble-200">
-                <input type="checkbox" checked={state.selectedPlayers.includes(p.userId)} onChange={(e) => dispatch({ type: 'togglePlayer', userId: p.userId, on: e.target.checked })} />
+              <label key={p.userId} className={`flex items-center gap-2 text-xs ${canMove(p) ? 'text-marble-200' : 'text-marble-500'}`}>
+                <input type="checkbox" disabled={!canMove(p)} checked={canMove(p) && state.selectedPlayers.includes(p.userId)} onChange={(e) => dispatch({ type: 'togglePlayer', userId: p.userId, on: e.target.checked })} />
                 <span className="flex-1">{p.name}</span>
-                <span className="text-marble-500">{locationLabel(p, scenes, state.current)}</span>
+                <span className="text-marble-500">{canMove(p) ? locationLabel(p, scenes, state.current) : 'not joined yet – signs in first'}</span>
               </label>
             ))
           ) : (
             <p className="text-xs text-marble-500">No active players.</p>
           )}
-          {players.length > 0 && (
-            <button className="btn btn-ghost" type="button" onClick={() => dispatch({ type: 'selectPlayers', userIds: allSelected ? [] : players.map((p) => p.userId) })}>
+          {movable.length > 0 && (
+            <button className="btn btn-ghost" type="button" onClick={() => dispatch({ type: 'selectPlayers', userIds: allSelected ? [] : movable.map((p) => p.userId) })}>
               {allSelected ? 'Clear selection' : 'Select all players'}
             </button>
           )}

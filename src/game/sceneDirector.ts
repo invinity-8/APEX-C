@@ -18,7 +18,12 @@ export interface DirectorPlayer {
   tokenIds: string[];
   sceneId: string | null;
   revision: number;
+  /** false: the profile never signed in, so it is not a campaign member yet and cannot be moved. */
+  joined?: boolean;
 }
+
+/** Players the server can move (campaign members). */
+export const canMove = (p: Pick<DirectorPlayer, 'joined'>) => p.joined !== false;
 
 export interface DirectorScene {
   id: string;
@@ -97,7 +102,7 @@ export function locationLabel(player: Pick<DirectorPlayer, 'sceneId'>, scenes: D
  * skipped (nothing to do), so "bring everyone" never needlessly bumps their revision.
  */
 export function transferTargets(players: DirectorPlayer[], userIds: string[], destination: string | null): Array<{ userId: string; revision: number }> {
-  return players.filter((p) => userIds.includes(p.userId) && p.sceneId !== destination).map((p) => ({ userId: p.userId, revision: p.revision }));
+  return players.filter((p) => canMove(p) && userIds.includes(p.userId) && p.sceneId !== destination).map((p) => ({ userId: p.userId, revision: p.revision }));
 }
 
 /** Human-readable transfer error. Stale revisions ask for a refresh instead of a blind retry. */
@@ -105,6 +110,7 @@ export function describeTransferError(status: number, message: string): string {
   const text = message.replace(/^(Api)?Error:\s*/i, '').trim();
   if (status === 0 || status >= 500) return 'The connection failed. The transfer may still have completed – use “Verify or retry” (same request, never applied twice).';
   if (/assignment changed|refresh the selection/i.test(text)) return 'A player was moved elsewhere in the meantime (assignment revision changed). The player list has been refreshed – check it and send again.';
+  if (/player (is not active|unavailable)/i.test(text)) return 'A selected player has not joined the campaign yet (never signed in) and cannot be moved.';
   if (/spawn/i.test(text)) return `${text} Open Scenes, add a spawn point and publish the scene.`;
   return text || 'The transfer was refused.';
 }

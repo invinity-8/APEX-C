@@ -84,6 +84,12 @@ describe('scene director state', () => {
     expect(transferTargets(players, ['u2'], CAVE)).toEqual([{ userId: 'u2', revision: 3 }]);
   });
 
+  it('never offers players who have not joined the campaign yet (server would refuse them)', () => {
+    const withNew = [...players, { userId: 'u3', name: 'Simon', tokenIds: [], sceneId: null, revision: 0, joined: false }];
+    expect(transferTargets(withNew, ['u1', 'u3'], CAVE)).toEqual([{ userId: 'u1', revision: 0 }]);
+    expect(describeTransferError(409, 'Player is not active in this campaign.')).toMatch(/not joined/);
+  });
+
   it('labels locations and explains stale revisions', () => {
     expect(locationLabel(players[0], scenes, FOREST)).toBe('Sanctuary');
     expect(locationLabel(players[1], scenes, FOREST)).toBe('Forest · current scene');
@@ -142,6 +148,7 @@ describe('scene switch through the server (scene-runtime)', () => {
     // Selecting a scene is client state only: the server assignment does not change.
     let ps = await playerList();
     expect(ps).toHaveLength(2);
+    expect(ps.every((p) => p.joined === true)).toBe(true);
     expect(ps.some((p) => p.sceneId === forest.id)).toBe(false);
     const r0 = ps.map((p) => p.revision);
 
