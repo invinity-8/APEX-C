@@ -79,7 +79,7 @@ export interface GameDirector {
   renderMap: (arena: ReactNode) => ReactNode;
 }
 
-export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled: boolean; run: (cmd: Command) => Promise<DispatchResult> }): GameDirector {
+export function useGameDirector({ game, enabled, run, active = true }: { game: GameApi; enabled: boolean; run: (cmd: Command) => Promise<DispatchResult>; /** Game tab is visible: refresh the published scene list (e.g. after publishing in Scenes). */ active?: boolean }): GameDirector {
   const online = enabled ? game.online : undefined;
   const campaignId = online?.campaignId ?? '';
   const [state, dispatch] = useReducer(directorReducer, undefined, () => initialDirector(storedToCurrent(campaignId ? readFocus(campaignId) : null)));
@@ -117,9 +117,10 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
   }, []);
 
   useEffect(() => {
-    if (!online) return;
-    loadScenes('').catch((e) => setError(String(e)));
-  }, [online?.campaignId, loadScenes]);
+    if (!online || !active) return;
+    loadScenes(search).catch((e) => setError(String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on entering Game, not on every keystroke
+  }, [online?.campaignId, loadScenes, active]);
   useEffect(() => {
     if (!online) return;
     loadPlayers().catch((e) => setError(String(e)));

@@ -32,7 +32,10 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   if (map.hex) {
     // Battle and region scenes: the Arena hex engine with this scene's content.
     const view = (id: string) => tokenViews.find(t => t.id === id);
-    const tokens: SceneToken[] = positions.map(p => {
+    // Assigned characters that have not moved yet stand on the spawn (the server starts them there too).
+    const spawnNode = map.nodes.find(n => n.kind === 'spawn');
+    const waiting = spawnNode ? (tokenLabels ?? []).filter(t => !positions.some(p => p.tokenId === t.tokenId)).map(t => ({ tokenId: t.tokenId, x: spawnNode.x, y: spawnNode.y })) : [];
+    const tokens: SceneToken[] = [...positions, ...waiting].map(p => {
       const marker = tokenLabels?.find(t => t.tokenId === p.tokenId);
       return { tokenId: p.tokenId, x: p.x, y: p.y, name: marker?.name ?? (category === 'world' ? 'Party' : name), color: marker?.color ?? color, view: view(p.tokenId) };
     });
