@@ -29,6 +29,7 @@ import { readBuildInfo } from '../build/buildInfo.js';
 import { APP_VERSION } from '../build/version.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { castMageArmor, isWearingArmor } from '../game/spells.js';
+import { importSpellList } from '../game/spellImport.js';
 import { characterMovementLoad } from '../game/items/weight.js';
 import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform, type AbilityResult } from '../game/abilities.js';
 import { findBeast } from '../game/beastCatalog.js';
@@ -999,6 +1000,25 @@ async function runSheet(user: AuthUser, body: unknown, repo: Repo): Promise<Shee
       if (v !== null) return sheetPayload(repo, cid, tokenId, state!);
     }
     throw new HttpError(409, 'The character sheet is being changed elsewhere right now. Please try again.', 'conflict');
+  }
+  if (body.action === 'importSpells') {
+    // Spell-only PDF import: the server rebuilds the sheet from the stored copy and replaces nothing but
+    // the spell list, so attributes, inventory, notes and other edits can never be overwritten.
+    if (!isInt(body.expectedVersion, Number.MAX_SAFE_INTEGER) || body.expectedVersion < 0) throw new HttpError(400, 'Invalid sheet version.');
+    const cur = await repo.loadSheet(cid, tokenId);
+    if ((cur?.version ?? 0) !== body.expectedVersion) {
+      throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded – please review the spell import again.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    const parsedCur = cur ? parseSheet(cur.data) : null;
+    const base: CharacterSheet = parsedCur?.ok ? parsedCur.sheet : emptySheet();
+    const r = importSpellList(base, body.spells);
+    if (!r.ok) throw new HttpError(400, r.error);
+    if (cur) await repo.backupSheet(cid, tokenId, cur.data, cur.version, 'Before spell import (PDF)', user.id);
+    const v = await repo.saveSheet(cid, tokenId, r.sheet, body.expectedVersion, user.id);
+    if (v === null) {
+      throw new HttpError(409, 'This character sheet was changed on another device. The latest version has been loaded – please review the spell import again.', 'sheet_conflict', undefined, { current: await sheetPayload(repo, cid, tokenId, state!) });
+    }
+    return { ...(await sheetPayload(repo, cid, tokenId, state!)), message: `${r.added} spell${r.added === 1 ? '' : 's'} added, ${r.changed} updated.` };
   }
   if (body.action === 'castMageArmor') {
     if (!isId(body.spellId)) throw new HttpError(400, 'Choose a valid spell.');

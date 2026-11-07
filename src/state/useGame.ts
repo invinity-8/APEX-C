@@ -4,6 +4,7 @@
  */
 import { applyDamage, applyHealing, convertSorcery, revert, setTempHp, transform } from '../game/abilities';
 import { findBeast } from '../game/beastCatalog';
+import { importSpellList } from '../game/spellImport';
 import { SEEDED_COMMANDS } from '../game/items/loot';
 import { PARTY_LOOT_SEEDED } from '../game/items/partyLoot';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -157,6 +158,12 @@ function useDemoSheets(state: GameState): SheetApi {
       // Demo mode plays the server: the same pure rules as /api/apex?op=sheet.
       const cur = payload(tokenId);
       if (body.expectedVersion !== cur.version) return { ok: false, error: 'Changed elsewhere.', conflict: cur };
+      if (body.action === 'importSpells') {
+        const r = importSpellList(cur.sheet, body.spells);
+        if (!r.ok) return { ok: false, error: r.error };
+        write(tokenId, r.sheet, cur.version + 1);
+        return { ok: true, sheet: { ...payload(tokenId), message: `${r.added} spell${r.added === 1 ? '' : 's'} added, ${r.changed} updated.` } };
+      }
       if (body.action === 'castMageArmor') {
         const cast = castMageArmor(cur.sheet, state.tokens[tokenId], body.spellId, Date.now());
         if (!cast.ok) return { ok: false, error: cast.error };

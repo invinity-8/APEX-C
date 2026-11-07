@@ -34,6 +34,11 @@ export interface WidgetDef extends WidgetMeta {
   icon: string;
   /** Small counter in the header (e.g. events awaiting a decision). */
   badge?: number;
+  /**
+   * Not relevant right now (e.g. Arena tools while a battle map is shown). The widget keeps its stored
+   * dock, order and collapsed state but is not rendered and not offered in the "Widgets" menu.
+   */
+  inactive?: boolean;
   render: () => ReactNode;
 }
 
@@ -110,7 +115,7 @@ export function Workspace({ widgets, defaults, storageKey, center }: { widgets: 
   };
 
   const renderDock = (dock: Dock) => {
-    const ids = layout.docks[dock].filter((id) => byId.has(id));
+    const ids = layout.docks[dock].filter((id) => byId.has(id) && !byId.get(id)!.inactive);
     const visible = ids.length > 0 || !!drag;
     if (!visible) return null;
     const size = layout.size[dock];
@@ -156,7 +161,7 @@ export function Workspace({ widgets, defaults, storageKey, center }: { widgets: 
     );
   };
 
-  const hiddenDefs = layout.hidden.map((id) => byId.get(id)).filter((w): w is WidgetDef => !!w);
+  const hiddenDefs = layout.hidden.map((id) => byId.get(id)).filter((w): w is WidgetDef => !!w && !w.inactive);
   return (
     <WorkspaceContext.Provider value={api}>
       <div className="ws-root">

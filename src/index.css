@@ -431,17 +431,33 @@
   max-width: calc(100vw - 1.5rem); max-height: calc(100vh - 2rem); }
 .apex-resizable::-webkit-resizer { background: linear-gradient(135deg, transparent 50%, rgba(192,155,88,.8) 50%); }
 
-/* The live map owns the main stage; preparation controls scroll independently. */
-.game-table { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem); height: 100%; min-height: 0; overflow: hidden; }
-.game-table-map { grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; overflow: auto; }
-.game-table-tools { grid-column: 2; grid-row: 1; min-width: 0; overflow: auto; border-left: 1px solid rgba(192,155,88,.3); }
-.game-table-tools > .grid { grid-template-columns: minmax(0, 1fr); }
-.game-scene-list { display: grid; gap: .3rem; max-height: 14rem; overflow: auto; margin-top: .75rem; }
-.game-scene-list button { display: flex; justify-content: space-between; gap: .5rem; text-align: left; }
-.game-scene-list small { opacity: .7; }
-.game-scene-list [aria-current=true] { border-color: #c09b58; background: #c09b581a; }
-@media (max-width: 900px) {
-  .game-table { grid-template-columns: minmax(0, 1fr); height: auto; overflow: visible; }
-  .game-table-map { min-height: 55vh; }
-  .game-table-tools { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid rgba(192,155,88,.3); }
-}
+/* Game: the active map owns the main stage; zoom and height are personal display settings. */
+.map-stage { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 240px; }
+.ws-map:has(> .map-stage[data-fixed-height]) { flex: 0 0 auto; height: auto; min-height: 0; }
+.map-stage-body { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.map-stage-body > .game-map, .map-stage-body > .player-scene { flex: 1; min-height: 0; overflow: auto; }
+.map-stage .scene-canvas-scroll { max-height: none; flex: 1; min-height: 0; }
+.map-stage .player-scene { display: flex; flex-direction: column; padding: .5rem 1rem; }
+.map-stage .player-scene > h2 { color: #e4c786; font: 700 1.2rem/1.2 Georgia, serif; }
+.map-stage .player-scene > p { font-size: .75rem; color: #a99c84; margin-bottom: .4rem; }
+.game-map { display: flex; flex-direction: column; }
+.map-stage-zoom { position: absolute; left: .6rem; bottom: 1rem; z-index: 20; display: flex; align-items: center; gap: .15rem; padding: .15rem; border: 1px solid rgba(192,155,88,.45); border-radius: .5rem; background: rgba(14,17,22,.92); }
+.map-stage-zoom-value { min-width: 3.2rem; font-size: .7rem; color: #e6d8bc; font-variant-numeric: tabular-nums; }
+.map-stage-resize { flex: 0 0 auto; height: .55rem; cursor: ns-resize; touch-action: none; background: linear-gradient(to bottom, transparent 35%, rgba(192,155,88,.45) 35%, rgba(192,155,88,.45) 65%, transparent 65%); }
+.map-stage-resize:hover, .map-stage-resize:focus-visible { background-color: rgba(192,155,88,.18); outline: none; }
+.game-map-banner { position: relative; z-index: 15; margin: .4rem; padding: .3rem .7rem; border: 1px solid rgba(192,155,88,.55); border-radius: .4rem; background: rgba(40,33,20,.92); color: #ecd9a9; font-size: .75rem; }
+.game-scene-list { display: grid; gap: .35rem; max-height: 22rem; overflow: auto; }
+.game-scene-card { display: grid; grid-template-columns: 4.5rem minmax(0,1fr) auto; align-items: center; gap: .55rem; width: 100%; text-align: left; padding: .3rem; border: 1px solid #3e3a33; border-radius: .45rem; background: #161a20; color: #e6d8bc; }
+.game-scene-card .scene-thumbnail { min-height: 3rem; height: 3rem; }
+.game-scene-card .scene-thumbnail img { height: 3rem; }
+.game-scene-card strong { display: block; font-size: .8rem; color: #dfc58a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-scene-card small { display: block; font-size: .68rem; opacity: .7; }
+.game-scene-card em { font-style: normal; font-size: .62rem; }
+.game-scene-card:hover { border-color: #7a6246; }
+.game-scene-card[aria-pressed=true] { border-color: #c09b58; background: #c09b5814; box-shadow: inset 0 0 0 1px rgba(192,155,88,.5); }
+.game-scene-card[aria-current=true] em { color: #9fe2b0; border-color: rgba(110,200,140,.6); }
+/* Scenes: category filter buttons show their state clearly. */
+.scene-category-filter { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .35rem; }
+.scene-director .scene-category-filter button { margin: 0; padding: .45rem .5rem; border: 1px solid #5e533f; border-radius: .4rem; background: #1b1f26; color: #cdbf9f; font-size: .78rem; text-align: center; }
+.scene-director .scene-category-filter button[aria-pressed=true] { border-color: #d8b56f; background: #c09b5833; color: #f3e1b4; font-weight: 700; box-shadow: inset 0 0 0 1px rgba(216,181,111,.7); }
+.scene-director .scene-category-filter button:hover:not(:disabled) { border-color: #a88a52; }
