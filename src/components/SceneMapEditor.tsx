@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { emptyMap, parseMap, type MapNode, type SceneMap } from '../campaign/maps';
-import { generateForestFeatures, type ForestOptions } from '../campaign/forestGenerator';
+import { convertLegacyMap, newHexScene } from '../campaign/hexScene';
+import { HexSceneEditor } from './HexSceneEditor';
 import type { SceneDefinition } from '../server/scenes';
 import { api } from '../online/api';
 import { playerSafeBackground, prepareMapUpload } from '../campaign/imageUpload';
 import { SceneGrid } from './SceneSurface';
 
-const forestFeatureColors = { tree: '#41664b', rock: '#877c6e', obstacle: '#78553d', water: '#3d7485' } as const;
+const legacyFeatureColors = { tree: '#41664b', rock: '#877c6e', obstacle: '#78553d', water: '#3d7485' } as const;
 
-/** Small original SVG editor. Saved drafts and published definitions are separate database fields. */
+/**
+ * Scene map editor. Battle and region maps use the Arena hex engine (HexSceneEditor); celestial and
+ * world maps keep the route/overview editor. Saved drafts and published definitions are separate.
+ */
 export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onSaved: (scene: SceneDefinition) => void }) {
   const [map, setMap] = useState<SceneMap>(() => parseMap(scene.metadata) ?? emptyMap(scene.category));
   const [revision, setRevision] = useState(scene.revision);
@@ -20,9 +24,6 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
-  const [forestOptions, setForestOptions] = useState<ForestOptions>({ seed: 90421, forestDensity: 65, openGroundPercent: 38, rockDensity: 18, obstacleDensity: 12, waterPercent: 8 });
-  const [generatedPreview, setGeneratedPreview] = useState<MapNode[] | null>(null);
-  const [undoGeneration, setUndoGeneration] = useState<SceneMap | null>(null);
   const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [hours, setHours] = useState(1); const [distance, setDistance] = useState(0);
   const svg = useRef<SVGSVGElement>(null); const dragging = useRef<string | null>(null);
   const current = map.nodes.find(n => n.id === selected);
@@ -32,14 +33,14 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
     if (id) api.mapImage(id).then(r => { if (live) setBackgroundUrl(r.url); }).catch(e => { if (live) setMessage(String(e)); });
     return () => { live = false; };
   }, [map.backgroundAsset, map.playerBackgroundAsset, playerPreview]);
-  function change(patch: Partial<SceneMap>, preserveUndo = false) { setMap(old => ({ ...old, ...patch })); if (!preserveUndo) setUndoGeneration(null); setDirty(true); setMessage(''); }
+  function change(patch: Partial<SceneMap> | SceneMap, replace = false) { setMap(old => (replace ? (patch as SceneMap) : { ...old, ...patch })); setDirty(true); if (!replace) setMessage(''); }
   function nodeChange(patch: Partial<MapNode>) { change({ nodes: map.nodes.map(n => n.id === selected ? { ...n, ...patch } : n) }); }
   function point(event: PointerEvent<SVGSVGElement>) {
     const rect = svg.current!.getBoundingClientRect();
     return { x: Math.max(0, Math.min(map.width, (event.clientX - rect.left) / rect.width * map.width)), y: Math.max(0, Math.min(map.height, (event.clientY - rect.top) / rect.height * map.height)) };
   }
   function add(event: PointerEvent<SVGSVGElement>) {
-    if (playerPreview || generatedPreview || tool === 'select' || busy) return;
+    if (playerPreview || tool === 'select' || busy) return;
     const n: MapNode = { id: crypto.randomUUID(), ...point(event), label: tool === 'spawn' ? 'Entry' : 'New ' + tool, kind: tool, visible: tool === 'spawn', width: 60, height: 60, description: '', targetScene: null };
     change({ nodes: [...map.nodes, n] }); setSelected(n.id); setTool('select');
   }
@@ -47,7 +48,7 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
     setBusy(true); setMessage('');
     try {
       let candidate = map;
-      if (publish && map.backgroundAsset) {
+      if (publish && map.backgroundAsset && !map.hex) {
         const source = await api.mapImage(map.backgroundAsset);
         const safe = await playerSafeBackground(map, source.url);
         const asset = await api.mapUpload(scene.id, 'players', safe.image, safe.thumbnail);
@@ -64,72 +65,41 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
     try { const image = await prepareMapUpload(file); const asset = await api.mapUpload(scene.id, 'gm', image.image, image.thumbnail); change({ backgroundAsset: asset.id, playerBackgroundAsset: null }); setMessage('Private map uploaded. Publish to generate a separate player-safe image.'); }
     catch (e) { setMessage(String(e)); } finally { setBusy(false); }
   }
-  const displayedNodes = generatedPreview ? [...map.nodes.filter(n => !n.generatedBy), ...generatedPreview] : map.nodes;
+  const displayedNodes = map.nodes;
   const visibleNodes = displayedNodes.filter(n => !playerPreview || (n.visible && n.kind !== 'spawn'));
-  function makeForestPreview(seed = forestOptions.seed) {
-    const options = { ...forestOptions, seed: Math.max(0, Math.floor(Number.isFinite(seed) ? seed : 0)) };
-    setForestOptions(options);
-    setGeneratedPreview(generateForestFeatures(map, options));
-    setMessage('Preview only. Your map has not changed.');
-  }
-  function applyForestPreview() {
-    if (!generatedPreview) return;
-    if (map.nodes.length - map.nodes.filter(n => n.generatedBy).length + generatedPreview.length > 300) {
-      setMessage('This layout would exceed the 300-object scene limit. Reduce density before applying.');
-      return;
-    }
-    setUndoGeneration(map);
-    change({ nodes: [...map.nodes.filter(n => !n.generatedBy), ...generatedPreview] }, true);
-    setGeneratedPreview(null);
-    setMessage('Forest layout applied. Manual objects were kept; save the draft to store it.');
-  }
-  function undoForest() {
-    if (!undoGeneration) return;
-    setMap(undoGeneration);
-    setUndoGeneration(null);
-    setGeneratedPreview(null);
-    setDirty(true);
-    setMessage('The previous map layout was restored. Save the draft to keep this change.');
-  }
+  const hexCategory = scene.category === 'battle' || scene.category === 'region';
+  const saveBar = <div className="journal-toolbar"><button className="btn btn-ghost" disabled={!dirty || busy} onClick={() => void save()}>Save draft</button><button className="btn btn-gold" disabled={busy} onClick={() => void save(true)}>Publish definition</button></div>;
+  if (map.hex) return <section className="scene-editor scene-editor-full" aria-label="Map editor">
+    <HexSceneEditor scene={scene} map={map} change={change} busy={busy} setMessage={setMessage} />
+    {message && <p role="status">{message}</p>}
+    <p className="text-xs text-marble-400">{dirty ? 'Unsaved changes.' : 'Saved definition.'} Players only see the published version.</p>
+    {saveBar}
+  </section>;
   return <section className="scene-editor scene-editor-full" aria-label="Map editor">
+    {hexCategory && <div role="note" className="scene-legacy-banner">
+      <strong>Old map format.</strong> Battle and region maps now use the Arena hex engine (hex tiles, terrain, mouse-wheel zoom). Convert this map – drawn trees, rocks, water and walls become hex terrain, spawn and locations are kept – or start over with an empty hex map. Nothing is stored until you save.
+      <div className="journal-toolbar"><button className="btn btn-gold" disabled={busy} onClick={() => { change(convertLegacyMap(map), true); setMessage('Converted to a hex map. Check it, then save or publish.'); }}>Convert to hex map</button><button className="btn btn-ghost" disabled={busy} onClick={() => { change(newHexScene(map, 'blank', 8, Math.floor(Math.random() * 100000)), true); setMessage('Started an empty hex map. The old drawing is discarded when you save.'); }}>Replace with empty hex map</button></div>
+    </div>}
     <div className="scene-editor-columns">
     <div className="scene-editor-canvas-panel">
     <p>{scene.category} · {map.interval} movement · {dirty ? 'Unsaved changes' : 'Saved definition'}</p>
-    <div className="journal-toolbar" role="toolbar" aria-label="Map editor tools">{(['select', 'location', 'label', 'spawn', 'wall', 'area'] as const).map(t => <button className="btn btn-ghost" key={t} disabled={playerPreview || busy || !!generatedPreview} aria-pressed={tool === t} onClick={() => setTool(t)}>{t}</button>)}</div>
+    <div className="journal-toolbar" role="toolbar" aria-label="Map editor tools">{(['select', 'location', 'label', 'spawn', 'wall', 'area'] as const).map(t => <button className="btn btn-ghost" key={t} disabled={playerPreview || busy} aria-pressed={tool === t} onClick={() => setTool(t)}>{t}</button>)}</div>
     <p>Choose a tool and click the map. Drag markers to move them. Scroll the map area to pan.</p>
     <label>Zoom <input type="range" min="0.4" max="2" step="0.1" value={zoom} onChange={e => setZoom(Number(e.target.value))} /></label>
     <label><input type="checkbox" checked={playerPreview} onChange={e => setPlayerPreview(e.target.checked)} /> Preview revealed map elements</label>
-    <div className="scene-canvas-scroll scene-canvas-full"><svg ref={svg} role="img" aria-label="Editable scene map" width={map.width * zoom} height={map.height * zoom} viewBox={`0 0 ${map.width} ${map.height}`} onPointerDown={add} onPointerMove={e => { if (dragging.current && !busy && !generatedPreview) { const p = point(e); change({ nodes: map.nodes.map(n => n.id === dragging.current ? { ...n, ...p } : n) }); } }} onPointerUp={() => { dragging.current = null; }} onPointerCancel={() => { dragging.current = null; }}>
+    <div className="scene-canvas-scroll scene-canvas-full"><svg ref={svg} role="img" aria-label="Editable scene map" width={map.width * zoom} height={map.height * zoom} viewBox={`0 0 ${map.width} ${map.height}`} onPointerDown={add} onPointerMove={e => { if (dragging.current && !busy) { const p = point(e); change({ nodes: map.nodes.map(n => n.id === dragging.current ? { ...n, ...p } : n) }); } }} onPointerUp={() => { dragging.current = null; }} onPointerCancel={() => { dragging.current = null; }}>
       <rect width={map.width} height={map.height} fill={scene.category === 'celestial' ? '#101626' : '#302a20'} />
       {backgroundUrl && <image href={backgroundUrl} width={map.width} height={map.height} preserveAspectRatio="none" />}
       <SceneGrid map={map} id={`grid-${scene.id}`} />
-      {generatedPreview && <g pointerEvents="none">{(map.nodes.filter(n => n.kind === 'spawn').length ? map.nodes.filter(n => n.kind === 'spawn') : [{ id: 'center', x: map.width / 2, y: map.height / 2 }]).map(n => <circle key={n.id} cx={n.x} cy={n.y} r={map.cell * 1.6} fill="#63a877" fillOpacity=".12" stroke="#83c998" strokeDasharray="7 6" />)}</g>}
       {map.routes.filter(r => !playerPreview || r.visible).map(r => { const a = visibleNodes.find(n => n.id === r.from), b = visibleNodes.find(n => n.id === r.to); return a && b ? <g key={r.id}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#c9ac70" strokeDasharray="8 6" /><text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fill="#f3e4bd" fontSize="14">{r.hours}h</text></g> : null; })}
-      {visibleNodes.map(n => <g key={n.id} opacity={n.generatedBy ? .78 : 1} onPointerDown={e => { e.stopPropagation(); if (!playerPreview && !busy && !generatedPreview) { setSelected(n.id); dragging.current = n.id; svg.current?.setPointerCapture(e.pointerId); } }}>
-        {n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={n.proceduralFeature === 'water' ? 12 : 3} fill={n.proceduralFeature ? forestFeatureColors[n.proceduralFeature] : n.kind === 'wall' ? '#877566' : '#52664d'} opacity={n.proceduralFeature === 'water' ? .72 : .82} stroke={selected === n.id ? '#fff' : n.generatedBy ? '#a8d8ad' : '#beab80'} strokeDasharray={n.generatedBy ? '4 3' : undefined} /> : <circle cx={n.x} cy={n.y} r={n.kind === 'spawn' ? 11 : 8} fill={n.visible ? '#d9bd76' : '#7a7589'} stroke={selected === n.id ? '#fff' : '#302a20'} strokeWidth="2" />}
-        <text x={n.x + 15} y={n.y + 4} fill="#f5e6c6" fontSize="14">{n.label}{!n.visible && !playerPreview ? ' (hidden)' : ''}{n.generatedBy && generatedPreview ? ' · preview' : ''}</text>
+      {visibleNodes.map(n => <g key={n.id} opacity={n.generatedBy ? .78 : 1} onPointerDown={e => { e.stopPropagation(); if (!playerPreview && !busy) { setSelected(n.id); dragging.current = n.id; svg.current?.setPointerCapture(e.pointerId); } }}>
+        {n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={n.proceduralFeature === 'water' ? 12 : 3} fill={n.proceduralFeature ? legacyFeatureColors[n.proceduralFeature] : n.kind === 'wall' ? '#877566' : '#52664d'} opacity={n.proceduralFeature === 'water' ? .72 : .82} stroke={selected === n.id ? '#fff' : n.generatedBy ? '#a8d8ad' : '#beab80'} strokeDasharray={n.generatedBy ? '4 3' : undefined} /> : <circle cx={n.x} cy={n.y} r={n.kind === 'spawn' ? 11 : 8} fill={n.visible ? '#d9bd76' : '#7a7589'} stroke={selected === n.id ? '#fff' : '#302a20'} strokeWidth="2" />}
+        <text x={n.x + 15} y={n.y + 4} fill="#f5e6c6" fontSize="14">{n.label}{!n.visible && !playerPreview ? ' (hidden)' : ''}</text>
       </g>)}
     </svg></div>
-    {generatedPreview && <div className="scene-generation-actions">
-      <p>{generatedPreview.length} editable features · seed {forestOptions.seed}. Manual objects and clear spawn zones are preserved. Nothing is saved until you apply and save.</p>
-      <button className="btn btn-ghost" disabled={busy} onClick={() => makeForestPreview((forestOptions.seed + 1) >>> 0)}>Regenerate with another seed</button>
-      <button className="btn btn-gold" disabled={busy} onClick={applyForestPreview}>Apply layout</button>
-      <button className="btn btn-ghost" disabled={busy} onClick={() => { setGeneratedPreview(null); setMessage('Forest preview discarded. The map was not changed.'); }}>Discard preview</button>
-    </div>}
     {message && <p role={message.startsWith('This layout') ? 'alert' : 'status'}>{message}</p>}
     </div>
     <aside className="scene-editor-inspector" aria-label="Scene settings and layers">
-    {scene.category === 'battle' && <fieldset disabled={busy || playerPreview} className="scene-generator-panel">
-      <legend>Fill with Content · Forest</legend>
-      <p>Generate editable terrain locally. Manual objects are kept and clear spawn zones remain walkable.</p>
-      <label>Seed <input type="number" min="0" max="4294967295" value={forestOptions.seed} onChange={e => setForestOptions(o => ({ ...o, seed: Number(e.target.value) }))} /></label>
-      <label>Forest density · {forestOptions.forestDensity}% <input type="range" min="0" max="100" value={forestOptions.forestDensity} onChange={e => setForestOptions(o => ({ ...o, forestDensity: Number(e.target.value) }))} /></label>
-      <label>Open ground · {forestOptions.openGroundPercent}% <input type="range" min="0" max="100" value={forestOptions.openGroundPercent} onChange={e => setForestOptions(o => ({ ...o, openGroundPercent: Number(e.target.value) }))} /></label>
-      <label>Rock density · {forestOptions.rockDensity}% <input type="range" min="0" max="100" value={forestOptions.rockDensity} onChange={e => setForestOptions(o => ({ ...o, rockDensity: Number(e.target.value) }))} /></label>
-      <label>Obstacle density · {forestOptions.obstacleDensity}% <input type="range" min="0" max="100" value={forestOptions.obstacleDensity} onChange={e => setForestOptions(o => ({ ...o, obstacleDensity: Number(e.target.value) }))} /></label>
-      <label>Water · {forestOptions.waterPercent}% <input type="range" min="0" max="100" value={forestOptions.waterPercent} onChange={e => setForestOptions(o => ({ ...o, waterPercent: Number(e.target.value) }))} /></label>
-      <div className="scene-editor-actions"><button className="btn btn-gold" disabled={!!generatedPreview} onClick={() => makeForestPreview()}>Preview layout</button><button className="btn btn-ghost" disabled={!undoGeneration} onClick={undoForest}>Undo generation</button></div>
-    </fieldset>}
     {!playerPreview && <section className="scene-layer-panel" aria-label="Layers and objects"><h3 className="panel-title">Layers & objects · {map.nodes.length}</h3>
       {map.nodes.length ? <ul>{map.nodes.map(n => <li key={n.id} className={selected === n.id ? 'is-selected' : ''}><button className="scene-layer-select" aria-pressed={selected === n.id} onClick={() => setSelected(n.id)}>{n.generatedBy ? '✦ ' : ''}{n.label}</button><button className="btn btn-ghost" aria-label={`${n.visible ? 'Hide' : 'Reveal'} ${n.label}`} disabled={busy} onClick={() => change({ nodes: map.nodes.map(item => item.id === n.id ? { ...item, visible: !item.visible } : item) })}>◉</button></li>)}</ul> : <p>No objects yet. Choose a tool and click the map.</p>}
     </section>}
@@ -166,7 +136,7 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
           <label><input type="checkbox" checked={r.visible} onChange={e => change({ routes: map.routes.map(o => o.id === r.id ? { ...o, visible: e.target.checked } : o) })} /> Revealed route</label>
           <button className="btn btn-ghost" onClick={() => change({ routes: map.routes.filter(o => o.id !== r.id) })}>Remove route</button></div>)}
       </fieldset>}
-      <div className="journal-toolbar"><button className="btn btn-ghost" disabled={!dirty} onClick={() => void save()}>Save draft</button><button className="btn btn-gold" onClick={() => void save(true)}>Publish definition</button></div>
+      {saveBar}
     </fieldset>}
     </aside>
     </div>

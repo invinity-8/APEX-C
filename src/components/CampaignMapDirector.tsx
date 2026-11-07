@@ -563,7 +563,7 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
       <div className="game-map" aria-label="Campaign map">
         {banner}
         {shownScene && snapshot ? (
-          <SceneSurface snapshot={snapshot} tokenLabels={markers} onDestination={placeMode ? placeToken : undefined} />
+          <SceneSurface snapshot={snapshot} tokenLabels={markers} tokenViews={game.view.tokens} gm onDestination={placeMode ? placeToken : undefined} />
         ) : mapError ? (
           <p role="alert" className="p-6 text-sm text-red-300">
             {mapError}
@@ -577,5 +577,5 @@ export function useGameDirector({ game, enabled, run }: { game: GameApi; enabled
     );
   };
 
-  return { enabled: true, arenaShown: shown === ARENA_ID, zoomable: shown !== ARENA_ID, widgets: [scenesWidget, playersWidget, toolsWidget], renderMap };
+  return { enabled: true, arenaShown: shown === ARENA_ID, zoomable: shown !== ARENA_ID && !shownScene?.map.hex, widgets: [scenesWidget, playersWidget, toolsWidget], renderMap };
 }

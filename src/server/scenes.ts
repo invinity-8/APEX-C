@@ -1,7 +1,7 @@
 /** Scene preparation is independent of the legacy Arena and character state. */
 import type { AuthUser } from './repo.js';
 import { emptyMap, parseMap } from '../campaign/maps.js';
-import { sceneTemplate } from '../campaign/templates.js';
+import { defaultTemplateFor, sceneTemplate } from '../campaign/templates.js';
 
 export const SCENE_CATEGORIES = ['celestial', 'world', 'region', 'battle'] as const;
 export type SceneCategory = typeof SCENE_CATEGORIES[number];
@@ -111,7 +111,9 @@ export async function sceneRequest(user: AuthUser, method: string, query: Record
       return { status: 400, body: { error: 'Provide a name (1–120 characters) and a valid scene category.' } };
     }
     // Drafts only: this endpoint never activates a scene or changes player assignments.
-    const template = typeof input.template === 'string' ? sceneTemplate(input.template, input.category as string) : null;
+    // Battle and region drafts always start as Arena-style hex maps (a seed per scene keeps them distinct).
+    const templateId = typeof input.template === 'string' && input.template ? input.template : defaultTemplateFor(input.category as string);
+    const template = templateId ? sceneTemplate(templateId, input.category as string, Math.floor(Math.random() * 0xffffffff)) : null;
     if (input.template && !template) return { status: 400, body: { error: 'Template does not match the scene category.' } };
     const scene = await catalog.create(user.campaignId, { name: input.name.trim(), category: input.category as SceneCategory });
     if (template) { const saved = await catalog.update(user.campaignId, scene.id, scene.revision, { metadata: template }); return { status: 201, body: { scene: saved ?? scene } }; }

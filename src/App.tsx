@@ -524,7 +524,7 @@ export default function App({ game }: { game: GameApi }) {
           defaults={defaults}
           storageKey={layoutKey(announceScope, role)}
           center={
-        <MapStage zoomable={director.enabled ? director.zoomable : !!game.scene && game.scene.kind === 'scene'}>
+        <MapStage zoomable={director.enabled ? director.zoomable : !!game.scene && game.scene.kind === 'scene' && !game.scene.scene?.map.hex}>
           {director.enabled ? director.renderMap(arenaNode) : game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> : arenaNode}
         </MapStage>
           }

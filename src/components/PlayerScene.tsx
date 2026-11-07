@@ -66,7 +66,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
       <ol className="mt-2 flex flex-wrap gap-1.5 text-xs">{liveEncounter.participants.map((participant, index) => <li key={participant.id} className={`chip ${liveEncounter.turnIndex === index ? 'border-gold-500 text-gold-200' : ''}`}>{participant.name} · {participant.initiative}</li>)}</ol>
       {!liveTurn && <p className="mt-1 text-xs text-marble-500">The current turn is hidden by the Game Master.</p>}
     </section>}
-    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} onDestination={moveMode ? move : undefined} />
+    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode ? Math.max(0, remaining) : null} onDestination={moveMode ? move : undefined} />
     {category === 'world' && scene.travel && <WorldTravel sceneId={scene.scene.id} sceneRevision={scene.scene.revision} assignmentRevision={scene.assignmentRevision} map={scene.scene.map} travel={scene.travel} onChanged={() => game.online?.refresh()} />}
     <p>The Game Master controls scene transitions and the next movement interval.</p>
   </div>;
