@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoState } from '../src/data/demo';
 import { executeCommand, type Command } from '../src/game/commands';
-import { ARMOR_PRESETS, WEAPON_PRESETS, deriveStats, suggestEquip, EQUIP_SLOTS } from '../src/game/equipment';
+import { ARMOR_PRESETS, WEAPON_PRESETS, deriveStats, previewEquipStats, suggestEquip, EQUIP_SLOTS } from '../src/game/equipment';
 import { emptySheet, type CharacterSheet } from '../src/game/sheet';
 import { parseCommand } from '../src/server/validate';
 import type { GameState } from '../src/game/types';
@@ -43,6 +43,27 @@ function setup() {
 const slotsUsing = (s: GameState, id: string) => EQUIP_SLOTS.filter((k) => s.tokens.sinna.equipment?.slots[k] === id);
 
 describe('equipment rules (server-authoritative)', () => {
+  it('previews the active-slot replacement with authoritative derived stats without mutating inventory', () => {
+    let s = setup();
+    s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'qs', slot: 'main1' });
+    const token = s.tokens.sinna;
+    const before = structuredClone({ inventory: token.inventory, equipment: token.equipment });
+    const preview = previewEquipStats(sheet, token, 'dg');
+    expect(preview).toMatchObject({ slot: 'main1', currentItem: { id: 'qs', name: 'Quarterstaff' }, candidateItem: { id: 'dg', name: 'Dagger' } });
+    if (!('slot' in preview)) return;
+    expect(preview.current.attacks.find((attack) => attack.slot === 'main1')).toMatchObject({ name: 'Quarterstaff', toHit: 2, damage: '1d6 bludgeoning' });
+    expect(preview.candidate.attacks.find((attack) => attack.slot === 'main1')).toMatchObject({ name: 'Dagger', toHit: 2, damage: '1d4 piercing' });
+    expect({ inventory: token.inventory, equipment: token.equipment }).toEqual(before);
+  });
+
+  it('does not disclose unidentified modifiers through an equipment comparison', () => {
+    const s = setup();
+    const hidden = { ...s.tokens.sinna.inventory.find((item) => item.id === 'dg')!, id: 'hidden-dagger', identified: false, mods: [{ modId: 'to-hit', tier: 1, value: 1 }] };
+    s.tokens.sinna.inventory.push(hidden);
+    expect(previewEquipStats(sheet, s.tokens.sinna, hidden.id)).toEqual({ reason: 'Identify this item to compare its hidden modifiers.' });
+    expect(JSON.stringify(previewEquipStats(sheet, s.tokens.sinna, hidden.id))).not.toContain('to-hit');
+  });
+
   it('equips armour + shield: derived AC 16 matches the imported AC with an explanation', () => {
     let s = setup();
     expect(deriveStats(sheet, s.tokens.sinna).ac).toMatchObject({ value: 16, source: 'imported' });

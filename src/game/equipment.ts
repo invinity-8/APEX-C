@@ -483,6 +483,58 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
   return { ac, attacks, bonuses, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
 }
 
+export interface EquipmentPreview {
+  slot: EquipSlot;
+  currentItem: Item | null;
+  candidateItem: Item;
+  current: DerivedStats;
+  candidate: DerivedStats;
+}
+
+/** Compute an equip comparison locally through the same slot and derived-stat rules as the live character sheet. */
+export function previewEquipStats(
+  sheet: CharacterSheet,
+  token: Pick<Token, 'inventory' | 'equipment' | 'armorWornAt'>,
+  itemId: string,
+  rules: ItemRules = DEFAULT_ITEM_RULES,
+  nowMs = Date.now(),
+): EquipmentPreview | { reason: string } {
+  const item = token.inventory.find((candidate) => candidate.id === itemId);
+  if (!item) return { reason: 'This item is no longer in the inventory.' };
+  if (!item.equip) return { reason: 'This item has no equipment properties.' };
+  if (item.identified === false) return { reason: 'Identify this item to compare its hidden modifiers.' };
+  const equipment = equipmentOf(token);
+  if (slotOfItem(equipment, itemId)) return { reason: 'This item is already equipped.' };
+  const activeSet = equipment.activeSet;
+  const handSlots: EquipSlot[] = activeSet === 1 ? ['main1', 'off1'] : ['main2', 'off2'];
+  const preferredSlots: EquipSlot[] = item.equip.kind === 'weapon' || item.equip.kind === 'focus'
+    ? handSlots
+    : item.equip.kind === 'shield' ? [handSlots[1]]
+      : item.equip.kind === 'armor' ? ['chest']
+        : item.equip.kind === 'ring' ? ['ring1', 'ring2']
+          : [item.equip.kind];
+  const occupiedSlot = preferredSlots.find((candidateSlot) => activeSlots(equipment).includes(candidateSlot) && equipment.slots[candidateSlot] && token.inventory.find((candidate) => candidate.id === equipment.slots[candidateSlot])?.equip?.kind === item.equip?.kind);
+  const slot = occupiedSlot ?? suggestSlot(equipment, item);
+  if (!slot) return { reason: 'There is no compatible active equipment slot for this item.' };
+
+  const current = deriveStats(sheet, token, rules, nowMs);
+  const trial = {
+    inventory: structuredClone(token.inventory),
+    equipment: structuredClone(equipment),
+    armorWornAt: token.armorWornAt,
+  } as Token;
+  const error = equipItem(trial, itemId, slot);
+  if (error) return { reason: error === 'twoHandedOff' ? 'This weapon does not fit the active hand slot.' : 'This item cannot be equipped in a matching active slot.' };
+  const currentItemId = equipment.slots[slot];
+  return {
+    slot,
+    currentItem: currentItemId ? token.inventory.find((candidate) => candidate.id === currentItemId) ?? null : null,
+    candidateItem: item,
+    current,
+    candidate: deriveStats(sheet, trial, rules, nowMs),
+  };
+}
+
 export const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 /** One-click equip from the inventory: a fitting slot of the ACTIVE weapon set, free slots first. */
