@@ -87,8 +87,10 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
       if (character) snapshot.viewer = { tokenId: character.id, name: character.name, color: character.color };
       return { status: 200, body: snapshot };
     }
-    const assignments = await repo.sceneRuntime.assignments(user.campaignId);
-    const players = profiles.slice(0, 100).map(p => { const a = assignments.find(a => a.user_id === p.userId); return { userId: p.userId, name: p.displayName, tokenIds: p.tokenIds, sceneId: a?.scene_id ?? null, revision: a?.revision ?? 0, inheritedArena: false }; });
+    const [assignments, members] = await Promise.all([repo.sceneRuntime.assignments(user.campaignId), repo.members(user.campaignId)]);
+    // Only campaign members can be assigned (apex_assign_scene joins apex_campaign_members). A player
+    // profile that never signed in is listed, but marked so the GM is not offered a transfer that must fail.
+    const players = profiles.slice(0, 100).map(p => { const a = assignments.find(a => a.user_id === p.userId); return { userId: p.userId, name: p.displayName, tokenIds: p.tokenIds, sceneId: a?.scene_id ?? null, revision: a?.revision ?? 0, inheritedArena: false, joined: members.some(m => m.userId === p.userId && m.role === 'player') }; });
     return { status: 200, body: { players } };
   }
   if (method !== 'POST') return { status: 405, body: { error: 'Method not allowed.' } };

@@ -30,7 +30,8 @@ import { MerchantShop } from './components/Merchant';
 import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
 import { SceneDirector } from './components/SceneDirector';
-import { CampaignMapDirector } from './components/CampaignMapDirector';
+import { useGameDirector } from './components/CampaignMapDirector';
+import { MapStage } from './components/map/MapStage';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 
@@ -227,11 +228,16 @@ export default function App({ game }: { game: GameApi }) {
   // Widgets render lazily (only while expanded); stable ids keep open widgets mounted.
   // APEX 0.7 consolidation: related panels share one widget (tabs inside); pages that have a navigation tab
   // (Character, Inventory, Arsenal, Feedback, Merchant) are not duplicated as widgets.
+  // Game: scene selection, player locations and scene tools are ordinary widgets (GM online).
+  const director = useGameDirector({ game, enabled: isGm && !!game.online, run });
+  // Arena tools only appear while the Arena is on the table; their placement is kept meanwhile.
+  const arenaOff = isGm ? director.enabled && !director.arenaShown : !!game.scene && game.scene.kind !== 'arena';
   const widgets: WidgetDef[] = [];
   if (isGm && state) {
     const partyFocus = selectedToken?.kind === 'player' ? selectedToken : (playerTokens[0] ?? null);
     widgets.push(
-      { id: 'gm-control', title: 'Arena & Rules', icon: '⚜', render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} /> },
+      ...director.widgets,
+      { id: 'gm-control', title: 'Arena & Rules', icon: '⚜', inactive: arenaOff, render: () => <ArenaTab state={state} run={run} showPartyFog={showPartyFog} setShowPartyFog={setShowPartyFog} onRegenerate={regenerate} worldManaged={!!game.online} /> },
       {
         id: 'party',
         title: 'Party',
@@ -246,11 +252,12 @@ export default function App({ game }: { game: GameApi }) {
           />
         ),
       },
-      { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
+      { id: 'selection', title: 'Selection', icon: '◎', inactive: arenaOff, render: () => selectionPanel },
       {
         id: 'events',
         title: 'Events & Announcements',
         icon: '⚡',
+        inactive: arenaOff,
         badge: awaitingCount,
         render: () => (
           <WidgetTabs
@@ -266,6 +273,7 @@ export default function App({ game }: { game: GameApi }) {
         id: 'rivals',
         title: 'Rivals & Sites',
         icon: '⚔',
+        inactive: arenaOff,
         render: () => (
           <WidgetTabs
             id="gm-rivals"
@@ -288,7 +296,6 @@ export default function App({ game }: { game: GameApi }) {
             id="gm-campaign"
             tabs={[
               { id: 'world', label: 'Worlds', render: () => <WorldPanel state={state} online={online} notify={notify} pending={game.pending.includes('world')} /> },
-              { id: 'scenes', label: 'Scenes', render: () => <SceneQuickAccess open={() => setScreen('scenes')} /> },
               { id: 'players', label: 'Players & access', render: () => <PlayersPanel state={state} online={online} notify={notify} /> },
             ]}
           />
@@ -324,7 +331,7 @@ export default function App({ game }: { game: GameApi }) {
           />
         ),
       },
-      { id: 'selection', title: 'Selection', icon: '◎', render: () => selectionPanel },
+      { id: 'selection', title: 'Selection', icon: '◎', inactive: arenaOff, render: () => selectionPanel },
     );
   }
   widgets.push(
@@ -348,12 +355,47 @@ export default function App({ game }: { game: GameApi }) {
   const defaults = useMemo(
     () =>
       role === 'gm'
-        ? defaultLayout({ right: ['gm-control', 'party', 'selection', 'events', 'rivals', 'campaign', 'legend'], bottom: ['chronicle'] }, ['rivals', 'campaign'], ['legend'])
+        ? defaultLayout({ right: ['game-scenes', 'game-players', 'game-scene-tools', 'gm-control', 'party', 'selection', 'events', 'rivals', 'campaign', 'legend'], bottom: ['chronicle'] }, ['rivals', 'campaign'], ['legend'])
         : defaultLayout({ right: ['me', 'party', 'selection', 'journal', 'legend'], bottom: ['chronicle'] }, ['journal'], ['legend']),
     [role],
   );
 
   const myToken = view.tokens.find((t) => t.id === view.viewerId) ?? null;
+  const arenaNode = (
+        <>
+          <ArenaMap
+            mapRef={mapRef}
+            view={view}
+            selectedTokenId={selectedTokenId}
+            selectedHex={selectedHex}
+            reach={reach}
+            fullReach={fullReach}
+            explain={explain}
+            placeMode={placeMode}
+            overlayFog={partyFog}
+            hiddenTeamIds={hiddenTeamIds}
+            onHexClick={onHexClick}
+            onTokenClick={onTokenClick}
+          />
+          {!isGm && (
+            <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-arcane-500/50 bg-ink-900/90 px-3 py-1 text-[11px] text-arcane-300">
+              Playing as {view.tokens.find((t) => t.id === view.viewerId)?.name}
+            </div>
+          )}
+          {!isGm && <MovementPill token={view.tokens.find((t) => t.id === view.viewerId) ?? null} />}
+          {toast && (
+            <div
+              key={toast.id}
+              role="status"
+              className={`absolute top-12 left-1/2 z-30 max-w-[90%] -translate-x-1/2 rounded-lg border px-4 py-2 text-sm shadow-2xl ${
+                toast.kind === 'error' ? 'border-blood-400/60 bg-blood-600/90 text-white' : 'border-gold-400/50 bg-ink-900/95 text-gold-200'
+              }`}
+            >
+              {toast.text}
+            </div>
+          )}
+        </>
+  );
   const tabs: Array<{ id: View; label: string }> = [
     { id: 'map', label: '🗺 Game' },
     ...(isGm && game.online ? [{ id: 'scenes' as View, label: '🧭 Scenes' }] : []),
@@ -454,7 +496,7 @@ export default function App({ game }: { game: GameApi }) {
           ) : screen === 'feedback' && isGm && game.online ? (
             <FeedbackInbox online={game.online} notify={notify} />
           ) : screen === 'scenes' && isGm && game.online ? (
-            <SceneDirector version={game.online.version} campaignId={game.online.campaignId} />
+            <SceneDirector />
           ) : screen === 'arsenal' && isGm && state ? (
             <ArsenalPanel state={state} run={run} />
           ) : screen === 'merchant' && !isGm && view.merchant && myToken ? (
@@ -482,54 +524,14 @@ export default function App({ game }: { game: GameApi }) {
           defaults={defaults}
           storageKey={layoutKey(announceScope, role)}
           center={
-        <CampaignMapDirector game={game} enabled={isGm && !!game.online} openScenes={() => setScreen('scenes')} run={run}>
-          {game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> :
-        <>
-          <ArenaMap
-            mapRef={mapRef}
-            view={view}
-            selectedTokenId={selectedTokenId}
-            selectedHex={selectedHex}
-            reach={reach}
-            fullReach={fullReach}
-            explain={explain}
-            placeMode={placeMode}
-            overlayFog={partyFog}
-            hiddenTeamIds={hiddenTeamIds}
-            onHexClick={onHexClick}
-            onTokenClick={onTokenClick}
-          />
-          {!isGm && (
-            <div className="pointer-events-none absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-arcane-500/50 bg-ink-900/90 px-3 py-1 text-[11px] text-arcane-300">
-              Playing as {view.tokens.find((t) => t.id === view.viewerId)?.name}
-            </div>
-          )}
-          {!isGm && <MovementPill token={view.tokens.find((t) => t.id === view.viewerId) ?? null} />}
-          {toast && (
-            <div
-              key={toast.id}
-              role="status"
-              className={`absolute top-12 left-1/2 z-30 max-w-[90%] -translate-x-1/2 rounded-lg border px-4 py-2 text-sm shadow-2xl ${
-                toast.kind === 'error' ? 'border-blood-400/60 bg-blood-600/90 text-white' : 'border-gold-400/50 bg-ink-900/95 text-gold-200'
-              }`}
-            >
-              {toast.text}
-            </div>
-          )}
-        </>}
-        </CampaignMapDirector>
+        <MapStage zoomable={director.enabled ? director.zoomable : !!game.scene && game.scene.kind === 'scene'}>
+          {director.enabled ? director.renderMap(arenaNode) : game.scene && game.scene.kind !== 'arena' ? <PlayerScene game={game} open={setScreen} /> : arenaNode}
+        </MapStage>
           }
         />
       </div>
     </div>
   );
-}
-
-function SceneQuickAccess({ open }: { open: () => void }) {
-  return <div className="space-y-2">
-    <p className="text-xs text-marble-400">Browse, edit and privately preview campaign scenes in the full workspace.</p>
-    <button className="btn btn-gold w-full" onClick={open}>Open Full View</button>
-  </div>;
 }
 
 /** Players: compact daily-movement indicator at the bottom of the map (the gold reach area stays primary). */

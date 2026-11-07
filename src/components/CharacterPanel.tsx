@@ -24,6 +24,7 @@ import { CosmeticsPicker, CosmeticTitle, DecoratedPortrait, cosmeticCardStyle } 
 import { Bar } from './ui';
 
 const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m.SheetImport })));
+const SpellImport = lazy(() => import('./SpellImport').then((m) => ({ default: m.SpellImport })));
 
 // APEX 0.7 consolidation: equipment and inventory live together on the Inventory page
 type Tab = 'overview' | 'attributes' | 'abilities' | 'spells' | 'resources' | 'appearance' | 'notes' | 'history';
@@ -83,6 +84,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const [castingSpellId, setCastingSpellId] = useState<string | null>(null);
   const [, forceSpellExpiryRefresh] = useState(0);
   const [importing, setImporting] = useState(false);
+  const [importingSpells, setImportingSpells] = useState(false);
   const details = token.details;
 
   const load = useCallback(async () => {
@@ -416,7 +418,14 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
       {tab === 'spells' && (
         <div className="space-y-3" aria-label="Full spellbook">
           <section className="panel p-3">
-            <h2 className="font-display text-2xl font-black text-gold-200">Spellbook</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-2xl font-black text-gold-200">Spellbook</h2>
+              {!editing && (
+                <button className="btn btn-ghost" onClick={() => setImportingSpells(true)} disabled={!data}>
+                  ⤒ Import Spells
+                </button>
+              )}
+            </div>
             <p className="mt-1 text-xs text-marble-400">Known and prepared spells are recorded here. Supported cast actions spend a matching slot and update the character’s effects.</p>
             {build && <p className="mt-1 text-xs text-marble-500">Character: {build}</p>}
             {mageArmorEffect && <p className="mt-1 text-xs text-emerald-300">Mage Armor active until {new Date(mageArmorEffect.expiresAt).toLocaleString()}.</p>}
@@ -527,6 +536,26 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
             </details>
           )}
         </div>
+      )}
+
+      {importingSpells && data && (
+        <Suspense fallback={null}>
+          <SpellImport
+            characterName={token.name}
+            existing={data.sheet.spells}
+            onClose={() => setImportingSpells(false)}
+            onSave={async (spells) => {
+              const r = await sheets.ability(token.id, { action: 'importSpells', spells, expectedVersion: data.version });
+              if (r.ok) {
+                setData(r.sheet);
+                notify(r.sheet.message ?? 'Spells imported.', 'info');
+                return null;
+              }
+              if (r.conflict) setData(r.conflict);
+              return r.error;
+            }}
+          />
+        </Suspense>
       )}
 
       {importing && data && (

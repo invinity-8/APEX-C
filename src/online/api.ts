@@ -87,7 +87,7 @@ export const api = {
   sceneFocus: (sceneId: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { focus: sceneId }),
   mapImage: (id: string, thumbnail = false) => request<{ url: string; expiresIn: number }>('GET', 'scene-assets', { id, thumbnail: thumbnail ? '1' : undefined }),
   mapUpload: (sceneId: string, audience: 'gm' | 'players', image: string, thumbnail: string) => request<{ id: string; width: number; height: number }>('POST', 'scene-assets', {}, { sceneId, audience, image, thumbnail }, { timeoutMs: 30_000 }),
-  scenePlayers: () => request<{ players: { userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean }[] }>('GET', 'scene-runtime'),
+  scenePlayers: () => request<{ players: { userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean; joined?: boolean }[] }>('GET', 'scene-runtime'),
   sceneMotionState: (sceneId: string, tokenId: string) => request<import('../server/sceneMotion').MotionSnapshot>('GET', 'scene-motion', { sceneId, tokenId }),
   sceneAssign: (sceneId: string | null, targets: { userId: string; revision: number }[], requestId: string) => request<{ ok: boolean; error?: string }>('POST', 'scene-runtime', {}, { sceneId, targets, requestId }),
   sceneAction: (id: string, revision: number, action: string, fields: Record<string, unknown> = {}) => request<{ scene: import('../server/scenes').SceneDefinition }>('POST', 'scenes', {}, { ...fields, id, revision, action }),
