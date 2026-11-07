@@ -1,5 +1,5 @@
 /**
- * Character dashboard (APEX 0.4). The full Spellbook is owned by the top-level Spells page.
+ * Character dashboard (APEX 0.4). The full Spellbook lives inside Character.
  * Character focuses on overview, attributes, abilities, resources, appearance and notes.
  *
  * - APEX resources (Will, movement, vision, inventory) come from the authoritative game state.
@@ -31,6 +31,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
   { id: 'abilities', label: 'Abilities & Features' },
+  { id: 'spells', label: 'Spells' },
   { id: 'resources', label: 'Resources' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
