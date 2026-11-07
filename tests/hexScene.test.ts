@@ -9,7 +9,6 @@ import {
   classifyColour,
   convertLegacyMap,
   decodeTerrain,
-  encodeTerrain,
   encodeTiles,
   generateHexScene,
   hexAt,

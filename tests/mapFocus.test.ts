@@ -52,7 +52,7 @@ function repoFor(scenePatch: Partial<RuntimeScene> | null) {
 
 describe('GM published scene focus', () => {
   it('loads only the published map and positions for characters already assigned there', async () => {
-    const { repo, map, motion } = repoFor({});
+    const { repo, map } = repoFor({});
     const result = await runtimeRequest(gm, 'GET', { focus: sceneId }, undefined, repo);
     expect(result.status).toBe(200);
     expect(result.body).toMatchObject({ kind: 'scene', scene: { id: sceneId, name: 'Forest', revision: 5, map }, motion: { tokens: [{ tokenId: 'token-1', x: 100, y: 100, version: 4 }] }, clock: { day: 1, phase: 'day' } });

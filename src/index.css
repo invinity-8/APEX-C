@@ -473,3 +473,14 @@
 .hex-palette button[aria-checked=true] { border-color: #d8b56f; background: #c09b5833; color: #f3e1b4; font-weight: 700; }
 .hex-brush-size { display: inline-flex !important; align-items: center; gap: .3rem; font-size: .72rem; margin: 0 0 0 .4rem !important; }
 .scene-legacy-banner { margin-bottom: .8rem; padding: .7rem .9rem; border: 1px solid rgba(216,181,111,.6); border-radius: .5rem; background: rgba(60,46,20,.6); color: #ecd9a9; font-size: .82rem; }
+
+/* Initiative bar (battle maps): portraits in turn order, the active turn highlighted. */
+.initiative-bar { display: flex; align-items: center; gap: .6rem; margin: 0 0 .5rem; padding: .35rem .6rem; border: 1px solid rgba(192,155,88,.45); border-radius: .6rem; background: rgba(14,17,22,.92); overflow-x: auto; }
+.initiative-round { flex: 0 0 auto; font: 700 .72rem/1 Georgia, serif; letter-spacing: .08em; text-transform: uppercase; color: #dfc58a; }
+.initiative-bar ol { display: flex; gap: .45rem; }
+.initiative-bar li { position: relative; display: grid; justify-items: center; gap: .1rem; padding: .25rem .35rem; border: 1px solid transparent; border-radius: .5rem; opacity: .72; min-width: 3.4rem; }
+.initiative-bar li[aria-current=true] { opacity: 1; border-color: #e8c66f; background: rgba(192,155,88,.18); box-shadow: 0 0 12px rgba(232,198,111,.35); }
+.initiative-bar li.is-mine small { color: #9fe2b0; }
+.initiative-bar small { font-size: .62rem; color: #e6d8bc; max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.initiative-bar em { position: absolute; top: .1rem; right: .15rem; font: 700 .58rem/1 sans-serif; font-style: normal; color: #f3e1b4; background: #2a2418; border-radius: .3rem; padding: .1rem .2rem; }
+.initiative-npc { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; background: #3b2626; color: #f2c9c9; font-weight: 700; font-size: .8rem; }

@@ -6,7 +6,12 @@
 import { useState } from 'react';
 import type { MapNode, SceneMap } from '../campaign/maps';
 import {
-  HEX_PRESETS,
+  PRESETS,
+  TILESETS,
+  convertToBattleTiles,
+  generateBattleScene,
+  tileSetOf,
+  type TileId,
   MAX_HEX_RADIUS,
   MIN_HEX_RADIUS,
   generateHexScene,
@@ -22,12 +27,11 @@ import {
 } from '../campaign/hexScene';
 import { loadPictureForSampling } from '../campaign/pictureSampling';
 import { hexKey, parseKey, type HexKey } from '../game/hex';
-import { TERRAIN, TERRAIN_ORDER, type TerrainType } from '../game/terrain';
 import type { SceneDefinition } from '../server/scenes';
 import { HexSceneMap } from './map/HexSceneMap';
 
-type Tool = 'brush' | 'select' | 'spawn' | 'location' | 'label';
-const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label' };
+type Tool = 'brush' | 'select' | 'spawn' | 'location' | 'label' | 'light';
+const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light' };
 
 export function HexSceneEditor({
   scene,
@@ -43,7 +47,10 @@ export function HexSceneEditor({
   setMessage: (m: string) => void;
 }) {
   const [tool, setTool] = useState<Tool>('brush');
-  const [terrain, setTerrain] = useState<TerrainType>('forest');
+  const set = tileSetOf(map.hex);
+  const battleScene = scene.category === 'battle';
+  const [terrain, setTerrain] = useState<TileId>(set === 'battle' ? 'wall' : 'forest');
+  const palette = TILESETS[set];
   const [brush, setBrush] = useState<0 | 1>(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [preset, setPreset] = useState<HexPreset>('forest');
@@ -68,7 +75,7 @@ export function HexSceneEditor({
     const at = map.nodes.find((n) => hexKey(hexAt(map, n)) === key);
     if (tool === 'select') return setSelected(at?.id ?? null);
     if (tool === 'brush') return;
-    if (!passable(map, parseKey(key)) && tool !== 'label') return setMessage(`Impassable hexes cannot hold a ${tool}. Paint passable terrain first.`);
+    if (!passable(map, parseKey(key)) && tool !== 'label' && tool !== 'light') return setMessage(`Impassable hexes cannot hold a ${tool}. Paint passable terrain first.`);
     const p = hexCentre(map, parseKey(key));
     if (tool === 'spawn') {
       const spawn = map.nodes.find((n) => n.kind === 'spawn');
@@ -78,15 +85,15 @@ export function HexSceneEditor({
         return setMessage('Spawn moved. Players arrive here when they are sent to this scene.');
       }
     }
-    const n: MapNode = { id: crypto.randomUUID(), ...p, label: tool === 'spawn' ? 'Arrival' : tool === 'location' ? 'New location' : 'Label', kind: tool, visible: tool !== 'spawn', width: 50, height: 50, description: '', targetScene: null };
+    const n: MapNode = { id: crypto.randomUUID(), ...p, label: tool === 'spawn' ? 'Arrival' : tool === 'location' ? 'New location' : tool === 'light' ? 'Torch' : 'Label', kind: tool, visible: tool !== 'spawn', width: 50, height: 50, description: '', targetScene: null, ...(tool === 'light' ? { lightFt: 30 } : {}) };
     change({ nodes: [...map.nodes, n] });
     setSelected(n.id);
     setTool('select');
   }
   function generate() {
     setUndo(map);
-    change(replaceTerrain(map, generateHexScene(preset, radius, seed)), true);
-    setMessage(`Generated “${HEX_PRESETS.find((p) => p.id === preset)?.label}” with seed ${seed}. Markers were kept. Save the draft to keep it.`);
+    change(replaceTerrain(map, set === 'battle' ? generateBattleScene(preset, radius, seed) : generateHexScene(preset, radius, seed)), true);
+    setMessage(`Generated “${PRESETS[set].find((p) => p.id === preset)?.label}” with seed ${seed}. Markers were kept. Save the draft to keep it.`);
   }
   async function importPicture(file?: File) {
     if (!file) return;
@@ -94,10 +101,10 @@ export function HexSceneEditor({
     setMessage('Reading the picture…');
     try {
       const picture = await loadPictureForSampling(file);
-      const data = sampleImageToHex(picture.pixels, picture.width, picture.height, importRadius, crop);
+      const data = sampleImageToHex(picture.pixels, picture.width, picture.height, importRadius, crop, set);
       setUndo(map);
       change(replaceTerrain(map, data), true);
-      setMessage(`${file.name} was sampled into ${data.terrain.replace(/\./g, '').length} hexes (radius ${data.radius}). Colours are matched to the nearest Arena terrain – paint corrections with the brush, then save.`);
+      setMessage(`${file.name} was sampled into ${data.terrain.replace(/\./g, '').length} hexes (radius ${data.radius}). Colours are matched to the nearest ${set === 'battle' ? '5-ft tile' : 'Arena terrain'} – paint corrections with the brush, then save.`);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -105,14 +112,26 @@ export function HexSceneEditor({
     }
   }
 
+  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => t !== 'light' || set === 'battle');
   return (
+    <>
+    {battleScene && set !== 'battle' && (
+      <div role="note" className="scene-legacy-banner">
+        <strong>Overview-scale terrain.</strong> This battle map still uses the Arena's overview tiles (mountains, forests). Battle maps now use 5-ft tiles – walls, single trees, boulders, floors – where line of sight matters.
+        <div className="journal-toolbar">
+          <button type="button" className="btn btn-gold" disabled={busy} onClick={() => (change(convertToBattleTiles(map, seed), true), setTerrain('wall'), setMessage('Converted to 5-ft battle tiles: mountains became walls, forests single trees and undergrowth. Check, then save.'))}>
+            Convert to 5-ft battle tiles
+          </button>
+        </div>
+      </div>
+    )}
     <div className="scene-editor-columns">
       <div className="scene-editor-canvas-panel">
         <p>
           {scene.category} · Arena hex engine · {map.unitsPerCell} {map.unit} per hex
         </p>
         <div className="journal-toolbar" role="toolbar" aria-label="Hex map tools">
-          {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => (
+          {visibleTools.map((t) => (
             <button key={t} type="button" className="btn btn-ghost" aria-pressed={tool === t} disabled={busy} onClick={() => setTool(t)}>
               {TOOL_LABEL[t]}
             </button>
@@ -120,10 +139,10 @@ export function HexSceneEditor({
         </div>
         {tool === 'brush' && (
           <div className="hex-palette" role="radiogroup" aria-label="Terrain">
-            {TERRAIN_ORDER.map((t) => (
-              <button key={t} type="button" role="radio" aria-checked={terrain === t} title={`${TERRAIN[t].label} – ${TERRAIN[t].cost === null ? 'impassable' : `cost ${TERRAIN[t].cost}`}`} onClick={() => setTerrain(t)}>
-                <span style={{ background: TERRAIN[t].fill }} />
-                {TERRAIN[t].label}
+            {palette.map((t) => (
+              <button key={t.id} type="button" role="radio" aria-checked={terrain === t.id} title={`${t.label} – ${t.cost === null ? 'impassable' : `cost ×${t.cost}`}${t.blocksSight ? ', blocks sight' : ''}`} onClick={() => setTerrain(t.id)}>
+                <span style={{ background: t.fill }} />
+                {t.label}
               </button>
             ))}
             <label className="hex-brush-size">
@@ -142,7 +161,7 @@ export function HexSceneEditor({
           <label>
             Style{' '}
             <select value={preset} onChange={(e) => setPreset(e.target.value as HexPreset)}>
-              {HEX_PRESETS.map((p) => (
+              {PRESETS[set].map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>
@@ -183,9 +202,9 @@ export function HexSceneEditor({
             Hex radius · {radius} ({3 * radius * (radius + 1) + 1} hexes){' '}
             <input type="range" min={MIN_HEX_RADIUS} max={MAX_HEX_RADIUS} value={radius} onChange={(e) => change(resizeHexScene(map, Number(e.target.value)), true)} />
           </label>
-          <label>
-            {map.unit} per hex <input type="number" min="0.01" max="10000" step="0.01" value={map.unitsPerCell} onChange={(e) => change({ unitsPerCell: Number(e.target.value) })} />
-          </label>
+          <p className="text-xs text-marble-400">
+            Scale: {set === 'battle' ? '1 hex = 5 ft (one square in 5e).' : '1 hex = 3 miles · 8 hexes per day at speed 30 (Arena scale).'}
+          </p>
           <label>
             GM notes <textarea maxLength={20000} value={map.gmNotes} onChange={(e) => change({ gmNotes: e.target.value })} />
           </label>
@@ -197,7 +216,7 @@ export function HexSceneEditor({
               {map.nodes.map((n) => (
                 <li key={n.id} className={selected === n.id ? 'is-selected' : ''}>
                   <button type="button" className="scene-layer-select" aria-pressed={selected === n.id} onClick={() => setSelected(n.id)}>
-                    {n.kind === 'spawn' ? '⇣ ' : n.kind === 'label' ? '✎ ' : '◆ '}
+                    {n.kind === 'spawn' ? '⇣ ' : n.kind === 'label' ? '✎ ' : n.kind === 'light' ? '🔥 ' : '◆ '}
                     {n.label}
                   </button>
                 </li>
@@ -216,6 +235,11 @@ export function HexSceneEditor({
             <label>
               Description <textarea maxLength={2000} value={current.description} onChange={(e) => nodeChange({ description: e.target.value })} />
             </label>
+            {current.kind === 'light' && (
+              <label>
+                Light radius · {current.lightFt ?? 30} ft <input type="range" min="10" max="60" step="5" value={current.lightFt ?? 30} onChange={(e) => nodeChange({ lightFt: Number(e.target.value) })} />
+              </label>
+            )}
             {current.kind !== 'spawn' && (
               <>
                 <label>
@@ -243,5 +267,6 @@ export function HexSceneEditor({
         )}
       </aside>
     </div>
+    </>
   );
 }
