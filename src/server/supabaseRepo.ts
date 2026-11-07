@@ -179,6 +179,10 @@ export class SupabaseRepo implements Repo {
       if (error) throw new Error(`scene motion: ${error.message}`);
       return data as import('./sceneMotion.js').LocalMotionSnapshot;
     },
+    rememberVision: async (campaignId, sceneId, userId, seen) => {
+      const { error } = await this.db.rpc('apex_remember_scene_vision', { p_campaign: campaignId, p_scene: sceneId, p_user: userId, p_seen: seen });
+      if (error) throw new Error(`scene vision: ${error.message}`);
+    },
     localWrite: async (user, input, cost, allowance, epoch, discovered, seen) => {
       const { data, error } = await this.db.rpc('apex_write_scene_motion_v2', { p_campaign: user.campaignId, p_actor: user.id, p_input: input, p_cost: cost, p_allowance: allowance, p_epoch: epoch, p_discovered: discovered, p_seen: seen });
       if (error) throw new Error(`scene move: ${error.message}`);

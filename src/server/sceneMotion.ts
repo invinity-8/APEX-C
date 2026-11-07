@@ -12,6 +12,8 @@ export interface LocalMotionSnapshot { tokens: LedgerPosition[]; known: MapNode[
 export interface SceneMotion {
   snapshot(campaignId: string, sceneId: string, userId: string, tokenIds: string[]): Promise<MotionSnapshot>;
   localSnapshot(campaignId: string, sceneId: string, userId: string, tokenIds: string[]): Promise<LocalMotionSnapshot>;
+  /** Merge hexes into a player's remembered view of a scene (no movement). */
+  rememberVision(campaignId: string, sceneId: string, userId: string, seen: string[]): Promise<void>;
   localWrite(user: AuthUser, input: Record<string, unknown>, cost: number, allowance: number, epoch: string, discovered: MapNode[], seen: string[]): Promise<{ ok: boolean; error?: string }>;
   write(user: AuthUser, input: Record<string, unknown>, cost: number, discovered: MapNode[]): Promise<{ ok: boolean; error?: string }>;
   advance(user: AuthUser, interval: 'round' | 'hour', expected: number, requestId: string): Promise<{ ok: boolean; error?: string }>;

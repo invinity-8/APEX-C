@@ -11,12 +11,14 @@ import { FeedbackButton } from './Feedback';
 interface Props {
   game: GameApi;
   onAdvancePhase: () => void;
+  /** The Arena clock (phase, shrinking, Begin Night/Day) is shown only while the Arena is on the table. */
+  arenaClock?: boolean;
   notify: (msg: string, kind?: 'error' | 'info') => void;
   /** Current UI area (for feedback reports). */
   area?: string;
 }
 
-export function Header({ game, onAdvancePhase, notify, area = 'Map' }: Props) {
+export function Header({ game, onAdvancePhase, notify, area = 'Map', arenaClock = true }: Props) {
   const { view, gmState, demo, online } = game;
   const fileRef = useRef<HTMLInputElement>(null);
   const [pwOpen, setPwOpen] = useState(false);
@@ -41,7 +43,8 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map' }: Props) {
         </div>
       </div>
 
-      {/* Time of day */}
+      {/* Time of day (Arena only – scenes keep their own clock in Scene tools) */}
+      {arenaClock && <>
       <div
         className={`flex items-center gap-3 rounded-xl border px-3 py-1.5 transition-colors duration-700 ${
           night ? 'border-arcane-500/50 bg-[#141433]' : 'border-gold-700/50 bg-ink-850'
@@ -77,6 +80,7 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map' }: Props) {
           ⏳ The Game Master controls time
         </span>
       )}
+      </>}
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {game.busy && (

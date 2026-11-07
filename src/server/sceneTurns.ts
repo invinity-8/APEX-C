@@ -11,7 +11,8 @@ import { endInitiative, endTurn, initiativeBonus, joinInitiative, setClock, type
 import type { GameState } from '../game/types.js';
 import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
-import { sheetOf } from './sceneLocal.js';
+import { clockFor, sheetOf, visionFor } from './sceneLocal.js';
+import { parseMap } from '../campaign/maps.js';
 import type { SceneResult } from './scenes.js';
 
 const uuid = (x: unknown): x is string => typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x);
@@ -44,6 +45,27 @@ async function rollFor(user: AuthUser, repo: Repo, sceneId: string, userIds?: st
     out.push({ tokenId: id, name: token.name, roll: d20(), bonus: initiativeBonus(await sheetOf(ctx, id)) });
   }
   return out;
+}
+
+/**
+ * Stores what every player on the scene sees right now (arrival, or before light/time changes), so
+ * the remembered map does not depend on having moved.
+ */
+export async function rememberCurrentVision(user: AuthUser, repo: Repo, sceneId: string): Promise<void> {
+  if (!repo.sceneRuntime || !repo.sceneMotion) return;
+  const scene = await repo.sceneRuntime.scene(user.campaignId, sceneId);
+  const map = scene ? parseMap(scene.published_metadata) : null;
+  if (!scene || !map?.hex) return;
+  const [assignments, profiles, ctx] = await Promise.all([repo.sceneRuntime.assignments(user.campaignId), repo.profiles(user.campaignId), sceneContext(repo, user.campaignId)]);
+  const clock = clockFor(ctx.state, sceneId);
+  for (const a of assignments.filter((x) => x.scene_id === sceneId)) {
+    const p = profiles.find((x) => x.userId === a.user_id && x.active && x.role === 'player');
+    if (!p) continue;
+    const tokenIds = p.tokenIds.filter((id) => ctx.state?.tokens[id]);
+    const local = await repo.sceneMotion.localSnapshot(user.campaignId, sceneId, p.userId, tokenIds);
+    const positions = tokenIds.map((id) => local.tokens.find((t) => t.tokenId === id) ?? (a.spawn_x !== null && a.spawn_y !== null ? { tokenId: id, x: a.spawn_x, y: a.spawn_y } : null)).filter((x): x is { tokenId: string; x: number; y: number } => !!x);
+    if (positions.length) await repo.sceneMotion.rememberVision(user.campaignId, sceneId, p.userId, [...(await visionFor(ctx, map, clock, positions))]);
+  }
 }
 
 /** Called after a successful transfer to a battle map. Returns a short status line. */
@@ -87,6 +109,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     const phase = v.phase === 'day' || v.phase === 'night' ? v.phase : undefined;
     const lighting = v.lighting === 'bright' || v.lighting === 'dim' || v.lighting === 'dark' ? v.lighting : undefined;
     if (!phase && !lighting && v.nextDay !== true) return { status: 400, body: { error: 'Nothing to change.' } };
+    await rememberCurrentVision(user, repo, sceneId).catch(() => undefined);
     return mutate(user, repo, (s) => setClock(s, sceneId, v.expectedVersion as number, { phase, lighting, nextDay: v.nextDay === true }));
   }
   return { status: 400, body: { error: 'Invalid scene action.' } };

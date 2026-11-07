@@ -99,6 +99,9 @@ begin
   assert (select hexes @> array['0,0','1,0','5,5'] from public.apex_scene_vision where campaign_id = cid and scene_id = s1 and user_id = p1), 'seen hexes merged';
   assert public.apex_scene_motion_state_v2(cid,s1,p2,array['aster'])->'seen' = '[]'::jsonb, 'other players see nothing of it';
   assert (public.apex_scene_motion_state_v2(cid,s1,p1,array['sinna'])->'tokens'->0->>'spent')::numeric = 500;
+  perform public.apex_remember_scene_vision(cid, s2, p1, array['9,9']);
+  perform public.apex_remember_scene_vision(cid, s2, p1, array['9,9','8,8']);
+  assert (select hexes from public.apex_scene_vision where campaign_id = cid and scene_id = s2 and user_id = p1) @> array['8,8','9,9'], 'remembered without moving';
   raise notice 'Scene-local time, turn order and vision: OK';
 end $$;
 select pg_temp.expect_denied_anon('select * from public.apex_scene_ledgers');

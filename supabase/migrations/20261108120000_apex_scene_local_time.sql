@@ -114,4 +114,18 @@ end $$;
 revoke all on function public.apex_write_scene_motion_v2(uuid, uuid, jsonb, numeric, numeric, text, jsonb, text[]) from public, anon, authenticated;
 grant execute on function public.apex_write_scene_motion_v2(uuid, uuid, jsonb, numeric, numeric, text, jsonb, text[]) to service_role;
 
+-- Remember what a player sees without moving (arrival, before light or time changes).
+create or replace function public.apex_remember_scene_vision(p_campaign uuid, p_scene uuid, p_user uuid, p_seen text[])
+returns void language sql set search_path = '' as $$
+  insert into public.apex_scene_vision(campaign_id, scene_id, user_id, hexes)
+  select p_campaign, p_scene, p_user, (select coalesce(array_agg(distinct h), '{}') from unnest(coalesce(p_seen, '{}')) h)
+  where exists (select 1 from public.apex_campaign_members where campaign_id = p_campaign and user_id = p_user)
+    and exists (select 1 from public.apex_scenes where campaign_id = p_campaign and id = p_scene)
+  on conflict (campaign_id, scene_id, user_id) do update set hexes = (
+    select coalesce(array_agg(distinct h), '{}') from (select unnest(public.apex_scene_vision.hexes) h union select unnest(coalesce(p_seen, '{}'))) u
+  );
+$$;
+revoke all on function public.apex_remember_scene_vision(uuid, uuid, uuid, text[]) from public, anon, authenticated;
+grant execute on function public.apex_remember_scene_vision(uuid, uuid, uuid, text[]) to service_role;
+
 update public.apex_schema_info set schema_version = greatest(schema_version, 7), updated_at = now() where id;

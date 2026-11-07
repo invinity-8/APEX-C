@@ -97,6 +97,11 @@ export class MemoryRepo implements Repo {
         .map(t => { const l = this.sceneLedgerRows.get(`${campaignId}:${sceneId}:${t.tokenId}`); return { tokenId: t.tokenId, x: t.x, y: t.y, version: t.version, epoch: l?.epoch ?? null, spent: l?.spent ?? 0 }; });
       return structuredClone({ tokens, known: Object.values(this.sceneKnownRows.get(`${campaignId}:${sceneId}:${userId}`) ?? {}), seen: [...(this.sceneVisionRows.get(`${campaignId}:${sceneId}:${userId}`) ?? [])] });
     },
+    rememberVision: async (campaignId, sceneId, userId, seen) => {
+      if (!this.memberList.some(m => m.campaignId === campaignId && m.userId === userId)) return;
+      const key = `${campaignId}:${sceneId}:${userId}`;
+      this.sceneVisionRows.set(key, new Set([...(this.sceneVisionRows.get(key) ?? []), ...seen]));
+    },
     // Mirrors apex_write_scene_motion_v2 (supabase/migrations/20261108120000_apex_scene_local_time.sql).
     localWrite: async (user, input, cost, allowance, epoch, discovered, seen) => {
       const profile = this.profileList.find(p => p.campaignId === user.campaignId && p.userId === user.id && p.active);

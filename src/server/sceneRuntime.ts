@@ -3,7 +3,7 @@ import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
 import { clockFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
 import type { SceneClockState } from '../game/types.js';
-import { initiativeForArrivals } from './sceneTurns.js';
+import { initiativeForArrivals, rememberCurrentVision } from './sceneTurns.js';
 
 export interface SceneSnapshot {
   viewer?: { tokenId: string; name: string; color: string };
@@ -142,6 +142,7 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
   if (result.ok && typeof v.sceneId === 'string') {
     const destination = await repo.sceneRuntime.scene(user.campaignId, v.sceneId);
     if (destination?.category === 'battle' && !destination.is_legacy_arena) initiative = await initiativeForArrivals(user, repo, destination.id, targets.map(t => t.userId)).catch(() => 'Initiative could not be rolled – start it in Scene tools.');
+    if (destination && (destination.category === 'battle' || destination.category === 'region')) await rememberCurrentVision(user, repo, destination.id).catch(() => undefined);
   }
   return { status: result.ok ? 200 : 409, body: { ...result, ...(initiative ? { initiative } : {}) } };
 }

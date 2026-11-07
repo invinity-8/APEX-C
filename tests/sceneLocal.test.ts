@@ -200,9 +200,7 @@ describe('API: battle map turns, region days, fog of war', () => {
     // Unknown hexes are not sent at all.
     const terrain = s.scene!.scene!.map.hex!.terrain;
     for (let i = 0; i < fog.length; i++) if (fog[i] === '.') expect(terrain[i]).toBe('.');
-    // Darkness shrinks the view; remembered hexes stay as 'e'.
-    const spawn = map.nodes.find((n) => n.kind === 'spawn')!;
-    expect((await move('hannah', scene, spawn.x + Math.sqrt(3) * 30, spawn.y)).status).toBe(200);
+    // Darkness shrinks the view; what was seen on arrival stays remembered ('e') without moving.
     const clockVersion = repo.states.get(cid)!.state.sceneClocks?.[scene.id]?.version ?? 0;
     expect((await request('gm', 'scene-turn', { action: 'clock', sceneId: scene.id, expectedVersion: clockVersion, lighting: 'dark' })).status).toBe(200);
     const dark = (await state('hannah')).scene!;

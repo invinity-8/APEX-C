@@ -86,14 +86,30 @@ Keine Datenbankmigration, keine Änderung an gespeicherten Szenen oder Karten.
 - **Alte Karten.** Neue Battle- und Region-Szenen entstehen immer als Hex-Karten. Bestehende gezeichnete Karten zeigen im Editor „Convert to hex map“ (Bäume werden Wald, Felsen Hügel, Hindernisse Ruinen, Wasser bleibt See, Wände werden Gebirge, Spawn und Orte bleiben erhalten) oder „Replace with empty hex map“. Gespeichert wird erst auf Klick; Daten werden nicht automatisch gelöscht. Der Wald-Generator mit den Baumsymbolen wurde entfernt.
 - **Prepare-Limit.** Import Spells liest „Spells to prepare“ aus dem PDF (sinna.pdf: 5) und kann es speichern. Das Spellbook zeigt „Prepared X / Y“. Spieler können das Limit nicht überschreiten und nicht selbst erhöhen; der Server lehnt das mit 422 ab. Der GM wird nur gewarnt und kann für Hausregeln überschreiten. Ein Bogen über dem Limit lässt sich immer reduzieren.
 
+### Umgesetzt (Folge-PR: Szenen von der Arena entkoppelt, Sicht, Initiative)
+
+- **Keine Arena-Kopplung mehr.** Bewegungsbudgets und Zeit gelten pro Szene; vorher waren sie kampagnenweit (`apex_scene_budgets`/`apex_scene_clocks`). Arena-Schleichen, Arena-Tag/Nacht und Arena-Bewegungspunkte wirken nicht mehr auf Szenen. Auf Szenen sind Arena-Widgets und die Arena-Uhr im Kopfbereich ausgeblendet. Migration `20261108120000_apex_scene_local_time` (Schema 7, nur additiv).
+- **Feste Maßstäbe statt Regler.** Battle Map: 1 Hex = 5 ft. Gebietskarte: 1 Hex = 3 Meilen, Standardgröße wie die Arena (Radius 12, 469 Felder); bei Tempo 30 ft sind das 24 Meilen bzw. 8 Felder pro Tag (das entspricht den 8 Bewegungspunkten der Arena).
+- **5-ft-Kacheln für Battle Maps.** Gras, Erdpfad, Steinboden, Holzboden, Unterholz (schwierig), Geröll (schwierig), seichtes Wasser (schwierig), tiefes Wasser, Baum, Felsblock, Wand – mit eigenem Painter im Draufsicht-Maßstab. Wände und Baumstämme blockieren Sicht und Bewegung, Felsblöcke nur Bewegung. Vorlagen: Waldlichtung, Bachfurt, Ruine, Dungeon, offenes Feld. Bisherige Battle Maps mit Übersichtsgelände lassen sich per Knopf umwandeln.
+- **Sicht serverseitig.** Spieler erhalten nur sichtbare und bereits gesehene Hexe; unbekanntes Gelände verlässt den Server nicht.
+  - Battle: Sichtlinie (kein Blick um Ecken), Licht hell (120 ft), dämmrig (60 ft) oder dunkel. Bei Dunkelheit zählen nur Dunkelsicht laut Charakterbogen, angrenzende Felder und Lichtquellen.
+  - Gebiet: Tag 2 Hexe (+1 auf Hügeln, +2 auf Bergen), Nacht 1 Hex; Berge verdecken.
+  - Gesehenes wird pro Spieler und Szene gespeichert: bei Bewegung, bei Ankunft und vor Licht- oder Zeitwechseln.
+- **Tag/Nacht auf Gebietskarten.** Der GM schaltet „Begin night“ / „Begin day N“; Nacht verdunkelt die Karte wie in der Arena. Das Reisebudget gilt pro Szenentag.
+- **Initiative auf Battle Maps.**
+  - Beim Betreten einer Battle Map würfelt der Server für alle Ankommenden d20 + Initiative (Bogen, sonst GE-Modifikator); bei Gleichstand geht der höhere Modifikator vor.
+  - Die Portraitleiste zeigt die Reihenfolge. Nur die aktive Figur bewegt sich, mit ihrem Tempo pro Zug; „End turn“ gibt an die nächste weiter.
+  - Die Datenbank prüft die Zugreihenfolge erneut in derselben Transaktion.
+  - Der GM sieht die Reihenfolge, kann „Next turn“, „End initiative“ (danach unbegrenzt freie Bewegung) und „Start initiative“ auslösen.
+
 ### Offene Folgeaufgaben (Kampf, Sicht, Zeit)
 
 Grundlage ab jetzt: Alle Battle- und Region-Szenen laufen auf Hex-Kacheln mit Arena-Wegfindung. Sicht, 4×4-Spawn, Reichweite und AoE können deshalb auf Hex-Distanzen aufsetzen. Vorhandene Bausteine: Encounter-Tracker pro Szene (`sceneEncounter*`, Initiative manuell, sortiert, versionsgeprüft), Bewegung mit Runden-/Stundenbudget und Wand-/Terrainprüfung (`sceneMotion`), Hex-Sicht der Arena (`visibility.ts`), serverseitige Schadens-/Heilungs- und Mage-Armor-Regeln am Charakterbogen. Es fehlen:
 
-1. **Szenenzeit und Licht.** Pro Szene Tageszeit und Lichtstufe speichern (hell/dämmrig/dunkel), unabhängig von der Arena-Zeitspur. *Abnahme:* GM stellt Nacht ein, die Spieleransicht ändert sich; die Arena-Tagesregeln bleiben unberührt.
-2. **Sichtweite, Dunkelsicht, Lichtquellen.** Serverseitig gefilterte Spieleransicht; Lichtquellen (Radius hell/dämmrig), durch Wände blockiert. *Abnahme:* Ein versteckter Gegner außerhalb der Sicht steht nicht in der Spieler-Antwort (nicht nur per CSS verborgen).
+1. ~~Szenenzeit und Licht~~ – umgesetzt (siehe oben).
+2. ~~Sichtweite, Dunkelsicht, Lichtquellen~~ – umgesetzt für Gelände. Offen: Gegnerfiguren und Verbündete nur bei Sicht übertragen (Gegner-Tokens gibt es noch nicht), getragene Fackeln der Spieler.
 3. **4 × 4-Einstiegsbereich.** Spawn als Fläche, deterministische Verteilung auf freie, begehbare Zellen; Überfüllung wird gemeldet. *Abnahme:* Vier Spieler landen auf vier verschiedenen freien Feldern, nie auf Wänden.
-4. **Encounter-Ablauf.** Initiative mit Modifikator würfeln, stabile Gleichstandsregel, Portraitleiste mit aktivem Zug, Zugrecht serverseitig (Spieler nur eigene Figur, GM Gegner), Kampfende stellt Exploration her. *Abnahme:* Ein Spieler kann außerhalb seines Zuges nicht ziehen oder angreifen.
+4. **Encounter-Ablauf.** Initiative, Portraitleiste, Zugrecht für Bewegung und Kampfende sind umgesetzt. Offen: Gegner als Figuren auf der Karte mit GM-Zügen; Aktionen/Angriffe im Zug. *Abnahme:* Ein Spieler kann außerhalb seines Zuges nicht angreifen.
 5. **Angriffe und Schaden.** Ziel-Kontextmenü (auch per Tastatur/Touch), Reichweiten- und Sichtlinienprüfung, Trefferwurf mit Advantage/Disadvantage, kritische Treffer, Rettungswürfe, atomare HP-Änderung mit Request-ID (keine Doppelschäden), nachvollziehbares Kampfprotokoll. *Abnahme:* Ein wiederholter Request erzeugt keinen zweiten Schaden; das Protokoll zeigt Würfe und Modifikatoren.
 6. **AoE-Vorschau.** Kegel/Würfel/Kugel/Linie mit betroffenen Zielen; die Vorschau ersetzt keine Serverprüfung. Nicht unterstützte Zauber werden als „manuell abwickeln“ markiert. *Abnahme:* Thunderwave (15-ft-Würfel) markiert die richtigen Felder.
 7. **Manuelle Hausregeln.** Jede nicht automatisierte Wirkung lässt sich vom GM manuell abwickeln (HP, Zustände, Ressourcen), protokolliert.

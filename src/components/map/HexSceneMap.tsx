@@ -78,11 +78,18 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
     return { hexes: out, byKey: Object.fromEntries(out.map((h) => [h.key, h])) as Record<HexKey, HexView>, defs: tiles };
   }, [map.hex, fog, battle]);
 
+  // Players (fog) fit to what they know – the size of the hidden map is not revealed by the zoom.
   const bounds = useMemo(() => {
+    if (fog && hexes.length) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const h of hexes) { const c = center(h); x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x); y1 = Math.max(y1, c.y); }
+      const pad = HEX_SIZE * 4;
+      return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+    }
     const r = (map.hex?.radius ?? 4) + 1.5;
     const w = Math.sqrt(3) * HEX_SIZE * r, h = 1.5 * HEX_SIZE * r + HEX_SIZE;
     return { x0: -w, y0: -h, x1: w, y1: h };
-  }, [map.hex?.radius]);
+  }, [map.hex?.radius, fog, hexes]);
 
   const vp = useHexViewport({ bounds, maxK: MAX_K, fitMaxK: 1.6, fitSignature: `${label}:${map.hex?.radius}` });
   const known = (k: HexKey) => !!byKey[k];
