@@ -391,6 +391,8 @@ export interface SceneEncounter {
   economy?: Record<string, import('./sceneActions.js').TurnBudget>;
   /** Participant id → turn serial when its reaction was used; cleared when its own turn starts. */
   reactions?: Record<string, number>;
+  /** Characters of the current block (consecutive characters act together) that already ended their part. */
+  blockDone?: string[];
 }
 
 /** Scene-local time and light (independent of the Arena day/night). */
@@ -430,8 +432,12 @@ export interface GameState {
   sceneEnemies?: Record<string, import('./sceneCombat.js').SceneEnemy[]>;
   sceneLights?: Record<string, string[]>;
   sceneCombatLog?: Record<string, import('./sceneCombat.js').CombatLogEntry[]>;
+  /** APEX 1.2: the GM's own creatures and elites (built-in SRD creatures are not stored). */
+  enemyLibrary?: import('./bestiary.js').StatBlock[];
   /** Open reaction prompts per scene (opportunity attacks) – valid during the turn they were offered in. */
   sceneReactions?: Record<string, import('./sceneActions.js').ReactionOffer[]>;
+  /** Moves paused by opportunity attacks per scene (they continue after the reactions are decided). */
+  scenePendingMoves?: Record<string, import('./sceneActions.js').PendingMove[]>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */
   merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */

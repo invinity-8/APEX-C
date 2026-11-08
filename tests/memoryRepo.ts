@@ -122,7 +122,12 @@ export class MemoryRepo implements Repo {
         else if (epoch === 'free') { if (enc?.status === 'active') return { ok: false, error: 'Initiative started. Wait for your turn.' }; }
         else {
           if (enc?.status !== 'active' || epoch !== `t:${enc.id}:${enc.turnSerial ?? 0}`) return { ok: false, error: 'The turn changed. Refresh before moving.' };
-          if (profile.role !== 'gm' && enc.participants[enc.turnIndex]?.tokenId !== token.id) return { ok: false, error: 'It is not your turn.' };
+          if (profile.role !== 'gm') {
+            // block: consecutive characters from the active index act together (until they end their part)
+            let ok = false;
+            for (let i = enc.turnIndex; i < enc.participants.length && enc.participants[i].tokenId; i++) if (enc.participants[i].tokenId === token.id && !enc.blockDone?.includes(`pc-${token.id}`)) ok = true;
+            if (!ok) return { ok: false, error: 'It is not your turn.' };
+          }
         }
         const ledger = this.sceneLedgerRows.get(key), spent = ledger?.epoch === epoch ? ledger.spent : 0;
         if (cost <= 0 || spent + cost > allowance + 1e-6) return { ok: false, error: 'Movement exceeds what is left this turn or day.' };

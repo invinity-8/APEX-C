@@ -44,6 +44,8 @@ export interface TurnBudget {
   dodge?: boolean;
   /** Last standard action, for the log and the UI. */
   last?: string;
+  /** Feet moved this turn (NPCs; characters use the scene movement ledger). */
+  moved?: number;
 }
 
 /** Participant id of a character / NPC in the encounter. */
@@ -56,7 +58,21 @@ export function budgetOf(e: Pick<SceneEncounter, 'economy' | 'turnSerial'> | nul
   return b && b.serial === serial ? b : { serial };
 }
 export const reactionUsed = (e: Pick<SceneEncounter, 'reactions'> | null, actor: string) => !!e?.reactions?.[actor];
-export const isActiveActor = (e: Pick<SceneEncounter, 'participants' | 'turnIndex'> | null, actor: string) => !!e && e.participants[e.turnIndex]?.id === actor;
+/**
+ * Who may act right now: the creature whose turn it is. Characters that follow each other directly in the order
+ * act TOGETHER (a block, e.g. enemy · Sinna · Aster · enemy): each ends its own part, the block ends when all are done.
+ */
+export function blockOf(e: Pick<SceneEncounter, 'participants' | 'turnIndex'> | null): string[] {
+  if (!e) return [];
+  const first = e.participants[e.turnIndex];
+  if (!first) return [];
+  if (!first.tokenId) return [first.id];
+  const out: string[] = [];
+  for (let i = e.turnIndex; i < e.participants.length && e.participants[i].tokenId; i++) out.push(e.participants[i].id);
+  return out;
+}
+export const activeActors = (e: Pick<SceneEncounter, 'participants' | 'turnIndex' | 'blockDone'> | null) => blockOf(e).filter((id) => !e?.blockDone?.includes(id));
+export const isActiveActor = (e: Pick<SceneEncounter, 'participants' | 'turnIndex' | 'blockDone'> | null, actor: string) => activeActors(e).includes(actor);
 
 /** Number of attacks one Attack action allows, from the sheet's features (Extra Attack, Fighter 11/20). */
 export function attacksPerAction(sheet: Pick<CharacterSheet, 'abilities' | 'details'> | null): number {
@@ -91,23 +107,24 @@ export function useEconomy(e: SceneEncounter | null, actor: string, kind: 'actio
     e.reactions = { ...(e.reactions ?? {}), [actor]: e.turnSerial ?? 0 };
     return null;
   }
-  if (!active && !opts.gm) return 'Wait for your turn.';
+  // only the active creature acts – the GM too (the GM can still adjust hit points, positions and the order)
+  if (!active) return 'Wait for your turn – only the creature whose turn it is can act.';
   const b = budgetOf(e, actor);
   if (kind === 'bonus') {
-    if (b.bonus && !opts.gm) return 'The bonus action was already used this turn.';
+    if (b.bonus) return 'The bonus action was already used this turn.';
     spend(e, actor, { bonus: true });
     return null;
   }
   if (kind === 'attack') {
     const allowed = Math.max(1, opts.attacksAllowed ?? 1);
-    if (b.action && !opts.gm) {
+    if (b.action) {
       if (!b.attackAction) return 'The action was already used this turn.';
       if ((b.attacks ?? 0) >= allowed) return allowed > 1 ? `All ${allowed} attacks of the Attack action are used.` : 'The attack was already made this turn.';
     }
     spend(e, actor, { action: true, attackAction: b.action ? b.attackAction : true, attacks: (b.attackAction ? b.attacks ?? 0 : 0) + 1, last: 'attack' });
     return null;
   }
-  if (b.action && !opts.gm) return 'The action was already used this turn.';
+  if (b.action) return 'The action was already used this turn.';
   spend(e, actor, { action: true });
   return null;
 }
@@ -137,6 +154,8 @@ export interface ReactionOffer {
   at: string;
   /** Where the target was when it left the reach (the attack happens there). */
   from: { x: number; y: number };
+  /** The interrupted move that continues after the decision. */
+  moveId?: string;
 }
 
 export interface Figure { kind: 'pc' | 'npc'; id: string; name: string; side: 'party' | 'enemy'; x: number; y: number; reachFt: number; down?: boolean }
@@ -161,6 +180,28 @@ export function opportunityOffers(mover: Figure, to: { x: number; y: number }, o
   }
   return out;
 }
+
+/**
+ * Walks a path (start first) and finds the first step that leaves the reach of hostiles who may react: the move
+ * stops on the hex BEFORE that step (the attack happens as the mover leaves). `declined` = reactors that already
+ * let this mover go during this move.
+ */
+export function firstOpportunity(mover: Figure, points: Array<{ x: number; y: number }>, others: Figure[], dist: (a: { x: number; y: number }, b: { x: number; y: number }) => number, e: SceneEncounter | null, declined: string[] = []): { stop: number; reactors: Figure[] } | null {
+  if (!e || e.status !== 'active') return null;
+  if (budgetOf(e, mover.kind === 'pc' ? pcActor(mover.id) : npcActor(mover.id)).disengage) return null;
+  const able = others.filter((o) => {
+    const actor = o.kind === 'pc' ? pcActor(o.id) : npcActor(o.id);
+    return !o.down && o.side !== mover.side && e.participants.some((p) => p.id === actor) && !reactionUsed(e, actor) && !declined.includes(actor);
+  });
+  for (let i = 1; i < points.length; i++) {
+    const reactors = able.filter((o) => dist(o, points[i - 1]) <= o.reachFt && dist(o, points[i]) > o.reachFt);
+    if (reactors.length) return { stop: i - 1, reactors };
+  }
+  return null;
+}
+
+/** A move that waits for opportunity attacks; it continues when every offer of it is decided. */
+export interface PendingMove { id: string; mover: { kind: 'pc' | 'npc'; id: string }; to: { x: number; y: number }; declined: string[]; turnSerial: number }
 
 export const reactionsOf = (state: Pick<GameState, 'sceneReactions' | 'sceneEncounters'>, sceneId: string): ReactionOffer[] => {
   const serial = state.sceneEncounters?.[sceneId]?.turnSerial ?? 0;

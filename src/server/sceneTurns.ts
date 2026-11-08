@@ -19,10 +19,12 @@ import type { GameState } from '../game/types.js';
 import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
-import { STANDARD_ACTIONS, addOffers, attacksPerAction, characterLevel, dropOffer, npcActor, opportunityOffers, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type StandardAction } from '../game/sceneActions.js';
-import { ENEMY_TEMPLATES, addEnemy, enemiesOf, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy } from '../game/sceneCombat.js';
+import { STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type StandardAction } from '../game/sceneActions.js';
+import { statBlock } from '../game/bestiary.js';
+import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
-import { hexAt, hexCentre, passable, tileLookup } from '../campaign/hexScene.js';
+import { hexAt, hexCentre, hexMovementCost, passable, tileLookup } from '../campaign/hexScene.js';
+import { continuePcMove } from './sceneMotion.js';
 import { lineOfSight } from '../campaign/hexVision.js';
 import { distance } from '../game/hex.js';
 import { applyDamage } from '../game/abilities.js';
@@ -133,7 +135,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
       if (a?.scene_id !== sceneId) return { status: 409, body: { error: 'You are not in this scene.' } };
     }
     const controls = (tokenId: string) => user.role === 'gm' || user.tokenIds.includes(tokenId);
-    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls));
+    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm'));
   }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).
@@ -164,19 +166,12 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     const key = hexKeyAt(map, at);
     if (pcs.some((p) => hexKeyAt(map, p) === key) || (ctx.state ? enemiesOf(ctx.state, sceneId) : []).some((e) => !e.defeated && e.id !== v.id && hexKeyAt(map, e) === key)) return { status: 409, body: { error: 'Another figure stands on that hex.' } };
     if (v.action === 'enemyAdd') {
-      if (typeof v.templateId !== 'string' || !ENEMY_TEMPLATES.some((t) => t.id === v.templateId)) return { status: 400, body: { error: 'Unknown enemy.' } };
+      if (typeof v.templateId !== 'string' || !statBlock(ctx.state ?? {}, v.templateId)) return { status: 400, body: { error: 'Unknown enemy.' } };
       const id = `en-${crypto.randomUUID().slice(0, 8)}`, roll = d20();
       return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy'));
     }
     if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid enemy.' } };
-    const before = ctx.state ? enemiesOf(ctx.state, sceneId).find((e) => e.id === v.id) : undefined;
-    const moved = await mutate(user, repo, (s) => updateEnemy(s, sceneId, v.id as string, at));
-    // the GM moved an NPC: characters (and NPCs of the other side) whose reach it left may react
-    if (moved.status === 200 && before && !before.defeated) {
-      const n = await offerOpportunityAttacks(user, repo, sceneId, { kind: 'npc', id: before.id }, before, at);
-      if (n) (moved.body as { message?: string }).message = `${before.name} moved – ${n} opportunity attack${n > 1 ? 's' : ''} possible.`;
-    }
-    return moved;
+    return moveNpc(user, repo, scene, map, v.id, at);
   }
   if (v.action === 'enemyRemove' || v.action === 'enemyHp') {
     if (typeof v.id !== 'string' || (v.action === 'enemyHp' && (!Number.isSafeInteger(v.delta) || Math.abs(v.delta as number) > 1000))) return { status: 400, body: { error: 'Invalid enemy change.' } };
@@ -246,12 +241,12 @@ async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<
   const state = ctx.state!;
   const pcs = await ctx.pcs!(sceneId, map);
   const out: Figure[] = pcs.map((p) => ({ kind: 'pc', id: p.tokenId, name: state.tokens[p.tokenId]?.name ?? 'Character', side: 'party', x: p.x, y: p.y, reachFt: 5 }));
-  for (const e of enemiesOf(state, sceneId)) out.push({ kind: 'npc', id: e.id, name: e.name, side: e.side === 'ally' ? 'party' : 'enemy', x: e.x, y: e.y, reachFt: e.attack.reachFt || 5, down: e.defeated });
+  for (const e of enemiesOf(state, sceneId)) out.push({ kind: 'npc', id: e.id, name: e.name, side: e.side === 'ally' ? 'party' : 'enemy', x: e.x, y: e.y, reachFt: npcReach(e), down: e.defeated });
   return out;
 }
 const feetBetween = (map: SceneMap) => (a: { x: number; y: number }, b: { x: number; y: number }) => distance(hexAt(map, a), hexAt(map, b)) * 5;
 
-interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string }
+interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string; kind?: 'melee' | 'ranged' | 'spell'; damageType?: string }
 
 /** Attack numbers of an attacker: a character's attack (equipment + sheet) or an NPC's attack. */
 async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefined): Promise<Strike | string> {
@@ -259,8 +254,10 @@ async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefine
   if (attacker.kind === 'npc') {
     const e = enemiesOf(state, ctx.sceneId!).find((x) => x.id === attacker.id && !x.defeated);
     if (!e) return 'That creature cannot attack.';
-    const dmg = parseDamage(e.attack.damage);
-    return dmg ? { name: e.attack.name, bonus: e.attack.bonus, damage: dmg, reachFt: e.attack.reachFt, rangeFt: e.attack.rangeFt } : 'Unreadable damage.';
+    const a = npcAttacks(e)[attackIndex ?? 0];
+    if (!a) return 'Choose one of the creature’s attacks.';
+    const dmg = parseDamage(a.damage);
+    return dmg ? { name: a.name, bonus: a.bonus, damage: dmg, reachFt: a.reachFt, ...(a.kind !== 'melee' && a.rangeFt ? { rangeFt: a.rangeFt } : {}), kind: a.kind, damageType: a.damageType } : 'Unreadable damage.';
   }
   const sheet = await sheetOf(ctx, attacker.tokenId);
   const attack = combatAttacks(sheet, state.tokens[attacker.tokenId], itemRulesOf(state))[attackIndex ?? 0];
@@ -333,7 +330,7 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
   if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
   if (attacker.kind === 'pc' && target.kind === 'pc') return { status: 422, body: { error: 'Characters do not attack each other here – the GM resolves that by hand.' } };
   const sheet = attacker.kind === 'pc' ? await sheetOf(ctx, attacker.tokenId) : null;
-  const allowed = attacksPerAction(sheet);
+  const allowed = attacker.kind === 'npc' ? (enemiesOf(ctx.state, scene.id).find((x) => x.id === attacker.id)?.multiattack ?? 1) : attacksPerAction(sheet);
   // pre-check the economy before rolling (the write re-checks it)
   const pre = useEconomy(activeEncounter(structuredClone(ctx.state), scene.id), actorOf(attacker), viaBonus ? 'bonus' : 'attack', { gm: user.role === 'gm', attacksAllowed: allowed });
   if (pre) return { status: 409, body: { error: pre } };
@@ -467,34 +464,73 @@ function rollDice(d: { count: number; sides: number; mod: number }) {
 }
 
 /**
- * Opportunity attacks after a move on a battle map in initiative: hostiles whose reach the mover left are offered
- * their reaction (prompt for the GM or the reacting character's player). Called after the move was saved.
+ * Path check for opportunity attacks (battle map, initiative): where the move must stop because a hostile may
+ * react. `points` = start followed by every entered hex. Returns null when the move can run to the end.
  */
-export async function offerOpportunityAttacks(user: AuthUser, repo: Repo, sceneId: string, mover: Side, from: { x: number; y: number }, to: { x: number; y: number }): Promise<number> {
-  const scene = await repo.sceneRuntime?.scene(user.campaignId, sceneId);
-  const map = scene ? parseMap(scene.published_metadata) : null;
-  if (!scene || !map?.hex || scene.category !== 'battle') return 0;
-  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
-  if (!ctx.state || !activeEncounter(ctx.state, sceneId)) return 0;
+export async function planInterruption(repo: Repo, campaignId: string, sceneId: string, map: SceneMap, mover: Side, points: Array<{ x: number; y: number }>, declined: string[] = []): Promise<{ stop: number; reactors: Figure[] } | null> {
+  const ctx = { ...(await sceneContext(repo, campaignId)), sceneId };
+  if (!ctx.state || !activeEncounter(ctx.state, sceneId)) return null;
   const figures = await battleFigures(ctx, sceneId, map);
   const me = positionOf(figures, mover);
-  if (!me) return 0;
-  const others = figures.filter((f) => f !== me).map((f) => f);
-  let count = 0;
-  await mutate(user, repo, (s) => {
-    const e = activeEncounter(s, sceneId);
-    const offers = opportunityOffers({ ...me, x: from.x, y: from.y }, to, others, feetBetween(map), e, () => `ro-${crypto.randomUUID().slice(0, 8)}`, new Date().toISOString());
-    count = offers.length;
-    if (!offers.length) return { ok: true, state: s };
-    const st = structuredClone(s);
-    addOffers(st, sceneId, offers);
-    for (const o of offers) logCombat(st, sceneId, `${o.target.name} leaves the reach of ${o.reactor.name} – opportunity attack possible (reaction).`);
-    return { ok: true, state: st };
-  });
-  return count;
+  if (!me) return null;
+  return firstOpportunity({ ...me, ...points[0] }, points, figures.filter((f) => f !== me), feetBetween(map), activeEncounter(ctx.state, sceneId), declined);
 }
 
-/** Take or skip an offered reaction (opportunity attack). */
+/** Stores the offers and the paused move (state write). */
+export function registerInterruption(state: GameState, sceneId: string, mover: Side, moverName: string, stopAt: { x: number; y: number }, to: { x: number; y: number }, reactors: Figure[], declined: string[]): GameState {
+  const st = structuredClone(state);
+  const e = activeEncounter(st, sceneId);
+  const moveId = `mv-${crypto.randomUUID().slice(0, 8)}`;
+  const now = new Date().toISOString();
+  const target = { kind: mover.kind, id: mover.kind === 'pc' ? mover.tokenId : mover.id, name: moverName };
+  addOffers(st, sceneId, reactors.map((r) => ({ id: `ro-${crypto.randomUUID().slice(0, 8)}`, kind: 'opportunity' as const, reactor: { kind: r.kind, id: r.id, name: r.name }, target, turnSerial: e?.turnSerial ?? 0, at: now, from: stopAt, moveId })));
+  const pending = (st.scenePendingMoves?.[sceneId] ?? []).filter((m) => m.turnSerial === (e?.turnSerial ?? 0));
+  st.scenePendingMoves = { ...(st.scenePendingMoves ?? {}), [sceneId]: [...pending, { id: moveId, mover: target, to, declined, turnSerial: e?.turnSerial ?? 0 }].slice(-10) };
+  for (const r of reactors) logCombat(st, sceneId, `${moverName} leaves the reach of ${r.name} – movement paused for an opportunity attack (reaction).`);
+  if (e) st.sceneEncounters![sceneId].version++;
+  return st;
+}
+
+/** A creature with a paused move cannot start another one until the reactions are decided. */
+export const pausedMoveOf = (state: GameState, sceneId: string, mover: Side) => (state.scenePendingMoves?.[sceneId] ?? []).find((m) => m.turnSerial === (state.sceneEncounters?.[sceneId]?.turnSerial ?? 0) && m.mover.kind === mover.kind && m.mover.id === (mover.kind === 'pc' ? mover.tokenId : mover.id) && reactionsOf(state, sceneId).some((o) => o.moveId === m.id));
+
+/**
+ * The GM moves an NPC along the cheapest path. In initiative only on its own turn and within its speed (Dash
+ * doubles it); leaving a hostile's reach pauses the move for an opportunity attack.
+ */
+export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: SceneMap, npcId: string, at: { x: number; y: number }, declined: string[] = []): Promise<SceneResult> {
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  const state = ctx.state;
+  const npc = state ? enemiesOf(state, scene.id).find((e) => e.id === npcId) : undefined;
+  if (!state || !npc || npc.defeated) return { status: 404, body: { error: 'Creature not found.' } };
+  const e = activeEncounter(state, scene.id);
+  const actor = npcActor(npc.id);
+  if (e && !isActiveActor(e, actor)) return { status: 409, body: { error: `Wait for ${npc.name}'s turn – only the creature whose turn it is can move.` } };
+  if (pausedMoveOf(state, scene.id, { kind: 'npc', id: npc.id }) && !declined.length) return { status: 409, body: { error: 'Decide the opportunity attack first.' } };
+  const path = hexMovementCost(map, npc, at);
+  if (!path.ok) return { status: 422, body: { error: path.error } };
+  const b = budgetOf(e, actor);
+  const allowance = npc.speedFt * (b.dash ? 2 : 1);
+  if (e && (b.moved ?? 0) + path.cost > allowance + 1e-9) return { status: 422, body: { error: `${npc.name} has only ${Math.max(0, allowance - (b.moved ?? 0))} ft of movement left this turn.` } };
+  const points = [{ x: npc.x, y: npc.y }, ...path.steps];
+  const stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'npc', id: npc.id }, points, declined);
+  const dest = stop ? points[stop.stop] : path.to;
+  const cost = stop ? (stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost) : path.cost;
+  return mutate(user, repo, (s) => {
+    let st = structuredClone(s);
+    if (cost > 0 || !stop) {
+      const r = updateEnemy(st, scene.id, npc.id, dest);
+      if (!r.ok) return r;
+      st = r.state;
+    }
+    const enc = st.sceneEncounters?.[scene.id];
+    if (enc?.status === 'active') spend(enc, actor, { moved: (budgetOf(enc, actor).moved ?? 0) + cost });
+    if (stop) st = registerInterruption(st, scene.id, { kind: 'npc', id: npc.id }, npc.name, dest, path.to, stop.reactors, declined);
+    return { ok: true, state: st, message: stop ? `${npc.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack.` : `${npc.name} moves ${cost} ft.` };
+  });
+}
+
+/** Take or skip an offered reaction (opportunity attack); a paused move continues once all its offers are decided. */
 async function reactionRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
   if (typeof v.offerId !== 'string' || typeof v.accept !== 'boolean') return { status: 400, body: { error: 'Invalid reaction.' } };
   const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
@@ -504,21 +540,46 @@ async function reactionRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
   const reactor: Side = offer.reactor.kind === 'pc' ? { kind: 'pc', tokenId: offer.reactor.id } : { kind: 'npc', id: offer.reactor.id };
   const target: Side = offer.target.kind === 'pc' ? { kind: 'pc', tokenId: offer.target.id } : { kind: 'npc', id: offer.target.id };
   if (!controls(user, reactor)) return { status: 403, body: { error: 'Only the reacting creature’s controller can decide.' } };
-  if (!v.accept) return mutate(user, repo, (s) => { const st = structuredClone(s); dropOffer(st, scene.id, offer.id); logCombat(st, scene.id, `${offer.reactor.name} lets ${offer.target.name} go.`); return { ok: true, state: st, message: 'Reaction skipped.' }; });
-  const strike = await strikeOf(ctx, reactor, Number.isSafeInteger(v.attackIndex) ? (v.attackIndex as number) : undefined);
-  if (typeof strike === 'string') return { status: 422, body: { error: strike } };
-  if (strike.rangeFt && strike.reachFt <= 5 && reactor.kind === 'pc' && strike.rangeFt > 15) return { status: 422, body: { error: 'An opportunity attack is a melee attack – choose a melee weapon.' } };
-  if (reactionUsed(activeEncounter(ctx.state, scene.id), actorOf(reactor))) return { status: 409, body: { error: 'The reaction was already used this round.' } };
-  const r = await rollAgainst(user, repo, ctx, offer.reactor.name, strike, target, ' (opportunity attack)');
-  if (typeof r === 'string') return { status: 404, body: { error: r } };
-  return mutate(user, repo, (s) => {
-    if (!reactionsOf(s, scene.id).some((o) => o.id === offer.id)) return { ok: false, error: 'This reaction is no longer available.' };
-    const st = r.apply(s);
-    dropOffer(st, scene.id, offer.id);
-    const e = st.sceneEncounters?.[scene.id];
-    const err = useEconomy(e?.status === 'active' ? e : null, actorOf(reactor), 'reaction', { gm: user.role === 'gm' });
-    if (err) return { ok: false, error: err };
-    if (e) e.version++;
-    return { ok: true, state: st, message: r.text };
-  });
+  let result: SceneResult;
+  if (!v.accept) {
+    result = await mutate(user, repo, (s) => { const st = structuredClone(s); dropOffer(st, scene.id, offer.id); logCombat(st, scene.id, `${offer.reactor.name} lets ${offer.target.name} go.`); return { ok: true, state: st, message: 'Reaction skipped.' }; });
+  } else {
+    const strike = await strikeOf(ctx, reactor, Number.isSafeInteger(v.attackIndex) ? (v.attackIndex as number) : undefined);
+    if (typeof strike === 'string') return { status: 422, body: { error: strike } };
+    if (strike.rangeFt && strike.rangeFt > 15) return { status: 422, body: { error: 'An opportunity attack is a melee attack – choose a melee weapon.' } };
+    if (reactionUsed(activeEncounter(ctx.state, scene.id), actorOf(reactor))) return { status: 409, body: { error: 'The reaction was already used this round.' } };
+    const r = await rollAgainst(user, repo, ctx, offer.reactor.name, strike, target, ' (opportunity attack)');
+    if (typeof r === 'string') return { status: 404, body: { error: r } };
+    result = await mutate(user, repo, (s) => {
+      if (!reactionsOf(s, scene.id).some((o) => o.id === offer.id)) return { ok: false, error: 'This reaction is no longer available.' };
+      const st = r.apply(s);
+      dropOffer(st, scene.id, offer.id);
+      const e = st.sceneEncounters?.[scene.id];
+      const err = useEconomy(e?.status === 'active' ? e : null, actorOf(reactor), 'reaction', { gm: user.role === 'gm' });
+      if (err) return { ok: false, error: err };
+      if (e) e.version++;
+      return { ok: true, state: st, message: r.text };
+    });
+  }
+  if (result.status !== 200 || !offer.moveId) return result;
+  // all offers of the paused move decided → the move continues (if the mover can still move)
+  const after = await repo.loadState(user.campaignId);
+  if (!after || reactionsOf(after.state, scene.id).some((o) => o.moveId === offer.moveId)) return result;
+  const pending = (after.state.scenePendingMoves?.[scene.id] ?? []).find((m) => m.id === offer.moveId);
+  if (!pending) return result;
+  const declined = [...pending.declined, ...reactionsOf(ctx.state, scene.id).filter((o) => o.moveId === offer.moveId).map((o) => (o.reactor.kind === 'pc' ? pcActor(o.reactor.id) : npcActor(o.reactor.id)))];
+  await mutate(user, repo, (s) => { const st = structuredClone(s); st.scenePendingMoves = { ...(st.scenePendingMoves ?? {}), [scene.id]: (st.scenePendingMoves?.[scene.id] ?? []).filter((m) => m.id !== pending.id) }; return { ok: true, state: st }; });
+  const map = parseMap(scene.published_metadata)!;
+  let cont: SceneResult;
+  if (pending.mover.kind === 'npc') {
+    const alive = enemiesOf(after.state, scene.id).some((x) => x.id === pending.mover.id && !x.defeated);
+    cont = alive ? await moveNpc(user, repo, scene, map, pending.mover.id, pending.to, declined) : { status: 200, body: { ok: true } };
+  } else {
+    const sheet = await sheetOf({ ...ctx, state: after.state }, pending.mover.id);
+    const down = !!sheet.hitPoints && sheet.hitPoints.current <= 0;
+    cont = down ? { status: 200, body: { ok: true } } : await continuePcMove(user, repo, scene.id, pending.mover.id, pending.to, declined);
+  }
+  const msg = (result.body as { message?: string }).message ?? '';
+  const contMsg = cont.status === 200 ? ((cont.body as { message?: string }).message ?? `${offer.target.name} continues moving.`) : `The move could not continue: ${(cont.body as { error?: string }).error ?? 'blocked'}.`;
+  return { status: 200, body: { ...(result.body as object), message: `${msg} ${contMsg}`.trim() } };
 }
