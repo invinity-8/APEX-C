@@ -276,3 +276,25 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Rettungswürfe mit Vorteil/Nachteil aus Zuständen (z. B. paralyzed scheitert automatisch an STR/DEX) – der GM entscheidet.
 - Dauer in Minuten außerhalb der Initiative.
 - Weitere Reaktionen (Counterspell, Hellish Rebuke, Uncanny Dodge) und weitere Klassen (Ki, Channel Divinity, Metamagic).
+
+## APEX 1.4 – Spielerblöcke, Spell-Listen, Standardangriff, Schleichen, Flanking
+
+- **Spielerblöcke:** Jeder beendet seinen eigenen Teil; der Zug geht erst weiter, wenn alle fertig sind. „End turn“ des GM bei einer ausgewählten Figur beendet nur deren Teil, „Next turn“ im Initiativebereich den ganzen Block.
+- **Spell-Listen:**
+  - Importierte Zauber ohne Details (typisch für Aurora-PDFs) bekommen die Spielmechanik der SRD-5.1-Zauber, nur Zahlen, keine Texte: Reichweite, Wirkzeit, Angriff/Rettungswurf, Schaden, Fläche, Upcast, Heilung.
+  - Damit funktionieren z. B. Fire Bolt, Produce Flame, Sacred Flame, Healing Word, Thunderwave, Fireball.
+  - Der GM bekommt für eine ausgewählte Spielerfigur **dasselbe Kampf-Panel** wie der Spieler (Zauberbuch, Ready-Leiste, Fähigkeiten, Rechtsklick-Regeln) inklusive Bewegungsradius.
+- **Fernkampf:** Reichweiten wie „120 ft“ wurden bisher als Nahkampf gelesen – behoben. Lange Reichweite (z. B. 80/320) ist erlaubt, mit Nachteil.
+- **Standardangriff per Rechtsklick:**
+  - Der in der Ready-Leiste gewählte Angriff ist der Standardangriff; er wird pro Gerät gemerkt.
+  - Rechtsklick auf einen Gegner greift sofort an. Ist er außer Nahkampfreichweite, läuft die Figur den günstigsten Weg in Reichweite (wenn die Bewegung reicht) und greift dann an.
+  - Ein vorbereiteter Zauber wird per Rechtsklick auf den Gegner gewirkt. Ohne Standardangriff öffnet sich das Menü.
+  - Für NPCs gilt dasselbe mit dem gewählten Angriff.
+- **Schleichen/Verstecken:**
+  - „🥷 Sneak“ (außerhalb der Initiative frei) bzw. „Hide“ (Aktion; Bonusaktion mit Cunning Action oder Nimble Escape): Stealth-Wurf. „Party sneak“ des GM lässt alle würfeln.
+  - Gegner sehen versteckte Figuren nur, wenn ihre passive Wahrnehmung den Stealth-Wert erreicht – serverseitig in Spielersicht und GM-Sichten.
+  - „Search“ ist ein aktiver Wahrnehmungswurf.
+  - Angreifen oder Zaubern deckt auf. Versteckt gibt es Vorteil, gegen Versteckte Nachteil.
+  - Auf der Karte erscheint 🥷 unter der Figur.
+- **Sneak Attack:** Schurken sehen im Angriffsmenü, ob Sneak Attack möglich ist (versteckt, unsichtbar, Flanking, Verbündeter am Ziel …) und können ihn an- oder abwählen. Der Server prüft die Bedingungen.
+- **Flanking (Hex):** Steht ein Verbündeter genau gegenüber auf der anderen Seite des Ziels und sind beide angrenzend, gibt es Vorteil auf Nahkampfangriffe – für Spieler und Gegner.
