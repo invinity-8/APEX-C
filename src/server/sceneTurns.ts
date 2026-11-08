@@ -144,7 +144,9 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
       if (a?.scene_id !== sceneId) return { status: 409, body: { error: 'You are not in this scene.' } };
     }
     const controls = (tokenId: string) => user.role === 'gm' || user.tokenIds.includes(tokenId);
-    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm'));
+    // the GM's "Next turn" ends the whole turn (block); ending one figure's turn ends only its part
+    const only = typeof v.actor === 'string' ? v.actor : undefined;
+    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm' && !only && v.force !== false, only));
   }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).

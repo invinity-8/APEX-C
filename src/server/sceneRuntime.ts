@@ -28,6 +28,8 @@ export interface SceneSnapshot {
   reactions?: ReactionOffer[];
   /** APEX 1.3: the viewer's own characters: effects, concentration and readied action. */
   self?: Record<string, { effects: Array<{ id: string; name: string; key: string; note?: string }>; concentration?: string; readied?: { trigger: string; attackIndex?: number } }>;
+  /** GM focus: movement left per character. */
+  pcMovement?: Record<string, ViewerMovement>;
   /** GM vision mode the fog was computed for ('all' = no fog). */
   view?: string;
   /** Recent attacks on this scene. */
@@ -181,7 +183,9 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
             fog = fogString(map.hex.radius, visible, side);
           }
           const figures = figuresFor(stored.state, focus.id, map, pcs, [], visible, true);
-          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id) };
+          // movement left of every character (GM acts for characters: reach area and budget)
+          const pcMovement = local ? Object.fromEntries(await Promise.all(pcs.map(async (p) => [p.tokenId, movementFor(stored.state, focus.id, focus.category as 'battle' | 'region', p.tokenId, true, await sheetOf(ctx, p.tokenId), local)] as const))) : {};
+          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id), pcMovement };
         })() : {}),
       } };
     }

@@ -1,10 +1,8 @@
 import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import type { SceneInteraction } from './SceneSurface';
-import { activeActors, blockOf, characterLevel, pcActor, spellRangeFt } from '../game/sceneActions';
-import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects';
-import { parseRangeFt } from '../game/sceneCombat';
-import { areaHexes, parseArea } from '../campaign/hexArea';
+import { pcInteraction } from './pcInteraction';
+import { activeActors, blockOf, pcActor, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import { useEffect, useRef, useState } from 'react';
 import type { GameApi } from '../state/gameApi';
@@ -35,20 +33,24 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   // targets chosen with right-clicks for a multi-target spell (Bless, Scorching Ray …)
   const [spellTargets, setSpellTargets] = useState<Array<{ kind: 'pc'; tokenId: string; name: string } | { kind: 'npc'; id: string; name: string }>>([]);
   useEffect(() => setSpellTargets([]), [ready]);
-  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) { setMySheet(r.sheet.sheet); setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); } }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
+  // the readied attack is the character's default attack (right-click an enemy) – remembered on this device
+  useEffect(() => { if (!me?.id) return; try { const v = localStorage.getItem(`apex.defaultAttack.${me.id}`); if (v !== null) setReady({ kind: 'attack', index: Number(v) }); } catch { /* storage unavailable */ } }, [me?.id]);
+  useEffect(() => { if (!me?.id || ready?.kind !== 'attack') return; try { localStorage.setItem(`apex.defaultAttack.${me.id}`, String(ready.index)); } catch { /* storage unavailable */ } }, [me?.id, ready]);
+  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) { setMySheet(withSrdSpells(r.sheet.sheet)); setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); } }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
   const [uncertain, setUncertain] = useState<Record<string, unknown> | null>(null);
   const pendingRef = useRef(false);
-  async function send(input: Record<string, unknown>) {
-    if (pendingRef.current) return;
+  /** Sends a move; resolves true when the character arrived (not paused by an opportunity attack). */
+  async function send(input: Record<string, unknown>): Promise<boolean> {
+    if (pendingRef.current) return false;
     pendingRef.current = true; setPending(true); setMessage('');
-    try { const r = await api.sceneMove(input); setUncertain(null); setMessage(r.message ?? 'Movement saved.'); setMoveMode(false); game.online?.refresh(); }
-    catch (e) { setMessage(String(e)); if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) setUncertain(input); else { setUncertain(null); game.online?.refresh(); } }
+    try { const r = await api.sceneMove(input) as { message?: string; paused?: boolean }; setUncertain(null); setMessage(r.message ?? 'Movement saved.'); setMoveMode(false); game.online?.refresh(); return !r.paused; }
+    catch (e) { setMessage(String(e)); if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) setUncertain(input); else { setUncertain(null); game.online?.refresh(); } return false; }
     finally { pendingRef.current = false; setPending(false); }
   }
-  function move(x: number, y: number, viaRightClick = false) {
-    if (!scene?.scene || !me || (!moveMode && !viaRightClick) || uncertain || pendingRef.current) return;
+  function move(x: number, y: number, viaRightClick = false): Promise<boolean> {
+    if (!scene?.scene || !me || (!moveMode && !viaRightClick) || uncertain || pendingRef.current) return Promise.resolve(false);
     const token = scene.motion?.tokens.find(t => t.tokenId === me.id);
-    void send({ action: 'move', requestId: crypto.randomUUID(), tokenId: me.id, tokenVersion: token?.version ?? 0, sceneId: scene.scene.id, sceneRevision: scene.scene.revision, assignmentRevision: scene.assignmentRevision, epoch: scene.scene.category === 'battle' ? scene.motion?.round ?? 0 : scene.motion?.hour ?? 0, x, y });
+    return send({ action: 'move', requestId: crypto.randomUUID(), tokenId: me.id, tokenVersion: token?.version ?? 0, sceneId: scene.scene.id, sceneRevision: scene.scene.revision, assignmentRevision: scene.assignmentRevision, epoch: scene.scene.category === 'battle' ? scene.motion?.round ?? 0 : scene.motion?.hour ?? 0, x, y });
   }
   if (!scene || scene.kind === 'arena') return null;
   if (scene.kind === 'sanctuary') return <section className={`sanctuary sanctuary-${preset ? background : settings?.atmosphere ?? 'hall'}`} aria-label="Character Sanctuary">
@@ -81,11 +83,11 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     catch (e) { setMessage(String(e)); game.online?.refresh(); }
     finally { pendingRef.current = false; setPending(false); }
   }
-  async function sceneAction(input: Record<string, unknown>) {
-    if (!scene?.scene || pendingRef.current) return;
+  async function sceneAction(input: Record<string, unknown>): Promise<boolean> {
+    if (!scene?.scene || pendingRef.current) return false;
     pendingRef.current = true; setPending(true); setMessage('');
-    try { const r = await api.sceneTurn({ sceneId: scene.scene.id, ...input }); setMessage(r.message ?? 'Done.'); game.online?.refresh(); }
-    catch (e) { setMessage(String(e)); game.online?.refresh(); }
+    try { const r = await api.sceneTurn({ sceneId: scene.scene.id, ...input }); setMessage(r.message ?? 'Done.'); game.online?.refresh(); return true; }
+    catch (e) { setMessage(String(e)); game.online?.refresh(); return false; }
     finally { pendingRef.current = false; setPending(false); }
   }
   function figureClick(id: string) {
@@ -96,45 +98,15 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     setTarget(id);
   }
   const enemiesInSight = (scene.figures ?? []).filter(f => f.kind === 'enemy' && f.condition !== 'down');
-  // APEX 1.2 map interaction: reach + path preview on your turn, right-click to move / cast / attack
-  const myPos = scene.motion?.tokens.find(t => t.tokenId === me?.id) ?? scene.spawn ?? null;
+  // APEX 1.4 map interaction (shared with the GM acting for a character): reach, path, LoS, right-click rules
   const acting = category === 'battle' && (myTurn || free);
-  const readySpell = ready?.kind === 'spell' && mySheet ? mySheet.spells.find(x => x.id === ready.spellId) : undefined;
-  const readyArea = readySpell ? parseArea(`${readySpell.range} ${readySpell.description}`) : null;
-  const readyRange = ready?.kind === 'attack' ? (() => { const a = attacks[ready.index]; if (!a) return null; const r = parseRangeFt(`${a.range} ${a.notes}`); return r.rangeFt ?? r.reachFt; })() : readySpell ? spellRangeFt(readySpell.range) : null;
-  const map = scene.scene?.map;
-  const interaction: SceneInteraction = category !== 'battle' || !me ? {} : {
-    pathFrom: acting && canMove && myPos && !readyArea ? myPos : null,
-    pathBudget: free ? null : remaining,
-    lineFrom: acting && myPos && readyRange && readyRange > 10 && !readyArea ? myPos : null,
-    lineRangeFt: readyRange,
-    areaAt: acting && myPos && readyArea && map ? (pt) => areaHexes(map, myPos, pt, readyArea) : null,
-    focus: myTurn && liveEncounter && myPos ? { key: `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}`, x: myPos.x, y: myPos.y } : null,
-    onTokenContext: (id) => {
-      if (readySpell && ready?.kind === 'spell' && spellHealing(readySpell, ready.slotLevel || readySpell.level)) {
-        // healing spell: right-click the creature to heal
-        const f = (scene?.figures ?? []).find(x => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
-        const t = id === me.id ? { kind: 'pc', tokenId: me.id } : f ? (f.kind === 'pc' ? { kind: 'pc', tokenId: f.tokenId } : { kind: 'npc', id: f.id }) : null;
-        if (t) { void sceneAction({ action: 'cast', tokenId: me.id, spellId: readySpell.id, slotLevel: ready.slotLevel, targets: [t] }); setReady(null); }
-        return;
-      }
-      const def = readySpell ? spellEffectOf(readySpell) : undefined;
-      if (readySpell && def && !readyArea && (def.targeting === 'enemy' || def.targeting === 'ally') && mySheet) {
-        const max = spellCount(def, readySpell.level, ready?.kind === 'spell' ? ready.slotLevel || readySpell.level : readySpell.level, characterLevel(mySheet));
-        const f = (scene?.figures ?? []).find(x => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
-        const isMe = id === me.id;
-        const t = isMe ? { kind: 'pc' as const, tokenId: me.id, name: me.name } : f ? (f.kind === 'pc' ? { kind: 'pc' as const, tokenId: f.tokenId!, name: f.name } : { kind: 'npc' as const, id: f.id, name: f.name }) : null;
-        if (t) setSpellTargets(list => (list.length >= max ? list : [...list, t]));
-        return;
-      }
-      figureClick(id);
-    },
-    onHexContext: (_k, p) => {
-      if (!acting) return;
-      if (readyArea && readySpell && ready?.kind === 'spell') { void sceneAction({ action: 'cast', tokenId: me.id, spellId: readySpell.id, slotLevel: ready.slotLevel, point: p }); setReady(null); return; }
-      if (canMove) move(p.x, p.y, true);
-    },
-  };
+  const interaction: SceneInteraction = category !== 'battle' || !me ? {} : pcInteraction({
+    snapshot: scene, tokenId: me.id, name: me.name, sheet: mySheet, attacks, acting, canMove, remaining: free ? null : remaining,
+    ready, setReady, setSpellTargets, act: (input) => sceneAction(input), move: (x, y) => move(x, y, true),
+    openTargetMenu: (id) => setTarget(id), notify: setMessage,
+    focusKey: myTurn && liveEncounter ? `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}` : null,
+  });
+
   const canAttack = category === 'battle' && (free || myTurn) && attacks.length > 0;
   const status = !mv ? '' : free ? 'Free movement – no initiative running.' : mv.mode === 'turn' ? (myTurn ? `Your turn · ${remaining.toFixed(0)} ft left` : mv.reason ?? 'Waiting for your turn.') : `${remaining.toFixed(1)} of ${mv.allowance.toFixed(1)} miles left today (day ${scene.clock?.day ?? 1}${scene.clock?.phase === 'night' ? ', night' : ''})`;
   return <div className="player-scene">

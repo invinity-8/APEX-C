@@ -19,6 +19,7 @@ import type { GameState, SceneEncounter } from './types.js';
 import type { CharacterSheet, SheetSpell } from './sheet.js';
 import { SLOT_RE } from './resources.js';
 import { addEffect } from './combatEffects.js';
+import { withSrdMechanics } from './srdSpellMechanics.js';
 
 export type StandardAction = 'dash' | 'disengage' | 'dodge' | 'help' | 'hide' | 'ready' | 'search' | 'useObject';
 export const STANDARD_ACTIONS: Array<{ id: StandardAction; label: string; text: string }> = [
@@ -297,8 +298,9 @@ export function spellDamage(spell: Pick<SheetSpell, 'description' | 'level'>, sl
 
 /** Validated plan for casting `spell` with a slot level (0 for cantrips). */
 export function planSpell(sheet: CharacterSheet, spellId: string, slotLevel: number, characterLevel = 1): SpellPlan | { error: string } {
-  const spell = sheet.spells.find((s) => s.id === spellId);
-  if (!spell) return { error: 'Choose a spell from your character sheet.' };
+  const found = sheet.spells.find((s) => s.id === spellId);
+  if (!found) return { error: 'Choose a spell from your character sheet.' };
+  const spell = withSrdMechanics(found); // imported sheets often list spells without range or text
   if (spell.level > 0 && !spell.prepared) return { error: `${spell.name} is not prepared.` };
   if (spell.level === 0) slotLevel = 0;
   else {
@@ -342,3 +344,6 @@ export function characterLevel(sheet: Pick<CharacterSheet, 'details'>): number {
 }
 
 export const ordinal = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
+
+/** The sheet with SRD mechanics filled into spells that have no details (for the battle UI). */
+export const withSrdSpells = <T extends Pick<CharacterSheet, 'spells'>>(sheet: T): T => ({ ...sheet, spells: sheet.spells.map(withSrdMechanics) });

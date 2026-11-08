@@ -152,11 +152,8 @@ export function BattleCommand(p: Props) {
               const left = a.uses ? a.uses - (npc.areaUsed?.[a.name] ?? 0) : null;
               return <button key={a.name} type="button" className="btn btn-ghost px-2 py-0.5" aria-pressed={p.areaMode === i} disabled={p.busy || left === 0} title={`${a.sizeFt}-ft ${a.shape} · DC ${a.dc} ${a.save.toUpperCase()} · ${a.damage} ${a.damageType}`} onClick={() => p.setAreaMode(p.areaMode === i ? null : i)}>🔥 {a.name}{left !== null ? ` (${left})` : ''}</button>;
             })}
-            {selected.kind === 'pc' && attacks.length > 0 && (
-              <select aria-label="Attack with" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={p.pcAttack} onChange={(e) => p.setPcAttack(Number(e.target.value))}>
-                {attacks.map((a, i) => <option key={i} value={i}>{a.name} {a.bonus} · {a.damage}</option>)}
-              </select>
-            )}
+            {npc && (
+              <>
             <button type="button" className="btn btn-gold px-2 py-0.5" aria-pressed={p.mode === 'attack'} disabled={p.busy || npc?.defeated || (selected.kind === 'pc' && !attacks.length)} onClick={() => p.setMode(p.mode === 'attack' ? null : 'attack')} data-testid="gm-attack">
               {p.mode === 'attack' ? 'Click the target…' : 'Attack'}
             </button>
@@ -165,11 +162,13 @@ export function BattleCommand(p: Props) {
               {STANDARD_ACTIONS.map((a) => <option key={a.id} value={a.id} title={a.text}>{a.label}</option>)}
             </select>
             <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy || !encounter} onClick={() => p.act({ action: 'standard', actor: toSide(selected), act: 'bonusOther' })}>Bonus action</button>
+              </>
+            )}
             {npc && [-10, -5, -1, 1, 5].map((d) => (
               <button key={d} type="button" className="btn btn-ghost px-1.5 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'enemyHp', id: npc.id, delta: d })}>{d > 0 ? `+${d}` : d} HP</button>
             ))}
             {npc && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy} onClick={() => (p.act({ action: 'enemyRemove', id: npc.id }), p.setSelected(null))}>Remove</button>}
-            {isTurn && encounter && <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'endTurn', encounterId: encounter.id, turnSerial: encounter.turnSerial ?? 0 })}>End turn</button>}
+            {isTurn && encounter && <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'endTurn', encounterId: encounter.id, turnSerial: encounter.turnSerial ?? 0, actor })}>End turn</button>}
           </div>
           {p.mode === 'move' && <p className="text-gold-200">Click the destination hex. {selected.kind === 'pc' ? 'Characters move with their speed rules (the GM may move them out of turn).' : 'NPCs move freely.'} Leaving a hostile’s reach offers it an opportunity attack.</p>}
           {p.mode === 'attack' && <p className="text-gold-200">Click the target on the map (reach, range and line of sight are checked).</p>}

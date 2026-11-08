@@ -13,6 +13,12 @@ import { activeActors, budgetOf, isActiveActor } from '../game/sceneActions';
 import { InitiativeBar } from './PlayerScene';
 import type { SceneInteraction } from './SceneSurface';
 import { areaHexes } from '../campaign/hexArea';
+import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
+import { PlayerCombat, type ReadyAction } from './PlayerCombat';
+import { withSrdSpells } from '../game/sceneActions';
+import type { CharacterSheet, SheetAttack } from '../game/sheet';
+import { hexAt } from '../campaign/hexScene';
+import { distance, hexKey } from '../game/hex';
 import { combatAttacks } from '../game/effectiveStats';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { GameApi, DispatchResult } from '../state/gameApi';
@@ -120,8 +126,28 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [npcAttack, setNpcAttack] = useState(0);
   const [areaMode, setAreaMode] = useState<number | null>(null);
   const [gmAdv, setGmAdv] = useState<'' | 'adv' | 'dis'>('');
+  // APEX 1.4: the GM acts for a character with the same combat panel as its player
+  const [pcSheet, setPcSheet] = useState<CharacterSheet | null>(null);
+  const [pcAttacks, setPcAttacks] = useState<SheetAttack[]>([]);
+  const [pcReady, setPcReady] = useState<ReadyAction>(null);
+  const [pcTargets, setPcTargets] = useState<SpellTarget[]>([]);
+  const [pcMenu, setPcMenu] = useState<string | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
+  const selectedPc = selected?.kind === 'pc' ? selected.id : null;
+  useEffect(() => {
+    let live = true;
+    setPcReady(null); setPcTargets([]); setPcMenu(null);
+    if (!selectedPc) { setPcSheet(null); setPcAttacks([]); return; }
+    void game.sheets.load(selectedPc).then((r) => {
+      if (!live || !r.ok) return;
+      const details = game.view.tokens.find((t) => t.id === selectedPc)?.details;
+      setPcSheet(withSrdSpells(r.sheet.sheet));
+      setPcAttacks(details ? combatAttacks(r.sheet.sheet, { inventory: details.inventory, equipment: details.equipment, armorWornAt: details.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks);
+    });
+    return () => { live = false; };
+  }, [selectedPc, game.sheets.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPcTargets([]), [pcReady]);
   const sheets = game.sheets;
   const itemRules = game.view.itemRules;
   const tokensView = game.view.tokens;
@@ -360,6 +386,37 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       setNotice(r.message ?? (how === 'place' ? 'Token position saved to this scene.' : 'Moved.'));
       game.online?.refresh();
     });
+  }
+
+  /** Like sceneTurn, but resolves to whether it worked (and the server message). */
+  async function sceneTurnP(input: Record<string, unknown>): Promise<{ ok: boolean; message?: string }> {
+    const scene = shownScene;
+    if (!scene) return { ok: false };
+    let out: { ok: boolean; message?: string } = { ok: false };
+    await guarded(async () => {
+      const r = await api.sceneTurn({ sceneId: scene.id, ...input });
+      out = { ok: true, message: r.message };
+      setNotice(r.message ?? 'Done.');
+      game.online?.refresh();
+      setSnapshot(await api.sceneFocus(scene.id, viewRef.current));
+    });
+    return out;
+  }
+  /** GM moves a character by the rules; resolves true when it arrived (not paused by an opportunity attack). */
+  async function moveCharacterP(tokenId: string, x: number, y: number): Promise<boolean> {
+    const scene = shownScene;
+    if (!scene) return false;
+    let arrived = false;
+    await guarded(async () => {
+      const position = snapshot?.motion?.tokens.find((t) => t.tokenId === tokenId);
+      const assignment = shownPlayers.find((p) => p.tokenIds.includes(tokenId));
+      const r = (await api.sceneMove({ action: 'move', requestId: crypto.randomUUID(), sceneId: scene.id, sceneRevision: scene.revision, tokenId, tokenVersion: position?.version ?? 0, assignmentRevision: assignment?.revision ?? 0, epoch: snapshot?.motion?.round ?? 0, x, y })) as { message?: string; paused?: boolean };
+      arrived = !r.paused;
+      setSnapshot(await api.sceneFocus(scene.id, viewRef.current));
+      setNotice(r.message ?? 'Moved.');
+      game.online?.refresh();
+    });
+    return arrived;
   }
 
   /** Scene time & initiative (scene-local; the Arena clock is never touched). */
@@ -758,6 +815,20 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     if (!fig) return none;
     const actor = refKey(selected);
     const active = !gmEncounter || isActiveActor(gmEncounter, actor);
+    if (selected.kind === 'pc') {
+      // the GM acts for the character exactly like its player (reach, ready bar, right-click rules)
+      const mv = snapshot.pcMovement?.[selected.id];
+      const free = !gmEncounter;
+      const left = mv ? Math.max(0, mv.allowance - mv.spent) : null;
+      const interaction = pcInteraction({
+        snapshot, tokenId: selected.id, name: fig.name, sheet: pcSheet, attacks: pcAttacks, acting: active, canMove: !!mv?.canMove && (free || (left ?? 0) > 0), remaining: free ? null : left,
+        ready: pcReady, setReady: setPcReady, setSpellTargets: setPcTargets,
+        act: async (input) => (await sceneTurnP(input)).ok, move: (x, y) => moveCharacterP(selected.id, x, y),
+        openTargetMenu: (id) => setPcMenu(id), notify: setNotice,
+        focusKey: gmEncounter && active ? `${turnKey}:${actor}` : null,
+      });
+      return { reach: active && !free && left !== null ? left : null, interaction };
+    }
     const npc = selected.kind === 'npc' ? gmEnemies.find((e) => e.id === selected.id) : undefined;
     const b = budgetOf(gmEncounter, actor);
     const left = npc && gmEncounter ? Math.max(0, npc.speedFt * (b.dash ? 2 : 1) - (b.moved ?? 0)) : null;
@@ -781,7 +852,16 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
         const ref = refOf(id);
         if (!ref || refKey(ref) === actor) return;
         if (!active) return setNotice(`It is not ${fig.name}'s turn.`);
-        sceneTurn({ action: 'strike', attacker: toSide(selected), target: toSide(ref), attackIndex: selected.kind === 'pc' ? pcAttack : npcAttack, ...(gmAdv ? { adv: gmAdv } : {}) });
+        const strike = () => sceneTurn({ action: 'strike', attacker: toSide(selected), target: toSide(ref), attackIndex: npcAttack, ...(gmAdv ? { adv: gmAdv } : {}) });
+        const tf = (snapshot.figures ?? []).find((f) => (ref.kind === 'pc' ? f.tokenId === ref.id : f.id === ref.id));
+        if (!tf || !attack) return strike();
+        // out of melee reach: walk into reach first (within the movement left), then attack
+        const dist = distance(hexAt(map, fig), hexAt(map, tf)) * 5;
+        if (attack.kind !== 'melee' || dist <= attack.reachFt) return strike();
+        const occupied = new Set((snapshot.figures ?? []).filter((f) => f !== fig && f.condition !== 'down').map((f) => hexKey(hexAt(map, f))));
+        const spot = approachHex(map, fig, tf, attack.reachFt, occupied, left);
+        if (!spot) return setNotice(`${tf.name} cannot be reached with ${fig.name}'s movement left.`);
+        void sceneTurnP({ action: 'enemyMove', id: npc!.id, x: spot.x, y: spot.y }).then((r) => { if (r.ok && !/ stops /.test(r.message ?? '')) strike(); });
       },
     };
     return { reach: active && left !== null ? left : null, interaction };
@@ -809,6 +889,17 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
             {shownScene.category === 'battle' && shownScene.map.hex && (
               <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} adv={gmAdv} setAdv={setGmAdv} />
             )}
+            {shownScene.category === 'battle' && selected?.kind === 'pc' && (() => {
+              const fig = (snapshot.figures ?? []).find((f) => f.kind === 'pc' && f.tokenId === selected.id);
+              const mv = snapshot.pcMovement?.[selected.id];
+              const pcSnapshot = { ...snapshot, reactions: [], self: { [selected.id]: { effects: fig?.effects ?? [], concentration: fig?.concentration } } };
+              return (
+                <div data-testid="gm-pc-panel">
+                  <p className="px-1 text-[11px] text-marble-400">Acting for <b className="text-gold-200">{fig?.name ?? 'character'}</b> – same panel as the player; right-click on the map like the player.</p>
+                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacks} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />
+                </div>
+              );
+            })()}
             <SceneSurface
               snapshot={snapshot}
               tokenLabels={markers}
