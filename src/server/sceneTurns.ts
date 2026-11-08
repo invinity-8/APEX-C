@@ -18,16 +18,16 @@ import { orderParticipants } from '../game/sceneOperations.js';
 import type { GameState } from '../game/types.js';
 import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
-import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
-import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
+import { carriedLights, clockFor, hexKeyAt, parseStoredSheet, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
+import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, activeActors, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
 import { statBlock, type AbilityKey } from '../game/bestiary.js';
-import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
+import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, type EffectMods, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
 import type { AttackOptions } from '../game/sceneCombat.js';
 import { attackExtras } from './combatFeatures.js';
 import { areaHexes, feetApart, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
-import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy } from '../game/sceneCombat.js';
+import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { hexAt, hexCentre, hexMovementCost, passable, tileLookup } from '../campaign/hexScene.js';
 import { continuePcMove } from './sceneMotion.js';
@@ -36,6 +36,7 @@ import { distance } from '../game/hex.js';
 import { applyDamage, applyHealing, classLevel, revert, setTempHp, transform } from '../game/abilities.js';
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
 import { findBeast } from '../game/beastCatalog.js';
+import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
 import { npcPerception, npcStealth, pcAbilityMod, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
 import type { SceneMap } from '../campaign/maps.js';
@@ -147,7 +148,13 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     const controls = (tokenId: string) => user.role === 'gm' || user.tokenIds.includes(tokenId);
     // the GM's "Next turn" ends the whole turn (block); ending one figure's turn ends only its part
     const only = typeof v.actor === 'string' ? v.actor : undefined;
-    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm' && !only && v.force !== false, only));
+    const res = await mutate(user, repo, (s) => {
+      const r = endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm' && !only && v.force !== false, only);
+      if (r.ok && (activeEncounter(r.state, sceneId)?.turnSerial ?? 0) !== (activeEncounter(s, sceneId)?.turnSerial ?? 0)) turnStartNpcs(r.state, sceneId);
+      return r;
+    });
+    if (res.status === 200) await turnStartSheets(user, repo, sceneId, v.turnSerial as number);
+    return res;
   }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).
@@ -217,16 +224,23 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     if (!who || (!cond && typeof v.effectId !== 'string')) return { status: 400, body: { error: 'Invalid condition.' } };
     const actor = actorOf(who);
     if (user.role !== 'gm' && !(v.add === false && cond === 'prone' && controls(user, who))) return { status: 403, body: { error: 'Only the GM sets conditions.' } };
-    return mutate(user, repo, (s) => {
+    let lostMax = 0;
+    const res = await mutate(user, repo, (s) => {
       const st = structuredClone(s);
       const name = nameOf(st, sceneId, who);
+      lostMax = 0;
       if (v.add === true && cond) { addEffect(st, sceneId, actor, conditionEffect(cond, undefined, () => `fx-${crypto.randomUUID().slice(0, 8)}`)); logCombat(st, sceneId, `${name} is ${cond}.`); return { ok: true, state: st, message: `${name}: ${cond}.` }; }
       const list = effectsOf(st, sceneId, actor).filter((e) => (typeof v.effectId === 'string' ? e.id === v.effectId : e.key === cond));
       if (!list.length) return { ok: false, error: 'Not on this creature.' };
       for (const e of list) removeEffect(st, sceneId, actor, e.id);
+      // Aid ends: the raised hit point maximum goes back down
+      lostMax = list.reduce((n, e) => n + (e.mods.maxHp ?? 0), 0);
+      if (lostMax && who.kind === 'npc') { const en = enemiesOf(st, sceneId).find((x) => x.id === who.id); if (en) { en.maxHp = Math.max(1, en.maxHp - lostMax); en.hp = Math.min(en.hp, en.maxHp); } }
       logCombat(st, sceneId, `${name}: ${list.map((e) => e.name).join(', ')} ends.`);
       return { ok: true, state: st, message: `${list.map((e) => e.name).join(', ')} removed.` };
     });
+    if (res.status === 200 && lostMax && who.kind === 'pc') await lowerMaxHp(user, repo, who.tokenId, lostMax);
+    return res;
   }
   if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM can do that.' } };
   if (v.action === 'enemyAdd' || v.action === 'enemyMove') {
@@ -349,6 +363,12 @@ async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<
 }
 const feetBetween = (map: SceneMap) => (a: { x: number; y: number }, b: { x: number; y: number }) => distance(hexAt(map, a), hexAt(map, b)) * 5;
 
+/** Visual feedback of one attack roll (APEX 1.6). */
+const strikeFx = (strike: Pick<Strike, 'name' | 'kind' | 'damageType' | 'reachFt'>, attacker: Side | undefined, target: string, roll: { hit: boolean; crit?: boolean; damage: number }): Omit<SceneFx, 'id' | 'at'> => ({
+  kind: roll.hit ? (roll.crit ? 'crit' : 'hit') : 'miss', ...(attacker ? { from: actorOf(attacker) } : {}), to: target, ...(roll.hit ? { amount: roll.damage } : {}),
+  label: strike.name, element: elementOf(`${strike.damageType ?? ''} ${strike.name}`, strike.kind === 'spell'), ranged: strike.kind === 'ranged' || strike.kind === 'spell' || strike.reachFt > 10,
+});
+
 interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string; kind?: 'melee' | 'ranged' | 'spell'; damageType?: string; longRangeFt?: number; finesse?: boolean; /** the attack uses the inactive weapon set: switch to it */ switchSet?: boolean }
 
 /** Attack numbers of an attacker: a character's attack (equipment + sheet) or an NPC's attack. */
@@ -388,6 +408,45 @@ async function concentrationCheck(ctx: Ctx, actor: string, damage: number): Prom
   const d = die(20);
   const broken = d + bonus < dc;
   return { text: ` Concentration (${c.spell}): Con save d20 ${d} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${d + bonus} vs DC ${dc} → ${broken ? 'lost' : 'kept'}.`, broken };
+}
+
+/** Effects that act at the start of a creature's turn: temporary hit points (Heroism) – NPCs in the state write. */
+function turnStartNpcs(state: GameState, sceneId: string) {
+  const e = activeEncounter(state, sceneId);
+  if (!e) return;
+  for (const id of activeActors(e)) {
+    if (!id.startsWith('npc-')) continue;
+    const t = effectsOf(state, sceneId, id).reduce((n, x) => Math.max(n, x.mods.tempHpTurn ?? 0), 0);
+    if (t > 0) { grantEnemyTempHp(state, sceneId, id.slice(4), t); logCombat(state, sceneId, `${nameOf(state, sceneId, { kind: 'npc', id: id.slice(4) })} gains ${t} temporary hit points (Heroism).`); }
+  }
+}
+
+/** …and characters on their sheets, once per new turn (after the turn changed). */
+async function turnStartSheets(user: AuthUser, repo: Repo, sceneId: string, previousSerial: number) {
+  const ctx = await sceneContext(repo, user.campaignId);
+  const e = ctx.state ? activeEncounter(ctx.state, sceneId) : null;
+  if (!ctx.state || !e || (e.turnSerial ?? 0) === previousSerial) return;
+  for (const id of activeActors(e)) {
+    if (!id.startsWith('pc-')) continue;
+    const t = effectsOf(ctx.state, sceneId, id).reduce((n, x) => Math.max(n, x.mods.tempHpTurn ?? 0), 0);
+    if (t <= 0) continue;
+    const tokenId = id.slice(3);
+    const row = await repo.loadSheet(user.campaignId, tokenId);
+    const sheet = row ? parseStoredSheet(row.data) : null;
+    if (!sheet?.hitPoints || sheet.hitPoints.temp >= t) continue;
+    const r = setTempHp(sheet, 'grant', t);
+    if (r.ok) await repo.saveSheet(user.campaignId, tokenId, r.sheet, row?.version ?? 0, user.id);
+  }
+}
+
+/** Aid ends: the character's hit point maximum (and current HP above it) go back down. */
+async function lowerMaxHp(user: AuthUser, repo: Repo, tokenId: string, by: number) {
+  const row = await repo.loadSheet(user.campaignId, tokenId);
+  const sheet = row ? parseStoredSheet(row.data) : null;
+  if (!sheet?.hitPoints) return;
+  sheet.hitPoints.max = Math.max(1, sheet.hitPoints.max - by);
+  sheet.hitPoints.current = Math.min(sheet.hitPoints.current, sheet.hitPoints.max);
+  await repo.saveSheet(user.campaignId, tokenId, sheet, row?.version ?? 0, user.id);
 }
 
 /** Damage to a character's sheet (temporary HP, Wild Shape and hit points). */
@@ -433,6 +492,7 @@ async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: s
       apply: (s) => {
         const r = roll.hit ? updateEnemy(s, sceneId, e.id, { hpDelta: -roll.damage }) : { ok: true as const, state: structuredClone(s) };
         const st = r.ok ? r.state : structuredClone(s);
+        pushFx(st, sceneId, [strikeFx(strike, o.attacker, targetActor, roll)]);
         const after = enemiesOf(st, sceneId).find((x) => x.id === e.id);
         if (conc?.broken || after?.defeated) endConcentration(st, sceneId, targetActor);
         if (!o.quiet) logCombat(st, sceneId, text + (after?.defeated ? ` ${e.name} is defeated.` : ''));
@@ -466,7 +526,7 @@ async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: s
   const hp = roll.hit ? await damagePc(user, repo, ctx, target.tokenId, roll.damage) : '';
   const conc = roll.hit ? await concentrationCheck(ctx, targetActor, roll.damage) : null;
   const text = roll.text + hp + extraText + (conc?.text ?? '');
-  return { text, hit: roll.hit, apply: (s) => { const st = structuredClone(s); if (conc?.broken) endConcentration(st, sceneId, targetActor); if (!o.quiet) logCombat(st, sceneId, text); return st; } };
+  return { text, hit: roll.hit, apply: (s) => { const st = structuredClone(s); pushFx(st, sceneId, [strikeFx(strike, o.attacker, targetActor, roll)]); if (conc?.broken) endConcentration(st, sceneId, targetActor); if (!o.quiet) logCombat(st, sceneId, text); return st; } };
 }
 
 const positionOf = (figures: Figure[], s: Side) => figures.find((f) => (s.kind === 'pc' ? f.kind === 'pc' && f.id === s.tokenId : f.kind === 'npc' && f.id === s.id));
@@ -495,7 +555,7 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
   const sheet = attacker.kind === 'pc' ? await sheetOf(ctx, attacker.tokenId) : null;
   const allowed = attacker.kind === 'npc' ? (enemiesOf(ctx.state, scene.id).find((x) => x.id === attacker.id)?.multiattack ?? 1) : attacksPerAction(sheet);
   // pre-check the economy before rolling (the write re-checks it)
-  const pre = useEconomy(activeEncounter(structuredClone(ctx.state), scene.id), actorOf(attacker), econ, { gm: user.role === 'gm', attacksAllowed: allowed });
+  const pre = useEconomy(activeEncounter(structuredClone(ctx.state), scene.id), actorOf(attacker), econ, { gm: user.role === 'gm', attacksAllowed: allowed, haste: econ === 'attack' && hasted(ctx.state, scene.id, actorOf(attacker)) });
   if (pre) return { status: 409, body: { error: pre } };
   const strike = await strikeOf(ctx, attacker, attackIndex);
   if (typeof strike === 'string') return { status: 422, body: { error: strike } };
@@ -525,7 +585,7 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
   }
   return mutate(user, repo, (s) => {
     const st = r.apply(s);
-    const err = useEconomy(st.sceneEncounters?.[scene.id]?.status === 'active' ? st.sceneEncounters[scene.id] : null, actorOf(attacker), econ, { gm: user.role === 'gm', attacksAllowed: allowed });
+    const err = useEconomy(st.sceneEncounters?.[scene.id]?.status === 'active' ? st.sceneEncounters[scene.id] : null, actorOf(attacker), econ, { gm: user.role === 'gm', attacksAllowed: allowed, haste: econ === 'attack' && hasted(st, scene.id, actorOf(attacker)) });
     if (asReaction && st.sceneReadied?.[scene.id]?.[actorOf(attacker)]) { const r = { ...st.sceneReadied[scene.id] }; delete r[actorOf(attacker)]; st.sceneReadied = { ...st.sceneReadied, [scene.id]: r }; }
     if (err) return { ok: false, error: err };
     for (const id of mods.onceUsed) removeEffect(st, scene.id, actorOf(attacker), id);
@@ -586,13 +646,16 @@ async function standardRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
     if (map?.hex && ctx.state) search = await searchFor(ctx, map, actor);
   }
   return mutate(user, repo, (s) => {
-    let r = takeStandardAction(s, scene.id, actorOf(actor), nameOf(s, scene.id, actor), v.act as StandardAction, viaBonus, user.role === 'gm');
+    let r = takeStandardAction(s, scene.id, actorOf(actor), nameOf(s, scene.id, actor), v.act as StandardAction, viaBonus, user.role === 'gm', hasted(s, scene.id, actorOf(actor)));
     if (!r.ok && search && !activeEncounter(s, scene.id)) r = { ok: true, state: structuredClone(s) }; // searching is free outside initiative
     if (r.ok && search) { for (const a of search.found) reveal(r.state, scene.id, a); r.message = search.lines.join(' '); }
     if (r.ok && r.message) logCombat(r.state, scene.id, r.message);
     return r;
   });
 }
+
+/** Hasted: one extra limited action per turn (APEX 1.6). */
+const hasted = (state: GameState, sceneId: string, actor: string) => effectsOf(state, sceneId, actor).some((e) => e.key === 'haste');
 
 const CONCENTRATION_SPELLS = new Set(['bless', 'bane', 'shield of faith', "hunter's mark", 'hex', 'hold person', 'hold monster', 'faerie fire', 'web', 'entangle', 'invisibility', 'blur', 'tasha’s hideous laughter', 'barkskin', 'haste', 'stoneskin', 'greater invisibility', 'heroism', 'divine favor']);
 
@@ -665,7 +728,11 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
   const area = parseArea(`${plan.spell.range} ${plan.spell.description}`);
   const heal = spellHealing(plan.spell, plan.slotLevel || plan.spell.level);
   const source = { actor: casterActor, name: casterName, spell: plan.spell.name, concentration: conc };
-  const makeEffect = (d: NonNullable<NonNullable<typeof def>['effect']>) => (d.condition ? { ...conditionEffect(d.condition, source, () => `fx-${crypto.randomUUID().slice(0, 8)}`), name: d.name } : { id: `fx-${crypto.randomUUID().slice(0, 8)}`, name: d.name, key: d.key, mods: { ...(d.mods ?? {}) }, source, ...(d.untilStartOfCaster ? { untilStartOf: casterActor } : {}), ...(d.turns ? { turns: d.turns } : {}) });
+  const spellMod = (nums.attack ?? 0) - (Number(/[+-]?\d+/.exec(sheet.combat.find((c) => /proficiency/i.test(c.label))?.value ?? '')?.[0]) || 2);
+  const upcast = Math.max(0, (plan.slotLevel || plan.spell.level) - plan.spell.level);
+  /** Numbers that depend on the caster or the slot: Heroism's temporary HP, Aid's hit points. */
+  const modsOf = (m: EffectMods = {}): EffectMods => ({ ...m, ...(m.tempHpTurn === -1 ? { tempHpTurn: Math.max(1, spellMod) } : {}), ...(m.maxHp ? { maxHp: m.maxHp + (def?.maxHpPerSlot ?? 0) * upcast } : {}) });
+  const makeEffect = (d: NonNullable<NonNullable<typeof def>['effect']>) => (d.condition ? { ...conditionEffect(d.condition, source, () => `fx-${crypto.randomUUID().slice(0, 8)}`), name: d.name } : { id: `fx-${crypto.randomUUID().slice(0, 8)}`, name: d.mods?.maxHp ? `${d.name} (+${modsOf(d.mods).maxHp} max HP)` : d.name, key: d.key, mods: modsOf(d.mods), source, ...(d.untilStartOfCaster ? { untilStartOf: casterActor } : {}), ...(d.turns ? { turns: d.turns } : {}) });
   /** Effect with an optional saving throw for one creature. */
   const affect = async (who: Side, name: string) => {
     if (!def?.effect) return;
@@ -673,17 +740,32 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
       const b = await saveOf(ctx, who, def.save), d = die(20);
       const ok = d + b >= dc;
       lines.push(`${name}: ${def.save.toUpperCase()} save d20 ${d} ${b >= 0 ? '+' : '−'} ${Math.abs(b)} = ${d + b} vs DC ${dc} → ${ok ? 'resists' : `${def.effect.name}`}.`);
-      if (ok) return;
+      if (ok) { steps.push((st) => { pushFx(st, scene.id, [{ kind: 'resist', from: casterActor, to: actorOf(who), label: plan.spell.name, element: elementOf(plan.spell.name, true), ranged: true }]); return st; }); return; }
     } else lines.push(`${name}: ${def.effect.name}.`);
+    steps.push((st) => { pushFx(st, scene.id, [{ kind: def.targeting === 'enemy' || def.targeting === 'point' ? 'debuff' : 'buff', from: casterActor, to: actorOf(who), label: def.effect!.name, element: def.targeting === 'enemy' || def.targeting === 'point' ? elementOf(plan.spell.name, true) : 'radiant', ranged: true }]); return st; });
     const fx = makeEffect(def.effect);
     steps.push((st) => { addEffect(st, scene.id, actorOf(who), fx); return st; });
   };
 
   /** Buffs and support (APEX 1.5): the effect, temporary hit points, ending a condition. */
   const support = async (who: Side, name: string) => {
-    if (def?.effect) await affect(who, name);
+    const had = def?.effect ? effectsOf(ctx.state!, scene.id, actorOf(who)).some((x) => x.key === def.effect!.key) : false;
+    // Aid on a creature that already has it: nothing changes (it does not stack)
+    if (def?.effect && !(had && def.effect.mods?.maxHp)) await affect(who, name);
+    // Aid: maximum and current hit points rise (once – a second Aid does not stack)
+    const raise = def?.effect?.mods?.maxHp ? modsOf(def.effect.mods).maxHp! : 0;
+    if (raise && !had) {
+      if (who.kind === 'pc') {
+        const trow = await repo.loadSheet(user.campaignId, who.tokenId);
+        const ts = structuredClone(await sheetOf(ctx, who.tokenId));
+        if (ts.hitPoints) { ts.hitPoints.max += raise; ts.hitPoints.current += raise; await repo.saveSheet(user.campaignId, who.tokenId, ts, trow?.version ?? 0, user.id); }
+        lines.push(`${name}: hit point maximum +${raise}${ts.hitPoints ? ` (${ts.hitPoints.current}/${ts.hitPoints.max} HP)` : ''}.`);
+      } else {
+        lines.push(`${name}: hit point maximum +${raise}.`);
+        steps.push((st) => { const en = enemiesOf(st, scene.id).find((x) => x.id === who.id); if (en) { en.maxHp += raise; en.hp += raise; } return st; });
+      }
+    } else if (raise) lines.push(`(${name} already has ${def!.effect!.name} – it does not stack.)`);
     if (def?.tempHp) {
-      const spellMod = (nums.attack ?? 0) - (Number(/[+-]?\d+/.exec(sheet.combat.find((c) => /proficiency/i.test(c.label))?.value ?? '')?.[0]) || 2);
       const base = def.tempHp.amount === 'mod' ? Math.max(1, spellMod) : (() => { const d = parseDamage(def.tempHp!.amount); return d ? rollDice(d).total : Number(def.tempHp!.amount) || 0; })();
       const amount = base + (def.tempHp.perSlot ?? 0) * Math.max(0, (plan.slotLevel || plan.spell.level) - plan.spell.level);
       if (who.kind === 'pc') {
@@ -691,8 +773,9 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
         const ts = await sheetOf(ctx, who.tokenId);
         const r = setTempHp(ts, 'grant', amount);
         if (r.ok) await repo.saveSheet(user.campaignId, who.tokenId, r.sheet, trow?.version ?? 0, user.id);
-        lines.push(`${name} gains ${amount} temporary hit points${r.ok ? ` (temporary HP ${r.sheet.hitPoints?.temp})` : ' (apply by hand)'}.`);
-      } else lines.push(`${name} gains ${amount} temporary hit points (GM: note them).`);
+        steps.push((st) => { pushFx(st, scene.id, [{ kind: 'buff', from: casterActor, to: actorOf(who), amount, label: 'temp HP', element: 'force', ranged: true }]); return st; });
+      lines.push(`${name} gains ${amount} temporary hit points${r.ok ? ` (temporary HP ${r.sheet.hitPoints?.temp})` : ' (apply by hand)'}.`);
+      } else { lines.push(`${name} gains ${amount} temporary hit points.`); steps.push((st) => { grantEnemyTempHp(st, scene.id, who.id, amount); return st; }); }
     }
     if (def?.removes) {
       const actor = actorOf(who);
@@ -715,6 +798,7 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
         const c = await concentrationCheck(ctx, actorOf(t), r.total);
         lines.push(`${def.projectiles.label} ${i + 1} → ${tname}: ${r.total} damage${dmgText}.${c?.text ?? ''}`);
         if (t.kind === 'npc') steps.push((st) => { const u = updateEnemy(st, scene.id, t.id, { hpDelta: -r.total }); return u.ok ? u.state : st; });
+        steps.push((st) => { pushFx(st, scene.id, [{ kind: 'hit', from: casterActor, to: actorOf(t), amount: r.total, label: plan.spell.name, element: elementOf(`${def.projectiles!.damage} ${plan.spell.name}`, true), ranged: true }]); return st; });
         if (c?.broken) steps.push((st) => { endConcentration(st, scene.id, actorOf(t)); return st; });
       } else {
         const tf = positionOf(figures, t)!;
@@ -737,9 +821,11 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
         const ts = await sheetOf(ctx, t.tokenId);
         const healed = ts.hitPoints ? applyHealing(ts, amount) : null;
         if (healed?.ok) await repo.saveSheet(user.campaignId, t.tokenId, healed.sheet, trow?.version ?? 0, user.id);
+        steps.push((st) => { pushFx(st, scene.id, [{ kind: 'heal', from: casterActor, to: actorOf(t), amount, label: plan.spell.name, element: 'heal', ranged: true }]); return st; });
         lines.push(`${tname} regains ${amount} hit points${healed?.ok ? ` (${healed.sheet.hitPoints?.current}/${healed.sheet.hitPoints?.max} HP)` : ''}.`);
       } else {
         lines.push(`${tname} regains ${amount} hit points.`);
+        steps.push((st) => { pushFx(st, scene.id, [{ kind: 'heal', from: casterActor, to: actorOf(t), amount, label: plan.spell.name, element: 'heal', ranged: true }]); return st; });
         steps.push((st) => { const u = updateEnemy(st, scene.id, t.id, { hpDelta: amount }); return u.ok ? u.state : st; });
       }
     }
@@ -945,6 +1031,7 @@ async function resolveArea(user: AuthUser, repo: Repo, ctx: Ctx, map: SceneMap, 
   const lines = [`${fx.source}: ${fx.name} – ${fx.area.sizeFt}-ft ${fx.area.shape}, DC ${fx.dc} ${ABILITY_NAME[fx.save]} save${rolled.total ? `, ${rolled.total} ${fx.damageType} damage (${rolled.rolls.join('+')}${dice?.mod ? `+${dice.mod}` : ''})` : ''}${fx.condition ? `, ${fx.condition} on a failure` : ''}.${figures.length ? '' : ' Nobody is in the area.'}`];
   const npcHits: Array<{ id: string; dmg: number }> = [];
   const conditionHits: Array<{ actor: string; name: string }> = [];
+  const hitsFx: Array<{ actor: string; dmg: number }> = [];
   for (const f of figures) {
     let bonus = 0;
     if (f.kind === 'npc') {
@@ -966,6 +1053,7 @@ async function resolveArea(user: AuthUser, repo: Repo, ctx: Ctx, map: SceneMap, 
       } else hp = ' (apply by hand)';
     }
     const noDamage = !dice || rolled.total === 0;
+    hitsFx.push({ actor: f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id), dmg: noDamage ? 0 : dmg });
     if (!saved && fx.condition) conditionHits.push({ actor: f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id), name: f.name });
     lines.push(`${f.name}: d20 ${d20} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${d20 + bonus} → ${saved ? (noDamage ? 'saved' : 'saved, half') : 'failed'}${noDamage ? '' : `: ${dmg} damage${hp}`}${!saved && fx.condition ? ` – ${fx.condition}` : ''}.`);
   }
@@ -980,6 +1068,10 @@ async function resolveArea(user: AuthUser, repo: Repo, ctx: Ctx, map: SceneMap, 
         const after = enemiesOf(st, sceneId).find((x) => x.id === h.id);
         if (after?.defeated) lines.push(`${after.name} is defeated.`);
       }
+      pushFx(st, sceneId, [
+        { kind: 'area', ...(fx.sourceActor ? { from: fx.sourceActor } : {}), point, hexes: [...keys], sizeFt: fx.area.sizeFt, label: fx.name, element: elementOf(`${fx.damageType} ${fx.name}`, true), ranged: true },
+        ...hitsFx.map((h) => ({ kind: (h.dmg > 0 ? 'hit' : 'resist') as SceneFx['kind'], to: h.actor, ...(h.dmg > 0 ? { amount: h.dmg } : {}), element: elementOf(`${fx.damageType} ${fx.name}`, true) })),
+      ]);
       for (const c of conditionHits) addEffect(st, sceneId, c.actor, conditionEffect(fx.condition!, fx.sourceActor ? { actor: fx.sourceActor, name: fx.source } : undefined, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
       if (!quiet) for (const l of lines) logCombat(st, sceneId, l);
       return st;
@@ -1049,6 +1141,12 @@ async function shieldDecision(user: AuthUser, repo: Repo, ctx: Ctx, scene: Scene
       addEffect(st, scene.id, actor, { id: `fx-shield-${crypto.randomUUID().slice(0, 6)}`, name: 'Shield', key: 'shield', mods: { ac: 5 }, untilStartOf: actor, source: { actor, name: hit.target.name, spell: 'Shield' } });
     }
     if (lostConc) endConcentration(st, scene.id, actor);
+    const landed = !shielded || hit.natural20 || hit.total >= hit.ac + 5;
+    const by = `${hit.attacker.kind === 'pc' ? 'pc' : 'npc'}-${hit.attacker.id}`;
+    pushFx(st, scene.id, [
+      ...(shielded ? [{ kind: 'buff' as const, to: actor, label: 'Shield', element: 'force' as const }] : []),
+      { kind: landed ? (hit.crit ? 'crit' : 'hit') : 'miss', from: by, to: actor, ...(landed ? { amount: hit.damage } : {}), element: 'physical' },
+    ]);
     logCombat(st, scene.id, text);
     return { ok: true, state: st, message: text };
   });
@@ -1093,12 +1191,14 @@ async function featureRequest(user: AuthUser, repo: Repo, scene: Scene, v: Recor
         const r = rollDice({ count: 1, sides: 10, mod: fighter });
         const healed = next.hitPoints ? applyHealing(next, r.total) : null;
         if (healed?.ok) next = healed.sheet;
+        steps.push((st) => pushFx(st, scene.id, [{ kind: 'heal', to: actor, amount: r.total, label: 'Second Wind', element: 'heal' }]));
         text = `${name} uses Second Wind: +${r.total} HP (${r.rolls[0]}+${fighter})${healed?.ok ? ` → ${healed.sheet.hitPoints?.current}/${healed.sheet.hitPoints?.max}` : ''}.`;
       }
       break;
     }
     case 'rage': {
       next = spendUse(sheet, info);
+      steps.push((st) => pushFx(st, scene.id, [{ kind: 'buff', to: actor, label: 'Rage', element: 'fire' }]));
       text = `${name} rages! Resistance to bludgeoning, piercing and slashing damage, +${rageDamage(barb)} melee damage for 10 rounds.`;
       steps.push((st) => addEffect(st, scene.id, actor, { id: `fx-rage-${crypto.randomUUID().slice(0, 6)}`, name: 'Raging', key: 'rage', mods: { resistPhysical: true, meleeDamage: rageDamage(barb) }, turns: 10, source: { actor, name } }));
       break;
@@ -1138,11 +1238,13 @@ async function featureRequest(user: AuthUser, repo: Repo, scene: Scene, v: Recor
           if (h?.ok) await repo.saveSheet(user.campaignId, target.tokenId, h.sheet, trow?.version ?? 0, user.id);
         } else if (target.kind === 'pc') { const h = next.hitPoints ? applyHealing(next, amount) : null; if (h?.ok) next = h.sheet; }
         else steps.push((st) => { const u = updateEnemy(st, scene.id, target.id, { hpDelta: amount }); if (u.ok) Object.assign(st, u.state); });
+        steps.push((st) => pushFx(st, scene.id, [{ kind: 'heal', from: actor, to: actorOf(target), amount, label: 'Lay on Hands', element: 'heal' }]));
         text = `${name} lays hands on ${to.name}: +${amount} HP.`;
       } else {
         if (target.kind === 'pc' && target.tokenId === v.tokenId) return { status: 422, body: { error: 'Bardic Inspiration goes to another creature.' } };
         next = spendUse(sheet, info);
         const d = inspirationDie(bard);
+        steps.push((st) => pushFx(st, scene.id, [{ kind: 'buff', from: actor, to: actorOf(target), label: 'Inspired', element: 'radiant', ranged: true }]));
         text = `${name} inspires ${to.name}: +1${d} on its next attack roll.`;
         steps.push((st) => addEffect(st, scene.id, actorOf(target), { id: `fx-insp-${crypto.randomUUID().slice(0, 6)}`, name: `Inspired (1${d})`, key: 'inspired', mods: { toHitDie: `1${d}`, once: true }, source: { actor, name } }));
       }
@@ -1188,7 +1290,7 @@ async function hideRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
     const st = structuredClone(s);
     const e = activeEncounter(st, scene.id);
     if (e) {
-      const err = useEconomy(st.sceneEncounters![scene.id], actor, viaBonus ? 'bonus' : 'action', { gm: user.role === 'gm' });
+      const err = useEconomy(st.sceneEncounters![scene.id], actor, viaBonus ? 'bonus' : 'action', { gm: user.role === 'gm', haste: !viaBonus && hasted(st, scene.id, actor) });
       if (err) return { ok: false, error: err };
       spend(st.sceneEncounters![scene.id], actor, { last: 'hide' });
       st.sceneEncounters![scene.id].version++;

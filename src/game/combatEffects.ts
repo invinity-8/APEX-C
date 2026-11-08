@@ -48,6 +48,10 @@ export interface EffectMods {
   /** Walking speed bonus in feet (Longstrider +10) and a multiplier (Haste ×2). */
   speed?: number;
   speedMult?: number;
+  /** APEX 1.6 – temporary hit points at the start of each of its turns (Heroism; -1 in a spell table = the caster's spellcasting modifier). */
+  tempHpTurn?: number;
+  /** Hit point maximum raised by this much while the effect lasts (Aid) – applied to the sheet / NPC once. */
+  maxHp?: number;
   /** Extra damage dice on this creature's weapon hits (Divine Favor 1d4 radiant). */
   weaponDamage?: string;
   /** On the TARGET: the marker (source actor) deals this extra damage dice on hits against it (Hunter's Mark, Hex). */

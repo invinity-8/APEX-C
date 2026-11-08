@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MarkerShape } from '../CharacterVisuals';
 import type { ReactNode } from 'react';
 import type { Site } from '../../game/types';
@@ -97,10 +98,12 @@ interface TokenStackProps {
   viewerId: string | null;
   hiddenTeamIds: Set<string>;
   onSelect: (id: string) => void;
+  /** APEX 1.6 – show uploaded character portraits inside the markers (online scenes). */
+  portraits?: boolean;
 }
 
 /** Mehrere Figuren auf einem Feld werden gruppiert, damit nichts übereinander liegt. */
-export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSelect }: TokenStackProps) {
+export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSelect, portraits = false }: TokenStackProps) {
   const c = center(tokens[0].pos);
   const shown = tokens.length > 4 ? tokens.slice(0, 3) : tokens;
   const extra = tokens.length - shown.length;
@@ -133,6 +136,7 @@ export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSele
                 <text y={r * 0.36} textAnchor="middle" fontSize={r * 0.95} fontWeight={700} fill="#14110d" fontFamily="Inter, sans-serif">
                   {t.initials}
                 </text>
+                {portraits && !!t.portraitV && <PortraitDisc tokenId={t.id} v={t.portraitV} r={r * 0.86} ring={t.accent ?? t.color} />}
               </>
             ) : (
               <>
@@ -164,4 +168,18 @@ export function TokenStack({ tokens, selectedId, viewerId, hiddenTeamIds, onSele
 
 function shieldPath(r: number) {
   return `M0,${-r} L${r * 0.9},${-r * 0.55} L${r * 0.8},${r * 0.35} L0,${r} L${-r * 0.8},${r * 0.35} L${-r * 0.9},${-r * 0.55} Z`;
+}
+
+/** Uploaded portrait clipped into the marker; a broken image simply hides (initials stay underneath). */
+function PortraitDisc({ tokenId, v, r, ring }: { tokenId: string; v: number; r: number; ring: string }) {
+  const [broken, setBroken] = useState(false);
+  const clip = `portrait-clip-${tokenId.replace(/[^a-z0-9_-]/gi, '')}-${Math.round(r)}`;
+  if (broken) return null;
+  return (
+    <g data-testid="token-portrait">
+      <defs><clipPath id={clip}><circle r={r} /></clipPath></defs>
+      <image href={`/api/apex?op=portrait&token=${encodeURIComponent(tokenId)}&v=${v}`} x={-r} y={-r} width={r * 2} height={r * 2} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clip})`} onError={() => setBroken(true)} />
+      <circle r={r} fill="none" stroke={ring} strokeWidth={1.6} />
+    </g>
+  );
 }

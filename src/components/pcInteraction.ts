@@ -86,6 +86,13 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
     onTokenContext: (id) => {
       const f = figOf(id);
       const isMe = id === i.tokenId;
+      // an area spell in hand: right-clicking a creature aims the area at its hex (Fireball on the orc)
+      if (readyArea && readySpell && i.ready?.kind === 'spell' && f && !isMe) {
+        if (!i.acting) return;
+        void i.act({ action: 'cast', tokenId: i.tokenId, spellId: readySpell.id, slotLevel: i.ready.slotLevel, point: { x: f.x, y: f.y } });
+        i.setReady(null);
+        return;
+      }
       // a readied healing spell: the right-clicked creature is healed
       if (readySpell && i.ready?.kind === 'spell' && spellHealing(readySpell, i.ready.slotLevel || readySpell.level)) {
         const t = isMe ? { kind: 'pc', tokenId: i.tokenId } : f ? (f.kind === 'pc' ? { kind: 'pc', tokenId: f.tokenId } : { kind: 'npc', id: f.id }) : null;

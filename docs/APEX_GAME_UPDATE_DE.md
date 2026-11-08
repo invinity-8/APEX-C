@@ -344,3 +344,38 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - **Haste:** Zusatzaktion nicht automatisiert.
 - **Heroism:** Temp-TP gibt es nur beim Wirken, nicht jede Runde.
 - **NPC-Ziele:** Temp-TP auf NPCs notiert der GM.
+
+## APEX 1.6 – Kampf-Feedback, Porträts, Lebensleisten, Handy
+
+- **Animationen auf der Karte** für Spieler und GM:
+  - **Fernkampf und Zauber:** eine farbige Schliere vom Angreifer zum Ziel.
+  - **Nahkampftreffer:** ein Hieb.
+  - **Am Ziel:** ein Aufblitzen und eine aufsteigende Zahl.
+    - Schaden in der Farbe des Elements, z. B. Feuer orange, Kälte hellblau, Blitz gelb, nekrotisch violett.
+    - „CRIT“ groß und golden.
+    - „Miss“ und „Resisted“ grau.
+    - Heilung grün mit Funken.
+  - **Buffs und Debuffs:** ein Ring und ihr Name.
+  - **Flächenzauber:** Die getroffenen Hexes blitzen in der Elementfarbe auf; jede getroffene Figur zeigt ihren Schaden.
+  - Gilt auch für Shield, Second Wind, Lay on Hands, Rage und Bardic Inspiration.
+  - Spieler sehen nur Effekte zwischen Figuren, die sie sehen. Nach einem Neuladen wird kein alter Kampf erneut abgespielt.
+  - Bei „Bewegung reduzieren“ im System gibt es nur ein kurzes Einblenden.
+- **Porträts:** Hochgeladene Charakterporträts erscheinen in den Figuren auf der Battlemap (zusätzlich zur Initiative-Leiste).
+- **Lebensleisten:**
+  - Charaktere der Gruppe haben unter der Figur eine Leiste: grün, unter der Hälfte orange, unter einem Viertel rot. Temporäre TP erscheinen als blauer Abschnitt.
+  - Der GM sieht sie auch bei Gegnern und Verbündeten.
+  - In Wild Shape zählen die TP der Tierform.
+- **Zustands-Icons** über der Figur: ◎ Konzentration (pulsiert), 💫 stunned, ⤓ prone, ⛓ restrained, ☠ poisoned, 🥷 versteckt, ✨ Bless, ⏩ Haste und weitere. Schlechte Zustände sind rot umrandet, Buffs gold. Der Tooltip nennt den Namen.
+- **Neue Regeln:**
+  - **Haste:** eine Zusatzaktion pro Zug – ein Waffenangriff, Dash, Disengage, Hide oder Use an Object. Im Panel als blauer Marker „Haste“.
+  - **Aid:** +5 TP-Maximum und aktuelle TP, +5 pro höherem Grad, bis zu 3 Ziele. Nicht stapelbar. Endet Aid (GM entfernt den Effekt), sinkt das Maximum wieder.
+  - **Heroism:** temporäre TP in Höhe des Zaubermodifikators beim Wirken und zu Beginn jedes Zugs des Ziels.
+  - **Temporäre TP für Gegner:** werden zuerst verbraucht und erscheinen für den GM in der Lebensleiste.
+- **Handy:**
+  - Tippen zeigt die Vorschau (Pfad, Sicht, Fläche); **gedrückt halten** wirkt wie ein Rechtsklick (bewegen, angreifen, zaubern).
+  - Auf schmalen Bildschirmen kommt die Karte direkt nach Initiative und Zugleiste, das Kampf-Panel darunter. Vorher war sie unter dem Panel abgeschnitten.
+- **Behoben:** Rechtsklick auf eine Figur mit einem Flächenzauber in der Hand (Feuerball auf den Ork) zielt jetzt dorthin, statt das Menü zu öffnen.
+
+**Noch offen:**
+- Haste: Lethargie nach dem Ende.
+- Lebensleisten anderer Charaktere sind für Spieler sichtbar (Gruppe), die von Gegnern nur für den GM.

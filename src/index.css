@@ -494,3 +494,39 @@
 .location-card h3 { font: 700 1rem/1.2 Georgia, serif; color: #e4c786; margin-bottom: .3rem; }
 .location-card .ws-icon { position: absolute; top: .3rem; right: .3rem; }
 .scene-director input[type=color] { width: 2.2rem; height: 1.8rem; padding: .1rem; cursor: pointer; }
+
+/* APEX 1.6 – combat feedback on the battle map (components/map/CombatFx.tsx) */
+.fx-float { animation: fx-float 1.6s cubic-bezier(.2,.8,.3,1) both; transform-box: fill-box; transform-origin: center; }
+.fx-float-crit { animation-name: fx-float-crit; }
+@keyframes fx-float { 0% { opacity: 0; transform: translateY(6px) scale(.6); } 15% { opacity: 1; transform: translateY(0) scale(1.15); } 30% { transform: translateY(-4px) scale(1); } 100% { opacity: 0; transform: translateY(-34px) scale(1); } }
+@keyframes fx-float-crit { 0% { opacity: 0; transform: scale(.4) rotate(-8deg); } 18% { opacity: 1; transform: scale(1.45) rotate(3deg); } 35% { transform: translateY(-4px) scale(1.1) rotate(0); } 100% { opacity: 0; transform: translateY(-40px) scale(1); } }
+.fx-streak { animation: fx-fade .9s ease-out both; }
+.fx-streak line { stroke-dashoffset: var(--fx-len); animation: fx-streak .32s ease-in both; animation-delay: inherit; }
+@keyframes fx-streak { to { stroke-dashoffset: 0; } }
+@keyframes fx-fade { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
+.fx-burst { animation: fx-burst .7s ease-out both; transform-box: fill-box; transform-origin: center; }
+@keyframes fx-burst { 0% { opacity: 0; transform: scale(.2); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
+.fx-ring { animation: fx-ring 1.1s ease-out both; transform-box: fill-box; transform-origin: center; }
+@keyframes fx-ring { 0% { opacity: 0; transform: scale(1.6); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(.7); } }
+.fx-sparkle { animation: fx-sparkle 1.2s ease-out both; }
+@keyframes fx-sparkle { 0% { opacity: 0; transform: translateY(8px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px); } }
+.fx-slash { stroke-dasharray: 60; stroke-dashoffset: 60; animation: fx-slash .45s ease-out both; }
+@keyframes fx-slash { 0% { stroke-dashoffset: 60; opacity: 1; } 60% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+.fx-whoosh { animation: fx-fade .8s ease-out both; }
+.fx-area { animation: fx-area 1.3s ease-out both; }
+@keyframes fx-area { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-float, .fx-float-crit, .fx-burst, .fx-ring, .fx-sparkle { animation: fx-fade 1.6s linear both; transform: none; }
+  .fx-streak line, .fx-slash { animation: none; stroke-dashoffset: 0; }
+}
+.fx-conc { animation: fx-conc 2.4s ease-in-out infinite; }
+@keyframes fx-conc { 0%, 100% { stroke-opacity: .55; } 50% { stroke-opacity: 1; filter: drop-shadow(0 0 3px #b9a8e3); } }
+@media (prefers-reduced-motion: reduce) { .fx-conc { animation: none; } }
+
+/* APEX 1.6 – phones: the battle map comes right after the turn order and the toolbar, the combat panel below it
+   (the panel grew taller and pushed the map out of the map stage's visible area). */
+@media (max-width: 767px) {
+  .map-stage .player-scene > * { order: 2; }
+  .map-stage .player-scene > .initiative-bar, .map-stage .player-scene > .journal-toolbar { order: 0; }
+  .map-stage .player-scene > .hex-scene { order: 1; flex: none; min-height: 58vh; }
+}

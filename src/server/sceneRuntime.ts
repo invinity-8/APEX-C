@@ -5,6 +5,7 @@ import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
 import { carriedLights, clockFor, figuresFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, withArrivalSlots, type SceneFigure, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
 import { ENEMY_TEMPLATES, enemiesOf, torchesOf, type CombatLogEntry } from '../game/sceneCombat.js';
+import { recentFx, type SceneFx } from '../game/sceneFx.js';
 import { reactionsOf, type ReactionOffer } from '../game/sceneActions.js';
 import { fogString, sceneVision } from '../campaign/hexVision.js';
 import { hexKey, hexesInRange } from '../game/hex.js';
@@ -38,6 +39,10 @@ export interface SceneSnapshot {
   combatLog?: CombatLogEntry[];
   /** The viewer carries a light. */
   torch?: boolean;
+  /** APEX 1.6: recent visual combat events (animated by the client). */
+  fx?: SceneFx[];
+  /** APEX 1.6: hit points of the party's characters on this scene (life bars on the map). */
+  vitals?: Record<string, { hp: number; maxHp: number; temp: number }>;
 }
 export interface SceneAssignment { user_id: string; scene_id: string | null; revision: number; spawn_x: number | null; spawn_y: number | null }
 export interface RuntimeScene { id: string; name: string; category: SceneCategory; revision: number; is_legacy_arena: boolean; is_draft: boolean; archived: boolean; published_metadata: unknown }
@@ -68,7 +73,7 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
   const full = parseMap(s.published_metadata)!;
   const local = ctx && motionStore && (s.category === 'battle' || s.category === 'region') ? await motionStore.localSnapshot(user.campaignId, s.id, user.id, user.tokenIds) : null;
   const motion = local ? motionShape(local, ctx!.state, s.id) : await motionStore?.snapshot(user.campaignId, s.id, user.id, user.tokenIds);
-  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch' | 'reactions' | 'self'> = {};
+  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch' | 'reactions' | 'self' | 'fx' | 'vitals'> = {};
   if (local && ctx?.state) {
     const clock = clockFor(ctx.state, s.id);
     const pcs = ctx.pcs ? await ctx.pcs(s.id, full) : [];
@@ -88,6 +93,10 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
     for (const id of user.tokenIds) passive = Math.max(passive, pcPassivePerception(await sheetOf(ctx, id)));
     extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false, { side: 'party', passive });
     extra.reactions = reactionsOf(ctx.state, s.id).filter((r) => r.reactor.kind === 'pc' && user.tokenIds.includes(r.reactor.id));
+    extra.vitals = await vitalsOf(ctx, pcs.map((p) => p.tokenId));
+    // combat feedback only between creatures this viewer can see (or its own characters)
+    const seen = new Set([...user.tokenIds.map((id) => `pc-${id}`), ...extra.figures.map((f) => (f.kind === 'pc' ? `pc-${f.tokenId}` : `npc-${f.id}`))]);
+    extra.fx = recentFx(ctx.state, s.id).filter((f) => (!f.to || seen.has(f.to)) && (!f.from || seen.has(f.from) || !!f.to)).map((f) => (f.from && !seen.has(f.from) ? { ...f, from: undefined } : f));
     extra.self = Object.fromEntries(user.tokenIds.map((id) => {
       const fxl = (ctx.state!.sceneEffects?.[s.id]?.[`pc-${id}`] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key }));
       const c = ctx.state!.sceneConcentration?.[s.id]?.[`pc-${id}`];
@@ -204,7 +213,7 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
           try {
             if (local) pcMovement = Object.fromEntries(await Promise.all(pcs.map(async (p) => [p.tokenId, movementFor(stored.state, focus.id, focus.category as 'battle' | 'region', p.tokenId, true, await sheetOf(ctx, p.tokenId).catch(() => emptySheet()), local)] as const)));
           } catch { pcMovement = {}; }
-          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id), pcMovement };
+          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id), pcMovement, fx: recentFx(stored.state, focus.id), vitals: await vitalsOf(ctx, pcs.map((p) => p.tokenId)) };
         })() : {}),
       } };
     }
@@ -244,4 +253,15 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
     if (destination && (destination.category === 'battle' || destination.category === 'region')) await rememberCurrentVision(user, repo, destination.id).catch(() => undefined);
   }
   return { status: result.ok ? 200 : 409, body: { ...result, ...(initiative ? { initiative } : {}) } };
+}
+
+/** Hit points (and temporary HP) of characters from their sheets – Wild Shape shows the beast's hit points. */
+async function vitalsOf(ctx: SceneViewContext, tokenIds: string[]): Promise<Record<string, { hp: number; maxHp: number; temp: number }>> {
+  const out: Record<string, { hp: number; maxHp: number; temp: number }> = {};
+  for (const id of tokenIds) {
+    const sheet = await ctx.loadSheet(id).catch(() => null);
+    if (sheet?.wildShape) out[id] = { hp: sheet.wildShape.hp, maxHp: sheet.wildShape.maxHp, temp: sheet.hitPoints?.temp ?? 0 };
+    else if (sheet?.hitPoints) out[id] = { hp: Math.max(0, sheet.hitPoints.current), maxHp: sheet.hitPoints.max, temp: sheet.hitPoints.temp };
+  }
+  return out;
 }

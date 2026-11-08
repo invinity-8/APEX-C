@@ -52,6 +52,8 @@ export interface TurnBudget {
   sneak?: boolean;
   /** Action Surge used this turn (one extra action). */
   surged?: boolean;
+  /** APEX 1.6 – the extra action of Haste was used (one weapon attack, Dash, Disengage, Hide or Use an Object). */
+  hasted?: boolean;
 }
 
 /** Participant id of a character / NPC in the encounter. */
@@ -105,7 +107,7 @@ export function spend(e: SceneEncounter, actor: string, change: Partial<Omit<Tur
  * Checks (and with `apply` spends) one use of the action economy. `gm` may act out of turn (table authority), but
  * the budget is still recorded so everyone sees what was used.
  */
-export function useEconomy(e: SceneEncounter | null, actor: string, kind: 'action' | 'bonus' | 'attack' | 'reaction', opts: { gm: boolean; attacksAllowed?: number }): string | null {
+export function useEconomy(e: SceneEncounter | null, actor: string, kind: 'action' | 'bonus' | 'attack' | 'reaction', opts: { gm: boolean; attacksAllowed?: number; /** Hasted and this use is allowed for the Haste action. */ haste?: boolean }): string | null {
   if (!e) return null; // no initiative: free play
   const active = isActiveActor(e, actor);
   if (kind === 'reaction') {
@@ -124,23 +126,32 @@ export function useEconomy(e: SceneEncounter | null, actor: string, kind: 'actio
   if (kind === 'attack') {
     const allowed = Math.max(1, opts.attacksAllowed ?? 1);
     if (b.action) {
+      const spent = !b.attackAction || (b.attacks ?? 0) >= allowed;
+      // Haste: one more weapon attack (only one, even with Extra Attack)
+      if (spent && opts.haste && !b.hasted) { spend(e, actor, { hasted: true, last: 'attack (Haste)' }); return null; }
       if (!b.attackAction) return 'The action was already used this turn.';
       if ((b.attacks ?? 0) >= allowed) return allowed > 1 ? `All ${allowed} attacks of the Attack action are used.` : 'The attack was already made this turn.';
     }
     spend(e, actor, { action: true, attackAction: b.action ? b.attackAction : true, attacks: (b.attackAction ? b.attacks ?? 0 : 0) + 1, last: 'attack' });
     return null;
   }
-  if (b.action) return 'The action was already used this turn.';
+  if (b.action) {
+    if (opts.haste && !b.hasted) { spend(e, actor, { hasted: true }); return null; }
+    return 'The action was already used this turn.';
+  }
   spend(e, actor, { action: true });
   return null;
 }
 
+/** Standard actions the extra action of Haste may be used for (5e: Attack – one weapon attack –, Dash, Disengage, Hide, Use an Object). */
+export const HASTE_ACTIONS = new Set(['dash', 'disengage', 'hide', 'useObject']);
+
 /** A standard action (Dash, Disengage, Dodge …): uses the action (or the bonus action, e.g. Cunning Action). */
-export function takeStandardAction(prev: GameState, sceneId: string, actor: string, name: string, act: StandardAction, viaBonus: boolean, gm: boolean): Result {
+export function takeStandardAction(prev: GameState, sceneId: string, actor: string, name: string, act: StandardAction, viaBonus: boolean, gm: boolean, hasted = false): Result {
   const state = clone(prev);
   const e = state.sceneEncounters?.[sceneId];
   if (!e || e.status !== 'active') return { ok: false, error: 'Actions are tracked while initiative runs.' };
-  const err = useEconomy(e, actor, viaBonus ? 'bonus' : 'action', { gm });
+  const err = useEconomy(e, actor, viaBonus ? 'bonus' : 'action', { gm, haste: hasted && !viaBonus && HASTE_ACTIONS.has(act) });
   if (err) return { ok: false, error: err };
   spend(e, actor, { last: act, ...(act === 'dash' ? { dash: true } : act === 'disengage' ? { disengage: true } : act === 'dodge' ? { dodge: true } : {}) });
   // Dodge: attacks against it have disadvantage until the start of its next turn

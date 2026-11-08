@@ -20,6 +20,8 @@ import { LightCanvas, usePrefersReducedMotion } from './LightCanvas';
 import { MapDefs } from './MapDefs';
 import { TokenStack } from './Markers';
 import { TerrainCanvas } from './TerrainCanvas';
+import { CombatFx } from './CombatFx';
+import type { SceneFx } from '../../game/sceneFx';
 import { useHexViewport } from './useHexViewport';
 
 export interface SceneToken {
@@ -31,13 +33,17 @@ export interface SceneToken {
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
-  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ally?: boolean; elite?: boolean };
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean };
   /** Carries a light (torch glow). */
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
   target?: boolean;
   /** Conditions / effects shown under the figure (e.g. "◎ Bless · Prone"). */
   badges?: string;
+  /** APEX 1.6 – the same as icons above the figure (concentration, conditions, buffs). */
+  icons?: Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }>;
+  /** APEX 1.6 – hit points of a character (life bar under the figure). */
+  vitals?: { hp: number; maxHp: number; temp: number };
 }
 
 interface Props {
@@ -74,6 +80,8 @@ interface Props {
   sightSide?: 'hostile' | 'party' | null;
   /** Area of effect preview for the hovered point. */
   areaAt?: ((point: { x: number; y: number }) => HexKey[]) | null;
+  /** APEX 1.6 – recent combat events to animate (floating numbers, streaks, bursts). */
+  fx?: SceneFx[];
   /** Centre the camera on a point whenever `key` changes (active turn). */
   focus?: { key: string; x: number; y: number } | null;
 }
@@ -81,7 +89,7 @@ interface Props {
 const MAX_K = 3.5;
 const NO_TEAMS = new Set<string>();
 
-export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null }: Props) {
+export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [] }: Props) {
   const { tokens, moving } = useAnimatedTokens(targetTokens, map);
   const reducedMotion = usePrefersReducedMotion();
   const [hover, setHover] = useState<HexKey | null>(null);
@@ -228,7 +236,20 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
   const bgSize = 320 * (tf?.k ?? 1);
   const unit = map.unit === 'feet' ? 'ft' : 'mi';
 
-  const pointKey = (e: React.PointerEvent | React.MouseEvent) => vp.keyAt(e.clientX, e.clientY, known);
+  const pointKey = (e: { clientX: number; clientY: number }) => vp.keyAt(e.clientX, e.clientY, known);
+  /** Right-click (or a long press on touch screens): act on the figure on that hex, else on the hex. */
+  const contextAt = (e: { clientX: number; clientY: number }) => {
+    const k = pointKey(e);
+    if (!k) return;
+    const onIt = stacks.find(([sk]) => sk === k)?.[1];
+    if (onIt?.length && onTokenContext) return onTokenContext((onIt.find((t) => t.enemy) ?? onIt[0]).tokenId);
+    const c = center(parseKey(k));
+    onHexContext?.(k, { x: c.x + ox, y: c.y + oy });
+  };
+  // APEX 1.6 – touch: a tap previews (path, sight, area), a long press acts like a right-click
+  const press = useRef<{ x: number; y: number; timer: number } | null>(null);
+  const longPressAt = useRef(0);
+  const cancelPress = () => { if (press.current) window.clearTimeout(press.current.timer); press.current = null; };
 
   return (
     <div
@@ -250,11 +271,19 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
             return;
           }
         }
+        if (e.pointerType === 'touch' && (onHexContext || onTokenContext)) {
+          cancelPress();
+          const at = { clientX: e.clientX, clientY: e.clientY };
+          const k = pointKey(at);
+          if (k) setHover(k);
+          press.current = { x: e.clientX, y: e.clientY, timer: window.setTimeout(() => { press.current = null; longPressAt.current = Date.now(); navigator.vibrate?.(12); contextAt(at); }, 480) };
+        }
         vp.onPointerDown(e);
       }}
       onPointerMove={(e) => {
         const r = vp.wrapRef.current!.getBoundingClientRect();
         setMouse({ x: e.clientX - r.left, y: e.clientY - r.top });
+        if (press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 10) cancelPress();
         const k = pointKey(e);
         if (painting.current && onPaint) {
           if (k) onPaint(k);
@@ -262,21 +291,18 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
         }
         if (!vp.dragging() && k !== hover) setHover(k);
       }}
-      onPointerUp={() => (painting.current = false)}
-      onPointerCancel={() => (painting.current = false)}
+      onPointerUp={() => { painting.current = false; cancelPress(); }}
+      onPointerCancel={() => { painting.current = false; cancelPress(); }}
       onPointerLeave={() => setHover(null)}
       onContextMenu={(e) => {
         if (!onHexContext && !onTokenContext) return;
         e.preventDefault();
-        const k = pointKey(e);
-        if (!k) return;
-        const onIt = stacks.find(([sk]) => sk === k)?.[1];
-        if (onIt?.length && onTokenContext) return onTokenContext((onIt.find((t) => t.enemy) ?? onIt[0]).tokenId);
-        const c = center(parseKey(k));
-        onHexContext?.(k, { x: c.x + ox, y: c.y + oy });
+        if (Date.now() - longPressAt.current < 1000) return; // the long press already acted (Android also sends contextmenu)
+        contextAt(e);
       }}
       onClick={(e) => {
         if (vp.consumeDragClick() || onPaint) return;
+        if (Date.now() - longPressAt.current < 1000) return;
         const k = pointKey(e);
         if (!k || !onHexClick) return;
         const c = center(parseKey(k));
@@ -362,13 +388,8 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                     {e.elite && <EliteFrame r={HEX_SIZE * 0.55} />}
                     <circle r={HEX_SIZE * 0.55} fill={enemy.color} stroke={e.condition === 'bloodied' ? '#ff5a4a' : e.ally ? '#7fb8ff' : '#b3261e'} strokeWidth={3} />
                     <text y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={2.5} paintOrder="stroke">{down ? '✕' : e.icon}</text>
-                    {e.hp !== undefined && e.maxHp ? (
-                      <g transform={`translate(${-HEX_SIZE * 0.55},${HEX_SIZE * 0.62})`}>
-                        <rect width={HEX_SIZE * 1.1} height={4} fill="#2a0e0e" />
-                        <rect width={(HEX_SIZE * 1.1 * e.hp) / e.maxHp} height={4} fill={e.hp * 2 <= e.maxHp ? '#e5484d' : '#6fcf6f'} />
-                      </g>
-                    ) : null}
-                    {enemy.badges && <text y={HEX_SIZE * 1.45} textAnchor="middle" fontSize={8} fill="#f3dc9a" stroke="#000" strokeWidth={2.5} paintOrder="stroke" data-testid="token-badges">{enemy.badges}</text>}
+                    {e.hp !== undefined && e.maxHp ? <LifeBar hp={e.hp} maxHp={e.maxHp} temp={e.tempHp ?? 0} y={HEX_SIZE * 0.62} party={e.ally} /> : null}
+                    {enemy.icons?.length ? <FigureIcons icons={enemy.icons} /> : null}
                     <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill={e.ally ? '#cfe4ff' : '#ffd6d0'} stroke="#000" strokeWidth={2.5} paintOrder="stroke">
                       {e.ally ? '🛡 ' : ''}
                       {enemy.name}{e.hp !== undefined ? ` ${e.hp}/${e.maxHp}` : e.condition === 'bloodied' ? ' (bloodied)' : ''}
@@ -381,18 +402,22 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                 const c = center(parseKey(k));
                 return (
                   <g key={k}>
-                    <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />
+                    <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} portraits />
                     <circle cx={c.x} cy={c.y} r={HEX_SIZE * 0.8} fill="none" stroke="#ffd36b" strokeWidth={2.5} strokeDasharray="5 4" pointerEvents="none" />
                   </g>
                 );
               }
               if (views.length === group.length) {
-                const badge = group.map((t) => t.badges).filter(Boolean).join(' | ');
                 const c0 = center(parseKey(k));
+                const icons = group.flatMap((t) => t.icons ?? []);
+                const v = group.length === 1 ? group[0].vitals : undefined;
                 return (
                   <g key={k}>
-                    <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />
-                    {badge && <text x={c0.x} y={c0.y + HEX_SIZE * 1.45} textAnchor="middle" fontSize={8} fill="#f3dc9a" stroke="#000" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none" data-testid="token-badges">{badge}</text>}
+                    <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} portraits />
+                    <g transform={`translate(${c0.x},${c0.y})`} pointerEvents="none">
+                      {v && v.maxHp > 0 && <LifeBar hp={v.hp} maxHp={v.maxHp} temp={v.temp} y={HEX_SIZE * 0.66} party />}
+                      {icons.length > 0 && <FigureIcons icons={icons} />}
+                    </g>
                   </g>
                 );
               }
@@ -406,6 +431,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                 </g>
               );
             })}
+            {fx.length > 0 && <CombatFx fx={fx} posOf={(actor) => { const id = actor.replace(/^(pc|npc)-/, ''); const t = tokens.find((x) => x.tokenId === id); return t ? center(hexAt(map, t)) : null; }} />}
             {tokens.filter((t) => moving.has(t.tokenId)).map((t) => {
               const w = toWorld(t);
               return (
@@ -517,4 +543,41 @@ function positionAt(a: { pts: Array<{ x: number; y: number }>; t0: number; dur: 
   if (i < 0) return a.pts[0];
   const f = seg - i, p = a.pts[i], q = a.pts[i + 1];
   return { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f };
+}
+
+/** Life bar under a figure: green (party) or red (enemy) above half, orange/red below; temporary HP as a blue cap. */
+function LifeBar({ hp, maxHp, temp, y, party }: { hp: number; maxHp: number; temp: number; y: number; party?: boolean }) {
+  const w = HEX_SIZE * 1.15, h = 5;
+  const frac = Math.max(0, Math.min(1, hp / maxHp));
+  const tempFrac = Math.min(1 - frac, temp / maxHp);
+  const fill = frac <= 0.25 ? '#e5484d' : frac <= 0.5 ? '#f59e0b' : party ? '#4ade80' : '#6fcf6f';
+  return (
+    <g transform={`translate(${-w / 2},${y})`} data-testid="life-bar">
+      <title>{`${hp}/${maxHp} HP${temp ? ` + ${temp} temporary` : ''}`}</title>
+      <rect x={-1} y={-1} width={w + 2} height={h + 2} rx={2} fill="#0b0b0b" fillOpacity={0.85} />
+      <rect width={w} height={h} rx={1.5} fill="#3a1414" />
+      <rect width={w * frac} height={h} rx={1.5} fill={fill} style={{ transition: 'width .5s ease-out' }} />
+      {tempFrac > 0 && <rect x={w * frac} width={w * tempFrac} height={h} rx={1.5} fill="#60a5fa" />}
+      {temp > 0 && frac + temp / maxHp > 1 && <rect width={w} height={1.5} fill="#93c5fd" />}
+    </g>
+  );
+}
+
+/** Condition / buff / concentration icons in a row above a figure. */
+function FigureIcons({ icons }: { icons: Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }> }) {
+  const shown = icons.slice(0, 5);
+  const r = 6.5, gap = 14.5;
+  const x0 = -((shown.length - 1) * gap) / 2;
+  return (
+    <g transform={`translate(0,${-HEX_SIZE * 0.92})`} data-testid="token-badges">
+      {shown.map((ic, i) => (
+        <g key={`${ic.name}-${i}`} transform={`translate(${x0 + i * gap},0)`}>
+          <title>{ic.name}</title>
+          <circle r={r} fill="#14110d" fillOpacity={0.92} stroke={ic.tone === 'conc' ? '#b9a8e3' : ic.tone === 'bad' ? '#e5484d' : '#c09b58'} strokeWidth={1.4} className={ic.tone === 'conc' ? 'fx-conc' : undefined} />
+          <text y={3.2} textAnchor="middle" fontSize={8.5} fill={ic.tone === 'conc' ? '#d8ccff' : '#fff'}>{ic.icon}</text>
+        </g>
+      ))}
+      {icons.length > shown.length && <text x={x0 + shown.length * gap} y={3} fontSize={8} fill="#f3dc9a" stroke="#000" strokeWidth={2} paintOrder="stroke">+{icons.length - shown.length}</text>}
+    </g>
+  );
 }

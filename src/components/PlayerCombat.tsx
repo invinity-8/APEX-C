@@ -79,7 +79,10 @@ export function PlayerCombat(p: Props) {
 
   const friends = figures.filter((x) => (x.kind === 'pc' && x.tokenId !== tokenId) || (x.kind === 'enemy' && x.side === 'ally'));
   const actionCost = bonus ? 'bonus' : 'action';
+  const hastedNow = !!me2?.effects.some((e) => e.key === 'haste') && !b.hasted;
   const spentCost = bonus ? !!b.bonus : !!b.action;
+  /** Dash, Disengage, Hide, Use an Object: also possible with the extra action of Haste. */
+  const spentHaste = bonus ? !!b.bonus : !!b.action && !hastedNow;
   const standard = (id: string) => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: id, viaBonus: bonus });
   const readySpellNow = p.ready?.kind === 'spell' ? spells.find((x) => x.id === (p.ready as { spellId: string }).spellId) : undefined;
   const defaultAttack = p.attacks.length ? 0 : -1;
@@ -126,7 +129,7 @@ export function PlayerCombat(p: Props) {
 
       {/* turn economy, movement, spell slots */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {encounter ? <EconomyOrbs encounter={encounter} actor={actor} /> : <span className="rounded-full border border-forest-400/60 px-2 py-0.5 text-forest-300">Free play – no initiative</span>}
+        {encounter ? <EconomyOrbs encounter={encounter} actor={actor} haste={!!me2?.effects.some((e) => e.key === 'haste')} /> : <span className="rounded-full border border-forest-400/60 px-2 py-0.5 text-forest-300">Free play – no initiative</span>}
         {p.movement && !p.free && (
           <span className="flex min-w-[11rem] flex-1 items-center gap-2" title={`${moveLeft} of ${p.movement.allowance} ft left${p.movement.dashed ? ' (Dash)' : ''}`}>
             <span aria-hidden className="text-base">👣</span>
@@ -156,13 +159,13 @@ export function PlayerCombat(p: Props) {
         {encounter && (['dash', 'disengage', 'dodge'] as const).map((id) => {
           const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
           const active = id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge;
-          return <Tile key={id} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} on={active} disabled={p.pending || !p.myTurn || spentCost} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
+          return <Tile key={id} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} on={active} disabled={p.pending || !p.myTurn || (id === 'dodge' ? spentCost : spentHaste)} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
         })}
         <Tile icon="🥷" label={hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'} cost={encounter && !hidden ? actionCost : undefined} on={hidden} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) })} testid={encounter ? 'hide' : 'sneak'} />
         <Tile icon="🔎" label="Search" cost={encounter ? actionCost : undefined} disabled={p.pending || (!!encounter && (!p.myTurn || spentCost))} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => standard('search')} />
         {encounter && <>
           <Tile icon="🤝" label="Help" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'help')!.text} onClick={() => standard('help')} />
-          <Tile icon="🧪" label="Use object" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
+          <Tile icon="🧪" label="Use object" cost={actionCost} disabled={p.pending || !p.myTurn || spentHaste} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
           <Tile icon="⏳" label="Ready" cost="action" on={readyOpen} disabled={p.pending || !p.myTurn || !!b.action} title="Prepare the chosen attack with a trigger; it uses your reaction" onClick={() => setReadyOpen((v) => !v)} />
           <span className="mx-0.5 w-px self-stretch bg-ink-700" aria-hidden />
           <Tile icon="◆" label="Bonus mode" on={bonus} title="Take the next standard action as a bonus action (Cunning Action, off-hand attack …) – only if a feature allows it" onClick={() => setBonus((v) => !v)} />
@@ -242,7 +245,7 @@ export function PlayerCombat(p: Props) {
           </div>
         );
       })()}
-      {!enemy && !p.ready && <p className="text-marble-500">Pick an attack or spell “in hand”, then right-click on the map. Right-click an enemy without one to see every option.</p>}
+      {!enemy && !p.ready && <p className="text-marble-500">Pick an attack or spell “in hand”, then right-click on the map (touch: tap to preview, press and hold to act). Right-click an enemy without one to see every option.</p>}
 
       {spellOpen && !enemy && (
         <Spellbook sheet={sheet} slots={slots} lvl={lvl} tokenId={tokenId} friends={friends} canAct={canAct} pending={p.pending} slotFor={slotFor}
@@ -313,7 +316,7 @@ function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, 
 }
 
 /** Action ●, bonus action ◆, reaction ↺ – lit while available. */
-function EconomyOrbs({ encounter, actor }: { encounter: SceneEncounter; actor: string }) {
+function EconomyOrbs({ encounter, actor, haste }: { encounter: SceneEncounter; actor: string; haste?: boolean }) {
   const b = budgetOf(encounter, actor);
   const orb = (id: string, label: string, used: boolean, shape: string, color: string, title: string) => (
     <span key={id} title={`${label}: ${used ? 'used' : 'available'} – ${title}`} data-used={used} data-testid={`eco-${id}`} className={`flex items-center gap-1 ${used ? 'text-marble-500' : 'text-marble-100'}`}>
@@ -326,6 +329,7 @@ function EconomyOrbs({ encounter, actor }: { encounter: SceneEncounter; actor: s
       {orb('action', 'Action', !!b.action, 'rounded-full', 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]', b.attackAction ? `Attack action · ${b.attacks ?? 0} attack(s) made` : b.last ? `used: ${b.last}` : 'one per turn')}
       {orb('bonus-action', 'Bonus', !!b.bonus, 'rotate-45 rounded-[3px] scale-75', 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)]', 'one per turn')}
       {orb('reaction', 'Reaction', reactionUsed(encounter, actor), 'rounded-full', 'bg-arcane-500 text-white shadow-[0_0_8px_rgba(122,99,194,0.8)]', 'refreshes at the start of your turn')}
+      {haste && orb('haste', 'Haste', !!b.hasted, 'rounded-full', 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]', 'one extra action: one weapon attack, Dash, Disengage, Hide or Use an Object')}
       {b.dash && <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-[11px] text-sky-200">Dashing</span>}
       {b.disengage && <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-[11px] text-sky-200">Disengaged</span>}
       {b.dodge && <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-[11px] text-sky-200">Dodging</span>}

@@ -432,6 +432,8 @@ export interface GameState {
   sceneEnemies?: Record<string, import('./sceneCombat.js').SceneEnemy[]>;
   sceneLights?: Record<string, string[]>;
   sceneCombatLog?: Record<string, import('./sceneCombat.js').CombatLogEntry[]>;
+  /** APEX 1.6 – short-lived visual combat events per scene (floating numbers, streaks, bursts). */
+  sceneFx?: Record<string, import('./sceneFx.js').SceneFx[]>;
   /** APEX 1.2: the GM's own creatures and elites (built-in SRD creatures are not stored). */
   enemyLibrary?: import('./bestiary.js').StatBlock[];
   /** Open reaction prompts per scene (opportunity attacks) – valid during the turn they were offered in. */
