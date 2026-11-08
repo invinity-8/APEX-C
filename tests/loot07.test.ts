@@ -41,7 +41,8 @@ describe('APEX 0.7 modifier families', () => {
     expect(dc.tiers[0].max).toBe(1);
     expect(dc.tiers[0].ilvl).toBeGreaterThanOrEqual(20);
     expect(modifier('spell-attack')!.tiers[0].max).toBe(1);
-    for (const m of MODIFIERS.filter((m) => m.family === 'attribute')) expect(m.tiers.every((t) => t.max === 1 && t.weight <= 30)).toBe(true);
+    // APEX 1.0: +1 from ilvl 10, +2 only from ilvl 24 and rare; the per-ability cap (+2) bounds the total
+    for (const m of MODIFIERS.filter((m) => m.family === 'attribute')) expect(m.tiers.every((t) => t.max <= 2 && (t.max === 1 ? t.ilvl >= 10 : t.ilvl >= 24 && t.weight <= 20))).toBe(true);
     expect(modifier('thorns')!.text).toMatch(/once per turn.*melee attack/);
   });
   it('caps apply across all equipped items (spell attack/DC +1, ability +1, thorns 4)', () => {
@@ -65,7 +66,7 @@ describe('APEX 0.7 modifier families', () => {
     ]);
     expect([b.spellAttack.total, b.spellAttack.value]).toEqual([2, DEFAULT_ITEM_RULES.spellAttackCap]);
     expect([b.spellDc.total, b.spellDc.value]).toEqual([2, 1]);
-    expect([b.abilities.str!.total, b.abilities.str!.value]).toEqual([2, 1]);
+    expect([b.abilities.str!.total, b.abilities.str!.value]).toEqual([2, DEFAULT_ITEM_RULES.abilityCap]); // cap 2 since APEX 1.0
     expect([b.thorns.total, b.thorns.value]).toEqual([6, 4]);
   });
 });

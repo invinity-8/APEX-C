@@ -147,7 +147,7 @@ export const MODIFIERS: ModDef[] = [
     affix: 'prefix',
     family: 'max-hp',
     tags: ['armour', 'shield', 'belt', 'jewellery', 'head'],
-    tiers: [t(1, 1, 2, 4, 800), t(2, 10, 5, 8, 500), t(3, 20, 9, 12, 250)],
+    tiers: [t(1, 1, 2, 4, 800), t(2, 10, 5, 8, 500), t(3, 20, 9, 12, 250), t(4, 27, 13, 16, 90)],
     effect: { type: 'maxHp' },
     text: '+{v} maximum hit points',
     description: 'Extra hit points while equipped (shown next to the sheet value, never written into it).',
@@ -234,10 +234,10 @@ export const MODIFIERS: ModDef[] = [
     affix: 'suffix',
     family: 'speed',
     tags: ['feet'],
-    tiers: [t(1, 12, 5, 5, 120)],
+    tiers: [t(1, 12, 5, 5, 120), t(2, 22, 10, 10, 40)],
     effect: { type: 'speed' },
     text: '+{v} ft walking speed',
-    description: 'Character-sheet walking speed only. It never changes arena movement points (those stay a GM decision).',
+    description: 'Walking speed in scenes, on the character sheet and in scene combat (Arena movement points stay a GM decision; encumbrance can still slow you).',
   },
   // ---------- APEX 0.7 – additional families (rare, capped; see ITEMIZATION_BALANCE.md §14)
   {
@@ -268,11 +268,12 @@ export const MODIFIERS: ModDef[] = [
       name: `of ${label === 'Strength' ? 'Might' : label === 'Dexterity' ? 'Grace' : label === 'Constitution' ? 'Vigour' : label === 'Intelligence' ? 'Insight' : label === 'Wisdom' ? 'the Sage' : 'Majesty'}`,
       affix: 'suffix',
       family: 'attribute',
-      tags: ['jewellery', 'belt', 'head', 'hands'],
-      tiers: [t(1, 16, 1, 1, 25)],
+      // APEX 1.0: attribute bonuses on every worn slot; +1 from item level 10, +2 from item level 24
+      tags: ['jewellery', 'belt', 'head', 'hands', 'feet', 'cloak', 'armour'],
+      tiers: [t(1, 10, 1, 1, 60), t(2, 24, 2, 2, 15)],
       effect: { type: 'ability', ability: a },
       text: `+{v} ${label}`,
-      description: 'At most +1 per ability from all equipped items, and never above 20 through items.',
+      description: 'At most +2 per ability from all equipped items, and never above 20 through items. Raises the modifier used for AC, attacks and initiative.',
     }),
   ),
   {

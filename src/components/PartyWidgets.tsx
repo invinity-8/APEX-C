@@ -4,6 +4,7 @@
  *    One request (GET op=party) on mount and whenever a sheet changes (existing sheet ping) – no polling.
  *  - CharacterSummary: compact sheet summary of the selected (or chosen) character.
  */
+import { effectiveStats } from '../game/effectiveStats';
 import { useEffect, useState } from 'react';
 import type { CharacterSheet } from '../game/sheet';
 import type { TokenView, ViewModel } from '../game/visibility';
@@ -86,6 +87,8 @@ export function CharacterSummary({ game, token }: { game: GameApi; token: TokenV
   }, [id, sheets]);
   if (!token || token.kind !== 'player') return <p className="text-xs text-marble-500">Select a player character on the map or in Party Health.</p>;
   const stat = (label: string) => sheet?.combat.find((c) => c.label === label)?.value;
+  // equipment counts everywhere: AC, initiative and speed as used at the table (needs the owner/GM inventory)
+  const eff = sheet && token.details?.inventory ? effectiveStats(sheet, token.details, game.view.itemRules) : null;
   const build = sheet?.details.find((d) => /class/i.test(d.label))?.value;
   return (
     <div className="space-y-2 text-xs">
@@ -101,9 +104,9 @@ export function CharacterSummary({ game, token }: { game: GameApi; token: TokenV
           <div className="grid grid-cols-4 gap-1 text-center">
             {[
               ['HP', sheet.hitPoints ? `${sheet.hitPoints.current}/${sheet.hitPoints.max}` : '—'],
-              ['AC', stat('Armor Class') ?? '—'],
-              ['Init', stat('Initiative') ?? '—'],
-              ['Speed', (stat('Speed (walking)') ?? stat('Speed') ?? '—').replace(/\s*ft\.?/i, ' ft')],
+              ['AC', eff?.ac.value != null ? String(eff.ac.value) : stat('Armor Class') ?? '—'],
+              ['Init', eff ? (eff.initiative.value >= 0 ? `+${eff.initiative.value}` : String(eff.initiative.value)) : stat('Initiative') ?? '—'],
+              ['Speed', eff ? `${eff.speed.value} ft` : (stat('Speed (walking)') ?? stat('Speed') ?? '—').replace(/\s*ft\.?/i, ' ft')],
             ].map(([l, v]) => (
               <div key={l} className="rounded-md border border-ink-600 bg-ink-900/60 px-1 py-1">
                 <div className="text-[9px] uppercase tracking-wider text-marble-500">{l}</div>

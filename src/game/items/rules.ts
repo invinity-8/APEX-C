@@ -8,7 +8,8 @@ export const GENERATABLE_RARITIES: Rarity[] = ['normal', 'magic', 'rare'];
 
 /** 2: weapon suffixes (of Ruin, of Alacrity on weapons) so rare weapons can reach 3–4 modifiers. */
 /** 3 (APEX 0.7): low-impact situational and cosmetic flavour modifiers. */
-export const MODIFIER_VERSION = 3;
+/** 4 (APEX 1.0): attribute bonuses on all worn slots (+1 at ilvl 10, +2 at ilvl 24), Hale tier 4, March tier 2. */
+export const MODIFIER_VERSION = 4;
 export const MAX_ITEM_LEVEL = 30;
 
 export interface AffixRule {
@@ -59,7 +60,8 @@ export interface ItemRules {
   cubeLevel3Fragments: number;
   cubeLevel4Fragments: number;
   cubeLevel5Fragments: number;
-  /** APEX 0.7 carrying: 0 = SRD standard (capacity STR × 15 lb), 1 = SRD variant encumbrance (×5 / ×10 thresholds). */
+  /** Carrying: 0 = SRD standard (capacity STR × 15 lb, no slowdown), 1 = SRD variant (×5 / ×10 lb: −10 / −20 ft),
+   *  2 = APEX (default since 1.0): above 50 % / 75 % of capacity speed −25 % / −50 %. */
   encumbranceVariant: number;
 }
 
@@ -75,7 +77,7 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   flatDamageCap: 6,
   spellAttackCap: 1,
   spellDcCap: 1,
-  abilityCap: 1,
+  abilityCap: 2,
   thornsCap: 4,
   fragmentsPerOrb: 10,
   fragmentsPerRandomOrb: 10,
@@ -87,7 +89,7 @@ export const DEFAULT_ITEM_RULES: ItemRules = {
   cubeLevel3Fragments: 9,
   cubeLevel4Fragments: 12,
   cubeLevel5Fragments: 15,
-  encumbranceVariant: 0,
+  encumbranceVariant: 2,
 };
 
 /** Hard limits the GM's overrides must stay within (validation). */
@@ -103,7 +105,7 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   flatDamageCap: [0, 12],
   spellAttackCap: [0, 2],
   spellDcCap: [0, 1],
-  abilityCap: [0, 2],
+  abilityCap: [0, 4],
   thornsCap: [0, 8],
   fragmentsPerOrb: [2, 100],
   fragmentsPerRandomOrb: [2, 100],
@@ -115,7 +117,7 @@ export const ITEM_RULE_LIMITS: Record<keyof ItemRules, [number, number]> = {
   cubeLevel3Fragments: [1, 999],
   cubeLevel4Fragments: [1, 999],
   cubeLevel5Fragments: [1, 999],
-  encumbranceVariant: [0, 1],
+  encumbranceVariant: [0, 2],
 };
 
 export function itemRulesOf(state: { itemRules?: Partial<ItemRules> }): ItemRules {

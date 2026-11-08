@@ -39,47 +39,44 @@ function fresh(items: Item[] = [], currency: Record<string, number> = {}) {
 }
 
 describe('equipment location sync', () => {
-  it('equipped items live in Equipped / Worn and return to their previous container', () => {
+  it('worn = paper doll only: equipping never moves the item, unequipping leaves it at home', () => {
     const sword = make('srd-longsword', 'sw', 'normal', []);
     sword.container = 'pockets';
     const axe = make('srd-battleaxe', 'ax', 'normal', []);
     let s = fresh([sword, axe]);
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sw', slot: 'main1' });
-    expect(item(s, 'sw')).toMatchObject({ container: 'equipped', prevContainer: 'pockets' });
-    // replacing the item in the slot sends the old one back
-    s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'ax', slot: 'main1' });
     expect(item(s, 'sw').container).toBe('pockets');
-    expect(item(s, 'sw').prevContainer).toBeUndefined();
-    expect(item(s, 'ax').container).toBe('equipped');
-    // weapon set 2 and resting keep the item worn (only inactive)
+    expect((s.tokens.sinna.containers ?? []).map((c) => c.id)).not.toContain('equipped');
+    s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'ax', slot: 'main1' });
+    expect(s.tokens.sinna.equipment!.slots.main1).toBe('ax');
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sw', slot: 'main2' });
-    s = run(s, { type: 'setWeaponSet', tokenId: 'sinna', set: 2 });
-    s = run(s, { type: 'setResting', tokenId: 'sinna', resting: true });
-    expect(item(s, 'sw').container).toBe('equipped');
     s = run(s, { type: 'unequipSlot', tokenId: 'sinna', slot: 'main2' });
     expect(item(s, 'sw').container).toBe('pockets');
     expect(s.tokens.sinna.inventory).toHaveLength(2); // nothing duplicated
   });
 
-  it('worn items cannot be moved away and equipment is not "worn" by moving it', () => {
+  it('moving a worn item into a container takes it off; the legacy worn container is refused', () => {
     let s = fresh([make('srd-longsword', 'sw', 'normal', [])]);
-    s = run(s, { type: 'invAddItem', tokenId: 'sinna', itemId: 'cape', name: 'Red festival cape' }, GM);
-    expect(refuse(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'sw', rev: 0, container: 'equipped' })).toMatch(/Use “Equip”/);
     s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sw', slot: 'main1' });
-    expect(refuse(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'sw', rev: 0, container: 'backpack' })).toMatch(/unequip it first/);
-    // narrative items may still be placed in Equipped / Worn
-    s = run(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'cape', rev: 0, container: 'equipped' });
-    expect(item(s, 'cape').container).toBe('equipped');
+    expect(refuse(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'sw', rev: 0, container: 'equipped' })).toMatch(/does not exist|Equip/);
+    s = run(s, { type: 'invMoveItem', tokenId: 'sinna', itemId: 'sw', rev: 0, container: 'side-pouch' });
+    expect(s.tokens.sinna.equipment!.slots.main1).toBeUndefined();
+    expect(item(s, 'sw').container).toBe('side-pouch');
   });
 
-  it('a missing Equipped / Worn container is created when needed', () => {
-    let s = fresh([make('srd-longsword', 'sw', 'normal', [])]);
-    s.tokens.sinna.containers = [{ id: 'bag', name: 'Bag' }];
-    s.tokens.sinna.inventory[0].container = 'bag';
-    s = run(s, { type: 'equipItem', tokenId: 'sinna', itemId: 'sw', slot: 'main1' });
-    expect(s.tokens.sinna.containers!.map((c) => c.id)).toEqual(['bag', 'equipped']);
-    s = run(s, { type: 'unequipSlot', tokenId: 'sinna', slot: 'main1' });
-    expect(item(s, 'sw').container).toBe('bag');
+  it('old saves: the Equipped / Worn container is dissolved into the previous containers', () => {
+    const sw = make('srd-longsword', 'sw', 'normal', []);
+    Object.assign(sw, { container: 'equipped', prevContainer: 'bag' });
+    const cape = { id: 'cape', name: 'Cape', quantity: 1, description: '', container: 'equipped' } as Item;
+    let s = fresh([sw, cape]);
+    s.tokens.sinna.containers = [{ id: 'bag', name: 'Bag' }, { id: 'equipped', name: 'Equipped / Worn' }];
+    s.tokens.sinna.equipment = { slots: { main1: 'sw' }, activeSet: 1, resting: false, restingKeep: [] };
+    s = run(s, { type: 'setWeaponSet', tokenId: 'sinna', set: 1 });
+    expect(s.tokens.sinna.containers!.map((c) => c.id)).toEqual(['bag']);
+    expect(item(s, 'sw')).toMatchObject({ container: 'bag' });
+    expect(item(s, 'sw').prevContainer).toBeUndefined();
+    expect(item(s, 'cape').container).toBe('bag');
+    expect(s.tokens.sinna.equipment!.slots.main1).toBe('sw');
   });
 
   it('body type is cosmetic only', () => {

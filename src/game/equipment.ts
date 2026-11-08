@@ -12,10 +12,11 @@
  */
 import type { CharacterSheet } from './sheet.js';
 import type { Item, Token } from './types.js';
-import { containersOf } from './inventory.js';
+import { LEGACY_WORN_CONTAINER, containerOfItem, containersOf } from './inventory.js';
 import { modifier, type Element, ELEMENTS, type SaveAbility } from './items/modifiers.js';
 import { DEFAULT_ITEM_RULES, type ItemRules } from './items/rules.js';
 import { resistanceReduction } from './items/resistance.js';
+import { combinePieces, type PieceInput, type PieceSlot } from './items/armour.js';
 
 export type EquipSlot = 'head' | 'chest' | 'gloves' | 'boots' | 'cloak' | 'amulet' | 'belt' | 'ring1' | 'ring2' | 'main1' | 'off1' | 'main2' | 'off2';
 export const EQUIP_SLOTS: EquipSlot[] = ['head', 'amulet', 'cloak', 'chest', 'belt', 'gloves', 'ring1', 'ring2', 'boots', 'main1', 'off1', 'main2', 'off2'];
@@ -32,6 +33,10 @@ export interface ItemEquip {
   /** Body armour: base AC and type (light = full Dex, medium = Dex max +2, heavy = no Dex). */
   armorType?: ArmorType;
   armorBase?: number;
+  /** APEX 1.0 armour pieces (body/head/gloves/boots without an SRD armorBase): armour and evasion ratings in
+   *  half-AC units, see items/armour.ts. `armorType` is the piece's weight class. */
+  armour?: number;
+  evasion?: number;
   /** Flat AC bonus while equipped (shield +2, ring of protection +1, magic armour +1 …). */
   acBonus?: number;
   /** Weapons: magic/other attack bonus, damage dice, damage type, properties, proficiency. */
@@ -235,10 +240,15 @@ export interface CalcStep {
 
 export interface DerivedStats {
   ac: { value: number | null; steps: CalcStep[]; source: 'derived' | 'imported' | 'none'; imported: number | null; note?: string };
+  /** APEX 1.0 armour pieces (null when an SRD suit, Mage Armor or nothing rated is worn). */
+  armour: { armour: number; evasion: number; dexLimit: number; weightClass: ArmorType; pieces: Array<{ slot: PieceSlot; name: string | null; armour: number; evasion: number | null }> } | null;
   attacks: Array<{ slot: EquipSlot; itemId: string; name: string; toHit: number | null; damage: string; twoHandedGrip: boolean; steps: CalcStep[]; properties: WeaponProperty[]; extra: string[] }>;
   /** APEX 0.6: character-wide bonuses from modifiers on equipped, identified items of the active set. */
   bonuses: ItemBonuses;
+  /** Ability modifiers INCLUDING equipped ability bonuses (score capped at 20). */
   abilityMods: Partial<Record<Ability, number>>;
+  /** Sheet score, item bonus and effective score per ability. */
+  abilityScores: Partial<Record<Ability, { base: number; bonus: number; value: number }>>;
   proficiency: number | null;
   resting: boolean;
   activeSet: 1 | 2;
@@ -363,9 +373,24 @@ export function abilityMods(sheet: CharacterSheet): Partial<Record<Ability, numb
   return out;
 }
 
+/** Ability scores from the sheet plus equipped ability bonuses (items never raise a score above 20). */
+export function effectiveAbilities(sheet: CharacterSheet, bonuses: ItemBonuses): { mods: Partial<Record<Ability, number>>; scores: Partial<Record<Ability, { base: number; bonus: number; value: number }>> } {
+  const mods = abilityMods(sheet);
+  const scores: Partial<Record<Ability, { base: number; bonus: number; value: number }>> = {};
+  for (const a of Object.keys(ABILITY_NAMES) as Ability[]) {
+    const attr = sheet.attributes.find((x) => ABILITY_NAMES[a].test(x.name.trim()));
+    const base = attr ? num(attr.value) : null;
+    if (base === null) continue;
+    const bonus = bonuses.abilities[a]?.value ?? 0;
+    const value = bonus > 0 ? Math.max(base, Math.min(20, base + bonus)) : base;
+    scores[a] = { base, bonus: value - base, value };
+    mods[a] = Math.floor((value - 10) / 2);
+  }
+  return { mods, scores };
+}
+
 export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory' | 'equipment' | 'armorWornAt'>, rules: ItemRules = DEFAULT_ITEM_RULES, nowMs = Date.now()): DerivedStats {
   const eq = equipmentOf(token);
-  const mods = abilityMods(sheet);
   const pb = num(sheet.combat.find((c) => /^proficiency bonus$/i.test(c.label))?.value);
   const importedAc = num(sheet.combat.find((c) => c.label === 'Armor Class')?.value);
   const items = new Map(token.inventory.map((i) => [i.id, i]));
@@ -377,10 +402,21 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
   const mageArmor = sheet.spellEffects.find((effect) => effect.kind === 'mageArmor');
   const mageArmorActive = !!mageArmor && Date.parse(mageArmor.expiresAt) > nowMs && !armor && !(token.armorWornAt && Date.parse(token.armorWornAt) > Date.parse(mageArmor.castAt));
   const bonuses = itemBonuses(worn, rules);
-  const acRelevant = allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther || mageArmorActive;
+  const { mods, scores } = effectiveAbilities(sheet, bonuses);
+  const pieceOf = (slot: EquipSlot, kind: ItemKind) => worn.find((w) => w.slot === slot && w.item.equip!.kind === kind)?.item;
+  const pieces: Array<{ slot: PieceSlot; item: Item | undefined }> = [
+    { slot: 'body', item: armor && !armor.equip!.armorBase ? armor : undefined },
+    { slot: 'head', item: pieceOf('head', 'head') },
+    { slot: 'hands', item: pieceOf('gloves', 'gloves') },
+    { slot: 'feet', item: pieceOf('boots', 'boots') },
+  ];
+  const rated = (i: Item | undefined) => !!i && (i.equip!.armour !== undefined || i.equip!.evasion !== undefined);
+  const anyPiece = pieces.some((p) => rated(p.item));
+  const acRelevant = anyPiece || allEquipped.some((i) => i.equip!.kind === 'armor' || i.equip!.acBonus) || !!eq.unarmoredAbility || !!eq.acOther || mageArmorActive;
 
   // ---- Armor Class
   let ac: DerivedStats['ac'];
+  let armourView: DerivedStats['armour'] = null;
   if (!acRelevant) {
     ac = {
       value: importedAc,
@@ -395,20 +431,33 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     const steps: CalcStep[] = [];
     const dex = mods.dex;
     let value: number;
-    if (armor && armor.equip!.armorBase) {
-      const e = armor.equip!;
+    const suit = armor && armor.equip!.armorBase ? armor : undefined;
+    if (suit) {
+      const e = suit.equip!;
       value = e.armorBase!;
-      steps.push({ label: `${armor.name} (${e.armorType ?? 'light'} armour)`, value, op: '=' });
+      steps.push({ label: `${suit.name} (${e.armorType ?? 'light'} armour)`, value, op: '=' });
       const cap = e.armorType === 'heavy' ? 0 : e.armorType === 'medium' ? 2 : Infinity;
       const add = Math.min(dex, cap);
       if (cap !== Infinity && dex > cap) steps.push({ label: `Dexterity modifier ${fmt(dex)}, capped by ${e.armorType} armour`, value: add, op: 'cap' });
       else if (cap !== 0) steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
       else steps.push({ label: 'Dexterity does not apply (heavy armour)', value: 0, op: 'cap' });
       value += add;
-    } else if (mageArmorActive) {
+      if (anyPiece) steps.push({ label: 'Helmet, gloves and boots: the SRD suit already includes them (modifiers still count)', value: 0, op: '+' });
+    } else if (mageArmorActive && !anyPiece) {
       value = 13 + dex;
       steps.push({ label: 'Mage Armor (active): base AC 13', value: 13, op: '=' });
       steps.push({ label: 'Dexterity modifier', value: dex, op: '+' });
+    } else if (anyPiece || armor) {
+      const input: PieceInput[] = pieces.map((p) => ({ slot: p.slot, name: p.item?.name, rating: rated(p.item) ? { armour: p.item!.equip!.armour ?? 0, evasion: p.item!.equip!.evasion ?? 0, type: p.item!.equip!.armorType } : null }));
+      const r = combinePieces(input);
+      armourView = { armour: r.armour, evasion: r.evasion, dexLimit: r.dexLimit, weightClass: r.weightClass, pieces: input.map((p) => ({ slot: p.slot, name: p.name ?? null, armour: p.rating?.armour ?? 0, evasion: p.rating?.evasion ?? null })) };
+      value = 10 + r.acFromArmour;
+      steps.push({ label: 'Base 10', value: 10, op: '=' });
+      steps.push({ label: `Armour ${r.armour} (½, rounded down) from ${input.filter((p) => p.rating).map((p) => p.name).join(', ') || 'no pieces'}`, value: r.acFromArmour, op: '+' });
+      const add = Math.min(dex, r.dexLimit);
+      if (dex > r.dexLimit) steps.push({ label: `Dexterity ${fmt(dex)}, limited by evasion ${r.evasion} (max ${fmt(r.dexLimit)})`, value: add, op: 'cap' });
+      else steps.push({ label: `Dexterity modifier (evasion ${r.evasion} allows up to ${r.dexLimit === Infinity ? 'any' : fmt(r.dexLimit)})`, value: dex, op: '+' });
+      value += add;
     } else {
       value = 10 + dex;
       steps.push({ label: eq.resting ? 'Unarmored (resting): 10' : 'Unarmored: 10', value: 10, op: '=' });
@@ -480,7 +529,7 @@ export function deriveStats(sheet: CharacterSheet, token: Pick<Token, 'inventory
     const extra = [...wm.banes, ...(wm.flatCapped ? [`Flat damage capped at ${rules.flatDamageCap}`] : [])];
     attacks.push({ slot: w.slot, itemId: w.item.id, name: w.item.name, toHit, damage: dmg + flat + (isOff ? ' (off hand)' : ''), twoHandedGrip, steps, properties: props, extra });
   }
-  return { ac, attacks, bonuses, abilityMods: mods, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
+  return { ac, armour: armourView, attacks, bonuses, abilityMods: mods, abilityScores: scores, proficiency: pb, resting: eq.resting, activeSet: eq.activeSet };
 }
 
 export interface EquipmentPreview {
@@ -550,38 +599,34 @@ export function suggestSlot(eq: Equipment, item: Pick<Item, 'id' | 'equip'>): Eq
 }
 
 
-// ---------------------------------------------------------------- APEX 0.7: one authoritative item location
+// ---------------------------------------------------------------- APEX 1.0: worn = the paper doll, nothing else
 
-export const EQUIPPED_CONTAINER = 'equipped';
+/** @deprecated pre-1.0 container id; kept so old saves can be read. */
+export const EQUIPPED_CONTAINER = LEGACY_WORN_CONTAINER;
 
 /**
- * Equipment slots are the single source of truth for "worn"; the inventory location follows them:
- *  - an item referenced by a slot (any weapon set, resting or not) lives in the "Equipped / Worn" container and
- *    remembers the container it came from (`prevContainer`);
- *  - an item with equipment properties that is no longer referenced by a slot goes back to that container (or the
- *    first other container) – it is never shown as worn and stored at the same time.
- * Narrative items without equipment properties may stay in "Equipped / Worn" (a player's choice). Mutates `t` –
- * call it on a copy inside commands.
+ * Equipment slots are the single source of truth for "worn". There is no worn container any more: an equipped item
+ * keeps its home container (where it returns when taken off). This removes the legacy "Equipped / Worn" container
+ * from old saves and puts its items back where they came from. Mutates `t` – call it on a copy inside commands.
  */
 export function syncEquipmentLocations(t: Token): void {
-  const eq = t.equipment;
-  const worn = new Set(eq ? EQUIP_SLOTS.map((s) => eq.slots[s]).filter((x): x is string => !!x) : []);
-  const needs = t.inventory.some((i) => worn.has(i.id) || (i.equip && i.container === EQUIPPED_CONTAINER));
-  if (!needs) return;
+  const legacy = t.containers?.some((c) => c.id === LEGACY_WORN_CONTAINER) || t.inventory.some((i) => i.container === LEGACY_WORN_CONTAINER || i.prevContainer);
+  if (!legacy) return;
   const containers = containersOf(t);
-  if (!containers.some((c) => c.id === EQUIPPED_CONTAINER)) containers.push({ id: EQUIPPED_CONTAINER, name: 'Equipped / Worn' });
-  t.containers = containers;
-  const fallback = containers.find((c) => c.id !== EQUIPPED_CONTAINER)?.id ?? EQUIPPED_CONTAINER;
   for (const i of t.inventory) {
-    if (worn.has(i.id)) {
-      if (i.container !== EQUIPPED_CONTAINER) {
-        if (i.container) i.prevContainer = i.container;
-        i.container = EQUIPPED_CONTAINER;
-      }
-    } else if (i.equip && i.container === EQUIPPED_CONTAINER) {
-      const back = i.prevContainer && i.prevContainer !== EQUIPPED_CONTAINER && containers.some((c) => c.id === i.prevContainer) ? i.prevContainer : fallback;
-      i.container = back;
-      delete i.prevContainer;
-    } else if (i.prevContainer) delete i.prevContainer;
+    i.container = containerOfItem(i, containers);
+    delete i.prevContainer;
   }
+  t.containers = containers;
+}
+
+/** Items on the paper doll, in slot order (active and inactive weapon set). */
+export function wornItems(t: Pick<Token, 'inventory' | 'equipment'>): Array<{ slot: EquipSlot; item: Item; active: boolean }> {
+  const eq = equipmentOf(t);
+  const active = new Set(activeSlots(eq));
+  const byId = new Map(t.inventory.map((i) => [i.id, i]));
+  return EQUIP_SLOTS.flatMap((slot) => {
+    const item = eq.slots[slot] ? byId.get(eq.slots[slot]!) : undefined;
+    return item ? [{ slot, item, active: active.has(slot) }] : [];
+  });
 }

@@ -4,6 +4,7 @@
  * the slot's click menu (keyboard/touch alternative). Two weapon sets, a Resting / Unarmored preset, and a
  * derived-stat panel that explains every step. All changes are server-validated commands.
  */
+import { ResistanceRow } from './items/StatsUi';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Command } from '../game/commands';
 import {
@@ -53,6 +54,7 @@ export function useSheet(game: GameApi, tokenId: string | null): CharacterSheet 
 
 function itemSummary(e: ItemEquip | undefined): string {
   if (!e) return 'properties not defined';
+  if (e.armour !== undefined || e.evasion !== undefined) return `${e.armorType ?? 'light'} ${e.kind === 'armor' ? 'armour' : e.kind} · Armour ${e.armour ?? 0} · Evasion ${e.evasion ?? 0}`;
   if (e.kind === 'armor') return `${e.armorType ?? ''} armour · AC ${e.armorBase ?? '?'}`;
   if (e.kind === 'shield') return `shield · AC ${fmt(e.acBonus ?? 0)}`;
   if (e.kind === 'weapon') return `${e.damage ?? '?'} ${e.damageType ?? ''}${e.properties?.length ? ` · ${e.properties.join(', ')}` : ''}`;
@@ -347,6 +349,14 @@ function DerivedPanel({ derived, eq, items, run, tokenId, onConfig }: { derived:
           {ac.note && <p className="mt-1 text-amber-200">{ac.note}</p>}
         </div>
       </div>
+      {derived.armour && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]" data-testid="armour-summary" title="Armor Class = 10 + ½ armour + Dexterity (at most ½ evasion; medium body max +2, heavy body +0). Empty slots count as light.">
+          <span className="rounded border border-ink-500 px-1.5 py-0.5 text-marble-100">⛨ Armour <b className="tabular-nums">{derived.armour.armour}</b></span>
+          <span className="rounded border border-ink-500 px-1.5 py-0.5 text-marble-100">➶ Evasion <b className="tabular-nums">{derived.armour.evasion}</b></span>
+          <span className="text-marble-400">Dex counts up to {derived.armour.dexLimit === Infinity ? 'any' : fmt(derived.armour.dexLimit)} · {derived.armour.weightClass} mix</span>
+        </div>
+      )}
+      <div className="mt-2"><ResistanceRow compact resistances={(Object.keys(derived.bonuses.resistances) as Array<keyof typeof derived.bonuses.resistances>).map((element) => ({ element, points: derived.bonuses.resistances[element].value, reduction: derived.bonuses.resistances[element].reduction, capped: derived.bonuses.resistances[element].total > derived.bonuses.resistances[element].value }))} /></div>
       {derived.attacks.length > 0 && (
         <table className="mt-2 w-full text-[11px]">
           <thead className="text-marble-500">

@@ -412,7 +412,7 @@ describe('Inventory (authoritative game state)', () => {
     const approved = ((await h.get('state')).body as PlayerPayload).view!.tokens.find((t) => t.id === 'sinna')!.details!;
     expect(approved.inventory.find((i) => i.id === 'req-req-key')).toMatchObject({ name: 'Old iron key, wrapped in red cloth', quantity: 1, container: 'pockets' });
     // existing items are preserved and get a default container
-    expect(approved.inventory.find((i) => i.name === 'Aqueduct-Stone Staff')?.container).toBe('equipped');
+    expect(approved.inventory.find((i) => i.name === 'Aqueduct-Stone Staff')?.container).toBe('backpack');
     const gmState = ((await gm.get('state')).body as GmPayload).state!;
     expect(gmState.tokens.sinna.inventory.some((i) => i.id === 'req-req-key')).toBe(true);
   });

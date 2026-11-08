@@ -18,7 +18,7 @@ describe('rough weights for free-text items', () => {
     expect(estimateWeightLb('Strange Trinket from Home')).toBe(0);
     expect(estimateWeightLb('Mysterious Thingamajig')).toBe(0.5);
     expect(estimateWeightLb('Gladius')).toBe(3); // Roman gear seen in the live campaign
-    expect(estimateWeightLb('Scutum')).toBe(6);
+    expect(estimateWeightLb('Scutum')).toBe(20); // APEX tower shield base
     expect(estimateWeightLb('Tent, Two—Person')).toBe(20);
     expect(estimateWeightKg('Chain Mail')).toBe(24.95);
     expect(estimateWeightKg('Backpack')).toBe(2.25);

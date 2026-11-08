@@ -50,7 +50,9 @@ export const ENCOUNTER_TABLE: Record<Encounter, { label: string; rolls: number; 
 /** Relative weight of each category in a roll (only enabled categories count). */
 export const CATEGORY_WEIGHT: Record<LootCategory, number> = { weapon: 20, armor: 16, accessory: 18, seal: 10, orb: 4, fragment: 14, potion: 12, consumable: 8, currency: 3, quest: 0, custom: 0 };
 
-const ACCESSORY: BaseCategory[] = ['ring', 'amulet', 'cloak', 'head', 'gloves', 'boots', 'belt'];
+const ACCESSORY: BaseCategory[] = ['ring', 'amulet', 'cloak', 'belt'];
+/** APEX 1.0: helmets, gloves and boots are armour pieces now (armour / evasion), so they drop as armour. */
+const ARMOUR: BaseCategory[] = ['armor', 'shield', 'head', 'gloves', 'boots'];
 export const CONSUMABLE_BASES = ['srd-torch', 'srd-rations-1-day', 'apex-arcane-dust', 'apex-iron-ingot'];
 export const POTION_BASE = 'srd-potion-of-healing';
 export const QUEST_BASE = 'apex-quest-token';
@@ -113,10 +115,12 @@ export function draftItemLevel(encounter: Encounter, referenceLevel: number, rng
   return clampIlvl(clampLevel(referenceLevel) + ENCOUNTER_TABLE[encounter].ilvlBonus + extra);
 }
 
-function basesOf(cat: LootCategory): BaseItem[] {
-  if (cat === 'weapon') return BASE_ITEMS.filter((b) => b.category === 'weapon');
-  if (cat === 'armor') return BASE_ITEMS.filter((b) => b.category === 'armor' || b.category === 'shield');
-  if (cat === 'accessory') return BASE_ITEMS.filter((b) => ACCESSORY.includes(b.category) && canRollMods(b));
+/** Bases of a loot category; with an item level only those that drop at it (base `dropLevel`). */
+export function basesOf(cat: LootCategory, itemLevel = MAX_ITEM_LEVEL): BaseItem[] {
+  const drops = (b: BaseItem) => (b.dropLevel ?? 1) <= itemLevel;
+  if (cat === 'weapon') return BASE_ITEMS.filter((b) => b.category === 'weapon' && drops(b));
+  if (cat === 'armor') return BASE_ITEMS.filter((b) => ARMOUR.includes(b.category) && drops(b));
+  if (cat === 'accessory') return BASE_ITEMS.filter((b) => ACCESSORY.includes(b.category) && canRollMods(b) && drops(b));
   return [];
 }
 
@@ -133,14 +137,15 @@ export function rollDraft(encounter: Encounter, referenceLevel: number, categori
     const cat = weightedPick(rng, enabled.map((c) => ({ value: c, weight: CATEGORY_WEIGHT[c] })))!;
     const key = `${keyPrefix}-${n + 1}`;
     if (cat === 'weapon' || cat === 'armor' || cat === 'accessory') {
-      const base = pick(rng, basesOf(cat));
+      const itemLevel = draftItemLevel(encounter, referenceLevel, rng);
+      const base = pick(rng, basesOf(cat, itemLevel));
       const [wn, wm, wr] = table.rarity;
       const rarity = weightedPick<DraftRarity>(rng, [
         { value: 'normal', weight: wn },
         { value: 'magic', weight: wm },
         { value: 'rare', weight: wr },
       ])!;
-      out.push({ key, category: cat, baseId: base.id, rarity: canRollMods(base) ? rarity : 'normal', itemLevel: draftItemLevel(encounter, referenceLevel, rng), identified: rarity === 'normal', quantity: 1 });
+      out.push({ key, category: cat, baseId: base.id, rarity: canRollMods(base) ? rarity : 'normal', itemLevel, identified: rarity === 'normal', quantity: 1 });
     } else if (cat === 'potion') out.push({ key, category: cat, baseId: POTION_BASE, quantity: between(rng, 1, encounter === 'boss' ? 3 : 2) });
     else if (cat === 'consumable') out.push({ key, category: cat, baseId: pick(rng, CONSUMABLE_BASES), quantity: between(rng, 1, 3) });
     else if (cat === 'seal') out.push({ key, category: cat, currency: 'seal', quantity: between(rng, 1, encounter === 'boss' ? 3 : 1) });

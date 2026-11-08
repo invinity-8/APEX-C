@@ -141,3 +141,19 @@ Grundlage ab jetzt: Alle Battle- und Region-Szenen laufen auf Hex-Kacheln mit Ar
 SRD 2014 / 5.1 als Grundgerüst, kombiniert mit dem bestehenden PoE-inspirierten Itemsystem. UA- und Hausregelerweiterungen sind erwünscht. Datenmodell und Oberfläche sollen zusätzliche Fähigkeiten erlauben; nicht automatisierte Effekte müssen manuell durch den GM abwickelbar bleiben. Keine automatische Umstellung auf 2024.
 
 Die lokale Typprüfung der ersten Navigations- und Anzeigeänderungen wurde erfolgreich ausgeführt.
+
+
+## APEX 1.0 – Itemization
+
+- **Keine Equipped-Kiste mehr.** „Getragen“ ist ausschließlich, was auf der Puppe in einem Slot steckt. Das Inventar zeigt einen Bereich **Getragen** mit genau diesen Items, Container zeigen getragene Items nie doppelt. Alte Spielstände: Die Kiste wird beim nächsten Inventarbefehl aufgelöst, ihre Items gehen in den vorherigen Container zurück.
+- **Rechtsklick** rüstet aus bzw. legt ab. Ziehen auf „Getragen“ rüstet aus, Ziehen in einen Container legt ab.
+- **Hover-Vergleich:** Badge ▲ Upgrade / ▼ Downgrade / ◆ Trade-off / ＝ Gleich. Beim Hover sieht man jede Zahl, die sich gegenüber dem aktuellen Slot ändert.
+- **Globale Werte:** AC, Speed, Initiative, Max-HP, Attribute und Resistenzen kommen aus einer gemeinsamen Berechnung. Charakterbogen, Party-Widget, Szenenkampf (Gegner greifen gegen die echte AC an, ausgerüstete Waffen sind als Angriff wählbar) und Szenenbewegung nutzen sie.
+- **Resistenzen** mit Elementsymbolen, Punkten und % Schadensreduktion.
+- **Rüstungsteile Armour/Evasion:** Körper, Kopf, Hände und Füße jeweils leicht/mittel/schwer, in drei Stufen (Drop-Level 1/8/16). Leicht gibt mehr Evasion (Dex zählt), schwer mehr Armour. Jede Kombination landet bei höchstens 18 AC, Mixen ist also Stil, Gewicht und Stealth. SRD-Rüstungen bleiben komplette Anzüge.
+- **Neue Schilde:** Buckler +1, Scutum +3 (STR 15, schwer, Stealth-Nachteil).
+- **Mods:** Attributsboni auf allen Slots (+1 ab ilvl 10, +2 ab ilvl 24, max +2, nie über 20). Sie wirken auf AC, Angriffe und Initiative. Mod-Tiers skalieren mit dem Item-Level, nicht mit der Basis, deshalb können gute Mods auch auf schlechten Basen landen.
+- **Encumbrance prozentual:** ab 50 % Last −25 % Speed, ab 75 % −50 %, über 100 % keine Bewegung (GM kann auf SRD umstellen).
+- **Icons** je Basis (Waffenfamilie, Rüstungsslot und Gewichtsklasse, Schmuck …). Die Farbe zeigt die Gewichtsklasse, der Rahmen die Seltenheit.
+
+Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
