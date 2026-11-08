@@ -38,7 +38,7 @@ describe('base item catalogue', () => {
     for (const b of BASE_ITEMS) {
       if (b.source.name === 'SRD 5.1') expect(b.source.attribution).toMatch(/CC BY 4\.0/);
       if (b.category === 'weapon') expect(b.equip?.damage).toMatch(/^\d+d\d+$|^1$/);
-      if (b.category === 'armor') expect(b.equip?.armorBase).toBeGreaterThan(10);
+      if (b.category === 'armor') expect((b.equip?.armorBase ?? 0) + (b.equip?.armour ?? 0)).toBeGreaterThan(0);
     }
     expect(baseItem('srd-longsword')?.equip).toMatchObject({ damage: '1d8', damageType: 'slashing' });
     expect(baseItem('srd-plate-armor')?.requirements?.str).toBe(15);

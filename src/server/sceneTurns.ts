@@ -7,6 +7,8 @@
  * All changes are compare-and-swap writes of the game state; scene movement re-checks the turn
  * inside the database transaction.
  */
+import { combatAttacks, effectiveStats, targetAc } from '../game/effectiveStats.js';
+import { itemRulesOf } from '../game/items/rules.js';
 import { endInitiative, endTurn, initiativeBonus, joinInitiative, setClock, type InitiativeEntry } from '../game/sceneTurns.js';
 import { orderParticipants } from '../game/sceneOperations.js';
 import type { GameState } from '../game/types.js';
@@ -50,7 +52,8 @@ async function rollFor(user: AuthUser, repo: Repo, sceneId: string, userIds?: st
   for (const id of tokenIds) {
     const token = ctx.state?.tokens[id];
     if (!token) continue;
-    out.push({ tokenId: id, name: token.name, roll: d20(), bonus: initiativeBonus(await sheetOf(ctx, id)) });
+    const sheet = await sheetOf(ctx, id);
+    out.push({ tokenId: id, name: token.name, roll: d20(), bonus: ctx.state ? effectiveStats(sheet, token, itemRulesOf(ctx.state)).initiative.value : initiativeBonus(sheet) });
   }
   return out;
 }
@@ -222,7 +225,7 @@ async function attackRequest(user: AuthUser, repo: Repo, scene: NonNullable<Awai
     if (attackUsed(state, scene.id, v.tokenId)) return { status: 409, body: { error: 'You already attacked this turn.' } };
   }
   const sheet = await sheetOf(ctx, v.tokenId);
-  const attack = sheet.attacks[v.attackIndex as number];
+  const attack = combatAttacks(sheet, state.tokens[v.tokenId], itemRulesOf(state))[v.attackIndex as number];
   if (!attack) return { status: 400, body: { error: 'Choose an attack from your character sheet.' } };
   const bonus = parseBonus(attack.bonus), damage = parseDamage(attack.damage);
   if (bonus === null || !damage) return { status: 422, body: { error: `“${attack.name}” has no readable attack bonus or damage (e.g. +5, 1d8+3). Resolve it by hand.` } };
@@ -259,7 +262,8 @@ async function enemyAttackRequest(user: AuthUser, repo: Repo, scene: NonNullable
   if (!reach.ok) return { status: 422, body: { error: `${ctx.state.tokens[v.tokenId].name} is out of reach (${reach.distanceFt} ft).` } };
   const row = await repo.loadSheet(user.campaignId, v.tokenId);
   const sheet = await sheetOf(ctx, v.tokenId);
-  const ac = Number(/\d+/.exec(sheet.combat.find((c) => /^armor class$/i.test(c.label))?.value ?? '')?.[0] ?? 10);
+  // APEX 1.0: equipment counts – the effective AC (armour pieces, shield, modifiers), not the imported number
+  const ac = targetAc(sheet, ctx.state.tokens[v.tokenId], itemRulesOf(ctx.state));
   const roll = resolveAttack(enemy.name, ctx.state.tokens[v.tokenId].name, enemy.attack.name, enemy.attack.bonus, parseDamage(enemy.attack.damage)!, ac, die);
   let hpText = '';
   if (roll.hit && sheet.hitPoints) {

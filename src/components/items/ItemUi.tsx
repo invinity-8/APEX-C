@@ -463,7 +463,10 @@ const LOAD_TONE: Record<CarryLoad['state'], { color: string; label: string }> = 
 /** Compact vertical gauge: current load / capacity in kg, percentage and state. */
 export function CarryGauge({ load }: { load: CarryLoad }) {
   const pct = load.pct === null ? 0 : Math.min(100, load.pct);
-  const tone = LOAD_TONE[load.state];
+  const tone = { ...LOAD_TONE[load.state] };
+  if (load.mode === 2 && load.state === 'encumbered') tone.label = 'Encumbered (speed −25 %)';
+  if (load.mode === 2 && load.state === 'heavily') tone.label = 'Heavily encumbered (speed −50 %)';
+  if (load.state === 'over') tone.label = 'Overburdened – cannot move';
   return (
     <div className="flex items-stretch gap-2 rounded-lg border border-ink-600 bg-ink-900/60 p-2" aria-label="Carry weight" data-testid="carry-gauge" data-state={load.state}>
       <div className="relative w-3.5 overflow-hidden rounded-full border border-ink-500 bg-ink-800" style={{ minHeight: 76 }} role="meter" aria-valuemin={0} aria-valuemax={load.capacityKg ?? 0} aria-valuenow={load.loadKg} aria-label="Carried weight">

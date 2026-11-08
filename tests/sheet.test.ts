@@ -140,7 +140,7 @@ describe('PDF field mapping', () => {
 describe('Inventory rules', () => {
   it('existing saves without containers get the default containers', () => {
     const s = createDemoState({ radius: 6, seed: 1 });
-    expect(containersOf(s.tokens.sinna).map((c) => c.name)).toEqual(['Backpack', 'Pockets', 'Side Pouch', 'Equipped / Worn', 'Other']);
+    expect(containersOf(s.tokens.sinna).map((c) => c.name)).toEqual(['Backpack', 'Pockets', 'Side Pouch', 'Other']);
   });
 
   it('players can request only their own narrative items; requests stay out of the shared log', () => {

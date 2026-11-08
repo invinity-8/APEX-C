@@ -551,8 +551,8 @@ type AddKind = 'quest' | 'custom' | 'potion' | 'consumable' | 'seal' | 'orb' | '
 const ADDABLE: AddKind[] = ['quest', 'custom', 'potion', 'consumable', 'seal', 'orb', 'fragment', 'currency', 'weapon', 'armor', 'accessory'];
 const EQUIP_BASES: Record<'weapon' | 'armor' | 'accessory', (b: BaseItem) => boolean> = {
   weapon: (b) => b.category === 'weapon',
-  armor: (b) => b.category === 'armor' || b.category === 'shield',
-  accessory: (b) => ['ring', 'amulet', 'cloak', 'head', 'gloves', 'boots', 'belt'].includes(b.category) && canRollMods(b),
+  armor: (b) => ['armor', 'shield', 'head', 'gloves', 'boots'].includes(b.category),
+  accessory: (b) => ['ring', 'amulet', 'cloak', 'belt'].includes(b.category) && canRollMods(b),
 };
 
 function AddEntry({ onAdd, busy }: { onAdd: (e: LootDraftEntry) => Promise<DispatchResult>; busy: boolean }) {
@@ -863,7 +863,7 @@ function Balance({ state, run }: { state: GameState; run: Run }) {
     ['cubeLevel3Fragments', 'Cube fragments: level 3'],
     ['cubeLevel4Fragments', 'Cube fragments: level 4'],
     ['cubeLevel5Fragments', 'Cube fragments: level 5'],
-    ['encumbranceVariant', 'Variant encumbrance (0 = SRD standard, 1 = variant)'],
+    ['encumbranceVariant', 'Encumbrance (0 = SRD standard, 1 = SRD variant −10/−20 ft, 2 = APEX −25 %/−50 %)'],
     ['resistanceCap', 'Resistance cap (points)'],
     ['toHitCap', 'To-hit cap per weapon'],
     ['acCap', 'AC cap'],

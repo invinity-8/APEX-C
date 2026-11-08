@@ -222,14 +222,8 @@ No database migration is needed.
 ## 12. APEX 0.7 – The Imperial Armory
 
 ### Equipment location (one authoritative source)
-Equipment slots are the single truth for "worn":
-- An item referenced by a slot lives in the **Equipped / Worn** container and remembers `prevContainer`. This
-  applies to both weapon sets and the Resting preset. If the container is missing, it is created.
-- When the slot reference disappears (unequip, replaced, restored, item gone), equipment returns to
-  `prevContainer`, or to the first other container if that one no longer exists.
-- Moving a worn item to another container is refused ("unequip it first"). Moving gear with equipment properties
-  into *Equipped / Worn* is refused ("use Equip"). Narrative free-text items may still be placed there.
-- Ownership never changes and nothing is duplicated. Derived stats follow the slots.
+*Superseded in APEX 1.0 – see §17.* The former **Equipped / Worn** container no longer exists: the paper doll's slots
+are the only meaning of "worn", and the inventory shows exactly those items in its **Worn** section.
 
 ### New crafting currency
 | Currency | Effect | Rules |
@@ -420,3 +414,89 @@ and enter a level by hand. Boss drops keep the rare higher item levels (+0 / +1 
   Buying names the purse revision and the merchant revision, selling the item revision and the merchant revision,
   so a double click, a retry or a stale screen is refused instead of spending or selling twice. Two players racing
   for the last item: exactly one gets it and pays. All trades are in the item audit log (`trade`).
+
+
+## 17. APEX 1.0 – Itemization overhaul
+
+### Worn = the paper doll (no Equipped container)
+- "Worn" is not a container. An item is worn **if and only if** an equipment slot references it. It keeps its home
+  container (where it goes when taken off).
+- The inventory shows a **Worn** section with exactly the slot items (inactive weapon set marked). Worn items are
+  never listed in a container at the same time.
+- **Right-click** an item: equip it into a fitting slot (free slots first), or take a worn item off. Dropping an
+  item on *Worn* equips it; dragging a worn item into a container (or choosing a container) takes it off.
+- Old saves: the legacy `equipped` container is removed on the next inventory/equipment command, and its items
+  return to `prevContainer` (or the Backpack). The client hides it immediately. Deleting a container that only
+  holds worn items moves their home to the first container.
+
+### Upgrade comparison (hover)
+Every wearable, identified, not-worn item gets a badge: **▲ Upgrade**, **▼ Downgrade**, **◆ Trade-off** or
+**＝ Same**. Hovering (or focusing) shows every changed number against the item currently in that slot: AC,
+attack bonus, average damage, resistances (% reduction), HP, initiative, speed, carry, spell attack/DC, thorns,
+ability scores, saves and skills. It uses the same rules as the character sheet (`previewEquipStats`).
+The badge's weights only rank the changes: AC 10, attack 6, ability 5, save 4, initiative 3, avg. damage 2 per
+point, skill 1.5, HP 1, resistance 0.3 per %, speed 0.6 per ft.
+
+### Armour pieces: Armour & Evasion → Armor Class
+Every armour slot (body, head, hands, feet) has an **Armour** and an **Evasion** rating (half-AC units):
+
+| Slot | Light (armour / evasion) | Medium | Heavy |
+| --- | --- | --- | --- |
+| Body | 2 / 6 | 5 / 2 | 8 / 0 |
+| Head, hands, feet (each) | 1 / 2 | 2 / 1 | 3 / 0 |
+
+```
+AC = 10 + ⌊Σ armour / 2⌋ + min(Dex modifier, ⌊Σ evasion / 2⌋, body limit)    body limit: light –, medium +2, heavy +0
+```
+An empty slot (or an old unrated cap/glove/boot) counts as light evasion with no armour, so unarmoured stays
+10 + Dex. Reference results: full light set 12 + Dex (studded leather), full medium 15 + Dex (max 2) (half plate),
+full heavy 18 (plate). **No combination exceeds 18 at any Dexterity** (tested over all 81 mixes), so mixing is
+a choice of style, weight and stealth: heavy body + light pieces locks Dex; a light body with heavy helmet,
+gauntlets and sabatons keeps up to +3 Dex. Shields add on top (Buckler +1, Shield +2, Scutum +3 with STR 15,
+20 lb and stealth disadvantage), then item modifiers (AC cap +2).
+
+**SRD suits** (Plate Armor, Leather Armor …) keep their SRD Armor Class. They are complete suits, so worn
+helmet/gloves/boots add only their modifiers, not their ratings (shown as a step in the AC explanation). Mage Armor
+applies when no rated piece is worn.
+
+### Bases (36 armour pieces + 2 shields)
+Three tiers per slot and weight class (drop levels 1 / 8 / 16). Tiers share their ratings (bounded accuracy) and
+differ in weight, stealth, Strength requirement and price – e.g. *Iron Cuirass* (35 lb, STR 13) → *Lorica
+Segmentata* (30 lb) → *Praetorian Plate* (26 lb, STR 11). Light pieces roll clothing modifiers (skills, travel),
+heavy pieces also roll armour modifiers (thorns, AC). Loot drafts only pick bases whose drop level is at most the
+item level; helmets, gloves and boots now drop as **armour**, accessories are rings, amulets, cloaks and belts.
+**Modifier tiers depend on the item level, never on the base tier** – a great roll can land on a humble base.
+
+### Modifiers (MODIFIER_VERSION 4)
+- Attributes (*of Might / Grace / Vigour / Insight / the Sage / Majesty*): every worn slot (jewellery, belt, head,
+  hands, feet, cloak, body armour). +1 from item level 10 (weight 60), +2 from item level 24 (weight 15). Cap per
+  ability +2, never above 20. **Applied**: the raised modifier is used for AC, attacks and initiative.
+- *Hale* tier 4 (ilvl 27: +13–16 HP), *of the March* tier 2 (ilvl 22: +10 ft).
+- Existing items keep their rolls; the new tiers only affect new rolls.
+
+### One set of numbers everywhere (`effectiveStats`)
+The character sheet overview, the party widget, scene combat and scene movement use the same calculation:
+- **Armor Class**: equipment-derived when armour/shields are worn, otherwise the sheet value (+ item modifiers).
+  Enemies in scene combat attack this AC.
+- **Speed**: walking speed + item speed − encumbrance (below). Scene movement uses it, including bonuses above the
+  sheet speed. Arena movement points stay GM-set; encumbrance can only lower them.
+- **Initiative**: sheet + item initiative + Dex gained from items. Scene initiative rolls use it.
+- **Max HP**: sheet + item HP (shown, never written into the sheet).
+- **Attacks**: equipped weapons of the active set appear in the scene attack menu with derived to-hit and damage
+  (flat weapon damage folded into the modifier), before the sheet's own attacks.
+- **Resistances**: element glyphs with points and the damage reduction (100 points = 50 %).
+
+### Encumbrance in percent (rule value 2, the new default)
+| Load (of capacity STR × 15 lb + item carry) | State | Speed |
+| --- | --- | --- |
+| ≤ 50 % | Unburdened | full |
+| > 50 % | Encumbered | −25 % (rounded down to 5 ft) |
+| > 75 % | Heavily encumbered | −50 % |
+| > 100 % | Overburdened | cannot move |
+
+The GM can switch back to SRD standard (0) or the SRD variant (1, −10/−20 ft) under *Arsenal → Balance*.
+
+### Item icons
+Original inline SVG glyphs per base family (sword, axe, bow, staff …; robe/mail/plate; cap/helm/great helm;
+glove/gauntlet; shoe/boot/sabaton; buckler/shield/tower; jewellery, potions, materials …). The metal tint shows the
+weight class, the frame the rarity.

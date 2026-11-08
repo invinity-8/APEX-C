@@ -7,6 +7,8 @@
  *   one "Edit" mode for all tabs, a conflict banner instead of silent overwrites.
  * - Players edit their own character; the GM edits every character.
  */
+import { effectiveStats } from '../game/effectiveStats';
+import { EffectiveStatGrid, ResistanceRow } from './items/StatsUi';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Command } from '../game/commands';
 import { emptySheet, newEntryId, spellMatchesQuery, type CharacterSheet, type SheetEntry, type SheetResource, type SheetSkill, type SheetSpell } from '../game/sheet';
@@ -174,6 +176,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   };
 
   const sheet = draft ?? data?.sheet ?? emptySheet();
+  const effective = token.details?.inventory && sheet.attributes.length ? effectiveStats(sheet, token.details, game.view.itemRules) : null;
   const editing = !!draft;
   const set = (patch: Partial<CharacterSheet>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const changedElsewhere = editing && data && data.version !== baseVersion;
@@ -277,20 +280,33 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
           </div>
           <section className="panel space-y-2 p-3 lg:col-span-2">
             <h3 className="panel-title">At a glance</h3>
+            {effective ? (
+              <>
+                <EffectiveStatGrid stats={effective} hpCurrent={sheet.hitPoints?.current ?? null} />
+                <p className="text-[10px] text-marble-500">Values at the table: the sheet plus worn equipment (hover for the calculation). Scene combat and movement use exactly these numbers.</p>
+              </>
+            ) : null}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {sheet.hitPoints && <Stat label="Hit points" value={`${sheet.hitPoints.current} / ${sheet.hitPoints.max}`} />}
-              {['Armor Class', 'Initiative', 'Speed (walking)', 'Speed', 'Passive Perception', 'Proficiency bonus'].map((l) => {
+              {!effective && sheet.hitPoints && <Stat label="Hit points" value={`${sheet.hitPoints.current} / ${sheet.hitPoints.max}`} />}
+              {[...(effective ? [] : ['Armor Class', 'Initiative', 'Speed (walking)', 'Speed']), 'Passive Perception', 'Proficiency bonus'].map((l) => {
                 const v = sheet.combat.find((c) => c.label === l)?.value;
                 return v ? <Stat key={l} label={l.replace(' (walking)', '')} value={v} /> : null;
               })}
             </div>
             {sheet.attributes.length > 0 && (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {sheet.attributes.map((a) => (
-                  <Stat key={a.id} label={a.name.slice(0, 3).toUpperCase()} value={a.value || '–'} sub={a.modifier} />
-                ))}
+                {sheet.attributes.map((a) => {
+                  const key = (['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).find((k) => a.name.trim().toLowerCase().startsWith(k));
+                  const eff = key ? effective?.abilities[key] : undefined;
+                  return eff?.bonus ? (
+                    <Stat key={a.id} label={a.name.slice(0, 3).toUpperCase()} value={String(eff.value)} sub={`${eff.value >= 10 ? '+' : ''}${Math.floor((eff.value - 10) / 2)} · sheet ${eff.base} +${eff.bonus} items`} />
+                  ) : (
+                    <Stat key={a.id} label={a.name.slice(0, 3).toUpperCase()} value={a.value || '–'} sub={a.modifier} />
+                  );
+                })}
               </div>
             )}
+            {effective && <ResistanceRow resistances={effective.resistances} />}
             {sheet.spells.length > 0 && (
               <p className="text-xs text-marble-300">
                 Spells: {sheet.spells.filter((s) => s.level === 0).length} cantrips · <b className="text-gold-200">{sheet.spells.filter((s) => s.level > 0 && s.prepared).length} prepared</b> ·{' '}

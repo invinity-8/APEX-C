@@ -26,7 +26,7 @@ import { addLog } from './log.js';
 import { findPath, type BlockCheck, type TerrainLookup } from './movement.js';
 import { advanceDay, advancePhase } from './day.js';
 import { movePointsForSpeed } from './resources.js';
-import { EQUIPPED_CONTAINER, SLOT_LABEL, emptyEquipment, equipItem, reconcileEquipment, slotOfItem, syncEquipmentLocations, unequipSlot, type Ability, type Equipment, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
+import { EQUIPPED_CONTAINER, emptyEquipment, equipItem, reconcileEquipment, syncEquipmentLocations, unequipSlot, type Ability, type Equipment, type EquipError, type EquipSlot, type ItemEquip } from './equipment.js';
 import { addAnnouncement, applyEvent, eventEligible, postponeEvent, rejectEvent } from './events.js';
 import { stringHash } from './rng.js';
 import { TERRAIN } from './terrain.js';
@@ -647,7 +647,7 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
         item.name = name;
       }
       if (!checkContainer(cmd.container)) return fail(prev, T.noSuchContainer);
-      if (cmd.container !== undefined) {
+      if (cmd.container !== undefined && cmd.container !== item.container) {
         const placement = wornPlacement(t, item, cmd.container) ?? holdingRefusal(t, item, cmd.container);
         if (placement) return fail(prev, placement);
         item.container = cmd.container;
@@ -745,12 +745,16 @@ function executeInventory(prev: GameState, actor: Actor, cmd: InventoryCommand):
     case 'invRemoveContainer': {
       if (!containers.some((c) => c.id === cmd.containerId)) return fail(prev, T.noSuchContainer);
       if (containers.find((c) => c.id === cmd.containerId)?.holding) return fail(prev, 'This container belongs to a Bag of Holding – it goes wherever the bag goes.');
-      if (t.inventory.some((i) => i.container === cmd.containerId)) return fail(prev, T.containerNotEmpty);
+      // worn items are shown on the paper doll, not in their home container – they simply get a new home
+      const worn = new Set(Object.values(t.equipment?.slots ?? {}));
+      if (t.inventory.some((i) => i.container === cmd.containerId && !worn.has(i.id))) return fail(prev, T.containerNotEmpty);
       if (containers.length <= 1) return fail(prev, T.lastContainer);
       t.containers = containers.filter((c) => c.id !== cmd.containerId);
+      for (const i of t.inventory) if (i.container === cmd.containerId) i.container = t.containers[0].id;
       break;
     }
   }
+  reconcileEquipment(t); // moving a worn item into a container takes it off
   syncHolding(t); // APEX 0.7: Bag of Holding containers follow the bags the character owns
   return { ok: true, state };
 }
@@ -855,11 +859,14 @@ function executeEquipment(prev: GameState, actor: Actor, cmd: EquipmentCommand):
  * knowledge …) with the previous state. Safe because every command clones before it mutates; it turns a
  * ~27 ms full-state clone on a radius-78 world into well under a millisecond.
  */
-/** APEX 0.7: worn items stay in "Equipped / Worn"; equipment is put on with Equip, not by moving it there. */
+/**
+ * APEX 1.0: there is no worn container. Moving a worn item into a container takes it off (the paper doll is the
+ * only place where items are worn) – it is never "worn and stored" at the same time.
+ */
 function wornPlacement(t: Token, item: Item, container: string): string | null {
-  const slot = slotOfItem(t.equipment ?? emptyEquipment(), item.id);
-  if (slot && container !== EQUIPPED_CONTAINER) return `${item.name} is worn (${SLOT_LABEL[slot]}) – unequip it first.`;
-  if (!slot && item.equip && container === EQUIPPED_CONTAINER) return `Use “Equip” to wear ${item.name}.`;
+  if (container === EQUIPPED_CONTAINER) return `Use “Equip” (right-click) to wear ${item.name}.`;
+  const eq = t.equipment;
+  if (eq) for (const s of Object.keys(eq.slots) as EquipSlot[]) if (eq.slots[s] === item.id) delete eq.slots[s];
   return null;
 }
 

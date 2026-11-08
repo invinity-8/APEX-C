@@ -81,7 +81,7 @@ export function sceneSpeed(state: GameState, tokenId: string, sheet: CharacterSh
   const token = state.tokens[tokenId];
   if (!token) return { speedFt: 0, overloaded: false };
   const load = characterMovementLoad(state, token, sheet);
-  return { speedFt: Math.max(0, Math.min(token.speedFt ?? 30, load.speedFt)), overloaded: load.load.state === 'over' };
+  return { speedFt: Math.max(0, load.speedFt), overloaded: load.load.state === 'over' }; // item speed and encumbrance count
 }
 
 export function movementFor(state: GameState, sceneId: string, category: 'battle' | 'region', tokenId: string, gm: boolean, sheet: CharacterSheet, local: LocalMotionSnapshot): ViewerMovement {

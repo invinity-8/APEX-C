@@ -10,7 +10,9 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Command } from '../game/commands';
-import { SLOT_LABEL, equipmentOf, fmt, previewEquipStats, slotOfItem, suggestSlot, type Equipment, type EquipmentPreview } from '../game/equipment';
+import { SLOT_LABEL, equipmentOf, fmt, slotOfItem, suggestSlot, wornItems, type Equipment } from '../game/equipment';
+import { compareItem, type CompareLine, type Comparison, type Verdict } from '../game/itemCompare';
+import { ItemIcon } from './items/ItemIcon';
 import { balanceOf, CURRENCIES } from '../game/items/currency';
 import { canActivate, canAscend, canAugment, canIdentify, canReroll, canSalvage, salvageReward, type Check } from '../game/items/loot';
 import { addableMods } from '../game/items/generate';
@@ -46,11 +48,9 @@ const input = 'rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-sm tex
 const DND = 'application/x-apex-inventory-item';
 const UNDO_MS = 5000;
 type Sort = 'manual' | 'name' | 'type' | 'quantity' | 'rarity' | 'level';
-type Filter = 'all' | 'equipped' | 'unequipped' | ItemCategory;
+type Filter = 'all' | ItemCategory;
 const FILTERS: Array<[Filter, string]> = [
   ['all', 'All'],
-  ['equipped', 'Equipped'],
-  ['unequipped', 'Not equipped'],
   ['weapon', 'Weapons'],
   ['armor', 'Armour & shields'],
   ['accessory', 'Accessories'],
@@ -65,6 +65,8 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
   const containers = details?.containers?.length ? details.containers : DEFAULT_CONTAINERS.map((c) => ({ ...c }));
   const items = useMemo(() => details?.inventory ?? [], [details?.inventory]);
   const eq = equipmentOf({ equipment: details?.equipment });
+  const worn = wornItems({ inventory: items, equipment: details?.equipment });
+  const wornIds = new Set(worn.map((w) => w.item.id));
   const [name, setName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newNotes, setNewNotes] = useState('');
@@ -137,9 +139,6 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
   const visible = items.filter((i) => !pending[i.id]);
   const matches = (i: Item) => {
     if (needle && !`${i.name} ${i.description} ${i.notes ?? ''}`.toLowerCase().includes(needle)) return false;
-    const equipped = !!slotOfItem(eq, i.id);
-    if (filter === 'equipped') return equipped;
-    if (filter === 'unequipped') return !equipped;
     if (filter !== 'all') return itemCategory(i) === filter;
     return true;
   };
@@ -218,7 +217,7 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
       </section>
 
       <div className="flex flex-wrap items-stretch gap-3">
-        <CarryGauge load={carryLoad({ inventory: items, currency: token.details?.currency }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant === 1)} />
+        <CarryGauge load={carryLoad({ inventory: items, currency: token.details?.currency }, strength, carryBonusLb(items, eq, rules), rules.encumbranceVariant)} />
         <div className="min-w-0 flex-1">
       <CurrencyBar
         currency={details.currency}
@@ -251,9 +250,32 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
         </div>
       ))}
 
+      <WornCard
+        token={token}
+        container={{ id: '__worn', name: 'Worn' }}
+        items={worn.filter((w) => !pending[w.item.id]).map((w) => w.item)}
+        allInside={worn.map((w) => w.item)}
+        allItems={visible}
+        containers={containers}
+        run={run}
+        canDelete={false}
+        reorderable={false}
+        eqSlot={(id) => slotOfItem(eq, id)}
+        dragId={dragId}
+        setDragId={setDragId}
+        onMove={move}
+        onRemove={remove}
+        eq={eq}
+        rules={rules}
+        isGm={isGm}
+        sheet={sheet}
+        inactive={new Set(worn.filter((w) => !w.active).map((w) => w.item.id))}
+      />
+
       <div className="grid gap-3 md:grid-cols-2">
         {containers.map((c) => {
-          const inside = visible.filter((i) => containerOfItem(i, containers) === c.id);
+          // worn items are shown on the paper doll (Worn) only – never in a container at the same time
+          const inside = visible.filter((i) => !wornIds.has(i.id) && containerOfItem(i, containers) === c.id);
           return (
             <ContainerCard
               key={c.id}
@@ -401,7 +423,65 @@ function ContainerCard(props: CardProps) {
   );
 }
 
-function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
+/**
+ * Worn: exactly the items on the paper doll (equipment slots). Not a container – dropping an item here equips it
+ * into a fitting slot, dragging a worn item into a container takes it off. Right-click equips/unequips.
+ */
+function WornCard(props: CardProps & { inactive: Set<string> }) {
+  const { token, run, eq } = props;
+  const [over, setOver] = useState(false);
+  const [error, setError] = useState('');
+  const dragged = props.allItems.find((i) => i.id === props.dragId);
+  return (
+    <section
+      className={`panel p-3 transition-colors ${over ? 'border-gold-400/80' : 'border-gold-700/50'}`}
+      aria-label="Worn (paper doll)"
+      data-testid="worn-items"
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DND)) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)}
+      onDrop={async (e) => {
+        setOver(false);
+        props.setDragId(null);
+        if (!dragged || props.eqSlot(dragged.id)) return;
+        e.preventDefault();
+        const slot = dragged.equip && dragged.identified !== false ? suggestSlot(eq, dragged) : null;
+        if (!slot) return setError(dragged.identified === false ? `Identify ${dragged.name} before wearing it.` : `${dragged.name} cannot be worn.`);
+        setError('');
+        await run({ type: 'equipItem', tokenId: token.id, itemId: dragged.id, slot });
+      }}
+    >
+      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+        <h3 className="panel-title flex-1">
+          Worn <span className="text-marble-500">({props.items.length})</span>
+        </h3>
+        <span className="text-[11px] text-marble-500">Exactly what is on the paper doll · drop an item here to wear it · right-click an item to equip / take off</span>
+      </div>
+      {error && <p role="alert" className="mb-1 text-[11px] text-amber-200">{error}</p>}
+      {props.items.length ? (
+        <ul className="grid gap-1.5 md:grid-cols-2">
+          {props.items.map((i) => (
+            <ItemRow key={i.id} {...props} item={i} inactiveSet={props.inactive.has(i.id)} />
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-md border border-dashed border-ink-600 px-2 py-3 text-center text-xs text-marble-500">Nothing worn – right-click equipment or drop it here.</p>
+      )}
+    </section>
+  );
+}
+
+const VERDICT: Record<Verdict, { label: string; className: string; title: string }> = {
+  upgrade: { label: '▲ Upgrade', className: 'border-emerald-500/60 text-emerald-300', title: 'Better than what you wear in that slot (hover for details)' },
+  downgrade: { label: '▼ Downgrade', className: 'border-rose-500/60 text-rose-300', title: 'Worse than what you wear in that slot (hover for details)' },
+  mixed: { label: '◆ Trade-off', className: 'border-amber-400/60 text-amber-200', title: 'Some numbers go up, others down (hover for details)' },
+  same: { label: '＝ Same', className: 'border-ink-500 text-marble-400', title: 'No derived number changes' },
+};
+
+function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item; inactiveSet?: boolean }) {
   const { token, item, containers, run, reorderable } = props;
   const [mode, setMode] = useState<'view' | 'edit' | 'split' | 'reroll' | 'salvage' | 'revoke' | 'augment' | 'ascend' | 'activate'>('view');
   const [inspect, setInspect] = useState(false);
@@ -418,16 +498,17 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   const rev = item.rev ?? 0;
   const slot = props.eqSlot(item.id);
   const mergeTarget = props.allItems.find((o) => o.id !== item.id && canMerge(item, o, containers));
-  useEffect(() => {
-    const showOnShift = (event: KeyboardEvent) => { if (event.key === 'Shift' && hovered.current) setCompare(true); };
-    const hideOnShiftRelease = (event: KeyboardEvent) => { if (event.key === 'Shift') setCompare(false); };
-    window.addEventListener('keydown', showOnShift);
-    window.addEventListener('keyup', hideOnShiftRelease);
-    return () => { window.removeEventListener('keydown', showOnShift); window.removeEventListener('keyup', hideOnShiftRelease); };
-  }, []);
-  const comparison = compare && props.sheet
-    ? previewEquipStats(props.sheet, { inventory: props.allItems, equipment: props.eq, armorWornAt: token.details?.armorWornAt }, item.id, props.rules)
-    : null;
+  // upgrade check: always computed for wearable items that are not worn (badge); details on hover
+  const comparison = useMemo(
+    () => (props.sheet && item.equip && !slot && item.identified !== false ? compareItem(props.sheet, { inventory: props.allItems, equipment: props.eq, armorWornAt: token.details?.armorWornAt }, item.id, props.rules) : null),
+    [props.sheet, item, slot, props.allItems, props.eq, token.details?.armorWornAt, props.rules],
+  );
+  const quickEquip = async () => {
+    if (slot) return void run({ type: 'unequipSlot', tokenId: token.id, slot });
+    const target = item.equip && item.identified !== false ? suggestSlot(props.eq, item) : null;
+    if (target) return void run({ type: 'equipItem', tokenId: token.id, itemId: item.id, slot: target });
+    setMenu(true);
+  };
   const update = (patch: Partial<{ name: string; description: string; notes: string; quantity: number; weightKg: number }>) => run({ type: 'invUpdateItem', tokenId: token.id, itemId: item.id, rev, ...patch });
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -465,13 +546,15 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
   }
   return (
     <li
-      className={`rounded-lg border bg-ink-800/50 p-2 ${slot ? 'border-gold-600/60' : 'border-ink-600'} ${props.dragId === item.id ? 'opacity-40' : ''}`}
+      className={`relative rounded-lg border bg-ink-800/50 p-2 ${slot ? 'border-gold-600/60' : 'border-ink-600'} ${props.inactiveSet ? 'opacity-70' : ''} ${props.dragId === item.id ? 'opacity-40' : ''}`}
       data-item={item.id}
       draggable
-      onContextMenu={(event) => { event.preventDefault(); setMenu(true); }}
-      onMouseEnter={(event) => { hovered.current = true; setCompare(event.shiftKey); }}
-      onMouseMove={(event) => { if (event.shiftKey) setCompare(true); }}
+      onContextMenu={(event) => { event.preventDefault(); void quickEquip(); }}
+      onMouseEnter={() => { hovered.current = true; setCompare(true); }}
       onMouseLeave={() => { hovered.current = false; setCompare(false); }}
+      onFocus={() => setCompare(true)}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setCompare(false)}
+      title={item.equip ? (slot ? 'Right-click: take off' : 'Right-click: equip') : undefined}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData(DND, item.id);
@@ -496,6 +579,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
         <span className="cursor-grab select-none pt-0.5 text-marble-600" aria-hidden title="Drag to reorder or move">
           ⠿
         </span>
+        <ItemIcon item={item} />
         <div className="min-w-0 flex-1">
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
@@ -503,16 +587,22 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item }) {
             {itemWeightKg(item) > 0 && <span className="ml-1.5 text-[10px] tabular-nums text-marble-500">{(itemWeightKg(item) * item.quantity).toFixed(1)} kg</span>}
             {slot && (
               <span className="ml-1.5 rounded border border-gold-500/50 px-1 text-[10px] uppercase tracking-wider text-gold-300" title="Equipped – see the Equipment tab">
-                equipped · {SLOT_LABEL[slot]}
+                worn · {SLOT_LABEL[slot]}{props.inactiveSet ? ' (inactive set)' : ''}
+              </span>
+            )}
+            {comparison && !('reason' in comparison) && (
+              <span className={`ml-1.5 rounded border px-1 text-[10px] uppercase tracking-wider ${VERDICT[comparison.verdict].className}`} title={VERDICT[comparison.verdict].title} data-testid="upgrade-verdict" data-verdict={comparison.verdict}>
+                {VERDICT[comparison.verdict].label}
               </span>
             )}
           </div>
           <ItemModLines item={item} />
           {item.description && <p className="text-xs text-marble-300">{item.description}</p>}
           {item.notes && <p className="text-xs italic text-marble-500">{item.notes}</p>}
-          {comparison && ("reason" in comparison
+          <ArmourLine item={item} />
+          {compare && comparison && ('reason' in comparison
             ? <p role="status" className="mt-2 rounded border border-ink-600 px-2 py-1 text-[11px] text-marble-400">{comparison.reason}</p>
-            : <EquipmentComparison preview={comparison} />)}
+            : <EquipmentComparison comparison={comparison} />)}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {structured && (
@@ -831,49 +921,36 @@ function useInventorySheet(game: GameApi | undefined, tokenId: string): Characte
   return sheet;
 }
 
-function EquipmentComparison({ preview }: { preview: EquipmentPreview }) {
-  const lines: Array<{ label: string; current: string; candidate: string; delta?: number; neutral?: boolean }> = [];
-  const addDelta = (label: string, current: number | null | undefined, candidate: number | null | undefined) => {
-    if (current == null || candidate == null || current === candidate) return;
-    lines.push({ label, current: String(current), candidate: String(candidate), delta: candidate - current });
-  };
-  const addBonus = (label: string, current: number, candidate: number) => addDelta(label, current, candidate);
-
-  addDelta('Armor Class', preview.current.ac.value, preview.candidate.ac.value);
-  const currentAttack = preview.current.attacks.find((attack) => attack.slot === preview.slot);
-  const candidateAttack = preview.candidate.attacks.find((attack) => attack.slot === preview.slot);
-  if (currentAttack?.toHit !== candidateAttack?.toHit) {
-    addDelta('Attack bonus', currentAttack?.toHit, candidateAttack?.toHit);
-  }
-  if (currentAttack?.damage !== candidateAttack?.damage) {
-    lines.push({ label: 'Damage', current: currentAttack?.damage ?? '—', candidate: candidateAttack?.damage ?? '—', neutral: true });
-  }
-
-  const before = preview.current.bonuses;
-  const after = preview.candidate.bonuses;
-  for (const [element, values] of Object.entries(before.resistances)) {
-    const next = after.resistances[element as keyof typeof after.resistances];
-    addBonus(`${element} resistance`, values.reduction, next.reduction);
-  }
-  for (const [key, label] of [['maxHp', 'Maximum HP'], ['initiative', 'Initiative'], ['speed', 'Speed'], ['carry', 'Carry bonus'], ['spellAttack', 'Spell attack'], ['spellDc', 'Spell save DC'], ['thorns', 'Thorns']] as const) {
-    addBonus(label, before[key].value, after[key].value);
-  }
-  for (const ability of new Set([...Object.keys(before.abilities), ...Object.keys(after.abilities)])) addBonus(`${ability.toUpperCase()} bonus`, before.abilities[ability as keyof typeof before.abilities]?.value ?? 0, after.abilities[ability as keyof typeof after.abilities]?.value ?? 0);
-  for (const save of new Set([...Object.keys(before.saves), ...Object.keys(after.saves)])) addBonus(`${save.toUpperCase()} save`, before.saves[save as keyof typeof before.saves]?.value ?? 0, after.saves[save as keyof typeof after.saves]?.value ?? 0);
-  for (const skill of new Set([...Object.keys(before.skills), ...Object.keys(after.skills)])) addBonus(`${skill} check`, before.skills[skill]?.value ?? 0, after.skills[skill]?.value ?? 0);
-
-  const tone = (delta: number | undefined, neutral?: boolean) => neutral || delta === undefined ? 'text-marble-300' : delta > 0 ? 'text-emerald-300' : delta < 0 ? 'text-rose-300' : 'text-marble-300';
-  const show = (line: (typeof lines)[number]) => line.delta === undefined || line.neutral ? `${line.current} → ${line.candidate}` : `${line.current} → ${line.candidate} (${fmt(line.delta)})`;
+function EquipmentComparison({ comparison }: { comparison: Comparison }) {
+  const { preview, lines, verdict } = comparison;
+  const tone = (l: CompareLine) => (l.neutral || l.delta === undefined ? 'text-marble-300' : l.good ? 'text-emerald-300' : 'text-rose-300');
+  const show = (l: CompareLine) => (l.delta === undefined || l.neutral || l.label.startsWith('Damage') ? `${l.current} → ${l.candidate}` : `${l.current} → ${l.candidate} (${fmt(l.delta)})`);
   return (
-    <aside aria-label={`Shift comparison for ${preview.slot}`} className="mt-2 rounded-md border border-gold-700/40 bg-ink-950/75 p-2 text-[11px]" data-testid="equipment-comparison">
+    <aside aria-label={`Comparison for ${SLOT_LABEL[preview.slot]}`} className="pointer-events-none absolute left-2 right-2 top-full z-30 mt-1 rounded-md border border-gold-600/60 bg-ink-950/95 p-2 text-[11px] shadow-xl shadow-black/60" data-testid="equipment-comparison">
       <div className="grid grid-cols-2 gap-2 border-b border-ink-700 pb-1 text-marble-300">
-        <p><span className="block text-[9px] uppercase tracking-wider text-marble-500">Current · {SLOT_LABEL[preview.slot]}</span>{preview.currentItem?.name ?? 'Empty slot'}</p>
-        <p><span className="block text-[9px] uppercase tracking-wider text-marble-500">Candidate</span>{preview.candidateItem.name}</p>
+        <p><span className="block text-[9px] uppercase tracking-wider text-marble-500">Worn now · {SLOT_LABEL[preview.slot]}</span>{preview.currentItem?.name ?? 'Empty slot'}</p>
+        <p><span className="block text-[9px] uppercase tracking-wider text-marble-500">This item</span>{preview.candidateItem.name} <b className={VERDICT[verdict].className.split(' ').find((c) => c.startsWith('text-'))}>{VERDICT[verdict].label}</b></p>
       </div>
-      {lines.length ? <ul className="mt-1 space-y-0.5">{lines.map((line) => <li key={line.label} className="flex justify-between gap-2"><span className="text-marble-400">{line.label}</span><span className={tone(line.delta, line.neutral)}>{show(line)}</span></li>)}</ul> : <p className="mt-1 text-marble-400">No derived stat changes for this slot.</p>}
-      <p className="mt-1 border-t border-ink-700 pt-1 text-[10px] text-marble-500">Local preview using the active rules. Damage dice are shown side by side without rating one as better.</p>
+      {lines.length ? <ul className="mt-1 space-y-0.5">{lines.map((line) => <li key={line.label} className="flex justify-between gap-2"><span className="text-marble-400">{line.label}</span><span className={tone(line)}>{show(line)}</span></li>)}</ul> : <p className="mt-1 text-marble-400">No derived number changes for this slot.</p>}
+      <p className="mt-1 border-t border-ink-700 pt-1 text-[10px] text-marble-500">Same rules as the character sheet and scene combat. Right-click to equip.</p>
     </aside>
   );
+}
+
+/** Armour pieces: armour / evasion ratings, weight class and stealth – the base's identity at a glance. */
+function ArmourLine({ item }: { item: Item }) {
+  const e = item.equip;
+  if (!e) return null;
+  const base = baseItem(item.baseId);
+  const bits: string[] = [];
+  if (e.armorBase) bits.push(`AC ${e.armorBase} ${e.armorType ?? ''} suit${e.armorType === 'medium' ? ' (Dex max +2)' : e.armorType === 'heavy' ? ' (no Dex)' : ' (+ Dex)'}`);
+  if (e.armour !== undefined || e.evasion !== undefined) bits.push(`${e.armorType ?? 'light'} · Armour ${e.armour ?? 0} · Evasion ${e.evasion ?? 0}`);
+  if (e.acBonus) bits.push(`+${e.acBonus} AC`);
+  if (e.damage) bits.push(`${e.damage}${e.versatileDamage ? ` / ${e.versatileDamage}` : ''} ${e.damageType ?? ''}`.trim());
+  if (base?.requirements?.str) bits.push(`STR ${base.requirements.str}`);
+  if (base?.stealthDisadvantage) bits.push('Stealth disadvantage');
+  if (!bits.length) return null;
+  return <p className="text-[11px] text-marble-400" data-testid="base-line">{bits.join(' · ')}</p>;
 }
 
 /** Carrying-capacity bonus (lb) from equipped, identified modifiers in active slots. */

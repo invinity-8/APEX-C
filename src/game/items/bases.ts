@@ -15,7 +15,8 @@
  *    gloves, boots, belts, materials, quest items, crafting currency). They carry no built-in combat statistics;
  *    their value comes from rolled modifiers or GM decisions. They are NOT official D&D items.
  */
-import type { ItemEquip, ItemKind, WeaponProperty } from '../equipment.js';
+import type { ArmorType, ItemEquip, ItemKind, WeaponProperty } from '../equipment.js';
+import { PIECE_RATINGS, type PieceSlot } from './armour.js';
 
 export type BaseCategory = 'weapon' | 'armor' | 'shield' | 'ring' | 'amulet' | 'cloak' | 'head' | 'gloves' | 'boots' | 'belt' | 'gear' | 'consumable' | 'material' | 'quest' | 'currency';
 export type ModTag = 'weapon' | 'melee' | 'ranged' | 'armour' | 'shield' | 'jewellery' | 'clothing' | 'head' | 'hands' | 'feet' | 'belt' | 'cloak';
@@ -42,6 +43,8 @@ export interface BaseItem {
   stealthDisadvantage?: boolean;
   /** Which modifier tags this base accepts (empty = no random modifiers). */
   modTags: ModTag[];
+  /** APEX 1.0: lowest item level this base drops at in random loot (default 1). */
+  dropLevel?: number;
   /** Stack in one inventory entry (consumables, materials, currency). */
   stackable?: boolean;
   description?: string;
@@ -126,17 +129,60 @@ const GENERIC: G[] = [
   ['Imperial Medallion', 'amulet', 'amulet', 'amulet', 0, 40, ['jewellery'], 'Gold-washed medallion of the Empire.'],
   ['Travelling Cloak', 'cloak', 'cloak', 'cloak', 2, 1, ['cloak', 'clothing'], 'Weatherproof wool, hooded.'],
   ['Legion Sagum', 'cloak', 'cloak', 'cloak', 3, 5, ['cloak', 'clothing'], 'The red military cloak of the legions.'],
-  ['Leather Cap', 'head', 'head', 'helmet', 1, 2, ['head', 'clothing'], 'Padded leather cap.'],
-  ['Iron Helm', 'head', 'head', 'helmet', 4, 10, ['head'], 'Plain iron helmet with cheek guards.'],
-  ['Crested Galea', 'head', 'head', 'helmet', 5, 25, ['head'], 'An officer’s helmet with a red crest.'],
-  ['Leather Gloves', 'gloves', 'gloves', 'gloves', 0.5, 1, ['hands', 'clothing'], 'Supple riding gloves.'],
-  ['Iron Gauntlets', 'gloves', 'gloves', 'gauntlets', 3, 10, ['hands'], 'Articulated iron gauntlets.'],
-  ['Soft Boots', 'boots', 'boots', 'boots', 1, 1, ['feet', 'clothing'], 'Quiet soft-soled boots.'],
-  ['Marching Caligae', 'boots', 'boots', 'boots', 2, 2, ['feet'], 'Hobnailed legion sandals.'],
   ['Rope Belt', 'belt', 'belt', 'belt', 0.5, 0.1, ['belt', 'clothing'], 'A knotted rope belt.'],
   ['Leather Belt', 'belt', 'belt', 'belt', 1, 1, ['belt', 'clothing'], 'A broad belt with pouches.'],
   ['Legion Cingulum', 'belt', 'belt', 'belt', 2, 10, ['belt'], 'Military belt with bronze plates.'],
 ];
+
+// ---------------------------------------------------------------- APEX 1.0 armour pieces (armour / evasion, see armour.ts)
+// Tiers of the same slot and weight class share their ratings (bounded accuracy); a higher tier drops from a higher
+// item level and is lighter, quieter or needs less Strength. Modifiers depend on the ITEM level, never on the base
+// tier – a great roll can land on a humble base.
+type P = [name: string, slot: 'armor' | 'head' | 'gloves' | 'boots', type: ArmorType, dropLevel: number, weight: number, price: number, stealth: boolean, str: number | undefined, description: string];
+const PIECES: P[] = [
+  // body
+  ['Quilted Jerkin', 'armor', 'light', 1, 6, 5, false, undefined, 'Layers of quilted linen – light and quiet.'],
+  ['Scout Leathers', 'armor', 'light', 8, 7, 40, false, undefined, 'Oiled leather with a hood and many straps.'],
+  ['Shadowweave Coat', 'armor', 'light', 16, 4, 300, false, undefined, 'Dark, close-woven cloth that drinks the light.'],
+  ['Ringed Hauberk', 'armor', 'medium', 1, 22, 30, true, undefined, 'Iron rings sewn onto a leather coat.'],
+  ['Lorica Squamata', 'armor', 'medium', 8, 18, 200, true, undefined, 'Overlapping bronze scales on linen.'],
+  ['Lamellar Cuirass', 'armor', 'medium', 16, 15, 600, false, undefined, 'Laced lamellae that move without a sound.'],
+  ['Iron Cuirass', 'armor', 'heavy', 1, 35, 60, true, 13, 'A thick breast- and backplate of hammered iron.'],
+  ['Lorica Segmentata', 'armor', 'heavy', 8, 30, 400, true, 13, 'Banded legion plate, the pride of the Empire.'],
+  ['Praetorian Plate', 'armor', 'heavy', 16, 26, 1200, true, 11, 'Gilded steel of the guard – lighter than it looks.'],
+  // head
+  ['Leather Cap', 'head', 'light', 1, 1, 2, false, undefined, 'Padded leather cap.'],
+  ['Scout Hood', 'head', 'light', 8, 1, 15, false, undefined, 'A deep hood with a leather brow guard.'],
+  ['Silk Circlet', 'head', 'light', 16, 0, 80, false, undefined, 'A silver circlet with a padded silk coif.'],
+  ['Iron Helm', 'head', 'medium', 1, 4, 10, false, undefined, 'Plain iron helmet with cheek guards.'],
+  ['Montefortino Helm', 'head', 'medium', 8, 3, 40, false, undefined, 'A bronze bowl helm with a neck guard.'],
+  ['Lamellar Helm', 'head', 'medium', 16, 3, 150, false, undefined, 'Laced lamellae around a steel cap.'],
+  ['Crested Galea', 'head', 'heavy', 1, 5, 25, true, undefined, 'An officer’s helmet with a red crest.'],
+  ['Visored Galea', 'head', 'heavy', 8, 5, 90, true, undefined, 'A closed helm with a hinged face plate.'],
+  ['Praetorian Helm', 'head', 'heavy', 16, 4, 300, true, undefined, 'Gilded helm of the guard.'],
+  // hands
+  ['Leather Gloves', 'gloves', 'light', 1, 0.5, 1, false, undefined, 'Supple riding gloves.'],
+  ['Archer’s Bracers', 'gloves', 'light', 8, 0.5, 15, false, undefined, 'Laced leather bracers that guard the bow arm.'],
+  ['Silk Wraps', 'gloves', 'light', 16, 0, 80, false, undefined, 'Fighting wraps of layered silk.'],
+  ['Studded Gloves', 'gloves', 'medium', 1, 1.5, 5, false, undefined, 'Leather gloves set with iron studs.'],
+  ['Manica Vambraces', 'gloves', 'medium', 8, 2, 40, false, undefined, 'The segmented arm guard of the arena.'],
+  ['Lamellar Gloves', 'gloves', 'medium', 16, 1.5, 150, false, undefined, 'Laced lamellae over the back of the hand.'],
+  ['Iron Gauntlets', 'gloves', 'heavy', 1, 3, 10, true, undefined, 'Articulated iron gauntlets.'],
+  ['Plated Gauntlets', 'gloves', 'heavy', 8, 3, 90, true, undefined, 'Steel plates over mail gloves.'],
+  ['Praetorian Gauntlets', 'gloves', 'heavy', 16, 2.5, 300, true, undefined, 'Gilded gauntlets of the guard.'],
+  // feet
+  ['Soft Boots', 'boots', 'light', 1, 1, 1, false, undefined, 'Quiet soft-soled boots.'],
+  ['Runner’s Sandals', 'boots', 'light', 8, 1, 15, false, undefined, 'Light laced sandals of the courier guild.'],
+  ['Shadowstep Boots', 'boots', 'light', 16, 0.5, 80, false, undefined, 'Felt-soled boots that barely touch the ground.'],
+  ['Marching Caligae', 'boots', 'medium', 1, 2, 2, false, undefined, 'Hobnailed legion sandals.'],
+  ['Legion Greaves', 'boots', 'medium', 8, 3, 40, false, undefined, 'Bronze shin guards over caligae.'],
+  ['Lamellar Boots', 'boots', 'medium', 16, 2.5, 150, false, undefined, 'Laced lamellae over soft boots.'],
+  ['Iron Sabatons', 'boots', 'heavy', 1, 5, 10, true, undefined, 'Plated iron foot armour.'],
+  ['Plated Greaves', 'boots', 'heavy', 8, 5, 90, true, undefined, 'Full steel greaves and sabatons.'],
+  ['Praetorian Sabatons', 'boots', 'heavy', 16, 4, 300, true, undefined, 'Gilded sabatons of the guard.'],
+];
+const PIECE_SLOT: Record<P[1], PieceSlot> = { armor: 'body', head: 'head', gloves: 'hands', boots: 'feet' };
+const PIECE_TAGS: Record<P[1], ModTag[]> = { armor: ['armour'], head: ['head'], gloves: ['hands'], boots: ['feet'] };
 
 type I = [name: string, category: BaseCategory, subtype: string, weight: number, price: number | undefined, stackable: boolean, source: ItemSource, description: string];
 const OTHER: I[] = [
@@ -201,7 +247,25 @@ export const BASE_ITEMS: BaseItem[] = [
     modTags: ['armour'],
     source: SRD,
   })),
+  ...PIECES.map(([name, slot, type, dropLevel, weight, price, stealth, str, description]): BaseItem => ({
+    id: `apex-${slug(name.replace(/’/g, ''))}`,
+    name,
+    category: slot,
+    subtype: `${type} ${slot === 'armor' ? 'armour' : slot === 'head' ? 'helmet' : slot}`,
+    equip: { kind: slot, armorType: type, ...PIECE_RATINGS[PIECE_SLOT[slot]][type] },
+    weight,
+    price,
+    dropLevel,
+    requirements: str ? { str } : undefined,
+    stealthDisadvantage: stealth,
+    // light pieces are clothing (skills, travel flavour); heavy body pieces also roll armour mods (thorns, AC)
+    modTags: [...PIECE_TAGS[slot], ...(type === 'light' ? (['clothing'] as ModTag[]) : []), ...(type === 'heavy' && slot !== 'armor' ? (['armour'] as ModTag[]) : [])],
+    description,
+    source: APEX,
+  })),
   { id: 'srd-shield', name: 'Shield', category: 'shield', subtype: 'shield', equip: { kind: 'shield', acBonus: 2 }, weight: 6, price: 10, modTags: ['shield', 'armour'], source: SRD },
+  { id: 'apex-buckler', name: 'Buckler', category: 'shield', subtype: 'light shield', equip: { kind: 'shield', acBonus: 1 }, weight: 2, price: 5, modTags: ['shield'], description: 'A small fist shield – +1 AC, light enough to keep a hand half free.', source: APEX },
+  { id: 'apex-scutum', name: 'Scutum', category: 'shield', subtype: 'tower shield', equip: { kind: 'shield', acBonus: 3 }, weight: 20, price: 30, dropLevel: 12, requirements: { str: 15 }, stealthDisadvantage: true, modTags: ['shield', 'armour'], description: 'The curved legion tower shield: +3 AC, but heavy, loud and only for the strong (STR 15).', source: APEX },
   ...GENERIC.map(([name, category, kind, subtype, weight, price, tags, description]): BaseItem => ({
     id: `apex-${slug(name)}`,
     name,

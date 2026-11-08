@@ -1,3 +1,4 @@
+import { combatAttacks } from '../game/effectiveStats';
 import { useEffect, useRef, useState } from 'react';
 import type { GameApi } from '../state/gameApi';
 import { CharacterPortrait } from './CharacterVisuals';
@@ -19,8 +20,9 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const [moveMode, setMoveMode] = useState(false), [pending, setPending] = useState(false), [message, setMessage] = useState('');
   const [attackIndex, setAttackIndex] = useState<number | null>(null);
   const [attacks, setAttacks] = useState<Array<{ name: string; bonus: string; damage: string; range: string }>>([]);
-  // Attacks come from the character sheet (Character → attacks); loaded once per character.
-  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) setAttacks(r.sheet.sheet.attacks); }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision]);
+  // Attacks: equipped weapons (derived from the inventory, same rule as the server) and the sheet's attacks.
+  const myDetails = me?.details;
+  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
   const [uncertain, setUncertain] = useState<Record<string, unknown> | null>(null);
   const pendingRef = useRef(false);
   async function send(input: Record<string, unknown>) {
