@@ -38,6 +38,7 @@ export interface SceneEnemy {
   abilities?: Record<AbilityKey, number>;
   saves?: Partial<Record<AbilityKey, number>>;
   areas?: NpcArea[];
+  buffs?: import('./bestiary.js').NpcBuff[];
   /** Area ability name → uses spent this encounter. */
   areaUsed?: Record<string, number>;
   elite?: boolean;
@@ -77,7 +78,7 @@ export function addEnemy(prev: GameState, sceneId: string, id: string, templateI
   const label = b.elite ? displayName(b) : `${b.name} ${count + 1}`;
   const enemy: SceneEnemy = {
     id, templateId, name: (name?.trim() || label).slice(0, 60), x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, init: t.init, attack: t.attack,
-    attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.elite ? { elite: true } : {}),
+    attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.buffs ? { buffs: structuredClone(b.buffs) } : {}), ...(b.elite ? { elite: true } : {}),
     color: side === 'ally' ? '#3f7fbf' : b.color, icon: b.icon, darkvisionFt: b.darkvisionFt, ...(side === 'ally' ? { side } : {}),
   };
   const state = structuredClone(prev);
@@ -146,25 +147,62 @@ export function parseBonus(text: string): number | null {
   return m ? (m[1] === '+' ? 1 : -1) * Number(m[2]) : /^\s*(\d{1,2})\b/.test(text) ? Number(/^\s*(\d{1,2})/.exec(text)![1]) : null;
 }
 /** Normal range in feet from "80/320 ft.", "Reach 10 ft", "5 ft." (default: melee 5 ft). */
-export function parseRangeFt(text: string): { reachFt: number; rangeFt?: number } {
+export function parseRangeFt(text: string): { reachFt: number; rangeFt?: number; longRangeFt?: number } {
   const ranged = /(\d{2,3})\s*\/\s*(\d{2,4})/.exec(text);
-  if (ranged) return { reachFt: 5, rangeFt: Number(ranged[1]) };
+  if (ranged) return { reachFt: 5, rangeFt: Number(ranged[1]), longRangeFt: Number(ranged[2]) };
   const reach = /reach\s*(\d{1,2})|^\s*(\d{1,2})\s*ft/i.exec(text);
   const ft = reach ? Number(reach[1] ?? reach[2]) : 5;
   return ft > 15 ? { reachFt: 5, rangeFt: ft } : { reachFt: Math.max(5, ft) };
 }
 
-export interface AttackRoll { d20: number; total: number; hit: boolean; crit: boolean; damage: number; rolls: number[]; text: string }
-/** Resolves one attack with the given random source (1..sides). */
-export function resolveAttack(attacker: string, target: string, weapon: string, bonus: number, damage: { count: number; sides: number; mod: number }, ac: number, die: (sides: number) => number): AttackRoll {
-  const d20 = die(20);
-  const crit = d20 === 20, total = d20 + bonus;
-  const hit = crit || (d20 !== 1 && total >= ac);
-  const rolls = hit ? Array.from({ length: damage.count * (crit ? 2 : 1) }, () => die(damage.sides)) : [];
-  const dmg = hit ? Math.max(1, rolls.reduce((a, b) => a + b, 0) + damage.mod) : 0;
+export interface AttackRoll { d20: number; d20s: number[]; total: number; hit: boolean; crit: boolean; damage: number; rolls: number[]; text: string; mode: 'normal' | 'adv' | 'dis' }
+export interface AttackOptions {
+  mode?: 'normal' | 'adv' | 'dis';
+  reasons?: string[];
+  /** Bonus dice on the attack roll (Bless "1d4", Bane "-1d4"). */
+  toHitDice?: string[];
+  toHitFlat?: number;
+  /** Melee hit within 5 ft of a paralyzed / unconscious target. */
+  autoCrit?: boolean;
+  /** Extra damage dice on a hit (Sneak Attack, Hunter's Mark, Smite …), doubled on a critical hit. */
+  extraDice?: Array<{ dice: string; label: string }>;
+  /** Flat extra damage on a hit (Rage). */
+  extraFlat?: Array<{ value: number; label: string }>;
+  /** Halve the damage (resistance, e.g. a raging target hit by a physical attack). */
+  halve?: string;
+}
+/** Resolves one attack with the given random source (1..sides). Advantage/disadvantage roll two d20. */
+export function resolveAttack(attacker: string, target: string, weapon: string, bonus: number, damage: { count: number; sides: number; mod: number }, ac: number, die: (sides: number) => number, o: AttackOptions = {}): AttackRoll {
+  const mode = o.mode ?? 'normal';
+  const d20s = mode === 'normal' ? [die(20)] : [die(20), die(20)];
+  const d20 = mode === 'adv' ? Math.max(...d20s) : mode === 'dis' ? Math.min(...d20s) : d20s[0];
+  const bonusDice = (o.toHitDice ?? []).map((spec) => { const m = /^(-)?(\d{1,2})d(\d{1,3})$/.exec(spec.trim()); if (!m) return 0; let t = 0; for (let i = 0; i < Number(m[2]); i++) t += die(Number(m[3])); return m[1] ? -t : t; });
+  const extra = bonusDice.reduce((a, b) => a + b, 0) + (o.toHitFlat ?? 0);
+  const total = d20 + bonus + extra;
+  const hit = d20 === 20 || (d20 !== 1 && total >= ac);
+  const crit = d20 === 20 || (hit && !!o.autoCrit);
+  const mult = crit ? 2 : 1;
+  const rolls = hit ? Array.from({ length: damage.count * mult }, () => die(damage.sides)) : [];
+  let dmg = hit ? Math.max(1, rolls.reduce((a, b) => a + b, 0) + damage.mod) : 0;
+  const extras: string[] = [];
+  if (hit) {
+    for (const x of o.extraDice ?? []) {
+      const m = /^(\d{1,2})d(\d{1,3})/.exec(x.dice);
+      if (!m) continue;
+      const r = Array.from({ length: Number(m[1]) * mult }, () => die(Number(m[2])));
+      const v = r.reduce((a, b) => a + b, 0);
+      dmg += v;
+      extras.push(`+${v} ${x.label}`);
+    }
+    for (const x of o.extraFlat ?? []) { dmg += x.value; extras.push(`+${x.value} ${x.label}`); }
+    if (o.halve) { dmg = Math.floor(dmg / 2); extras.push(`halved (${o.halve})`); }
+  }
   const sign = bonus >= 0 ? '+' : '−';
-  const text = `${attacker} attacks ${target} with ${weapon}: d20 ${d20} ${sign} ${Math.abs(bonus)} = ${total} vs AC ${ac} → ${crit ? 'CRITICAL HIT' : hit ? 'hit' : d20 === 1 ? 'natural 1, miss' : 'miss'}${hit ? `, ${dmg} damage (${rolls.join('+') || '0'}${damage.mod ? `${damage.mod > 0 ? '+' : '−'}${Math.abs(damage.mod)}` : ''})` : ''}.`;
-  return { d20, total, hit, crit, damage: dmg, rolls, text };
+  const rollText = mode === 'normal' ? `d20 ${d20}` : `d20 ${d20} (${mode === 'adv' ? 'advantage' : 'disadvantage'}: ${d20s.join(', ')})`;
+  const bonusText = extra ? ` ${extra >= 0 ? '+' : '−'} ${Math.abs(extra)} (${[...(o.toHitDice ?? []), ...(o.toHitFlat ? [String(o.toHitFlat)] : [])].join(', ')})` : '';
+  const why = o.reasons?.length ? ` [${o.reasons.join('; ')}]` : '';
+  const text = `${attacker} attacks ${target} with ${weapon}: ${rollText} ${sign} ${Math.abs(bonus)}${bonusText} = ${total} vs AC ${ac} → ${crit ? 'CRITICAL HIT' : hit ? 'hit' : d20 === 1 ? 'natural 1, miss' : 'miss'}${hit ? `, ${dmg} damage (${rolls.join('+') || '0'}${damage.mod ? `${damage.mod > 0 ? '+' : '−'}${Math.abs(damage.mod)}` : ''}${extras.length ? ` ${extras.join(' ')}` : ''})` : ''}.${why}`;
+  return { d20, d20s, total, hit, crit, damage: dmg, rolls, text, mode };
 }
 
 /** Records that a character used its attack in the current turn (one attack per turn). */

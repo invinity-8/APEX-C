@@ -50,7 +50,7 @@ describe('enemy library', () => {
     expect(bear.multiattack).toBe(2);
     expect(BUILTIN_BESTIARY.find((b) => b.id === 'goblin')!.attacks.map((a) => a.kind)).toEqual(['melee', 'ranged']);
     expect(saveBonus(bear, 'str')).toBe(4);
-    expect(BUILTIN_BESTIARY.find((b) => b.elite)).toMatchObject({ name: 'Orc Bloodcaller', areas: [expect.objectContaining({ shape: 'cone' })] });
+    expect(BUILTIN_BESTIARY.find((b) => b.elite)).toMatchObject({ name: 'Orc Bloodcaller', areas: expect.arrayContaining([expect.objectContaining({ shape: 'cone' }), expect.objectContaining({ condition: 'restrained' })]) });
   });
 
   it('the GM saves own creatures and elites; built-ins can be overridden per campaign', () => {

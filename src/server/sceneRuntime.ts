@@ -26,6 +26,8 @@ export interface SceneSnapshot {
   figures?: SceneFigure[];
   /** Open reaction prompts this viewer decides (GM: all; player: their characters'). */
   reactions?: ReactionOffer[];
+  /** APEX 1.3: the viewer's own characters: effects, concentration and readied action. */
+  self?: Record<string, { effects: Array<{ id: string; name: string; key: string; note?: string }>; concentration?: string; readied?: { trigger: string; attackIndex?: number } }>;
   /** GM vision mode the fog was computed for ('all' = no fog). */
   view?: string;
   /** Recent attacks on this scene. */
@@ -62,7 +64,7 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
   const full = parseMap(s.published_metadata)!;
   const local = ctx && motionStore && (s.category === 'battle' || s.category === 'region') ? await motionStore.localSnapshot(user.campaignId, s.id, user.id, user.tokenIds) : null;
   const motion = local ? motionShape(local, ctx!.state, s.id) : await motionStore?.snapshot(user.campaignId, s.id, user.id, user.tokenIds);
-  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch' | 'reactions'> = {};
+  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch' | 'reactions' | 'self'> = {};
   if (local && ctx?.state) {
     const clock = clockFor(ctx.state, s.id);
     const pcs = ctx.pcs ? await ctx.pcs(s.id, full) : [];
@@ -79,6 +81,12 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
     // Allies and enemies only where the player can see them.
     extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false);
     extra.reactions = reactionsOf(ctx.state, s.id).filter((r) => r.reactor.kind === 'pc' && user.tokenIds.includes(r.reactor.id));
+    extra.self = Object.fromEntries(user.tokenIds.map((id) => {
+      const fxl = (ctx.state!.sceneEffects?.[s.id]?.[`pc-${id}`] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key }));
+      const c = ctx.state!.sceneConcentration?.[s.id]?.[`pc-${id}`];
+      const r = ctx.state!.sceneReadied?.[s.id]?.[`pc-${id}`];
+      return [id, { effects: fxl, ...(c ? { concentration: c.spell } : {}), ...(r ? { readied: { trigger: r.trigger, attackIndex: r.attackIndex } } : {}) }];
+    }));
     const tokenId = user.tokenIds.find(id => ctx.state!.tokens[id]);
     if (tokenId) extra.movement = movementFor(ctx.state, s.id, s.category as 'battle' | 'region', tokenId, user.role === 'gm', await sheetOf(ctx, tokenId), local);
   }

@@ -11,6 +11,7 @@
  */
 import { orderParticipants } from './sceneOperations.js';
 import { activeActors, blockOf } from './sceneActions.js';
+import { onTurnStart } from './combatEffects.js';
 import type { GameState, SceneClockState, SceneEncounter, SceneEncounterParticipant } from './types.js';
 
 export const defaultClock = (): SceneClockState => ({ day: 1, phase: 'day', lighting: 'bright', version: 0 });
@@ -86,8 +87,15 @@ export function endTurn(prev: GameState, sceneId: string, encounterId: string, t
   if (enc.turnIndex >= enc.participants.length) { enc.turnIndex = 0; enc.round++; }
   enc.turnSerial = (enc.turnSerial ?? 0) + 1;
   enc.blockDone = [];
-  // the new active creatures get their reaction back (5e: it refreshes at the start of your turn)
-  for (const id of blockOf(enc)) if (enc.reactions?.[id] !== undefined) { const { [id]: _r, ...rest } = enc.reactions; void _r; enc.reactions = rest; }
+  // the new active creatures get their reaction back (5e: it refreshes at the start of your turn); effects that
+  // last "until the start of its next turn" end, turn-counted effects tick, readied actions lapse
+  const endedFx: string[] = [];
+  for (const id of blockOf(enc)) {
+    if (enc.reactions?.[id] !== undefined) { const { [id]: _r, ...rest } = enc.reactions; void _r; enc.reactions = rest; }
+    endedFx.push(...onTurnStart(state, sceneId, id));
+    if (state.sceneReadied?.[sceneId]?.[id]) { const r = { ...state.sceneReadied[sceneId] }; delete r[id]; state.sceneReadied = { ...state.sceneReadied, [sceneId]: r }; }
+  }
+  void endedFx;
   enc.version++;
   const names = blockOf(enc).map((id) => enc.participants.find((p) => p.id === id)?.name).join(' & ');
   return { ok: true, state, message: `${names}'s turn${enc.turnIndex === 0 ? ` · round ${enc.round}` : ''}.` };

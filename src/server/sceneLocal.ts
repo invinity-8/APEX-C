@@ -10,6 +10,8 @@ import { hexKey, type HexKey } from '../game/hex.js';
 import { characterMovementLoad } from '../game/items/weight.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { budgetOf, pcActor } from '../game/sceneActions.js';
+import { speedZero } from '../game/combatEffects.js';
+import { findBeast } from '../game/beastCatalog.js';
 import { activeEncounter, clockOf, epochAllowance, movementEpoch, type MovementMode } from '../game/sceneTurns.js';
 import type { GameState, SceneClockState } from '../game/types.js';
 import type { LocalMotionSnapshot, MotionSnapshot } from './sceneMotion.js';
@@ -23,7 +25,7 @@ export interface SceneViewContext {
 export interface PcPosition { tokenId: string; userId: string; x: number; y: number; stored: boolean }
 
 /** A figure a viewer may see on the map: another character or an enemy. */
-export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
+export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** Conditions and buffs (name, key). */ effects?: Array<{ id: string; name: string; key: string }>; concentration?: string; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
 
 /** Arrival slots for characters without a stored position (no two on the same hex). */
 export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } | null, rows: Array<{ tokenId: string; userId: string; stored?: { x: number; y: number } }>, blocked: Array<{ x: number; y: number }>): PcPosition[] {
@@ -40,15 +42,20 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   const torches = new Set(torchesOf(state, sceneId));
   const condition = (hp: number, max: number): SceneFigure['condition'] => (hp <= 0 ? 'down' : hp * 2 <= max ? 'bloodied' : 'healthy');
   const seen = (p: { x: number; y: number }) => !visible || visible.has(hexKeyAt(map, p));
+  const fx = (actor: string) => {
+    const list = (state.sceneEffects?.[sceneId]?.[actor] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key }));
+    const c = state.sceneConcentration?.[sceneId]?.[actor];
+    return { ...(list.length ? { effects: list } : {}), ...(c ? { concentration: c.spell } : {}) };
+  };
   const out: SceneFigure[] = [];
   for (const p of pcs) {
     const t = state.tokens[p.tokenId];
     if (!t || exclude.includes(p.tokenId) || !seen(p)) continue;
-    out.push({ id: `pc-${p.tokenId}`, kind: 'pc', tokenId: p.tokenId, name: t.name, color: t.color, x: p.x, y: p.y, condition: 'healthy', torch: torches.has(p.tokenId) });
+    out.push({ id: `pc-${p.tokenId}`, kind: 'pc', tokenId: p.tokenId, name: t.name, color: t.color, x: p.x, y: p.y, condition: 'healthy', torch: torches.has(p.tokenId), ...fx(`pc-${p.tokenId}`) });
   }
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e)) continue;
-    out.push({ id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
+    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
   }
   return out;
 }
@@ -83,6 +90,9 @@ export function sceneSpeed(state: GameState, tokenId: string, sheet: CharacterSh
   const token = state.tokens[tokenId];
   if (!token) return { speedFt: 0, overloaded: false };
   const load = characterMovementLoad(state, token, sheet);
+  // Wild Shape: the beast's walking speed (equipment merged into the form – no encumbrance)
+  const beast = sheet.wildShape ? findBeast(state.customBeasts, sheet.wildShape.formId) : undefined;
+  if (beast) return { speedFt: beast.speed.walk, overloaded: false };
   return { speedFt: Math.max(0, load.speedFt), overloaded: load.load.state === 'over' }; // item speed and encumbrance count
 }
 
@@ -97,7 +107,8 @@ export function movementFor(state: GameState, sceneId: string, category: 'battle
     canMove: e.canMove && !overloaded,
     reason: overloaded ? 'Over carrying capacity – reduce the carried load before moving.' : e.reason,
     // Dash: extra movement equal to the speed for this turn
-    allowance: epochAllowance(e.mode, speedFt) * (e.mode === 'turn' && budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash ? 2 : 1),
+    // grappled / restrained / paralyzed …: speed 0
+    allowance: speedZero(state, sceneId, pcActor(tokenId)) ? 0 : epochAllowance(e.mode, speedFt) * (e.mode === 'turn' && budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash ? 2 : 1),
     dashed: e.mode === 'turn' && !!budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash,
     spent: row && row.epoch === e.epoch ? row.spent : 0,
     unit: category === 'battle' ? 'feet' : 'miles',

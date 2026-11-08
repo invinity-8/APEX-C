@@ -436,6 +436,14 @@ export interface GameState {
   enemyLibrary?: import('./bestiary.js').StatBlock[];
   /** Open reaction prompts per scene (opportunity attacks) – valid during the turn they were offered in. */
   sceneReactions?: Record<string, import('./sceneActions.js').ReactionOffer[]>;
+  /** APEX 1.3: conditions and buffs per scene and participant id. */
+  sceneEffects?: Record<string, Record<string, import('./combatEffects.js').SceneEffect[]>>;
+  /** APEX 1.3: concentration per scene and participant id. */
+  sceneConcentration?: Record<string, Record<string, import('./combatEffects.js').Concentration>>;
+  /** APEX 1.3: attacks waiting for a defensive reaction (Shield) per scene. */
+  scenePendingHits?: Record<string, import('./sceneActions.js').PendingHit[]>;
+  /** APEX 1.3: readied actions per scene and participant id. */
+  sceneReadied?: Record<string, Record<string, import('./sceneActions.js').ReadiedAction>>;
   /** Moves paused by opportunity attacks per scene (they continue after the reactions are decided). */
   scenePendingMoves?: Record<string, import('./sceneActions.js').PendingMove[]>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */

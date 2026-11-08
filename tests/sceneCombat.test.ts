@@ -76,7 +76,7 @@ describe('arrival area, light, enemies', () => {
     expect(parseDamage('1d8+3 slashing')).toEqual({ count: 1, sides: 8, mod: 3 });
     expect(parseDamage('2d6 − 1')).toEqual({ count: 2, sides: 6, mod: -1 });
     expect(parseBonus('+5 to hit')).toBe(5);
-    expect(parseRangeFt('80/320 ft.')).toEqual({ reachFt: 5, rangeFt: 80 });
+    expect(parseRangeFt('80/320 ft.')).toEqual({ reachFt: 5, rangeFt: 80, longRangeFt: 320 });
     expect(parseRangeFt('Reach 10 ft')).toEqual({ reachFt: 10 });
     const seq = [20, 4, 6];
     const crit = resolveAttack('A', 'B', 'Sword', 5, { count: 1, sides: 8, mod: 3 }, 30, () => seq.shift()!);

@@ -224,3 +224,55 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Flächenzauber mit Angriffswurf (z. B. Scorching Ray mit mehreren Strahlen auf verschiedene Ziele).
 - Elite-Fähigkeiten über Schaden hinaus (Buffs, Bedingungen).
 - Weitere Reaktionen (Shield, Ready-Trigger).
+
+## APEX 1.3 – Zustände, Zauber, Reaktionen, Klassenfähigkeiten
+
+**Zustände und Buffs** (`src/game/combatEffects.ts`)
+- Alle SRD-Zustände wirken mechanisch:
+  - *blinded, poisoned, frightened, restrained, prone*: eigene Angriffe mit Nachteil
+  - *blinded, restrained, paralyzed, stunned, unconscious*: Angriffe gegen sie mit Vorteil
+  - *prone*: Vorteil aus 5 ft, Nachteil aus größerer Entfernung
+  - *paralyzed, unconscious*: Nahkampftreffer aus 5 ft sind automatisch kritisch
+  - *incapacitated*: keine Aktionen und keine Reaktionen
+  - *grappled, restrained u. a.*: Speed 0
+- Der GM setzt und entfernt Zustände im Kommandofeld. Spieler können „Stand up“ (prone beenden).
+- Zustände und Buffs stehen unter den Figuren auf der Karte.
+
+**Vorteil/Nachteil**
+- Automatisch aus Zuständen, Dodge, Fernkampf auf große Distanz und Fernkampf mit einem Gegner in 5 ft.
+- Dazu eine manuelle Wahl (GM-Entscheidung). Vorteil und Nachteil heben sich auf.
+- Der Wurf zeigt beide d20 und die Gründe im Log.
+
+**Konzentration**
+- Ein Konzentrationszauber pro Figur; ein neuer beendet den alten samt seiner Effekte.
+- Bei Schaden wird automatisch ein Konstitutionswurf gemacht (DC 10 oder halber Schaden).
+
+**Zauber** (`src/game/spellEffects.ts`)
+- **Zauberbuch im Kampf:** alle bekannten Zauber nach Grad, mit Slots, Beschreibung und „Ready“. Nicht vorbereitete Zauber sind ausgegraut.
+- **Mehrere Ziele:** Bless, Bane, Hold Person, Invisibility … (Anzahl mit Upcast) sowie Strahlen und Geschosse (Scorching Ray, Magic Missile trifft automatisch, Eldritch Blast nach Stufe). Ziele wählst du per Rechtsklick (dasselbe Ziel auch mehrfach), dann „Cast“.
+- **Buffs und Debuffs:** Bless/Bane (±1d4 auf Angriffe), Shield of Faith (+2 AC), Hunter's Mark/Hex (+1d6 bei eigenen Treffern), Blur.
+- **Zustandszauber mit Rettungswurf:** Hold Person/Monster (paralyzed), Faerie Fire (Angriffe mit Vorteil), Web und Entangle (restrained), Command, Tasha's Hideous Laughter.
+- **Heilzauber:** Ready, dann Rechtsklick auf Verbündete oder dich selbst; Upcast wird erkannt.
+
+**Reaktionen**
+- **Shield:** Wird ein Charakter getroffen, der Shield vorbereitet hat, einen Slot und die Reaktion frei hat, wartet der Schaden. Der Spieler entscheidet; mit +5 AC kann der Treffer zum Fehlschlag werden. Shield hält bis zum Beginn des eigenen nächsten Zugs.
+- **Ready:** Angriff in der Ready-Leiste wählen, Auslöser eintragen, „Ready“ (kostet die Aktion). Wenn der Auslöser eintritt: Rechtsklick auf das Ziel, „Release readied attack“ (kostet die Reaktion). Gilt bis zum nächsten eigenen Zug.
+
+**Klassenfähigkeiten** (`src/game/classFeatures.ts`, erkannt aus Klasse/Stufe und Fähigkeiten im Bogen; Nutzungen als Ressourcen im Bogen)
+- **Action Surge:** eine zusätzliche Aktion in diesem Zug.
+- **Second Wind:** 1d10 + Kämpferstufe HP.
+- **Rage:** 10 Runden Resistenz gegen physischen Schaden, +2/+3/+4 Nahkampfschaden.
+- **Wild Shape:** Bestie wählen. Angriffe, AC, HP und Speed der Bestie gelten im Kampf; kein Zaubern; Zurückverwandeln als Bonusaktion.
+- **Lay on Hands:** Heilung aus dem Pool.
+- **Bardic Inspiration:** Würfel auf den nächsten Angriff eines Verbündeten.
+- **Sneak Attack:** automatisch einmal pro Zug bei Finesse- oder Fernkampfwaffe mit Vorteil oder einem Verbündeten am Ziel.
+- **Divine Smite:** Slot im Angriffsmenü wählen; er wird nur bei einem Treffer verbraucht (+1d8 gegen Untote und Unholde).
+
+**Elite-Fähigkeiten**
+- Stat-Blocks können **Unterstützungsfähigkeiten** haben (z. B. *Blood war cry*: Verbündete in 30 ft +2 auf Treffer bis zum nächsten Zug der Elite).
+- **Flächen mit Zustand** bei misslungenem Rettungswurf (z. B. *Grasping roots*: restrained). Der Orc Bloodcaller hat beides.
+
+**Noch offen:**
+- Rettungswürfe mit Vorteil/Nachteil aus Zuständen (z. B. paralyzed scheitert automatisch an STR/DEX) – der GM entscheidet.
+- Dauer in Minuten außerhalb der Initiative.
+- Weitere Reaktionen (Counterspell, Hellish Rebuke, Uncanny Dodge) und weitere Klassen (Ki, Channel Divinity, Metamagic).

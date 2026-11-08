@@ -119,6 +119,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [pcAttack, setPcAttack] = useState(0);
   const [npcAttack, setNpcAttack] = useState(0);
   const [areaMode, setAreaMode] = useState<number | null>(null);
+  const [gmAdv, setGmAdv] = useState<'' | 'adv' | 'dis'>('');
   const viewRef = useRef(view);
   viewRef.current = view;
   const sheets = game.sheets;
@@ -780,7 +781,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
         const ref = refOf(id);
         if (!ref || refKey(ref) === actor) return;
         if (!active) return setNotice(`It is not ${fig.name}'s turn.`);
-        sceneTurn({ action: 'strike', attacker: toSide(selected), target: toSide(ref), attackIndex: selected.kind === 'pc' ? pcAttack : npcAttack });
+        sceneTurn({ action: 'strike', attacker: toSide(selected), target: toSide(ref), attackIndex: selected.kind === 'pc' ? pcAttack : npcAttack, ...(gmAdv ? { adv: gmAdv } : {}) });
       },
     };
     return { reach: active && left !== null ? left : null, interaction };
@@ -806,7 +807,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
           <>
             {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
             {shownScene.category === 'battle' && shownScene.map.hex && (
-              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} />
+              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} adv={gmAdv} setAdv={setGmAdv} />
             )}
             <SceneSurface
               snapshot={snapshot}

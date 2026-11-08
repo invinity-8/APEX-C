@@ -1,7 +1,8 @@
 import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import type { SceneInteraction } from './SceneSurface';
-import { activeActors, blockOf, pcActor, spellRangeFt } from '../game/sceneActions';
+import { activeActors, blockOf, characterLevel, pcActor, spellRangeFt } from '../game/sceneActions';
+import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects';
 import { parseRangeFt } from '../game/sceneCombat';
 import { areaHexes, parseArea } from '../campaign/hexArea';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -31,6 +32,9 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const [mySheet, setMySheet] = useState<CharacterSheet | null>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [ready, setReady] = useState<ReadyAction>(null);
+  // targets chosen with right-clicks for a multi-target spell (Bless, Scorching Ray …)
+  const [spellTargets, setSpellTargets] = useState<Array<{ kind: 'pc'; tokenId: string; name: string } | { kind: 'npc'; id: string; name: string }>>([]);
+  useEffect(() => setSpellTargets([]), [ready]);
   useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) { setMySheet(r.sheet.sheet); setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); } }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
   const [uncertain, setUncertain] = useState<Record<string, unknown> | null>(null);
   const pendingRef = useRef(false);
@@ -106,7 +110,25 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     lineRangeFt: readyRange,
     areaAt: acting && myPos && readyArea && map ? (pt) => areaHexes(map, myPos, pt, readyArea) : null,
     focus: myTurn && liveEncounter && myPos ? { key: `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}`, x: myPos.x, y: myPos.y } : null,
-    onTokenContext: (id) => figureClick(id),
+    onTokenContext: (id) => {
+      if (readySpell && ready?.kind === 'spell' && spellHealing(readySpell, ready.slotLevel || readySpell.level)) {
+        // healing spell: right-click the creature to heal
+        const f = (scene?.figures ?? []).find(x => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
+        const t = id === me.id ? { kind: 'pc', tokenId: me.id } : f ? (f.kind === 'pc' ? { kind: 'pc', tokenId: f.tokenId } : { kind: 'npc', id: f.id }) : null;
+        if (t) { void sceneAction({ action: 'cast', tokenId: me.id, spellId: readySpell.id, slotLevel: ready.slotLevel, targets: [t] }); setReady(null); }
+        return;
+      }
+      const def = readySpell ? spellEffectOf(readySpell) : undefined;
+      if (readySpell && def && !readyArea && (def.targeting === 'enemy' || def.targeting === 'ally') && mySheet) {
+        const max = spellCount(def, readySpell.level, ready?.kind === 'spell' ? ready.slotLevel || readySpell.level : readySpell.level, characterLevel(mySheet));
+        const f = (scene?.figures ?? []).find(x => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
+        const isMe = id === me.id;
+        const t = isMe ? { kind: 'pc' as const, tokenId: me.id, name: me.name } : f ? (f.kind === 'pc' ? { kind: 'pc' as const, tokenId: f.tokenId!, name: f.name } : { kind: 'npc' as const, id: f.id, name: f.name }) : null;
+        if (t) setSpellTargets(list => (list.length >= max ? list : [...list, t]));
+        return;
+      }
+      figureClick(id);
+    },
     onHexContext: (_k, p) => {
       if (!acting) return;
       if (readyArea && readySpell && ready?.kind === 'spell') { void sceneAction({ action: 'cast', tokenId: me.id, spellId: readySpell.id, slotLevel: ready.slotLevel, point: p }); setReady(null); return; }
@@ -123,7 +145,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
       {category === 'battle' && me && <button className="btn btn-ghost" disabled={pending} aria-pressed={!!scene.torch} onClick={() => void sceneAction({ action: 'torch', tokenId: me.id, on: !scene.torch })} data-testid="torch">{scene.torch ? '🔥 Put out light' : '🕯 Light a torch'}</button>}
       <span role="status" data-testid="movement-status">{status}</span>
     </div>}
-    {category === 'battle' && me && <PlayerCombat snapshot={scene} encounter={liveEncounter} tokenId={me.id} sheet={mySheet} attacks={attacks} myTurn={myTurn} free={free} pending={pending} act={(input) => void sceneAction(input)} target={target} setTarget={setTarget} ready={ready} setReady={setReady} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />}
+    {category === 'battle' && me && <PlayerCombat snapshot={scene} encounter={liveEncounter} tokenId={me.id} sheet={mySheet} attacks={attacks} myTurn={myTurn} free={free} pending={pending} act={(input) => void sceneAction(input)} target={target} setTarget={setTarget} ready={ready} setReady={setReady} spellTargets={spellTargets} setSpellTargets={setSpellTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />}
     {canAttack && attackIndex !== null && <p className="text-xs text-gold-200">{enemiesInSight.length ? 'Click an enemy on the map.' : 'No enemy in sight.'}</p>}
     {!!scene.combatLog?.length && <details className="combat-log" open><summary>Combat log</summary><ol>{scene.combatLog.slice().reverse().map(l => <li key={l.id}>{l.text}</li>)}</ol></details>}
     {moveMode && <p>Choose a destination on the map. The server checks your path, terrain, walls and {free ? 'nothing else – movement is free' : mv?.mode === 'turn' ? 'your speed this turn' : 'how far you can travel today'}.</p>}
