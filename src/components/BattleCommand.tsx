@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import type { SceneEncounter } from '../game/types';
 import { npcAttacks, type SceneEnemy } from '../game/sceneCombat';
+import { CONDITIONS, CONDITION_TEXT, type ConditionId } from '../game/combatEffects';
 import { STANDARD_ACTIONS, budgetOf, isActiveActor, npcActor, pcActor, reactionUsed } from '../game/sceneActions';
 import type { SheetAttack } from '../game/sheet';
 
@@ -62,6 +63,8 @@ interface Props {
   /** Index of the NPC area ability being aimed (right-click a hex). */
   areaMode: number | null;
   setAreaMode: (i: number | null) => void;
+  adv: '' | 'adv' | 'dis';
+  setAdv: (a: '' | 'adv' | 'dis') => void;
 }
 
 export function BattleCommand(p: Props) {
@@ -97,7 +100,7 @@ export function BattleCommand(p: Props) {
         <ul className="space-y-1" aria-label="Reaction prompts" data-testid="gm-reactions">
           {reactions.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center gap-2 rounded border border-amber-400/60 bg-amber-500/10 px-2 py-1 text-amber-100">
-              <span className="flex-1">⚡ <b>{r.reactor.name}</b> may make an opportunity attack against <b>{r.target.name}</b> (reaction).</span>
+              <span className="flex-1">{r.kind === 'shield' ? <>🛡 <b>{r.reactor.name}</b> may cast <b>Shield</b> against <b>{r.target.name}</b>'s hit (the player decides; the GM may too).</> : <>⚡ <b>{r.reactor.name}</b> may make an opportunity attack against <b>{r.target.name}</b> (reaction).</>}</span>
               <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'reaction', offerId: r.id, accept: true })}>Attack</button>
               <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'reaction', offerId: r.id, accept: false })}>Skip</button>
             </li>
@@ -116,6 +119,22 @@ export function BattleCommand(p: Props) {
             <button type="button" className="ml-auto text-marble-500 hover:text-gold-200" onClick={() => (p.setSelected(null), p.setMode(null))}>✕</button>
           </div>
           <EconomyChips encounter={encounter} actor={actor} />
+          <div className="flex flex-wrap items-center gap-1" aria-label="Conditions and effects" data-testid="gm-effects">
+            {fig.concentration && <span className="rounded-full border border-arcane-400/70 px-2 py-0.5 text-arcane-200">◎ {fig.concentration}</span>}
+            {(fig.effects ?? []).map((e) => (
+              <span key={e.id} className="flex items-center gap-1 rounded-full border border-ink-500 px-2 py-0.5 text-marble-100" title={CONDITION_TEXT[e.key as ConditionId] ?? e.name}>
+                {e.name}
+                <button type="button" className="text-marble-500 hover:text-blood-400" aria-label={`Remove ${e.name}`} onClick={() => p.act({ action: 'condition', target: toSide(selected), effectId: e.id, add: false })}>×</button>
+              </span>
+            ))}
+            <select aria-label="Add a condition" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value="" onChange={(e) => e.target.value && p.act({ action: 'condition', target: toSide(selected), condition: e.target.value, add: true })}>
+              <option value="">+ Condition…</option>
+              {CONDITIONS.map((c) => <option key={c} value={c} title={CONDITION_TEXT[c]}>{c}</option>)}
+            </select>
+            <select aria-label="Attack roll" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={p.adv} onChange={(e) => p.setAdv(e.target.value as '' | 'adv' | 'dis')} title="Applies to this creature's next attacks; effects and conditions are added automatically">
+              <option value="">roll: automatic</option><option value="adv">roll with advantage</option><option value="dis">roll with disadvantage</option>
+            </select>
+          </div>
           <div className="flex flex-wrap items-center gap-1">
             <button type="button" className="btn btn-ghost px-2 py-0.5" aria-pressed={p.mode === 'move'} disabled={p.busy || npc?.defeated} onClick={() => p.setMode(p.mode === 'move' ? null : 'move')} data-testid="gm-move">
               {p.mode === 'move' ? 'Click a hex…' : 'Move'}
@@ -125,6 +144,10 @@ export function BattleCommand(p: Props) {
                 {npcAttacks(npc).map((a, i) => <option key={i} value={i}>{a.kind === 'melee' ? '⚔' : a.kind === 'ranged' ? '🏹' : '✦'} {a.name} +{a.bonus} · {a.damage}{a.damageType ? ` ${a.damageType}` : ''} · {a.kind === 'melee' ? `reach ${a.reachFt}` : `range ${a.rangeFt}`} ft</option>)}
               </select>
             )}
+            {npc?.buffs?.map((bf, i) => {
+              const left = bf.uses ? bf.uses - (npc.areaUsed?.[bf.name] ?? 0) : null;
+              return <button key={bf.name} type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy || left === 0 || !isTurn} title={`${bf.cost === 'bonus' ? 'Bonus action' : 'Action'}: allies within ${bf.radiusFt} ft${bf.toHit ? ` +${bf.toHit} to hit` : ''}${bf.ac ? ` +${bf.ac} AC` : ''}${bf.advantage ? ' advantage' : ''} until its next turn`} onClick={() => p.act({ action: 'npcBuff', id: npc.id, buff: i })}>📯 {bf.name}{left !== null ? ` (${left})` : ''}</button>;
+            })}
             {npc?.areas?.map((a, i) => {
               const left = a.uses ? a.uses - (npc.areaUsed?.[a.name] ?? 0) : null;
               return <button key={a.name} type="button" className="btn btn-ghost px-2 py-0.5" aria-pressed={p.areaMode === i} disabled={p.busy || left === 0} title={`${a.sizeFt}-ft ${a.shape} · DC ${a.dc} ${a.save.toUpperCase()} · ${a.damage} ${a.damageType}`} onClick={() => p.setAreaMode(p.areaMode === i ? null : i)}>🔥 {a.name}{left !== null ? ` (${left})` : ''}</button>;

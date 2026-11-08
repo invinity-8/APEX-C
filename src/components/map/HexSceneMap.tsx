@@ -36,6 +36,8 @@ export interface SceneToken {
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
   target?: boolean;
+  /** Conditions / effects shown under the figure (e.g. "◎ Bless · Prone"). */
+  badges?: string;
 }
 
 interface Props {
@@ -335,6 +337,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                         <rect width={(HEX_SIZE * 1.1 * e.hp) / e.maxHp} height={4} fill={e.hp * 2 <= e.maxHp ? '#e5484d' : '#6fcf6f'} />
                       </g>
                     ) : null}
+                    {enemy.badges && <text y={HEX_SIZE * 1.45} textAnchor="middle" fontSize={8} fill="#f3dc9a" stroke="#000" strokeWidth={2.5} paintOrder="stroke" data-testid="token-badges">{enemy.badges}</text>}
                     <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill={e.ally ? '#cfe4ff' : '#ffd6d0'} stroke="#000" strokeWidth={2.5} paintOrder="stroke">
                       {e.ally ? '🛡 ' : ''}
                       {enemy.name}{e.hp !== undefined ? ` ${e.hp}/${e.maxHp}` : e.condition === 'bloodied' ? ' (bloodied)' : ''}
@@ -352,7 +355,16 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                   </g>
                 );
               }
-              if (views.length === group.length) return <TokenStack key={k} tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />;
+              if (views.length === group.length) {
+                const badge = group.map((t) => t.badges).filter(Boolean).join(' | ');
+                const c0 = center(parseKey(k));
+                return (
+                  <g key={k}>
+                    <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />
+                    {badge && <text x={c0.x} y={c0.y + HEX_SIZE * 1.45} textAnchor="middle" fontSize={8} fill="#f3dc9a" stroke="#000" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none" data-testid="token-badges">{badge}</text>}
+                  </g>
+                );
+              }
               const c = center(parseKey(k));
               return (
                 <g key={k} transform={`translate(${c.x},${c.y})`} onClick={(e) => (e.stopPropagation(), onTokenClick?.(group[0].tokenId))}>
