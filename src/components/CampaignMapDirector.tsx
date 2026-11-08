@@ -15,6 +15,7 @@ import type { SceneInteraction } from './SceneSurface';
 import { areaHexes } from '../campaign/hexArea';
 import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
+import { speedWith } from '../game/combatEffects';
 import { withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import { hexAt } from '../campaign/hexScene';
@@ -831,7 +832,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     }
     const npc = selected.kind === 'npc' ? gmEnemies.find((e) => e.id === selected.id) : undefined;
     const b = budgetOf(gmEncounter, actor);
-    const left = npc && gmEncounter ? Math.max(0, npc.speedFt * (b.dash ? 2 : 1) - (b.moved ?? 0)) : null;
+    const left = npc && gmEncounter ? Math.max(0, speedWith((fig.effects ?? []).map((x) => ({ mods: x.mods ?? {} })), npc.speedFt) * (b.dash ? 2 : 1) - (b.moved ?? 0)) : null;
     const attack = npc ? npcAttacks(npc)[npcAttack] : undefined;
     const range = attack ? (attack.kind === 'melee' ? attack.reachFt : attack.rangeFt ?? attack.reachFt) : null;
     const area = npc && areaMode !== null ? npc.areas?.[areaMode] : undefined;
@@ -841,6 +842,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       pathBudget: left,
       lineFrom: active && !area && range && range > 10 ? fig : null,
       lineRangeFt: range,
+      sightFrom: active && !area ? fig : null,
+      sightSide: npc?.side === 'ally' ? 'hostile' : 'party',
       areaAt: active && area ? (pt) => areaHexes(map, fig, pt, { shape: area.shape, sizeFt: area.sizeFt }) : null,
       focus: gmEncounter && active ? { key: `${turnKey}:${actor}`, x: fig.x, y: fig.y } : null,
       onHexContext: (_k, p) => {

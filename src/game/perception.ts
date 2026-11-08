@@ -12,6 +12,8 @@ const signed = (v: string | undefined) => { const m = /([+-−]?\s*\d{1,2})/.exe
 const abilityMod = (sheet: Pick<CharacterSheet, 'attributes'>, re: RegExp) => { const a = sheet.attributes.find((x) => re.test(x.name.trim())); const n = Number(/\d+/.exec(a?.value ?? '')?.[0]); return Number.isFinite(n) && n > 0 ? Math.floor((n - 10) / 2) : signed(a?.modifier) ?? 0; };
 const skill = (sheet: Pick<CharacterSheet, 'skills'>, name: string) => signed(sheet.skills.find((s) => s.name.trim().toLowerCase() === name)?.value);
 
+/** Ability modifier from the sheet (score, else the printed modifier). */
+export const pcAbilityMod = (sheet: Pick<CharacterSheet, 'attributes'>, re: RegExp) => abilityMod(sheet, re);
 export const pcStealth = (sheet: CharacterSheet) => skill(sheet, 'stealth') ?? abilityMod(sheet, /^dex/i);
 export const pcPerception = (sheet: CharacterSheet) => skill(sheet, 'perception') ?? abilityMod(sheet, /^wis/i);
 export function pcPassivePerception(sheet: CharacterSheet): number {
