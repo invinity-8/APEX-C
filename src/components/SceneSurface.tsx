@@ -36,7 +36,7 @@ export interface SceneInteraction {
 }
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
-export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets, selectedId = null, interaction = {} }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted figure ids (attack mode). */ targets?: string[]; /** GM: the selected figure (token or NPC id). */ selectedId?: string | null; /** APEX 1.2 right-click, previews, camera focus. */ interaction?: SceneInteraction }) {
+export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets, selectedId = null, interaction = {}, compact = false }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted figure ids (attack mode). */ targets?: string[]; /** GM: the selected figure (token or NPC id). */ selectedId?: string | null; /** APEX 1.2 right-click, previews, camera focus. */ interaction?: SceneInteraction; /** APEX 1.9: inside the battle layout – the map only, no title. */ compact?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const zoom = useMapZoom();
   const [info, setInfo] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const clock = snapshot.clock;
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
-    return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p>
+    return <section className="player-scene hex-scene" aria-label="Assigned campaign scene">{!compact && <><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p></>}
       <div className="hex-scene-frame">
         {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
         {view3d && category === 'battle' ? (

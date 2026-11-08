@@ -3,7 +3,8 @@
  * the standard actions (Dash, Disengage, Dodge …), a target menu when an enemy is clicked (weapon attacks with
  * range, spells with slot choice / upcasting) and the opportunity-attack prompt. The server checks every rule.
  */
-import { useState } from 'react';
+import { useEffect, useState, type DragEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import type { SceneEncounter } from '../game/types';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -43,6 +44,10 @@ interface Props {
   setReady: (r: ReadyAction) => void;
   spellTargets: Array<{ kind: 'pc'; tokenId: string; name: string } | { kind: 'npc'; id: string; name: string }>;
   setSpellTargets: (t: Props['spellTargets']) => void;
+  /** APEX 1.9: the battle layout's hotbar slot over the map – the action bar renders there (portal). */
+  barTarget?: HTMLElement | null;
+  /** End this character's turn (shown as the big button in the action bar). */
+  onEndTurn?: () => void;
 }
 
 export function PlayerCombat(p: Props) {
@@ -112,8 +117,56 @@ export function PlayerCombat(p: Props) {
     );
   };
 
-  return (
-    <section className="space-y-2 rounded-xl border border-gold-700/60 bg-gradient-to-b from-ink-900/95 to-ink-950/95 p-2.5 text-xs shadow-[0_6px_24px_rgba(0,0,0,0.45)]" aria-label="Combat actions" data-testid="player-combat">
+  // ---- APEX 1.9 quick bar (Baldur's-Gate style): customizable slots, drag & drop from the panel, saved per character
+  const allQuick: QuickItem[] = [
+    ...p.attacks.map((_, i) => ({ k: 'attack', i }) as QuickItem),
+    ...spells.map((sp) => ({ k: 'spell', id: sp.id }) as QuickItem),
+    ...(['dash', 'disengage', 'dodge', 'hide', 'search', 'help', 'useObject'] as const).map((id) => ({ k: 'act', id }) as QuickItem),
+    ...features.map((f) => ({ k: 'feature', id: f.id }) as QuickItem),
+  ];
+  const [quick, setQuickState] = useState<Array<QuickItem | null>>(() => loadQuick(tokenId));
+  useEffect(() => setQuickState(loadQuick(tokenId)), [tokenId]);
+  const setQuick = (items: Array<QuickItem | null>) => { setQuickState(items); try { localStorage.setItem(`apex.quickbar.${tokenId}`, JSON.stringify(items)); } catch { /* private mode */ } };
+  // first use (nothing saved): attacks, the first spells, the common actions, features
+  const shownQuick = quick.length ? quick : defaultQuick(allQuick);
+  const quickView = (q: QuickItem): QuickView | null => {
+    if (q.k === 'attack') {
+      const a = p.attacks[q.i]; if (!a) return null;
+      const r = parseRangeFt(`${a.range} ${a.notes}`);
+      return { icon: r.rangeFt ? '🏹' : '⚔', label: a.name.replace(' (equipped)', '').replace(/ \((Shillelagh)\)/, ' ✦'), title: `${a.name} · ${a.bonus} · ${a.damage}`, cost: 'action', on: p.ready?.kind === 'attack' && p.ready.index === q.i, disabled: !canAct };
+    }
+    if (q.k === 'spell') {
+      const sp = spells.find((x) => x.id === q.id); if (!sp) return null;
+      const noSlot = sp.level > 0 && !slots.some((x) => x.level >= sp.level && x.current > 0);
+      return { icon: supportive(sp) ? '✚' : '✦', label: sp.name, title: `${sp.name} · ${sp.level ? `${ordinal(sp.level)} level` : 'cantrip'} · ${sp.range}`, cost: /bonus/i.test(sp.castingTime) ? 'bonus' : /reaction/i.test(sp.castingTime) ? undefined : 'action', level: sp.level, on: p.ready?.kind === 'spell' && p.ready.spellId === sp.id, disabled: noSlot || !canAct, tone: supportive(sp) ? 'support' : 'spell' };
+    }
+    if (q.k === 'act') {
+      const a = STANDARD_ACTIONS.find((x) => x.id === q.id);
+      const label = q.id === 'hide' ? (hidden ? 'Unhide' : encounter ? 'Hide' : 'Sneak') : q.id === 'useObject' ? 'Object' : a?.label ?? q.id;
+      const used = q.id === 'dodge' || q.id === 'help' || q.id === 'search' ? spentCost : spentHaste;
+      const on = q.id === 'dash' ? !!b.dash : q.id === 'disengage' ? !!b.disengage : q.id === 'dodge' ? !!b.dodge : q.id === 'hide' ? hidden : false;
+      return { icon: { dash: '🏃', disengage: '↩', dodge: '🛡', hide: '🥷', search: '🔎', help: '🤝', useObject: '🧪' }[q.id] ?? '•', label, title: a?.text ?? label, cost: encounter ? actionCost : undefined, on, disabled: p.pending || (!!encounter && (!p.myTurn || (q.id !== 'hide' || !hidden) && used)) };
+    }
+    const f = features.find((x) => x.id === q.id); if (!f) return null;
+    return { icon: FEATURE_ICONS[f.id] ?? (f.id === 'wildShape' ? '🐾' : f.target === 'ally' ? '✚' : '★'), label: f.name, title: f.text, cost: f.cost === 'free' ? undefined : f.cost, badge: f.current ?? undefined, disabled: p.pending || !canAct || f.current === 0, tone: 'feature' };
+  };
+  const useQuick = (q: QuickItem) => {
+    if (q.k === 'attack') return p.setReady(p.ready?.kind === 'attack' && p.ready.index === q.i ? null : { kind: 'attack', index: q.i });
+    if (q.k === 'spell') { const sp = spells.find((x) => x.id === q.id); if (sp) p.setReady(p.ready?.kind === 'spell' && p.ready.spellId === sp.id ? null : { kind: 'spell', spellId: sp.id, slotLevel: slotFor(sp.id, sp.level) }); return; }
+    if (q.k === 'act') {
+      if (q.id === 'hide') return p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) });
+      return standard(q.id);
+    }
+    const f = features.find((x) => x.id === q.id);
+    if (!f) return;
+    // Wild Shape and features with a target are chosen in the panel
+    if (f.id === 'wildShape' || f.target === 'ally') { document.querySelector('[data-testid="features"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    p.act({ action: 'feature', tokenId, feature: f.id });
+  };
+  const dragQuick = (q: QuickItem) => ({ draggable: true, onDragStart: (e: DragEvent) => { e.dataTransfer.setData(QUICK_MIME, JSON.stringify({ item: q })); e.dataTransfer.effectAllowed = 'copy'; } });
+
+  const barNode = (
+    <div className="battle-hotbar space-y-1.5 text-xs" data-testid="combat-bar">
       {reactions.filter((r) => r.kind === 'shield').map((r) => (
         <div key={r.id} role="alertdialog" aria-label="Shield" className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-400/70 bg-sky-500/15 px-2 py-1.5 text-sky-100" data-testid="shield-prompt">
           <span className="flex-1">🛡 <b>{r.target.name}</b> hits <b>{r.reactor.name}</b>. Cast <b>Shield</b> (reaction, +5 AC until your next turn – it may turn this hit into a miss)?</span>
@@ -130,98 +183,6 @@ export function PlayerCombat(p: Props) {
         </div>
       ))}
 
-      {/* turn economy, movement, spell slots */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {encounter ? <EconomyOrbs encounter={encounter} actor={actor} haste={!!me2?.effects.some((e) => e.key === 'haste')} /> : <span className="rounded-full border border-forest-400/60 px-2 py-0.5 text-forest-300">Free play – no initiative</span>}
-        {p.movement && !p.free && (
-          <span className="flex min-w-[11rem] flex-1 items-center gap-2" title={`${moveLeft} of ${p.movement.allowance} ft left${p.movement.dashed ? ' (Dash)' : ''}`}>
-            <span aria-hidden className="text-base">👣</span>
-            <span className="relative h-3 flex-1 overflow-hidden rounded-full border border-ink-600 bg-ink-800" role="meter" aria-label="Movement left" aria-valuemin={0} aria-valuemax={p.movement.allowance} aria-valuenow={moveLeft} data-testid="movement-bar">
-              <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-500 to-gold-200 transition-[width] duration-300" style={{ width: `${(moveLeft / moveTotal) * 100}%` }} />
-              {p.movement.dashed && <span className="absolute inset-y-0 border-l border-dashed border-sky-300" style={{ left: '50%' }} />}
-            </span>
-            <b className="tabular-nums text-marble-100">{Math.round(moveLeft)}<span className="text-marble-500"> / {Math.round(p.movement.allowance)} ft</span></b>
-          </span>
-        )}
-        {slots.length > 0 && <SlotTracker slots={slots} />}
-      </div>
-
-      {beast && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-900/25 px-2 py-1.5 text-emerald-100" data-testid="wild-shape-banner">
-          <span className="text-lg" aria-hidden>{beastIcon(beast.formName)}</span>
-          <span className="flex-1"><b>Wild Shape: {beast.formName}</b> · {beast.hp}/{beast.maxHp} beast HP · beast attacks, AC and speed · no spellcasting. At 0 beast HP you revert; extra damage carries over.</span>
-        </div>
-      )}
-      {(me2?.effects.length || me2?.concentration || me2?.readied) && (
-        <div className="flex flex-wrap items-center gap-1" aria-label="Your conditions and effects" data-testid="my-effects">
-          {me2?.concentration && <span className="rounded-full border border-arcane-300/70 bg-arcane-500/15 px-2 py-0.5 text-arcane-300" title="A new concentration spell ends it; damage forces a Constitution save">◎ Concentrating: {me2.concentration}</span>}
-          {me2?.effects.map((e) => <span key={e.id} className="rounded-full border border-ink-500 bg-ink-800/80 px-2 py-0.5 text-marble-100" title={CONDITION_TEXT[e.key as ConditionId] ?? e.name}>{e.name}</span>)}
-          {me2?.effects.some((e) => e.key === 'prone') && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} onClick={() => p.act({ action: 'condition', target: { kind: 'pc', tokenId }, condition: 'prone', add: false })}>Stand up</button>}
-          {me2?.readied && <span className="rounded-full border border-gold-500/70 px-2 py-0.5 text-gold-200">⏳ Readied: {me2.readied.trigger} – right-click the target when it happens</span>}
-        </div>
-      )}
-
-      {/* action tiles */}
-      <div className="flex flex-wrap items-stretch gap-1.5" role="group" aria-label="Standard actions">
-        <Tile icon="⚔" label="Attack" cost="action" on={p.ready?.kind === 'attack'} disabled={!p.attacks.length || !canAct} title="Ready your first weapon – right-click an enemy to attack (walking into reach first)" onClick={() => p.setReady(p.ready?.kind === 'attack' ? null : { kind: 'attack', index: defaultAttack })} />
-        <Tile icon="✦" label="Cast spell" cost="action" on={spellOpen} disabled={!(sheet?.spells.length) || !!beast} title={beast ? `No spellcasting in Wild Shape (${beast.formName})` : 'Open the spellbook'} onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
-        {encounter && (['dash', 'disengage', 'dodge'] as const).map((id) => {
-          const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
-          const active = id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge;
-          return <Tile key={id} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} on={active} disabled={p.pending || !p.myTurn || (id === 'dodge' ? spentCost : spentHaste)} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
-        })}
-        <Tile icon="🥷" label={hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'} cost={encounter && !hidden ? actionCost : undefined} on={hidden} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) })} testid={encounter ? 'hide' : 'sneak'} />
-        <Tile icon="🔎" label="Search" cost={encounter ? actionCost : undefined} disabled={p.pending || (!!encounter && (!p.myTurn || spentCost))} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => standard('search')} />
-        {encounter && <>
-          <Tile icon="🤝" label="Help" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'help')!.text} onClick={() => standard('help')} />
-          <Tile icon="🧪" label="Use object" cost={actionCost} disabled={p.pending || !p.myTurn || spentHaste} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
-          <Tile icon="⏳" label="Ready" cost="action" on={readyOpen} disabled={p.pending || !p.myTurn || !!b.action} title="Prepare the chosen attack with a trigger; it uses your reaction" onClick={() => setReadyOpen((v) => !v)} />
-          <span className="mx-0.5 w-px self-stretch bg-ink-700" aria-hidden />
-          <Tile icon="◆" label="Bonus mode" on={bonus} title="Take the next standard action as a bonus action (Cunning Action, off-hand attack …) – only if a feature allows it" onClick={() => setBonus((v) => !v)} />
-          <Tile icon="✧" label="Other bonus" cost="bonus" disabled={p.pending || !p.myTurn || !!b.bonus} title="Mark the bonus action as used (feature, off-hand attack …)" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'bonusOther' })} />
-        </>}
-      </div>
-      {readyOpen && encounter && p.myTurn && !b.action && (
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gold-700/60 bg-ink-900/70 p-1.5" aria-label="Ready an action">
-          <input className="w-64 rounded border border-ink-600 bg-ink-900 px-1.5 py-0.5" placeholder="Trigger (e.g. when the orc opens the door)" value={readyTrigger} onChange={(e) => setReadyTrigger(e.target.value)} />
-          <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !readyTrigger.trim() || p.ready?.kind !== 'attack'} title="Choose the attack in the hotbar first" onClick={() => { p.act({ action: 'ready', actor: { kind: 'pc', tokenId }, attackIndex: p.ready?.kind === 'attack' ? p.ready.index : 0, trigger: readyTrigger }); setReadyTrigger(''); setReadyOpen(false); }}>⏳ Ready {p.ready?.kind === 'attack' ? p.attacks[p.ready.index]?.name : 'the chosen attack'}</button>
-        </div>
-      )}
-
-      {features.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Class features" data-testid="features">
-          {features.map((f) => f.id === 'wildShape' ? (
-            <select key={f.id} aria-label="Wild Shape" className="h-14 rounded-lg border border-emerald-600/60 bg-ink-900 px-2 text-emerald-200" value="" disabled={p.pending || !canAct || f.current === 0} onChange={(e) => e.target.value && p.act({ action: 'feature', tokenId, feature: 'wildShape', formId: e.target.value })}>
-              <option value="">🐾 Wild Shape ({f.current ?? f.max} left)…</option>
-              {beastOptions(sheet).map((b) => <option key={b.id} value={b.id}>{b.name} · CR {b.cr} · AC {b.ac} · {b.hp} HP</option>)}
-            </select>
-          ) : f.target === 'ally' ? (
-            <select key={f.id} aria-label={f.name} className="h-14 rounded-lg border border-forest-400/60 bg-ink-900 px-2 text-forest-300" value="" title={f.text} disabled={p.pending || !canAct || f.current === 0} onChange={(e) => { if (!e.target.value) return; const [kind, id] = e.target.value.split(':'); p.act({ action: 'feature', tokenId, feature: f.id, target: kind === 'pc' ? { kind: 'pc', tokenId: id } : { kind: 'npc', id }, ...(f.id === 'layOnHands' ? { amount: Math.max(1, Number(window.prompt('Hit points to restore?', '5')) || 5) } : {}) }); }}>
-              <option value="">✚ {f.name} ({f.current ?? f.max} left)…</option>
-              {f.id === 'layOnHands' && <option value={`pc:${tokenId}`}>yourself</option>}
-              {figures.filter((x) => x.kind === 'pc' || x.side === 'ally').map((x) => <option key={x.id} value={x.kind === 'pc' ? `pc:${x.tokenId}` : `npc:${x.id}`}>{x.name}</option>)}
-            </select>
-          ) : (
-            <Tile key={f.id} icon={FEATURE_ICONS[f.id] ?? '★'} label={f.name} disabled={p.pending || !canAct || f.current === 0} title={f.text} onClick={() => p.act({ action: 'feature', tokenId, feature: f.id })} testid={`feature-${f.id}`} badge={f.current ?? undefined} tone="forest" />
-          ))}
-        </div>
-      )}
-
-      {/* hotbar: what is "in hand" – its range shows on the map, right-click uses it */}
-      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-700 bg-ink-950/70 p-1.5" role="toolbar" aria-label="Ready an attack or spell" data-testid="ready-bar">
-        <span className="pr-1 text-[10px] uppercase tracking-wider text-marble-500">In hand</span>
-        {p.attacks.map((a, i) => {
-          const r = parseRangeFt(`${a.range} ${a.notes}`);
-          const on = p.ready?.kind === 'attack' && p.ready.index === i;
-          return <button key={`a${i}`} type="button" className={`rounded-md border px-2 py-1 transition ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_8px_rgba(192,155,88,0.5)]' : 'border-ink-600 bg-ink-900 text-marble-100 hover:border-gold-500'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')} <span className="text-[10px] text-marble-500">{a.bonus}</span></button>;
-        })}
-        {spells.map((sp) => {
-          const on = p.ready?.kind === 'spell' && p.ready.spellId === sp.id;
-          const help = supportive(sp);
-          const noSlot = sp.level > 0 && !slots.some((x) => x.level >= sp.level && x.current > 0);
-          return <button key={sp.id} type="button" className={`rounded-md border px-2 py-1 transition ${on ? 'border-arcane-300 bg-arcane-500/25 text-arcane-300 shadow-[0_0_8px_rgba(122,99,194,0.6)]' : `border-ink-600 bg-ink-900 hover:border-arcane-300/70 ${help ? 'text-forest-300' : 'text-marble-100'}`} ${noSlot ? 'opacity-40' : ''}`} aria-pressed={on} title={`${sp.level ? `${ordinal(sp.level)} level` : 'cantrip'} · ${sp.range}${help ? ' · support' : ''}${noSlot ? ' · no slot left' : ''}`} onClick={() => p.setReady(on ? null : { kind: 'spell', spellId: sp.id, slotLevel: slotFor(sp.id, sp.level) })} data-testid="ready-spell"><LevelBadge level={sp.level} /> {help ? '✚' : '✦'} {sp.name}</button>;
-        })}
-      </div>
       {readySpellNow && p.ready?.kind === 'spell' && (() => {
         const sp = readySpellNow;
         const lv = (p.ready as { slotLevel: number }).slotLevel;
@@ -254,10 +215,117 @@ export function PlayerCombat(p: Props) {
           </div>
         );
       })()}
+      <div className="hotbar-frame">
+        <div className="hotbar-economy">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {encounter ? <EconomyOrbs encounter={encounter} actor={actor} haste={!!me2?.effects.some((e) => e.key === 'haste')} /> : <span className="rounded-full border border-forest-400/60 px-2 py-0.5 text-forest-300">Free play – no initiative</span>}
+        {p.movement && !p.free && (
+          <span className="flex min-w-[11rem] flex-1 items-center gap-2" title={`${moveLeft} of ${p.movement.allowance} ft left${p.movement.dashed ? ' (Dash)' : ''}`}>
+            <span aria-hidden className="text-base">👣</span>
+            <span className="relative h-3 flex-1 overflow-hidden rounded-full border border-ink-600 bg-ink-800" role="meter" aria-label="Movement left" aria-valuemin={0} aria-valuemax={p.movement.allowance} aria-valuenow={moveLeft} data-testid="movement-bar">
+              <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-500 to-gold-200 transition-[width] duration-300" style={{ width: `${(moveLeft / moveTotal) * 100}%` }} />
+              {p.movement.dashed && <span className="absolute inset-y-0 border-l border-dashed border-sky-300" style={{ left: '50%' }} />}
+            </span>
+            <b className="tabular-nums text-marble-100">{Math.round(moveLeft)}<span className="text-marble-500"> / {Math.round(p.movement.allowance)} ft</span></b>
+          </span>
+        )}
+        {slots.length > 0 && <SlotTracker slots={slots} />}
+      </div>
+
+        </div>
+        <div className="flex items-end gap-2">
+          <QuickBar items={shownQuick} setItems={setQuick} render={quickView} onUse={useQuick} />
+          {p.onEndTurn && p.myTurn && <button type="button" className="hotbar-end" disabled={p.pending} onClick={p.onEndTurn} data-testid="end-turn-bar" title="End your turn">End<br />turn</button>}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+    {p.barTarget ? createPortal(barNode, p.barTarget) : null}
+    <section className="space-y-2 rounded-xl border border-gold-700/60 bg-gradient-to-b from-ink-900/95 to-ink-950/95 p-2.5 text-xs shadow-[0_6px_24px_rgba(0,0,0,0.45)]" aria-label="Combat actions" data-testid="player-combat">
+      {!p.barTarget && barNode}
+      {beast && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-900/25 px-2 py-1.5 text-emerald-100" data-testid="wild-shape-banner">
+          <span className="text-lg" aria-hidden>{beastIcon(beast.formName)}</span>
+          <span className="flex-1"><b>Wild Shape: {beast.formName}</b> · {beast.hp}/{beast.maxHp} beast HP · beast attacks, AC and speed · no spellcasting. At 0 beast HP you revert; extra damage carries over.</span>
+        </div>
+      )}
+      {(me2?.effects.length || me2?.concentration || me2?.readied) && (
+        <div className="flex flex-wrap items-center gap-1" aria-label="Your conditions and effects" data-testid="my-effects">
+          {me2?.concentration && <span className="rounded-full border border-arcane-300/70 bg-arcane-500/15 px-2 py-0.5 text-arcane-300" title="A new concentration spell ends it; damage forces a Constitution save">◎ Concentrating: {me2.concentration}</span>}
+          {me2?.effects.map((e) => <span key={e.id} className="rounded-full border border-ink-500 bg-ink-800/80 px-2 py-0.5 text-marble-100" title={CONDITION_TEXT[e.key as ConditionId] ?? e.name}>{e.name}</span>)}
+          {me2?.effects.some((e) => e.key === 'prone') && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} onClick={() => p.act({ action: 'condition', target: { kind: 'pc', tokenId }, condition: 'prone', add: false })}>Stand up</button>}
+          {me2?.readied && <span className="rounded-full border border-gold-500/70 px-2 py-0.5 text-gold-200">⏳ Readied: {me2.readied.trigger} – right-click the target when it happens</span>}
+        </div>
+      )}
+
+      {/* action tiles */}
+      <div className="flex flex-wrap items-stretch gap-1.5" role="group" aria-label="Standard actions">
+        <Tile icon="⚔" label="Attack" cost="action" on={p.ready?.kind === 'attack'} disabled={!p.attacks.length || !canAct} title="Ready your first weapon – right-click an enemy to attack (walking into reach first)" onClick={() => p.setReady(p.ready?.kind === 'attack' ? null : { kind: 'attack', index: defaultAttack })} />
+        <Tile icon="✦" label="Cast spell" cost="action" on={spellOpen} disabled={!(sheet?.spells.length) || !!beast} title={beast ? `No spellcasting in Wild Shape (${beast.formName})` : 'Open the spellbook'} onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
+        {encounter && (['dash', 'disengage', 'dodge'] as const).map((id) => {
+          const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
+          const active = id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge;
+          return <Tile key={id} drag={dragQuick({ k: 'act', id })} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} on={active} disabled={p.pending || !p.myTurn || (id === 'dodge' ? spentCost : spentHaste)} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
+        })}
+        <Tile drag={dragQuick({ k: 'act', id: 'hide' })} icon="🥷" label={hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'} cost={encounter && !hidden ? actionCost : undefined} on={hidden} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) })} testid={encounter ? 'hide' : 'sneak'} />
+        <Tile drag={dragQuick({ k: 'act', id: 'search' })} icon="🔎" label="Search" cost={encounter ? actionCost : undefined} disabled={p.pending || (!!encounter && (!p.myTurn || spentCost))} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => standard('search')} />
+        {encounter && <>
+          <Tile drag={dragQuick({ k: 'act', id: 'help' })} icon="🤝" label="Help" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'help')!.text} onClick={() => standard('help')} />
+          <Tile drag={dragQuick({ k: 'act', id: 'useObject' })} icon="🧪" label="Use object" cost={actionCost} disabled={p.pending || !p.myTurn || spentHaste} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
+          <Tile icon="⏳" label="Ready" cost="action" on={readyOpen} disabled={p.pending || !p.myTurn || !!b.action} title="Prepare the chosen attack with a trigger; it uses your reaction" onClick={() => setReadyOpen((v) => !v)} />
+          <span className="mx-0.5 w-px self-stretch bg-ink-700" aria-hidden />
+          <Tile icon="◆" label="Bonus mode" on={bonus} title="Take the next standard action as a bonus action (Cunning Action, off-hand attack …) – only if a feature allows it" onClick={() => setBonus((v) => !v)} />
+          <Tile icon="✧" label="Other bonus" cost="bonus" disabled={p.pending || !p.myTurn || !!b.bonus} title="Mark the bonus action as used (feature, off-hand attack …)" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'bonusOther' })} />
+        </>}
+      </div>
+      {readyOpen && encounter && p.myTurn && !b.action && (
+        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gold-700/60 bg-ink-900/70 p-1.5" aria-label="Ready an action">
+          <input className="w-64 rounded border border-ink-600 bg-ink-900 px-1.5 py-0.5" placeholder="Trigger (e.g. when the orc opens the door)" value={readyTrigger} onChange={(e) => setReadyTrigger(e.target.value)} />
+          <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !readyTrigger.trim() || p.ready?.kind !== 'attack'} title="Choose the attack in the hotbar first" onClick={() => { p.act({ action: 'ready', actor: { kind: 'pc', tokenId }, attackIndex: p.ready?.kind === 'attack' ? p.ready.index : 0, trigger: readyTrigger }); setReadyTrigger(''); setReadyOpen(false); }}>⏳ Ready {p.ready?.kind === 'attack' ? p.attacks[p.ready.index]?.name : 'the chosen attack'}</button>
+        </div>
+      )}
+
+      {features.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Class features" data-testid="features">
+          {features.map((f) => f.id === 'wildShape' ? (
+            <select key={f.id} aria-label="Wild Shape" className="h-14 rounded-lg border border-emerald-600/60 bg-ink-900 px-2 text-emerald-200" value="" disabled={p.pending || !canAct || f.current === 0} onChange={(e) => e.target.value && p.act({ action: 'feature', tokenId, feature: 'wildShape', formId: e.target.value })}>
+              <option value="">🐾 Wild Shape ({f.current ?? f.max} left)…</option>
+              {beastOptions(sheet).map((b) => <option key={b.id} value={b.id}>{b.name} · CR {b.cr} · AC {b.ac} · {b.hp} HP</option>)}
+            </select>
+          ) : f.target === 'ally' ? (
+            <select key={f.id} aria-label={f.name} className="h-14 rounded-lg border border-forest-400/60 bg-ink-900 px-2 text-forest-300" value="" title={f.text} disabled={p.pending || !canAct || f.current === 0} onChange={(e) => { if (!e.target.value) return; const [kind, id] = e.target.value.split(':'); p.act({ action: 'feature', tokenId, feature: f.id, target: kind === 'pc' ? { kind: 'pc', tokenId: id } : { kind: 'npc', id }, ...(f.id === 'layOnHands' ? { amount: Math.max(1, Number(window.prompt('Hit points to restore?', '5')) || 5) } : {}) }); }}>
+              <option value="">✚ {f.name} ({f.current ?? f.max} left)…</option>
+              {f.id === 'layOnHands' && <option value={`pc:${tokenId}`}>yourself</option>}
+              {figures.filter((x) => x.kind === 'pc' || x.side === 'ally').map((x) => <option key={x.id} value={x.kind === 'pc' ? `pc:${x.tokenId}` : `npc:${x.id}`}>{x.name}</option>)}
+            </select>
+          ) : (
+            <Tile key={f.id} drag={dragQuick({ k: 'feature', id: f.id })} icon={FEATURE_ICONS[f.id] ?? '★'} label={f.name} disabled={p.pending || !canAct || f.current === 0} title={f.text} onClick={() => p.act({ action: 'feature', tokenId, feature: f.id })} testid={`feature-${f.id}`} badge={f.current ?? undefined} tone="forest" />
+          ))}
+        </div>
+      )}
+
+      {/* hotbar: what is "in hand" – its range shows on the map, right-click uses it */}
+      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-700 bg-ink-950/70 p-1.5" role="toolbar" aria-label="Ready an attack or spell" data-testid="ready-bar">
+        <span className="pr-1 text-[10px] uppercase tracking-wider text-marble-500">In hand</span>
+        {p.attacks.map((a, i) => {
+          const r = parseRangeFt(`${a.range} ${a.notes}`);
+          const on = p.ready?.kind === 'attack' && p.ready.index === i;
+          return <button key={`a${i}`} type="button" {...dragQuick({ k: 'attack', i })} className={`rounded-md border px-2 py-1 transition ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_8px_rgba(192,155,88,0.5)]' : 'border-ink-600 bg-ink-900 text-marble-100 hover:border-gold-500'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')} <span className="text-[10px] text-marble-500">{a.bonus}</span></button>;
+        })}
+        {spells.map((sp) => {
+          const on = p.ready?.kind === 'spell' && p.ready.spellId === sp.id;
+          const help = supportive(sp);
+          const noSlot = sp.level > 0 && !slots.some((x) => x.level >= sp.level && x.current > 0);
+          return <button key={sp.id} type="button" {...dragQuick({ k: 'spell', id: sp.id })} className={`rounded-md border px-2 py-1 transition ${on ? 'border-arcane-300 bg-arcane-500/25 text-arcane-300 shadow-[0_0_8px_rgba(122,99,194,0.6)]' : `border-ink-600 bg-ink-900 hover:border-arcane-300/70 ${help ? 'text-forest-300' : 'text-marble-100'}`} ${noSlot ? 'opacity-40' : ''}`} aria-pressed={on} title={`${sp.level ? `${ordinal(sp.level)} level` : 'cantrip'} · ${sp.range}${help ? ' · support' : ''}${noSlot ? ' · no slot left' : ''}`} onClick={() => p.setReady(on ? null : { kind: 'spell', spellId: sp.id, slotLevel: slotFor(sp.id, sp.level) })} data-testid="ready-spell"><LevelBadge level={sp.level} /> {help ? '✚' : '✦'} {sp.name}</button>;
+        })}
+      </div>
       {!enemy && !p.ready && <p className="text-marble-500">Pick an attack or spell “in hand”, then right-click on the map (touch: tap to preview, press and hold to act). Right-click an enemy without one to see every option.</p>}
 
       {spellOpen && !enemy && (
-        <Spellbook sheet={sheet} slots={slots} lvl={lvl} tokenId={tokenId} friends={friends} canAct={canAct} pending={p.pending} slotFor={slotFor}
+        <Spellbook drag={(id) => dragQuick({ k: 'spell', id })} sheet={sheet} slots={slots} lvl={lvl} tokenId={tokenId} friends={friends} canAct={canAct} pending={p.pending} slotFor={slotFor}
           onReady={(id, lv) => { p.setReady({ kind: 'spell', spellId: id, slotLevel: lv }); setSpellOpen(false); }}
           onCast={(id, lv, t) => { castOn(id, lv, t); setSpellOpen(false); }} />
       )}
@@ -304,6 +372,7 @@ export function PlayerCombat(p: Props) {
         </div>
       )}
     </section>
+    </>
   );
 }
 
@@ -312,9 +381,9 @@ const FEATURE_ICONS: Record<string, string> = { actionSurge: '⚡', secondWind: 
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 
 /** One big action button (icon, label, cost marker: ● action, ◆ bonus action). */
-function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, tone }: { icon: string; label: string; cost?: 'action' | 'bonus'; on?: boolean; disabled?: boolean; title?: string; onClick: () => void; testid?: string; badge?: number; tone?: 'forest' }) {
+function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, tone, drag }: { icon: string; label: string; cost?: 'action' | 'bonus'; on?: boolean; disabled?: boolean; title?: string; onClick: () => void; testid?: string; badge?: number; tone?: 'forest'; drag?: { draggable: boolean; onDragStart: (e: DragEvent) => void } }) {
   return (
-    <button type="button" title={title} disabled={disabled} aria-pressed={on} onClick={onClick} data-testid={testid}
+    <button type="button" title={title} disabled={disabled} aria-pressed={on} onClick={onClick} data-testid={testid} {...drag}
       className={`relative flex h-14 w-[4.6rem] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-center text-[10px] leading-tight transition disabled:cursor-not-allowed disabled:opacity-35 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_10px_rgba(192,155,88,0.45)]' : tone === 'forest' ? 'border-forest-400/60 bg-forest-700/30 text-forest-300 hover:border-forest-300' : 'border-ink-600 bg-ink-850 text-marble-100 hover:border-gold-500 hover:bg-ink-800'}`}>
       <span className="text-lg leading-none" aria-hidden>{icon}</span>
       <span className="line-clamp-2">{label}</span>
@@ -390,7 +459,7 @@ function TargetPick({ self, friends, onPick, disabled }: { self: string; friends
 }
 
 /** Spellbook: a tab per spell level with its slots, spell cards with tags, Ready and (support spells) Cast on …. */
-function Spellbook({ sheet, slots, lvl, tokenId, friends, canAct, pending, slotFor, onReady, onCast }: { sheet: CharacterSheet | null; slots: Slot[]; lvl: number; tokenId: string; friends: Friend[]; canAct: boolean; pending: boolean; slotFor: (id: string, level: number) => number; onReady: (id: string, lv: number) => void; onCast: (id: string, lv: number, t: CastTarget | null) => void }) {
+function Spellbook({ drag, sheet, slots, lvl, tokenId, friends, canAct, pending, slotFor, onReady, onCast }: { drag: (id: string) => { draggable: boolean; onDragStart: (e: DragEvent) => void }; sheet: CharacterSheet | null; slots: Slot[]; lvl: number; tokenId: string; friends: Friend[]; canAct: boolean; pending: boolean; slotFor: (id: string, level: number) => number; onReady: (id: string, lv: number) => void; onCast: (id: string, lv: number, t: CastTarget | null) => void }) {
   const all = sheet?.spells ?? [];
   const levels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter((l) => all.some((x) => x.level === l));
   const [tab, setTab] = useState(levels[0] ?? 0);
@@ -429,7 +498,7 @@ function Spellbook({ sheet, slots, lvl, tokenId, friends, canAct, pending, slotF
           ].filter(Boolean);
           const noSlot = x.level > 0 && !slots.some((s) => s.level >= x.level && s.current > 0);
           return (
-            <li key={x.id} className={`rounded-md border px-2 py-1.5 ${usable ? (help ? 'border-forest-400/50 bg-forest-700/15' : 'border-ink-600 bg-ink-900/70') : 'border-ink-800 opacity-55'}`}>
+            <li key={x.id} {...(x.level === 0 || x.prepared ? drag(x.id) : {})} className={`rounded-md border px-2 py-1.5 ${usable ? (help ? 'border-forest-400/50 bg-forest-700/15' : 'border-ink-600 bg-ink-900/70') : 'border-ink-800 opacity-55'}`}>
               <div className="flex items-start gap-1.5">
                 <LevelBadge level={x.level} />
                 <div className="min-w-0 flex-1">
@@ -470,4 +539,70 @@ function sneakHint(snapshot: SceneSnapshot, tokenId: string, enemy: NonNullable<
     if (allies.some((f) => flanks(hexAt(map, me), t, hexAt(map, f)))) why.push('flanking');
   }
   return why.length ? why.join(', ') : null;
+}
+
+// ---------------------------------------------------------------- quick bar (APEX 1.9)
+
+export type QuickItem = { k: 'attack'; i: number } | { k: 'spell'; id: string } | { k: 'act'; id: string } | { k: 'feature'; id: string };
+type QuickView = { icon: string; label: string; title: string; cost?: 'action' | 'bonus'; level?: number; on?: boolean; disabled?: boolean; badge?: number; tone?: 'spell' | 'support' | 'feature' };
+const QUICK_MIME = 'application/x-apex-quick';
+const QUICK_SLOTS = 14;
+function loadQuick(tokenId: string): Array<QuickItem | null> {
+  try { const v = JSON.parse(localStorage.getItem(`apex.quickbar.${tokenId}`) ?? '[]'); return Array.isArray(v) ? v.slice(0, QUICK_SLOTS) : []; } catch { return []; }
+}
+function defaultQuick(all: QuickItem[]): Array<QuickItem | null> {
+  const pick = [...all.filter((q) => q.k === 'attack').slice(0, 2), ...all.filter((q) => q.k === 'spell').slice(0, 5), ...all.filter((q) => q.k === 'act' && ['dash', 'disengage', 'dodge', 'hide'].includes(q.id)), ...all.filter((q) => q.k === 'feature').slice(0, 3)];
+  return Array.from({ length: QUICK_SLOTS }, (_, i) => pick[i] ?? null);
+}
+const sameQuick = (a: QuickItem | null, b: QuickItem | null) => !!a && !!b && a.k === b.k && (a.k === 'attack' ? a.i === (b as { i: number }).i : (a as { id: string }).id === (b as { id: string }).id);
+
+/** The hotbar: square slots; drag items from the panel onto a slot, drag slots to reorder, right-click a slot to empty it. */
+function QuickBar({ items, setItems, render, onUse }: { items: Array<QuickItem | null>; setItems: (v: Array<QuickItem | null>) => void; render: (q: QuickItem) => QuickView | null; onUse: (q: QuickItem) => void }) {
+  const [over, setOver] = useState<number | null>(null);
+  const slots = Array.from({ length: QUICK_SLOTS }, (_, i) => items[i] ?? null);
+  // keys 1–9 use the first nine slots (not while typing)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || !/^[1-9]$/.test(e.key)) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const q = slots[Number(e.key) - 1];
+      const v = q ? render(q) : null;
+      if (q && v && !v.disabled) { e.preventDefault(); onUse(q); }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
+  const drop = (i: number, e: DragEvent) => {
+    e.preventDefault(); setOver(null);
+    let data: { item: QuickItem; from?: number };
+    try { data = JSON.parse(e.dataTransfer.getData(QUICK_MIME)); } catch { return; }
+    const next = [...slots];
+    if (data.from !== undefined) { next[data.from] = next[i]; next[i] = data.item; } // swap within the bar
+    else { const dup = next.findIndex((x) => sameQuick(x, data.item)); if (dup >= 0) next[dup] = null; next[i] = data.item; }
+    setItems(next);
+  };
+  return (
+    <div className="hotbar-slots" role="toolbar" aria-label="Quick bar – drag actions, attacks and spells here" data-testid="quick-bar">
+      {slots.map((q, i) => {
+        const v = q ? render(q) : null;
+        return (
+          <button key={i} type="button" className={`hotbar-slot${v?.on ? ' is-on' : ''}${over === i ? ' is-over' : ''}${v?.tone ? ` tone-${v.tone}` : ''}`} disabled={!v || v.disabled} title={v ? `${v.title}\n(drag to move, right-click to remove)` : 'Empty – drag an action, attack or spell from the panel here'}
+            aria-pressed={v?.on} aria-label={v?.label ?? `Empty slot ${i + 1}`} data-testid={v ? 'quick-slot' : 'quick-empty'}
+            draggable={!!v} onDragStart={(e) => { if (q) { e.dataTransfer.setData(QUICK_MIME, JSON.stringify({ item: q, from: i })); e.dataTransfer.effectAllowed = 'move'; } }}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes(QUICK_MIME)) { e.preventDefault(); setOver(i); } }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(i, e)}
+            onClick={() => q && onUse(q)} onContextMenu={(e) => { e.preventDefault(); if (q) { const next = [...slots]; next[i] = null; setItems(next); } }}>
+            {v && <>
+              <span className="hotbar-icon" aria-hidden>{v.icon}</span>
+              <span className="hotbar-label">{v.label}</span>
+              {v.cost && <span aria-hidden className={`hotbar-cost ${v.cost}`} />}
+              {v.level !== undefined && <span className="hotbar-level">{v.level ? ROMAN[v.level] : '∞'}</span>}
+              {v.badge !== undefined && <span className="hotbar-badge">{v.badge}</span>}
+            </>}
+            {i < 9 && <kbd className="hotbar-key" aria-hidden>{i + 1}</kbd>}
+          </button>
+        );
+      })}
+    </div>
+  );
 }

@@ -1,5 +1,6 @@
 import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
+import { BattleLayout } from './BattleLayout';
 import type { SceneInteraction } from './SceneSurface';
 import { pcInteraction } from './pcInteraction';
 import { activeActors, blockOf, pcActor, withShillelagh, withSrdSpells } from '../game/sceneActions';
@@ -111,6 +112,31 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
 
   const canAttack = category === 'battle' && (free || myTurn) && attacks.length > 0;
   const status = !mv ? '' : free ? 'Free movement – no initiative running.' : mv.mode === 'turn' ? (myTurn ? `Your turn · ${remaining.toFixed(0)} ft left` : mv.reason ?? 'Waiting for your turn.') : `${remaining.toFixed(1)} of ${mv.allowance.toFixed(1)} miles left today (day ${scene.clock?.day ?? 1}${scene.clock?.phase === 'night' ? ', night' : ''})`;
+  if (category === 'battle' && me) {
+    // APEX 1.9: the map in the centre, turn order and action bar over it, details docked to a side of the player's choice
+    return <div className="player-scene">
+      <BattleLayout label={scene.scene.name}
+        top={liveEncounter ? <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me.id} /> : null}
+        map={<SceneSurface compact snapshot={scene} tokenId={me.id} name={me.name} color={me.color} tokenViews={game.view.tokens} reachBudget={(moveMode || (myTurn && canMove)) && !free ? remaining : null} onDestination={moveMode ? move : undefined} interaction={interaction} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />}
+        dock={(bar) => <>
+          <div className="journal-toolbar">
+            <button className="btn btn-gold" disabled={pending || !!uncertain || !canMove} aria-pressed={moveMode} onClick={() => setMoveMode(!moveMode)}>{moveMode ? 'Cancel movement' : 'Move your character'}</button>
+            {myTurn && <button className="btn btn-gold" disabled={pending} onClick={() => void endTurn()} data-testid="end-turn">End turn</button>}
+            <button className="btn btn-ghost" disabled={pending} aria-pressed={!!scene.torch} onClick={() => void sceneAction({ action: 'torch', tokenId: me.id, on: !scene.torch })} data-testid="torch">{scene.torch ? '🔥 Put out light' : '🕯 Light a torch'}</button>
+            <span role="status" data-testid="movement-status">{status}</span>
+          </div>
+          <PlayerCombat snapshot={scene} encounter={liveEncounter} tokenId={me.id} sheet={mySheet} attacks={attacksNow} myTurn={myTurn} free={free} pending={pending} act={(input) => void sceneAction(input)} target={target} setTarget={setTarget} ready={ready} setReady={setReady} spellTargets={spellTargets} setSpellTargets={setSpellTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} barTarget={bar} onEndTurn={() => void endTurn()} />
+          {canAttack && attackIndex !== null && <p className="text-xs text-gold-200">{enemiesInSight.length ? 'Click an enemy on the map.' : 'No enemy in sight.'}</p>}
+          {moveMode && <p>Choose a destination on the map. The server checks your path, terrain, walls and {free ? 'nothing else – movement is free' : 'your speed this turn'}.</p>}
+          {message && <p role="status">{message}</p>}
+          {uncertain && <button className="btn btn-ghost" disabled={pending} onClick={() => void send(uncertain)}>Verify or retry previous movement</button>}
+          {!!scene.combatLog?.length && <details className="combat-log" open><summary>Combat log</summary><ol>{scene.combatLog.slice().reverse().map(l => <li key={l.id}>{l.text}</li>)}</ol></details>}
+          {!!game.view.sceneAnnouncements.length && <section className="space-y-2" aria-label="Scene announcements">
+            {game.view.sceneAnnouncements.map(item => <article key={item.id} className="rounded-lg border border-gold-700/60 bg-ink-950/90 p-3"><p className="eyebrow">Scene event</p><h2 className="font-display text-lg text-gold-200">{item.title}</h2><p className="whitespace-pre-wrap text-sm text-marble-200">{item.text}</p></article>)}
+          </section>}
+        </>} />
+    </div>;
+  }
   return <div className="player-scene">
     {liveEncounter && <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me?.id ?? null} />}
     {['battle', 'region'].includes(category) && <div className="journal-toolbar">

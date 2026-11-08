@@ -15,6 +15,7 @@ import type { SceneInteraction } from './SceneSurface';
 import { areaHexes } from '../campaign/hexArea';
 import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
+import { BattleLayout } from './BattleLayout';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -901,22 +902,43 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       <div className="game-map" aria-label="Campaign map">
         {banner}
         {shownScene && snapshot ? (
-          <>
-            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
-            {shownScene.category === 'battle' && shownScene.map.hex && (
+          shownScene.category === 'battle' && shownScene.map.hex ? (
+            // APEX 1.9: the map in the centre, turn order over its top, the selected character's action bar over its
+            // bottom, the GM tools docked to the side of the GM's choice
+            <BattleLayout label={shownScene.name}
+              top={gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
+              map={<SceneSurface
+              compact
+              snapshot={snapshot}
+              tokenLabels={markers}
+              tokenViews={game.view.tokens}
+              gm
+              selectedId={selected?.id ?? null}
+              onDestination={enemyMode ? enemyClick : placeMode ? placeToken : battleMode === 'move' && selected ? battleMove : undefined}
+              onFigureClick={figureClick}
+              targets={battleMode === 'attack' ? (snapshot.figures ?? []).map((f) => (f.kind === 'pc' ? f.tokenId! : f.id)).filter((id) => id !== selected?.id) : selectedEnemy ? [selectedEnemy] : undefined}
+              reachBudget={battle.reach}
+              interaction={battle.interaction}
+            />}
+              dock={(bar) => <>
+                {shownScene.category === 'battle' && shownScene.map.hex && (
               <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} adv={gmAdv} setAdv={setGmAdv} />
             )}
-            {shownScene.category === 'battle' && selected?.kind === 'pc' && (() => {
+                {shownScene.category === 'battle' && selected?.kind === 'pc' && (() => {
               const fig = (snapshot.figures ?? []).find((f) => f.kind === 'pc' && f.tokenId === selected.id);
               const mv = snapshot.pcMovement?.[selected.id];
               const pcSnapshot = { ...snapshot, reactions: [], self: { [selected.id]: { effects: fig?.effects ?? [], concentration: fig?.concentration } } };
               return (
                 <div data-testid="gm-pc-panel">
                   <p className="px-1 text-[11px] text-marble-400">Acting for <b className="text-gold-200">{fig?.name ?? 'character'}</b> – same panel as the player; right-click on the map like the player.</p>
-                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacksNow} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />
+                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacksNow} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} barTarget={bar} onEndTurn={gmEncounter ? () => void sceneTurnP({ action: 'endTurn', encounterId: gmEncounter.id, turnSerial: gmEncounter.turnSerial ?? 0, actor: `pc-${selected.id}` }) : undefined} />
                 </div>
               );
             })()}
+              </>} />
+          ) : (
+          <>
+            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
             <SceneSurface
               snapshot={snapshot}
               tokenLabels={markers}
@@ -930,6 +952,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               interaction={battle.interaction}
             />
           </>
+          )
         ) : mapError ? (
           <p role="alert" className="p-6 text-sm text-red-300">
             {mapError}
