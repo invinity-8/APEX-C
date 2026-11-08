@@ -11,6 +11,7 @@ import { characterMovementLoad } from '../game/items/weight.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { budgetOf, pcActor } from '../game/sceneActions.js';
 import { speedZero } from '../game/combatEffects.js';
+import { findBeast } from '../game/beastCatalog.js';
 import { activeEncounter, clockOf, epochAllowance, movementEpoch, type MovementMode } from '../game/sceneTurns.js';
 import type { GameState, SceneClockState } from '../game/types.js';
 import type { LocalMotionSnapshot, MotionSnapshot } from './sceneMotion.js';
@@ -84,6 +85,9 @@ export function sceneSpeed(state: GameState, tokenId: string, sheet: CharacterSh
   const token = state.tokens[tokenId];
   if (!token) return { speedFt: 0, overloaded: false };
   const load = characterMovementLoad(state, token, sheet);
+  // Wild Shape: the beast's walking speed (equipment merged into the form – no encumbrance)
+  const beast = sheet.wildShape ? findBeast(state.customBeasts, sheet.wildShape.formId) : undefined;
+  if (beast) return { speedFt: beast.speed.walk, overloaded: false };
   return { speedFt: Math.max(0, load.speedFt), overloaded: load.load.state === 'over' }; // item speed and encumbrance count
 }
 

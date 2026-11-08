@@ -15,6 +15,7 @@ import { carryLoad, encumberedSpeed, strengthScore, type CarryLoad, type Encumbr
 import { walkingSpeed } from './resources.js';
 import { ELEMENTS, type Element } from './items/modifiers.js';
 import { initiativeBonus } from './sceneTurns.js';
+import { findBeast } from './beastCatalog.js';
 
 export type StatsToken = Pick<Token, 'inventory' | 'equipment' | 'armorWornAt'> & { currency?: Token['currency']; speedFt?: number };
 
@@ -46,6 +47,20 @@ export function effectiveStats(sheet: CharacterSheet, token: StatsToken, rules: 
   const initBonus = b.initiative.value + dexGain;
   const sheetAc = num(sheet.combat.find((c) => c.label === 'Armor Class')?.value);
   const hpMax = sheet.hitPoints?.max ?? null;
+  const beast = sheet.wildShape ? findBeast(undefined, sheet.wildShape.formId) : undefined;
+  if (sheet.wildShape && beast) {
+    // Wild Shape: the beast's AC, speed and hit points count at the table
+    return {
+      ac: { value: beast.ac, sheet: sheetAc, steps: [{ label: `Wild Shape: ${beast.name}`, value: beast.ac, op: '=' }], source: 'derived' },
+      speed: { value: beast.speed.walk, sheet: sheetSpeed, steps: [{ label: `Wild Shape: ${beast.name}`, value: beast.speed.walk, op: '=' }] },
+      initiative: { value: sheetInit, sheet: sheetInit, bonus: 0 },
+      maxHp: { sheet: sheet.wildShape.maxHp, bonus: 0, value: sheet.wildShape.maxHp },
+      resistances: ELEMENTS.map((element) => ({ element, points: 0, reduction: 0, capped: false })),
+      abilities: derived.abilityScores,
+      load,
+      derived,
+    };
+  }
   return {
     ac: { value: derived.ac.value, sheet: sheetAc, steps: derived.ac.steps, source: derived.ac.source },
     speed: { value: speed.speedFt, sheet: sheetSpeed, steps: speed.steps },
@@ -65,7 +80,10 @@ export const targetAc = (sheet: CharacterSheet, token: StatsToken, rules?: ItemR
  * Attacks offered in scene combat: the equipped weapons of the active set (derived to-hit and damage, including
  * weapon modifiers) first, then the attacks written on the sheet. Indices are stable for a given sheet + equipment.
  */
-export function combatAttacks(sheet: CharacterSheet, token: StatsToken, rules: ItemRules = DEFAULT_ITEM_RULES, withOtherSet = true): Array<SheetAttack & { source: 'equipment' | 'sheet'; otherSet?: boolean }> {
+export function combatAttacks(sheet: CharacterSheet, token: StatsToken, rules: ItemRules = DEFAULT_ITEM_RULES, withOtherSet = true): Array<SheetAttack & { source: 'equipment' | 'sheet' | 'beast'; otherSet?: boolean }> {
+  // Wild Shape: the beast's attacks replace yours (equipment merges into the form)
+  const beast = sheet.wildShape ? findBeast(undefined, sheet.wildShape.formId) : undefined;
+  if (sheet.wildShape) return (beast?.attacks ?? []).map((a, i) => ({ id: `beast-${i}`, name: `${a.name} (${sheet.wildShape!.formName})`, bonus: a.toHit >= 0 ? `+${a.toHit}` : `${a.toHit}`, damage: a.damage, range: /(\d+\/\d+)\s*ft|reach\s*\d+/i.exec(a.notes ?? '')?.[0] ?? '5 ft', notes: a.notes ?? '', source: 'beast' as const }));
   const base = gearAttacks(sheet, token, rules);
   // the inactive weapon set comes last (indices of the active list stay stable); using it switches weapons
   const eq = token.equipment;

@@ -38,6 +38,7 @@ export interface SceneEnemy {
   abilities?: Record<AbilityKey, number>;
   saves?: Partial<Record<AbilityKey, number>>;
   areas?: NpcArea[];
+  buffs?: import('./bestiary.js').NpcBuff[];
   /** Area ability name → uses spent this encounter. */
   areaUsed?: Record<string, number>;
   elite?: boolean;
@@ -77,7 +78,7 @@ export function addEnemy(prev: GameState, sceneId: string, id: string, templateI
   const label = b.elite ? displayName(b) : `${b.name} ${count + 1}`;
   const enemy: SceneEnemy = {
     id, templateId, name: (name?.trim() || label).slice(0, 60), x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, init: t.init, attack: t.attack,
-    attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.elite ? { elite: true } : {}),
+    attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.buffs ? { buffs: structuredClone(b.buffs) } : {}), ...(b.elite ? { elite: true } : {}),
     color: side === 'ally' ? '#3f7fbf' : b.color, icon: b.icon, darkvisionFt: b.darkvisionFt, ...(side === 'ally' ? { side } : {}),
   };
   const state = structuredClone(prev);

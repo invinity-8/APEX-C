@@ -38,6 +38,22 @@ export interface NpcArea {
   damageType: string;
   /** Uses per encounter (null = at will). */
   uses?: number | null;
+  /** APEX 1.3: a condition on a failed save (e.g. 'restrained', 'prone', 'frightened'). */
+  condition?: import('./combatEffects.js').ConditionId;
+}
+
+/** APEX 1.3: a supporting ability (bonus action): allies within the radius get a buff until the creature's next turn. */
+export interface NpcBuff {
+  name: string;
+  radiusFt: number;
+  /** +to hit, +AC, advantage on attacks. */
+  toHit?: number;
+  ac?: number;
+  advantage?: boolean;
+  /** Also affects the creature itself. */
+  self?: boolean;
+  uses?: number | null;
+  cost: 'action' | 'bonus';
 }
 
 export interface StatBlock {
@@ -64,6 +80,7 @@ export interface StatBlock {
   /** Attacks per Attack action (Multiattack). */
   multiattack: number;
   areas?: NpcArea[];
+  buffs?: NpcBuff[];
   traits: Array<{ name: string; text: string }>;
   color: string;
   icon: string;
@@ -97,8 +114,9 @@ export const BUILTIN_BESTIARY: StatBlock[] = [
     id: 'orc-bloodcaller', name: 'Orc Bloodcaller', elite: true, size: 'Medium', type: 'humanoid (orc)', ac: 14, acNote: 'bone mail', hp: 52, hitDice: '8d8+16', speedFt: 30, abilities: ab(14, 12, 14, 10, 16, 14), saves: { wis: 5 }, senses: 'darkvision 60 ft., passive Perception 13', darkvisionFt: 60, languages: 'Common, Orc', cr: '3',
     attacks: [melee('Bone staff', 4, '1d8+2', 'bludgeoning'), { name: 'Blood flame', kind: 'spell', bonus: 5, damage: '2d10', damageType: 'fire', reachFt: 5, rangeFt: 120 }],
     multiattack: 1,
-    areas: [{ name: 'Burning howl', shape: 'cone', sizeFt: 15, rangeFt: 0, save: 'dex', dc: 13, damage: '3d6', damageType: 'fire', uses: 2 }],
-    traits: [{ name: 'Elite', text: 'An APEX elite shaman. Its war cry gives allies within 30 ft +2 to hit until its next turn (GM).' }], color: '#8a2a2a', icon: 'Bc', source: 'APEX',
+    areas: [{ name: 'Burning howl', shape: 'cone', sizeFt: 15, rangeFt: 0, save: 'dex', dc: 13, damage: '3d6', damageType: 'fire', uses: 2 }, { name: 'Grasping roots', shape: 'sphere', sizeFt: 10, rangeFt: 60, save: 'str', dc: 13, damage: '0', damageType: 'none', uses: 1, condition: 'restrained' }],
+    buffs: [{ name: 'Blood war cry', radiusFt: 30, toHit: 2, self: false, uses: 2, cost: 'bonus' }],
+    traits: [{ name: 'Elite', text: 'An APEX elite shaman: war cry (+2 to hit for allies within 30 ft until its next turn), roots that restrain, fire.' }], color: '#8a2a2a', icon: 'Bc', source: 'APEX',
   },
 ];
 
@@ -149,6 +167,14 @@ export function parseStatBlock(raw: unknown): { ok: true; block: StatBlock } | {
     if (!area.name || !shape || !save || !Number.isFinite(area.sizeFt) || !Number.isFinite(area.rangeFt) || !Number.isFinite(area.dc) || !DICE.test(area.damage)) return { ok: false, error: `Area ability “${area.name || '?'}”: shape, size, save, DC, damage.` };
     areas.push(area);
   }
+  const COND = ['blinded', 'charmed', 'deafened', 'frightened', 'grappled', 'incapacitated', 'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious'];
+  (Array.isArray(o.areas) ? o.areas : []).slice(0, 4).forEach((r, i) => { const c = (r as Record<string, unknown>).condition; if (typeof c === 'string' && COND.includes(c) && areas[i]) areas[i].condition = c as NpcArea['condition']; });
+  const buffs: NpcBuff[] = [];
+  for (const r of (Array.isArray(o.buffs) ? o.buffs : []).slice(0, 3) as Array<Record<string, unknown>>) {
+    const b: NpcBuff = { name: str(r.name, 40), radiusFt: int(r.radiusFt, 0, 120) ?? NaN, cost: r.cost === 'action' ? 'action' : 'bonus', ...(int(r.toHit, 1, 5) !== null ? { toHit: r.toHit as number } : {}), ...(int(r.ac, 1, 5) !== null ? { ac: r.ac as number } : {}), ...(r.advantage === true ? { advantage: true } : {}), ...(r.self === true ? { self: true } : {}), uses: r.uses === null || r.uses === undefined ? null : int(r.uses, 1, 9) };
+    if (!b.name || !Number.isFinite(b.radiusFt) || (!b.toHit && !b.ac && !b.advantage)) return { ok: false, error: `Support ability “${b.name || '?'}”: name, radius and an effect (to hit, AC or advantage).` };
+    buffs.push(b);
+  }
   const traits = (Array.isArray(o.traits) ? o.traits : []).slice(0, 8).map((t) => ({ name: str((t as Record<string, unknown>).name, 40), text: str((t as Record<string, unknown>).text, 400) })).filter((t) => t.name);
   const color = typeof o.color === 'string' && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color.toLowerCase() : '#7a3a3a';
   const icon = str(o.icon, 3) || name.slice(0, 2);
@@ -158,7 +184,7 @@ export function parseStatBlock(raw: unknown): { ok: true; block: StatBlock } | {
       id, name, ...(o.elite === true ? { elite: true } : {}), ...(str(o.title, 40) ? { title: str(o.title, 40) } : {}),
       size: str(o.size, 20) || 'Medium', type: str(o.type, 40) || 'humanoid', ac, ...(str(o.acNote, 40) ? { acNote: str(o.acNote, 40) } : {}), hp, ...(str(o.hitDice, 20) ? { hitDice: str(o.hitDice, 20) } : {}),
       speedFt, abilities, ...(Object.keys(saves).length ? { saves } : {}), senses: str(o.senses, 80), darkvisionFt, languages: str(o.languages, 80), cr: str(o.cr, 6) || '?',
-      attacks, multiattack, ...(areas.length ? { areas } : {}), traits, color, icon, source: 'custom',
+      attacks, multiattack, ...(areas.length ? { areas } : {}), ...(buffs.length ? { buffs } : {}), traits, color, icon, source: 'custom',
     },
   };
 }
