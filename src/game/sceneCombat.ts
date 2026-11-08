@@ -48,6 +48,8 @@ export interface SceneEnemy {
   /** APEX: 'ally' = a GM-controlled companion fighting with the party (default 'enemy'). */
   side?: 'enemy' | 'ally';
   darkvisionFt?: number;
+  /** APEX 1.6 – temporary hit points (spent before hit points, never stack: the higher value stays). */
+  tempHp?: number;
 }
 
 export interface CombatLogEntry { id: number; at: string; text: string }
@@ -94,6 +96,12 @@ export function addEnemy(prev: GameState, sceneId: string, id: string, templateI
   return { ok: true, state, message: `${enemy.name} placed.` };
 }
 
+/** Temporary hit points for an NPC (the higher of the old and new value). */
+export function grantEnemyTempHp(state: GameState, sceneId: string, id: string, amount: number) {
+  const e = enemiesOf(state, sceneId).find((x) => x.id === id);
+  if (e && amount > (e.tempHp ?? 0)) e.tempHp = amount;
+}
+
 export function updateEnemy(prev: GameState, sceneId: string, id: string, change: { x?: number; y?: number; hpDelta?: number; remove?: boolean }): Result {
   const list = enemiesOf(prev, sceneId);
   const enemy = list.find((e) => e.id === id);
@@ -108,7 +116,9 @@ export function updateEnemy(prev: GameState, sceneId: string, id: string, change
   const e = enemies.find((x) => x.id === id)!;
   if (change.x !== undefined && change.y !== undefined) { e.x = change.x; e.y = change.y; }
   if (change.hpDelta) {
-    e.hp = Math.max(0, Math.min(e.maxHp, e.hp + change.hpDelta));
+    let delta = change.hpDelta;
+    if (delta < 0 && e.tempHp) { const soak = Math.min(e.tempHp, -delta); e.tempHp -= soak; delta += soak; if (!e.tempHp) delete e.tempHp; }
+    e.hp = Math.max(0, Math.min(e.maxHp, e.hp + delta));
     e.defeated = e.hp === 0;
     if (e.defeated) dropFromInitiative(state, sceneId, `npc-${id}`);
   }

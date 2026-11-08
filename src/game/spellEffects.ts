@@ -23,6 +23,8 @@ export interface SpellEffectDef {
   effect?: { key: string; name: string; mods?: EffectMods; condition?: ConditionId; untilStartOfCaster?: boolean; turns?: number };
   /** APEX 1.5 – temporary hit points ('1d4+4', '5', or 'mod' = the caster's spellcasting modifier), +perSlot per level above. */
   tempHp?: { amount: string; perSlot?: number };
+  /** Aid: the maximum (and current) hit points rise by `maxHp` + this per slot level above the spell's. */
+  maxHpPerSlot?: number;
   /** Ends one of these conditions on the target (Lesser Restoration). */
   removes?: ConditionId[];
   /** The effect sits on the TARGET but works for the caster (Hunter's Mark: +1d6 on the caster's hits). */
@@ -57,7 +59,8 @@ export const SPELL_EFFECTS: Record<string, SpellEffectDef> = {
   'divine favor': T({ targeting: 'self', effect: { key: 'divine-favor', name: 'Divine Favor (+1d4 radiant)', mods: { weaponDamage: '1d4' } } }),
   'false life': T({ targeting: 'self', tempHp: { amount: '1d4+4', perSlot: 5 } }),
   'armor of agathys': T({ targeting: 'self', tempHp: { amount: '5', perSlot: 5 }, effect: { key: 'armor-of-agathys', name: 'Armor of Agathys' } }),
-  'heroism': T({ targeting: 'ally', targets: 1, perSlot: 1, tempHp: { amount: 'mod' }, effect: { key: 'heroism', name: 'Heroism (not frightened)' } }),
+  'heroism': T({ targeting: 'ally', targets: 1, perSlot: 1, tempHp: { amount: 'mod' }, effect: { key: 'heroism', name: 'Heroism (not frightened)', mods: { tempHpTurn: -1 } } }),
+  'aid': T({ targeting: 'ally', targets: 3, effect: { key: 'aid', name: 'Aid', mods: { maxHp: 5 } }, maxHpPerSlot: 5 }),
   'lesser restoration': T({ targeting: 'ally', targets: 1, removes: ['blinded', 'deafened', 'paralyzed', 'poisoned'] }),
   'mass healing word': T({ targeting: 'ally', targets: 6 }),
   'mass cure wounds': T({ targeting: 'ally', targets: 6 }),

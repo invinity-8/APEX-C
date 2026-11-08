@@ -48,6 +48,7 @@ export const SRD_SPELL_MECHANICS: Record<string, M> = {
   'divine favor': m({ level: 1, range: 'Self', time: '1 bonus action', conc: true }),
   // 2nd level
   'barkskin': m({ level: 2, range: 'Touch', conc: true }),
+  'aid': m({ level: 2, range: '30 feet' }),
   'lesser restoration': m({ level: 2, range: 'Touch' }),
   'prayer of healing': m({ level: 2, range: '30 feet', time: '10 minutes', heal: '2d8', up: '1d8' }),
   'scorching ray': m({ level: 2, range: '120 feet', attack: 'ranged', damage: '2d6 fire' }),

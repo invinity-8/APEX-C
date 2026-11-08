@@ -7,6 +7,7 @@ import { useMapZoom } from './map/MapStage';
 import { HexSceneMap, type SceneToken } from './map/HexSceneMap';
 import { hexReach } from '../campaign/hexScene';
 import type { TokenView } from '../game/visibility';
+import { figureIcons } from './map/effectIcons';
 
 export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | 'width' | 'height'>; id: string }) {
   if (map.grid === 'none') return null;
@@ -61,10 +62,16 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const tokens: SceneToken[] = [...own, ...figures.map(f => ({
       tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
       view: f.tokenId ? view(f.tokenId) : undefined,
-      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
+      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
       badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
-    }))];
+      icons: figureIcons(f.effects, f.concentration),
+      ...(f.kind === 'pc' && snapshot.vitals?.[f.tokenId!] ? { vitals: snapshot.vitals[f.tokenId!] } : {}),
+    }))].map((t) => {
+      // the viewer's own characters: effects from `self`, hit points from `vitals`
+      const mine = snapshot.self?.[t.tokenId];
+      return { ...t, ...(mine && !t.icons?.length ? { icons: figureIcons(mine.effects, mine.concentration) } : {}), ...(!t.enemy && !t.vitals && snapshot.vitals?.[t.tokenId] ? { vitals: snapshot.vitals[t.tokenId] } : {}) };
+    });
     const reachOrigin = interaction.reachFrom ?? point;
     const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? hexReach(map, reachOrigin, reachBudget) : null;
     // Scene-local light: region night like the Arena; battle lighting dim/dark.
@@ -72,7 +79,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p>
-      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} /></div>
+      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} /></div>
     </section>;
   }
   function destination(e: PointerEvent<SVGSVGElement>) {
