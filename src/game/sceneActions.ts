@@ -18,6 +18,7 @@
 import type { GameState, SceneEncounter } from './types.js';
 import type { CharacterSheet, SheetSpell } from './sheet.js';
 import { SLOT_RE } from './resources.js';
+import { addEffect } from './combatEffects.js';
 
 export type StandardAction = 'dash' | 'disengage' | 'dodge' | 'help' | 'hide' | 'ready' | 'search' | 'useObject';
 export const STANDARD_ACTIONS: Array<{ id: StandardAction; label: string; text: string }> = [
@@ -46,6 +47,10 @@ export interface TurnBudget {
   last?: string;
   /** Feet moved this turn (NPCs; characters use the scene movement ledger). */
   moved?: number;
+  /** Sneak Attack used this turn. */
+  sneak?: boolean;
+  /** Action Surge used this turn (one extra action). */
+  surged?: boolean;
 }
 
 /** Participant id of a character / NPC in the encounter. */
@@ -137,6 +142,8 @@ export function takeStandardAction(prev: GameState, sceneId: string, actor: stri
   const err = useEconomy(e, actor, viaBonus ? 'bonus' : 'action', { gm });
   if (err) return { ok: false, error: err };
   spend(e, actor, { last: act, ...(act === 'dash' ? { dash: true } : act === 'disengage' ? { disengage: true } : act === 'dodge' ? { dodge: true } : {}) });
+  // Dodge: attacks against it have disadvantage until the start of its next turn
+  if (act === 'dodge') addEffect(state, sceneId, actor, { id: `fx-dodge-${e.turnSerial ?? 0}`, name: 'Dodging', key: 'dodge', mods: { attacked: 'dis' }, untilStartOf: actor });
   e.version++;
   const label = STANDARD_ACTIONS.find((a) => a.id === act)?.label ?? act;
   return { ok: true, state, message: `${name} takes the ${label} ${viaBonus ? 'bonus action' : 'action'}.` };
@@ -146,7 +153,9 @@ export function takeStandardAction(prev: GameState, sceneId: string, actor: stri
 
 export interface ReactionOffer {
   id: string;
-  kind: 'opportunity';
+  /** opportunity attack, or Shield against a hit (pending hit id in `hitId`). */
+  kind: 'opportunity' | 'shield';
+  hitId?: string;
   /** Who may react: an NPC (GM decides) or a character (its player decides; the GM may too). */
   reactor: { kind: 'pc' | 'npc'; id: string; name: string };
   target: { kind: 'pc' | 'npc'; id: string; name: string };
@@ -199,6 +208,23 @@ export function firstOpportunity(mover: Figure, points: Array<{ x: number; y: nu
   }
   return null;
 }
+
+/** An attack that hit a character who may still react (Shield): damage waits for the decision. */
+export interface PendingHit {
+  id: string;
+  attacker: { kind: 'pc' | 'npc'; id: string; name: string };
+  target: { kind: 'pc'; id: string; name: string };
+  total: number;
+  ac: number;
+  crit: boolean;
+  natural20: boolean;
+  damage: number;
+  text: string;
+  turnSerial: number;
+}
+
+/** A readied action (Ready): released with the reaction before the creature's next turn. */
+export interface ReadiedAction { kind: 'attack' | 'spell'; attackIndex?: number; spellId?: string; slotLevel?: number; trigger: string; readiedSerial: number }
 
 /** A move that waits for opportunity attacks; it continues when every offer of it is decided. */
 export interface PendingMove { id: string; mover: { kind: 'pc' | 'npc'; id: string }; to: { x: number; y: number }; declined: string[]; turnSerial: number }

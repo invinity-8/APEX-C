@@ -10,6 +10,7 @@ import { hexKey, type HexKey } from '../game/hex.js';
 import { characterMovementLoad } from '../game/items/weight.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { budgetOf, pcActor } from '../game/sceneActions.js';
+import { speedZero } from '../game/combatEffects.js';
 import { activeEncounter, clockOf, epochAllowance, movementEpoch, type MovementMode } from '../game/sceneTurns.js';
 import type { GameState, SceneClockState } from '../game/types.js';
 import type { LocalMotionSnapshot, MotionSnapshot } from './sceneMotion.js';
@@ -97,7 +98,8 @@ export function movementFor(state: GameState, sceneId: string, category: 'battle
     canMove: e.canMove && !overloaded,
     reason: overloaded ? 'Over carrying capacity – reduce the carried load before moving.' : e.reason,
     // Dash: extra movement equal to the speed for this turn
-    allowance: epochAllowance(e.mode, speedFt) * (e.mode === 'turn' && budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash ? 2 : 1),
+    // grappled / restrained / paralyzed …: speed 0
+    allowance: speedZero(state, sceneId, pcActor(tokenId)) ? 0 : epochAllowance(e.mode, speedFt) * (e.mode === 'turn' && budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash ? 2 : 1),
     dashed: e.mode === 'turn' && !!budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash,
     spent: row && row.epoch === e.epoch ? row.spent : 0,
     unit: category === 'battle' ? 'feet' : 'miles',

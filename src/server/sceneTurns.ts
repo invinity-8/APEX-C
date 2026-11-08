@@ -19,8 +19,11 @@ import type { GameState } from '../game/types.js';
 import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
-import { STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type StandardAction } from '../game/sceneActions.js';
+import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
 import { statBlock, type AbilityKey } from '../game/bestiary.js';
+import { CONDITIONS, PHYSICAL, acBonus, addEffect, attackMods, conditionEffect, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
+import type { AttackOptions } from '../game/sceneCombat.js';
+import { attackExtras } from './combatFeatures.js';
 import { areaHexes, feetApart, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
@@ -152,11 +155,29 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
   if (v.action === 'strike') {
     const attacker = sideOf(v.attacker), target = sideOf(v.target);
     if (!attacker || !target || (v.attackIndex !== undefined && !Number.isSafeInteger(v.attackIndex))) return { status: 400, body: { error: 'Invalid attack.' } };
-    return strikeRequest(user, repo, scene, attacker, target, v.attackIndex as number | undefined, v.bonus === true);
+    return strikeRequest(user, repo, scene, attacker, target, v.attackIndex as number | undefined, v.bonus === true, v.adv, Number.isSafeInteger(v.smite) ? (v.smite as number) : undefined);
   }
   if (v.action === 'standard') return standardRequest(user, repo, scene, v);
   if (v.action === 'cast') return castRequest(user, repo, scene, v);
   if (v.action === 'reaction') return reactionRequest(user, repo, scene, v);
+  if (v.action === 'condition') {
+    // GM: add/remove a condition; players may only stand up from prone (it costs movement – the GM rules it)
+    const who = sideOf(v.target);
+    const cond = CONDITIONS.find((c) => c === v.condition);
+    if (!who || (!cond && typeof v.effectId !== 'string')) return { status: 400, body: { error: 'Invalid condition.' } };
+    const actor = actorOf(who);
+    if (user.role !== 'gm' && !(v.add === false && cond === 'prone' && controls(user, who))) return { status: 403, body: { error: 'Only the GM sets conditions.' } };
+    return mutate(user, repo, (s) => {
+      const st = structuredClone(s);
+      const name = nameOf(st, sceneId, who);
+      if (v.add === true && cond) { addEffect(st, sceneId, actor, conditionEffect(cond, undefined, () => `fx-${crypto.randomUUID().slice(0, 8)}`)); logCombat(st, sceneId, `${name} is ${cond}.`); return { ok: true, state: st, message: `${name}: ${cond}.` }; }
+      const list = effectsOf(st, sceneId, actor).filter((e) => (typeof v.effectId === 'string' ? e.id === v.effectId : e.key === cond));
+      if (!list.length) return { ok: false, error: 'Not on this creature.' };
+      for (const e of list) removeEffect(st, sceneId, actor, e.id);
+      logCombat(st, sceneId, `${name}: ${list.map((e) => e.name).join(', ')} ends.`);
+      return { ok: true, state: st, message: `${list.map((e) => e.name).join(', ')} removed.` };
+    });
+  }
   if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM can do that.' } };
   if (v.action === 'enemyAdd' || v.action === 'enemyMove') {
     const map = parseMap(scene.published_metadata);
@@ -250,7 +271,7 @@ async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<
 }
 const feetBetween = (map: SceneMap) => (a: { x: number; y: number }, b: { x: number; y: number }) => distance(hexAt(map, a), hexAt(map, b)) * 5;
 
-interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string; kind?: 'melee' | 'ranged' | 'spell'; damageType?: string; /** the attack uses the inactive weapon set: switch to it */ switchSet?: boolean }
+interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string; kind?: 'melee' | 'ranged' | 'spell'; damageType?: string; longRangeFt?: number; finesse?: boolean; /** the attack uses the inactive weapon set: switch to it */ switchSet?: boolean }
 
 /** Attack numbers of an attacker: a character's attack (equipment + sheet) or an NPC's attack. */
 async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefined): Promise<Strike | string> {
@@ -261,7 +282,7 @@ async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefine
     const a = npcAttacks(e)[attackIndex ?? 0];
     if (!a) return 'Choose one of the creature’s attacks.';
     const dmg = parseDamage(a.damage);
-    return dmg ? { name: a.name, bonus: a.bonus, damage: dmg, reachFt: a.reachFt, ...(a.kind !== 'melee' && a.rangeFt ? { rangeFt: a.rangeFt } : {}), kind: a.kind, damageType: a.damageType } : 'Unreadable damage.';
+    return dmg ? { name: a.name, bonus: a.bonus, damage: dmg, reachFt: a.reachFt, ...(a.kind !== 'melee' && a.rangeFt ? { rangeFt: a.rangeFt, ...(a.longRangeFt ? { longRangeFt: a.longRangeFt } : {}) } : {}), kind: a.kind, damageType: a.damageType } : 'Unreadable damage.';
   }
   const sheet = await sheetOf(ctx, attacker.tokenId);
   const attack = combatAttacks(sheet, state.tokens[attacker.tokenId], itemRulesOf(state))[attackIndex ?? 0];
@@ -270,46 +291,105 @@ async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefine
   const bonus = parseBonus(attack.bonus), damage = parseDamage(attack.damage);
   if (bonus === null || !damage) return `“${attack.name}” has no readable attack bonus or damage (e.g. +5, 1d8+3). Resolve it by hand.`;
   const range = parseRangeFt(`${attack.range} ${attack.notes}`);
-  return { name: attack.name, bonus, damage, reachFt: range.reachFt, rangeFt: range.rangeFt, ...(switchSet ? { switchSet: true } : {}) };
+  return { name: attack.name, bonus, damage, reachFt: range.reachFt, rangeFt: range.rangeFt, ...(range.longRangeFt ? { longRangeFt: range.longRangeFt } : {}), kind: range.rangeFt ? 'ranged' : 'melee', damageType: /(bludgeoning|piercing|slashing|fire|cold|lightning|thunder|acid|poison|necrotic|radiant|force|psychic)/i.exec(attack.damage)?.[1]?.toLowerCase(), finesse: /finesse|dagger|rapier|shortsword|scimitar|whip/i.test(`${attack.name} ${attack.notes}`), ...(switchSet ? { switchSet: true } : {}) };
 }
 
 /**
  * Rolls an attack and applies the damage: characters lose hit points on their sheet, NPCs on the scene. Returns
  * the log text and a state mutation (the NPC hit points) to run inside the compare-and-swap write.
  */
-async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: string, strike: Strike, target: Side, extraText = ''): Promise<{ text: string; apply: (s: GameState) => GameState } | string> {
+/** Concentration check after damage (Constitution save, DC 10 or half the damage): text and whether it broke. */
+async function concentrationCheck(ctx: Ctx, actor: string, damage: number): Promise<{ text: string; broken: boolean } | null> {
+  const state = ctx.state!, sceneId = ctx.sceneId!;
+  const c = concentrationOf(state, sceneId, actor);
+  if (!c || damage <= 0) return null;
+  let bonus = 0;
+  if (actor.startsWith('pc-')) bonus = pcSaveBonus(await sheetOf(ctx, actor.slice(3)), 'con');
+  else { const e = enemiesOf(state, sceneId).find((x) => `npc-${x.id}` === actor); bonus = e?.saves?.con ?? (e?.abilities ? Math.floor((e.abilities.con - 10) / 2) : 0); }
+  const dc = concentrationDc(damage);
+  const d = die(20);
+  const broken = d + bonus < dc;
+  return { text: ` Concentration (${c.spell}): Con save d20 ${d} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${d + bonus} vs DC ${dc} → ${broken ? 'lost' : 'kept'}.`, broken };
+}
+
+/** Damage to a character's sheet (temporary HP, Wild Shape and hit points). */
+async function damagePc(user: AuthUser, repo: Repo, ctx: Ctx, tokenId: string, amount: number): Promise<string> {
+  if (amount <= 0) return '';
+  const row = await repo.loadSheet(user.campaignId, tokenId);
+  const sheet = await sheetOf(ctx, tokenId);
+  if (!sheet.hitPoints) return ' (no hit points on the sheet – apply by hand)';
+  const hurt = applyDamage(sheet, amount);
+  if (!hurt.ok) return ' (apply by hand)';
+  const saved = await repo.saveSheet(user.campaignId, tokenId, hurt.sheet, row?.version ?? 0, user.id);
+  return saved === null ? ' (the sheet changed meanwhile – apply the damage by hand)' : ` (${hurt.sheet.wildShape ? `${hurt.sheet.wildShape.formName} ${hurt.sheet.wildShape.hp}/${hurt.sheet.wildShape.maxHp}, ` : ''}${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
+}
+
+/** Can a character cast Shield right now (prepared, a slot left, reaction free, not incapacitated)? */
+function shieldReady(state: GameState, sceneId: string, sheet: CharacterSheet, tokenId: string): boolean {
+  const known = sheet.spells.some((x) => x.name.trim().toLowerCase() === 'shield' && x.prepared);
+  const slot = spellSlots(sheet).some((x) => x.current > 0);
+  const e = activeEncounter(state, sceneId);
+  return known && slot && !reactionUsed(e, pcActor(tokenId)) && !incapacitated(state, sceneId, pcActor(tokenId));
+}
+
+/**
+ * Rolls an attack and applies the damage: characters lose hit points on their sheet, NPCs on the scene. Effects
+ * (advantage, Bless, Shield AC, resistance, extra dice) come in `o`; concentration of a damaged creature is checked.
+ * A character that can still cast Shield gets a reaction prompt first – the damage waits for the decision.
+ */
+async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: string, strike: Strike, target: Side, extraText = '', o: AttackOptions & { attacker?: Side } = {}): Promise<{ text: string; apply: (s: GameState) => GameState; hit?: boolean } | string> {
   const state = ctx.state!;
   const sceneId = ctx.sceneId!;
+  const targetActor = actorOf(target);
+  const fxAc = acBonus(state, sceneId, targetActor);
+  const physical = PHYSICAL.test(strike.damageType ?? strike.name) || (!strike.damageType && strike.kind !== 'spell');
+  const halve = resistsPhysical(state, sceneId, targetActor) && physical ? 'resistance' : undefined;
   if (target.kind === 'npc') {
     const e = enemiesOf(state, sceneId).find((x) => x.id === target.id && !x.defeated);
     if (!e) return 'Target not found.';
-    const roll = resolveAttack(attackerName, e.name, strike.name, strike.bonus, strike.damage, e.ac, die);
+    const roll = resolveAttack(attackerName, e.name, strike.name, strike.bonus, strike.damage, e.ac + fxAc, die, { ...o, halve });
+    const conc = roll.hit ? await concentrationCheck(ctx, targetActor, roll.damage) : null;
+    const text = roll.text + extraText + (conc?.text ?? '');
     return {
-      text: roll.text + extraText,
+      text,
+      hit: roll.hit,
       apply: (s) => {
         const r = roll.hit ? updateEnemy(s, sceneId, e.id, { hpDelta: -roll.damage }) : { ok: true as const, state: structuredClone(s) };
         const st = r.ok ? r.state : structuredClone(s);
         const after = enemiesOf(st, sceneId).find((x) => x.id === e.id);
-        logCombat(st, sceneId, roll.text + extraText + (after?.defeated ? ` ${e.name} is defeated.` : ''));
+        if (conc?.broken || after?.defeated) endConcentration(st, sceneId, targetActor);
+        logCombat(st, sceneId, text + (after?.defeated ? ` ${e.name} is defeated.` : ''));
         return st;
       },
     };
   }
   const token = state.tokens[target.tokenId];
   if (!token) return 'Target not found.';
-  const row = await repo.loadSheet(user.campaignId, target.tokenId);
   const sheet = await sheetOf(ctx, target.tokenId);
-  const ac = targetAc(sheet, token, itemRulesOf(state));
-  const roll = resolveAttack(attackerName, token.name, strike.name, strike.bonus, strike.damage, ac, die);
-  let hp = '';
-  if (roll.hit && sheet.hitPoints) {
-    const hurt = applyDamage(sheet, roll.damage);
-    if (hurt.ok) {
-      const saved = await repo.saveSheet(user.campaignId, target.tokenId, hurt.sheet, row?.version ?? 0, user.id);
-      hp = saved === null ? ' (the sheet changed meanwhile – apply the damage by hand)' : ` (${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
-    }
-  } else if (roll.hit) hp = ' (no hit points on the sheet – apply by hand)';
-  return { text: roll.text + hp + extraText, apply: (s) => { const st = structuredClone(s); logCombat(st, sceneId, roll.text + hp + extraText); return st; } };
+  const ac = targetAc(sheet, token, itemRulesOf(state)) + fxAc;
+  const roll = resolveAttack(attackerName, token.name, strike.name, strike.bonus, strike.damage, ac, die, { ...o, halve });
+  // Shield: the hit would miss against AC + 5 – the character decides first
+  if (roll.hit && roll.d20 !== 20 && roll.total < ac + 5 && shieldReady(state, sceneId, sheet, target.tokenId)) {
+    const hitId = `hit-${crypto.randomUUID().slice(0, 8)}`;
+    const text = `${roll.text}${extraText} – ${token.name} may cast Shield (reaction).`;
+    return {
+      text,
+      hit: true,
+      apply: (s) => {
+        const st = structuredClone(s);
+        const e = activeEncounter(st, sceneId);
+        const serial = e?.turnSerial ?? 0;
+        st.scenePendingHits = { ...(st.scenePendingHits ?? {}), [sceneId]: [...(st.scenePendingHits?.[sceneId] ?? []).filter((h) => h.turnSerial === serial), { id: hitId, attacker: { kind: o.attacker?.kind ?? 'npc', id: o.attacker ? (o.attacker.kind === 'pc' ? o.attacker.tokenId : o.attacker.id) : '', name: attackerName }, target: { kind: 'pc', id: target.tokenId, name: token.name }, total: roll.total, ac, crit: roll.crit, natural20: roll.d20 === 20, damage: roll.damage, text: roll.text + extraText, turnSerial: serial }] };
+        addOffers(st, sceneId, [{ id: `ro-${crypto.randomUUID().slice(0, 8)}`, kind: 'shield', hitId, reactor: { kind: 'pc', id: target.tokenId, name: token.name }, target: { kind: o.attacker?.kind ?? 'npc', id: o.attacker ? (o.attacker.kind === 'pc' ? o.attacker.tokenId : o.attacker.id) : '', name: attackerName }, turnSerial: serial, at: new Date().toISOString(), from: { x: 0, y: 0 } }]);
+        logCombat(st, sceneId, text);
+        return st;
+      },
+    };
+  }
+  const hp = roll.hit ? await damagePc(user, repo, ctx, target.tokenId, roll.damage) : '';
+  const conc = roll.hit ? await concentrationCheck(ctx, targetActor, roll.damage) : null;
+  const text = roll.text + hp + extraText + (conc?.text ?? '');
+  return { text, hit: roll.hit, apply: (s) => { const st = structuredClone(s); if (conc?.broken) endConcentration(st, sceneId, targetActor); logCombat(st, sceneId, text); return st; } };
 }
 
 const positionOf = (figures: Figure[], s: Side) => figures.find((f) => (s.kind === 'pc' ? f.kind === 'pc' && f.id === s.tokenId : f.kind === 'npc' && f.id === s.id));
@@ -326,7 +406,7 @@ async function playerInScene(user: AuthUser, repo: Repo, sceneId: string) {
  * An attack on the battle map: a character (player on its turn, or the GM) or an NPC (GM) attacks a target.
  * Uses the Attack action (Extra Attack allows several) or, with `bonus`, the bonus action.
  */
-async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker: Side, target: Side, attackIndex: number | undefined, viaBonus: boolean): Promise<SceneResult> {
+async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker: Side, target: Side, attackIndex: number | undefined, viaBonus: boolean, adv?: unknown, smite?: number): Promise<SceneResult> {
   const map = parseMap(scene.published_metadata);
   if (!map?.hex || scene.category !== 'battle') return { status: 400, body: { error: 'Attacks happen on battle maps.' } };
   if (!controls(user, attacker)) return { status: 403, body: { error: 'This is not your character.' } };
@@ -344,14 +424,31 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
   const figures = await battleFigures(ctx, scene.id, map);
   const from = positionOf(figures, attacker), to = positionOf(figures, target);
   if (!from || !to || to.down) return { status: 404, body: { error: 'Target or attacker not on the map.' } };
-  const reach = inReach(map, from, to, strike.reachFt, strike.rangeFt);
-  if (!reach.ok) return { status: 422, body: { error: `${to.name} is out of reach or not in line of sight (${reach.distanceFt} ft, ${strike.name}: ${strike.rangeFt ?? strike.reachFt} ft).` } };
-  const r = await rollAgainst(user, repo, ctx, from.name, strike, target, viaBonus ? ' (bonus action)' : '');
+  const reach = inReach(map, from, to, strike.reachFt, strike.longRangeFt ?? strike.rangeFt);
+  if (!reach.ok) return { status: 422, body: { error: `${to.name} is out of reach or not in line of sight (${reach.distanceFt} ft, ${strike.name}: ${strike.longRangeFt ?? strike.rangeFt ?? strike.reachFt} ft).` } };
+  if (incapacitated(ctx.state, scene.id, actorOf(attacker))) return { status: 409, body: { error: `${from.name} is incapacitated.` } };
+  const melee = strike.kind ? strike.kind === 'melee' : !strike.rangeFt;
+  const mods = attackMods(ctx.state, scene.id, {
+    attacker: actorOf(attacker), target: actorOf(target), melee, distanceFt: reach.distanceFt,
+    longRange: !!strike.rangeFt && reach.distanceFt > strike.rangeFt,
+    hostileAdjacent: figures.some((f) => !f.down && f.side !== from.side && feetBetween(map)(f, from) <= 5 && !incapacitated(ctx.state!, scene.id, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id))),
+    manual: adv === 'adv' || adv === 'dis' ? adv : undefined,
+  });
+  const extras = await attackExtras(ctx, map, attacker, target, strike, melee, mods, figures, sheet, smite);
+  if (typeof extras === 'string') return { status: 422, body: { error: extras } };
+  const r = await rollAgainst(user, repo, ctx, from.name, strike, target, viaBonus ? ' (bonus action)' : '', { mode: mods.mode, reasons: mods.reasons, toHitDice: mods.toHitDice, toHitFlat: mods.toHit, autoCrit: mods.autoCrit, extraDice: extras.dice, extraFlat: extras.flat, attacker });
   if (typeof r === 'string') return { status: 404, body: { error: r } };
+  // Divine Smite: the slot is spent only when the attack hits
+  if (extras.smiteSlot && r.hit && attacker.kind === 'pc' && sheet) {
+    const row = await repo.loadSheet(user.campaignId, attacker.tokenId);
+    await repo.saveSheet(user.campaignId, attacker.tokenId, spendSlot(sheet, extras.smiteSlot), row?.version ?? 0, user.id);
+  }
   return mutate(user, repo, (s) => {
     const st = r.apply(s);
     const err = useEconomy(st.sceneEncounters?.[scene.id]?.status === 'active' ? st.sceneEncounters[scene.id] : null, actorOf(attacker), viaBonus ? 'bonus' : 'attack', { gm: user.role === 'gm', attacksAllowed: allowed });
     if (err) return { ok: false, error: err };
+    for (const id of mods.onceUsed) removeEffect(st, scene.id, actorOf(attacker), id);
+    extras.after(st);
     // drawing the other weapon set is part of the attack (free object interaction)
     if (strike.switchSet && attacker.kind === 'pc') {
       const t = st.tokens[attacker.tokenId];
@@ -529,6 +626,7 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
   const path = hexMovementCost(map, npc, at);
   if (!path.ok) return { status: 422, body: { error: path.error } };
   const b = budgetOf(e, actor);
+  if (speedZero(state, scene.id, actor)) return { status: 422, body: { error: `${npc.name} cannot move (speed 0: ${effectsOf(state, scene.id, actor).filter((x) => x.mods.speedZero).map((x) => x.name).join(', ')}).` } };
   const allowance = npc.speedFt * (b.dash ? 2 : 1);
   if (e && (b.moved ?? 0) + path.cost > allowance + 1e-9) return { status: 422, body: { error: `${npc.name} has only ${Math.max(0, allowance - (b.moved ?? 0))} ft of movement left this turn.` } };
   const points = [{ x: npc.x, y: npc.y }, ...path.steps];
@@ -559,6 +657,8 @@ async function reactionRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
   const reactor: Side = offer.reactor.kind === 'pc' ? { kind: 'pc', tokenId: offer.reactor.id } : { kind: 'npc', id: offer.reactor.id };
   const target: Side = offer.target.kind === 'pc' ? { kind: 'pc', tokenId: offer.target.id } : { kind: 'npc', id: offer.target.id };
   if (!controls(user, reactor)) return { status: 403, body: { error: 'Only the reacting creature’s controller can decide.' } };
+  if (offer.kind === 'shield') return shieldDecision(user, repo, ctx, scene, offer, v.accept);
+  if (v.accept && incapacitated(ctx.state, scene.id, actorOf(reactor))) return { status: 409, body: { error: `${offer.reactor.name} is incapacitated.` } };
   let result: SceneResult;
   if (!v.accept) {
     result = await mutate(user, repo, (s) => { const st = structuredClone(s); dropOffer(st, scene.id, offer.id); logCombat(st, scene.id, `${offer.reactor.name} lets ${offer.target.name} go.`); return { ok: true, state: st, message: 'Reaction skipped.' }; });
@@ -693,5 +793,45 @@ async function npcAreaRequest(user: AuthUser, repo: Repo, scene: Scene, v: Recor
     if (me) me.areaUsed = { ...(me.areaUsed ?? {}), [area.name]: (me.areaUsed?.[area.name] ?? 0) + 1 };
     if (e) e.version++;
     return { ok: true, state: st, message: r.lines.join(' ') };
+  });
+}
+
+/** Shield (reaction): +5 AC until the start of the caster's next turn, also against the triggering attack. */
+async function shieldDecision(user: AuthUser, repo: Repo, ctx: Ctx, scene: Scene, offer: ReactionOffer, accept: boolean): Promise<SceneResult> {
+  const state = ctx.state!;
+  const hit = (state.scenePendingHits?.[scene.id] ?? []).find((h) => h.id === offer.hitId);
+  if (!hit) return { status: 409, body: { error: 'This attack was already resolved.' } };
+  const tokenId = hit.target.id, actor = pcActor(tokenId);
+  let text: string;
+  let shielded = false;
+  if (accept) {
+    const sheet = await sheetOf(ctx, tokenId);
+    if (!shieldReady(state, scene.id, sheet, tokenId)) return { status: 409, body: { error: 'Shield cannot be cast now (prepared spell, a slot and the reaction are needed).' } };
+    const slot = spellSlots(sheet).find((x) => x.current > 0)!;
+    const row = await repo.loadSheet(user.campaignId, tokenId);
+    if ((await repo.saveSheet(user.campaignId, tokenId, spendSlot(sheet, slot.level), row?.version ?? 0, user.id)) === null) return { status: 409, body: { error: 'The character sheet changed meanwhile – try again.' } };
+    shielded = true;
+    const stillHits = hit.natural20 || hit.total >= hit.ac + 5;
+    text = `${hit.target.name} casts Shield (${ordinal(slot.level)}-level slot): AC ${hit.ac} → ${hit.ac + 5}. ${hit.attacker.name}'s ${hit.total} ${stillHits ? 'still hits' : 'misses'}.`;
+    if (stillHits) text += ` ${hit.damage} damage${await damagePc(user, repo, ctx, tokenId, hit.damage)}${(await concentrationCheck(ctx, actor, hit.damage))?.text ?? ''}`;
+  } else {
+    const conc = await concentrationCheck(ctx, actor, hit.damage);
+    text = `${hit.target.name} takes the hit: ${hit.damage} damage${await damagePc(user, repo, ctx, tokenId, hit.damage)}${conc?.text ?? ''}`;
+    if (conc?.broken) text += ' ';
+  }
+  const lostConc = / → lost\.$/.test(text.trim());
+  return mutate(user, repo, (s) => {
+    const st = structuredClone(s);
+    if (!(st.scenePendingHits?.[scene.id] ?? []).some((h) => h.id === hit.id)) return { ok: false, error: 'This attack was already resolved.' };
+    st.scenePendingHits = { ...(st.scenePendingHits ?? {}), [scene.id]: (st.scenePendingHits?.[scene.id] ?? []).filter((h) => h.id !== hit.id) };
+    dropOffer(st, scene.id, offer.id);
+    if (shielded) {
+      const e = activeEncounter(st, scene.id);
+      if (e) useEconomy(st.sceneEncounters![scene.id], actor, 'reaction', { gm: true });
+      addEffect(st, scene.id, actor, { id: `fx-shield-${crypto.randomUUID().slice(0, 6)}`, name: 'Shield', key: 'shield', mods: { ac: 5 }, untilStartOf: actor, source: { actor, name: hit.target.name, spell: 'Shield' } });
+    }
+    if (lostConc) endConcentration(st, scene.id, actor);
+    logCombat(st, scene.id, text);
+    return { ok: true, state: st, message: text };
   });
 }
