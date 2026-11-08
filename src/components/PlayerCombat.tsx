@@ -12,6 +12,7 @@ import { parseRangeFt } from '../game/sceneCombat';
 import { hexAt } from '../campaign/hexScene';
 import { distance } from '../game/hex';
 import { EconomyChips } from './BattleCommand';
+import { flanks } from '../game/combatEffects';
 import { spellCount, spellEffectOf } from '../game/spellEffects';
 import { battleFeatures } from '../game/classFeatures';
 import { CONDITION_TEXT, type ConditionId } from '../game/combatEffects';
@@ -60,6 +61,9 @@ export function PlayerCombat(p: Props) {
   const [smite, setSmite] = useState(0);
   const [readyTrigger, setReadyTrigger] = useState('');
   const me2 = snapshot.self?.[tokenId];
+  const hidden = !!me2?.effects.some((e) => e.key === 'hidden');
+  const rogue = !!sheet?.abilities.some((x) => /sneak attack/i.test(x.name));
+  const [sneakOn, setSneakOn] = useState(true);
   const features = sheet ? battleFeatures(sheet) : [];
   const canSmite = !!sheet?.abilities.some((x) => /divine smite/i.test(x.name));
   const [slot, setSlot] = useState<Record<string, number>>({});
@@ -154,6 +158,9 @@ export function PlayerCombat(p: Props) {
             {STANDARD_ACTIONS.filter((a) => !['dash', 'disengage', 'dodge'].includes(a.id)).map((a) => <option key={a.id} value={a.id} title={a.text}>{a.label}</option>)}
           </select>
           {more && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending || !p.myTurn} onClick={() => { p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: more, viaBonus: bonus }); setMore(''); }}>Do it</button>}
+          <button type="button" className={`btn px-2 py-0.5 ${hidden ? 'btn-gold' : 'btn-ghost'}`} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Hide / sneak: Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : { viaBonus: bonus }) })} data-testid="hide">
+            🥷 {hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'}
+          </button>
           <label className="flex items-center gap-1 text-marble-300" title="E.g. Cunning Action, off-hand attack, bonus-action spells – only if a feature allows it">
             <input type="checkbox" checked={bonus} onChange={(e) => setBonus(e.target.checked)} /> as bonus action
           </label>
@@ -161,6 +168,12 @@ export function PlayerCombat(p: Props) {
         </div>
       )}
 
+      {!encounter && (
+        <div className="flex flex-wrap items-center gap-1">
+          <button type="button" className={`btn px-2 py-0.5 ${hidden ? 'btn-gold' : 'btn-ghost'}`} disabled={p.pending} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : {}) })} data-testid="sneak">🥷 {hidden ? 'Stop sneaking' : 'Sneak'}</button>
+          <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'search' })}>🔎 Search</button>
+        </div>
+      )}
       {features.length > 0 && (
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Class features" data-testid="features">
           <span className="text-marble-400">Features:</span>
@@ -262,6 +275,11 @@ export function PlayerCombat(p: Props) {
           </div>
           <div className="flex flex-wrap items-center gap-2 text-marble-300">
             <label>Roll <select aria-label="Advantage" className="rounded border border-ink-600 bg-ink-900 px-1" value={adv} onChange={(e) => setAdv(e.target.value as '' | 'adv' | 'dis')}><option value="">automatic</option><option value="adv">advantage (GM ruling)</option><option value="dis">disadvantage</option></select></label>
+            {rogue && (
+              <label title="Sneak Attack (once per turn, finesse or ranged weapon): with advantage – hidden, invisible, flanking, a prone/restrained target … – or an ally next to the target, and no disadvantage. The server checks it.">
+                <input type="checkbox" checked={sneakOn} onChange={(e) => setSneakOn(e.target.checked)} /> Sneak Attack{(() => { const why = sneakHint(snapshot, tokenId, enemy, hidden, me2?.effects ?? []); return why ? <b className="ml-1 text-emerald-300">possible: {why}</b> : <span className="ml-1 text-marble-500">(no advantage / ally next to the target)</span>; })()}
+              </label>
+            )}
             {canSmite && <label title="Spent only on a hit">Divine Smite <select aria-label="Smite slot" className="rounded border border-ink-600 bg-ink-900 px-1" value={smite} onChange={(e) => setSmite(Number(e.target.value))}><option value={0}>no</option>{slots.filter((x) => x.current > 0).map((x) => <option key={x.level} value={x.level}>{ordinal(x.level)} slot</option>)}</select></label>}
             {me2?.readied && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} onClick={() => { p.act({ action: 'release', actor: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, ...(adv ? { adv } : {}) }); p.setTarget(null); }} data-testid="release">⏳ Release readied attack (reaction)</button>}
           </div>
@@ -273,7 +291,7 @@ export function PlayerCombat(p: Props) {
               return (
                 <li key={i} className="flex flex-wrap items-center gap-1.5 rounded border border-ink-700 px-1.5 py-1">
                   <span className="flex-1"><b className="text-marble-50">{r.rangeFt ? '🏹' : '⚔'} {a.name}</b> <span className="text-marble-400">{a.bonus} · {a.damage} · {r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}</span>{!ok && <span className="block text-[10px] text-rose-300">out of {r.rangeFt ? 'range' : 'reach'}</span>}</span>
-                  <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || !ok} onClick={() => { p.act({ action: 'strike', attacker: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, attackIndex: i, bonus, ...(adv ? { adv } : {}), ...(smite ? { smite } : {}) }); p.setTarget(null); }} data-testid="attack-option">
+                  <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || !ok} onClick={() => { p.act({ action: 'strike', attacker: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, attackIndex: i, bonus, ...(adv ? { adv } : {}), ...(smite ? { smite } : {}), ...(rogue && !sneakOn ? { sneak: false } : {}) }); p.setTarget(null); }} data-testid="attack-option">
                     Attack{bonus ? ' (bonus)' : ''}
                   </button>
                 </li>
@@ -291,4 +309,21 @@ export function PlayerCombat(p: Props) {
       )}
     </section>
   );
+}
+
+/** Why Sneak Attack may apply against this target (client hint; the server decides). */
+function sneakHint(snapshot: SceneSnapshot, tokenId: string, enemy: NonNullable<SceneSnapshot['figures']>[number], hidden: boolean, mine: Array<{ key: string }>): string | null {
+  const map = snapshot.scene?.map;
+  const me = snapshot.motion?.tokens.find((t) => t.tokenId === tokenId);
+  const why: string[] = [];
+  if (hidden) why.push('you are hidden');
+  if (mine.some((e) => e.key === 'invisible')) why.push('you are invisible');
+  if ((enemy.effects ?? []).some((e) => ['restrained', 'paralyzed', 'stunned', 'unconscious', 'blinded', 'faerie-fire'].includes(e.key))) why.push('the target is helpless or outlined');
+  if (map?.hex && me) {
+    const t = hexAt(map, enemy);
+    const allies = (snapshot.figures ?? []).filter((f) => (f.kind === 'pc' && f.tokenId !== tokenId) || (f.kind === 'enemy' && f.side === 'ally'));
+    if (allies.some((f) => distance(hexAt(map, f), t) === 1)) why.push('an ally is next to the target');
+    if (allies.some((f) => flanks(hexAt(map, me), t, hexAt(map, f)))) why.push('flanking');
+  }
+  return why.length ? why.join(', ') : null;
 }

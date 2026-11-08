@@ -60,7 +60,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       view: f.tokenId ? view(f.tokenId) : undefined,
       enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
-      badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => e.name)].filter(Boolean).join(' · ') || undefined,
+      badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
     }))];
     const reachOrigin = interaction.reachFrom ?? point;
     const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? hexReach(map, reachOrigin, reachBudget) : null;

@@ -93,6 +93,9 @@ export function BattleCommand(p: Props) {
             {VIEW_LABEL[v] ?? `👁 ${fig?.name ?? 'Selected'}`}
           </button>
         ))}
+        <span className="ml-2 border-l border-ink-700 pl-2" />
+        <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy} title="Every character rolls Stealth; opponents notice them only with enough passive Perception" onClick={() => p.act({ action: 'partySneak', on: true })} data-testid="party-sneak">🥷 Party sneak</button>
+        <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'partySneak', on: false })}>Stop sneaking</button>
         {p.view !== 'all' && <span className="text-marble-500">grey hexes are out of sight{p.view.startsWith('pc-') || !VIEW_LABEL[p.view] ? '' : ' for everyone in this group'}</span>}
       </div>
 
@@ -164,6 +167,9 @@ export function BattleCommand(p: Props) {
             <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy || !encounter} onClick={() => p.act({ action: 'standard', actor: toSide(selected), act: 'bonusOther' })}>Bonus action</button>
               </>
             )}
+            {npc && (fig.effects ?? []).some((e) => e.key === 'hidden')
+              ? <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'hide', actor: toSide(selected), off: true })}>🥷 Stop hiding</button>
+              : npc && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy || (!!encounter && !isTurn)} title="Stealth check (action in initiative)" onClick={() => p.act({ action: 'hide', actor: toSide(selected) })}>🥷 Hide</button>}
             {npc && [-10, -5, -1, 1, 5].map((d) => (
               <button key={d} type="button" className="btn btn-ghost px-1.5 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'enemyHp', id: npc.id, delta: d })}>{d > 0 ? `+${d}` : d} HP</button>
             ))}

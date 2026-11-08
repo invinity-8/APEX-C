@@ -38,9 +38,18 @@ export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } 
   });
 }
 
-export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs: PcPosition[], exclude: string[], visible: Set<HexKey> | null, gm: boolean): SceneFigure[] {
+/**
+ * `notice`: who looks (side and best passive Perception). Hidden creatures of the OTHER side stay invisible unless
+ * that passive Perception reaches their Stealth total. Without `notice` (GM full view) everything is shown.
+ */
+export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs: PcPosition[], exclude: string[], visible: Set<HexKey> | null, gm: boolean, notice?: { side: 'party' | 'enemy'; passive: number }): SceneFigure[] {
   const torches = new Set(torchesOf(state, sceneId));
   const condition = (hp: number, max: number): SceneFigure['condition'] => (hp <= 0 ? 'down' : hp * 2 <= max ? 'bloodied' : 'healthy');
+  const noticed = (actor: string, side: 'party' | 'enemy') => {
+    if (!notice || notice.side === side) return true;
+    const h = (state.sceneEffects?.[sceneId]?.[actor] ?? []).find((e) => e.key === 'hidden');
+    return !h || notice.passive >= (h.value ?? 0);
+  };
   const seen = (p: { x: number; y: number }) => !visible || visible.has(hexKeyAt(map, p));
   const fx = (actor: string) => {
     const list = (state.sceneEffects?.[sceneId]?.[actor] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key }));
@@ -50,11 +59,11 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   const out: SceneFigure[] = [];
   for (const p of pcs) {
     const t = state.tokens[p.tokenId];
-    if (!t || exclude.includes(p.tokenId) || !seen(p)) continue;
+    if (!t || exclude.includes(p.tokenId) || !seen(p) || !noticed(`pc-${p.tokenId}`, 'party')) continue;
     out.push({ id: `pc-${p.tokenId}`, kind: 'pc', tokenId: p.tokenId, name: t.name, color: t.color, x: p.x, y: p.y, condition: 'healthy', torch: torches.has(p.tokenId), ...fx(`pc-${p.tokenId}`) });
   }
   for (const e of enemiesOf(state, sceneId)) {
-    if (!seen(e)) continue;
+    if (!seen(e) || !noticed(`npc-${e.id}`, e.side === 'ally' ? 'party' : 'enemy')) continue;
     out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
   }
   return out;

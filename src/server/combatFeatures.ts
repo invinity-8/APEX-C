@@ -26,7 +26,7 @@ export const hasFeature = (sheet: CharacterSheet | null, re: RegExp) => !!sheet?
 export const smiteDice = (slot: number, undeadOrFiend: boolean) => `${Math.min(5, 1 + slot) + (undeadOrFiend ? 1 : 0)}d8`;
 export const sneakDice = (rogueLevel: number) => `${Math.ceil(rogueLevel / 2)}d6`;
 
-export async function attackExtras(ctx: CtxLike, map: SceneMap, attacker: Side, target: Side, strike: StrikeLike, melee: boolean, mods: AttackMods, figures: Figure[], sheet: CharacterSheet | null, smite?: number): Promise<{ dice: Array<{ dice: string; label: string }>; flat: Array<{ value: number; label: string }>; after: (st: GameState) => void; smiteSlot?: number } | string> {
+export async function attackExtras(ctx: CtxLike, map: SceneMap, attacker: Side, target: Side, strike: StrikeLike, melee: boolean, mods: AttackMods, figures: Figure[], sheet: CharacterSheet | null, smite?: number, sneakWanted = true): Promise<{ dice: Array<{ dice: string; label: string }>; flat: Array<{ value: number; label: string }>; after: (st: GameState) => void; smiteSlot?: number } | string> {
   const state = ctx.state!, sceneId = ctx.sceneId!;
   const me = actorOf(attacker), them = actorOf(target);
   const dice: Array<{ dice: string; label: string }> = [];
@@ -40,7 +40,7 @@ export async function attackExtras(ctx: CtxLike, map: SceneMap, attacker: Side, 
     // Sneak Attack: once per turn, finesse or ranged weapon, advantage (and no disadvantage) or an ally next to the target
     const rogue = classLevel(sheet, 'rogue');
     const e = activeEncounter(state, sceneId);
-    if (rogue && hasFeature(sheet, /sneak attack/i) && (strike.finesse || strike.kind === 'ranged') && mods.mode !== 'dis' && !budgetOf(e, me).sneak) {
+    if (sneakWanted && rogue && hasFeature(sheet, /sneak attack/i) && (strike.finesse || strike.kind === 'ranged') && mods.mode !== 'dis' && !budgetOf(e, me).sneak) {
       const tf = figures.find((f) => (target.kind === 'pc' ? f.kind === 'pc' && f.id === target.tokenId : f.kind === 'npc' && f.id === target.id));
       const ally = tf && figures.some((f) => f.side === 'party' && !(f.kind === 'pc' && f.id === attacker.tokenId) && !f.down && distance(hexAt(map, f), hexAt(map, tf)) <= 1 && !incapacitated(state, sceneId, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id)));
       if (mods.mode === 'adv' || ally) {
