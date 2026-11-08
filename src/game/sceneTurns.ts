@@ -63,7 +63,7 @@ export function joinInitiative(prev: GameState, sceneId: string, encounterId: st
  * Ends a turn. Players end their own part of the current block (consecutive characters act together); the block
  * – and with it the turn – ends when every character in it is done. `force` (GM “Next turn”) ends the whole block.
  */
-export function endTurn(prev: GameState, sceneId: string, encounterId: string, turnSerial: number, controls: (tokenId: string) => boolean, force = false): Result {
+export function endTurn(prev: GameState, sceneId: string, encounterId: string, turnSerial: number, controls: (tokenId: string) => boolean, force = false, only?: string): Result {
   const e = activeEncounter(prev, sceneId);
   if (!e || e.id !== encounterId) return { ok: false, error: 'Initiative is not running in this scene.' };
   if ((e.turnSerial ?? 0) !== turnSerial) return { ok: false, error: 'The turn already changed.' };
@@ -74,7 +74,8 @@ export function endTurn(prev: GameState, sceneId: string, encounterId: string, t
   const state = structuredClone(prev);
   const enc = state.sceneEncounters![sceneId];
   if (!force) {
-    const mine = open.find((id) => controls(e.participants.find((p) => p.id === id)?.tokenId ?? ''));
+    // the character that ends its part (one of a block may finish earlier; the others keep acting)
+    const mine = open.find((id) => (only ? id === only : true) && (controls(e.participants.find((p) => p.id === id)?.tokenId ?? '') || (!!only && !e.participants.find((p) => p.id === id)?.tokenId && controls(''))));
     if (!mine) return { ok: false, error: `It is ${open.map((id) => e.participants.find((p) => p.id === id)?.name).join(' & ') || active.name}'s turn.` };
     if (open.length > 1) {
       enc.blockDone = [...(enc.blockDone ?? []), mine];

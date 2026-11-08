@@ -21,7 +21,7 @@ import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
 import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
 import { statBlock, type AbilityKey } from '../game/bestiary.js';
-import { CONDITIONS, type ConditionId, PHYSICAL, acBonus, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
+import { flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, PHYSICAL, acBonus, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
 import type { AttackOptions } from '../game/sceneCombat.js';
 import { attackExtras } from './combatFeatures.js';
 import { areaHexes, feetApart, parseArea, type AreaSpec } from '../campaign/hexArea.js';
@@ -36,6 +36,7 @@ import { distance } from '../game/hex.js';
 import { applyDamage, applyHealing, classLevel, revert, transform } from '../game/abilities.js';
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
 import { findBeast } from '../game/beastCatalog.js';
+import { npcPerception, npcStealth, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { parseMap } from '../campaign/maps.js';
@@ -144,7 +145,9 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
       if (a?.scene_id !== sceneId) return { status: 409, body: { error: 'You are not in this scene.' } };
     }
     const controls = (tokenId: string) => user.role === 'gm' || user.tokenIds.includes(tokenId);
-    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm'));
+    // the GM's "Next turn" ends the whole turn (block); ending one figure's turn ends only its part
+    const only = typeof v.actor === 'string' ? v.actor : undefined;
+    return mutate(user, repo, (s) => endTurn(s, sceneId, v.encounterId as string, v.turnSerial as number, controls, user.role === 'gm' && !only && v.force !== false, only));
   }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).
@@ -158,12 +161,31 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
   if (v.action === 'strike') {
     const attacker = sideOf(v.attacker), target = sideOf(v.target);
     if (!attacker || !target || (v.attackIndex !== undefined && !Number.isSafeInteger(v.attackIndex))) return { status: 400, body: { error: 'Invalid attack.' } };
-    return strikeRequest(user, repo, scene, attacker, target, v.attackIndex as number | undefined, v.bonus === true, v.adv, Number.isSafeInteger(v.smite) ? (v.smite as number) : undefined);
+    return strikeRequest(user, repo, scene, attacker, target, v.attackIndex as number | undefined, v.bonus === true, v.adv, Number.isSafeInteger(v.smite) ? (v.smite as number) : undefined, false, v.sneak === false ? false : undefined);
   }
   if (v.action === 'standard') return standardRequest(user, repo, scene, v);
   if (v.action === 'cast') return castRequest(user, repo, scene, v);
   if (v.action === 'reaction') return reactionRequest(user, repo, scene, v);
   if (v.action === 'feature') return featureRequest(user, repo, scene, v);
+  if (v.action === 'hide') return hideRequest(user, repo, scene, v);
+  if (v.action === 'partySneak') {
+    // GM: the whole party sneaks (everyone rolls Stealth) or stops sneaking
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM starts a party sneak.' } };
+    const map = parseMap(scene.published_metadata);
+    const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
+    if (!map?.hex || !ctx.state) return { status: 400, body: { error: 'Needs a battle map.' } };
+    const pcs = (await battleFigures(ctx, sceneId, map)).filter((f) => f.kind === 'pc' && !f.down);
+    const rolls: Array<{ actor: string; name: string; total: number }> = [];
+    if (v.on === true) for (const f of pcs) { const b = pcStealth(await sheetOf(ctx, f.id)); const d = die(20); rolls.push({ actor: pcActor(f.id), name: f.name, total: d + b }); }
+    return mutate(user, repo, (s) => {
+      const st = structuredClone(s);
+      for (const f of pcs) reveal(st, sceneId, pcActor(f.id));
+      for (const r of rolls) addEffect(st, sceneId, r.actor, hiddenEffect(r.total, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+      const text = v.on === true ? `The party sneaks: ${rolls.map((r) => `${r.name} Stealth ${r.total}`).join(', ')}.` : 'The party stops sneaking.';
+      logCombat(st, sceneId, text);
+      return { ok: true, state: st, message: text };
+    });
+  }
   if (v.action === 'ready') {
     // Ready: uses the action now; the readied attack is released later with the reaction (until the next turn)
     const who = sideOf(v.actor);
@@ -462,7 +484,7 @@ async function playerInScene(user: AuthUser, repo: Repo, sceneId: string) {
  * An attack on the battle map: a character (player on its turn, or the GM) or an NPC (GM) attacks a target.
  * Uses the Attack action (Extra Attack allows several) or, with `bonus`, the bonus action.
  */
-async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker: Side, target: Side, attackIndex: number | undefined, viaBonus: boolean, adv?: unknown, smite?: number, asReaction = false): Promise<SceneResult> {
+async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker: Side, target: Side, attackIndex: number | undefined, viaBonus: boolean, adv?: unknown, smite?: number, asReaction = false, sneakWanted?: boolean): Promise<SceneResult> {
   const econ = asReaction ? 'reaction' : viaBonus ? 'bonus' : 'attack';
   const map = parseMap(scene.published_metadata);
   if (!map?.hex || scene.category !== 'battle') return { status: 400, body: { error: 'Attacks happen on battle maps.' } };
@@ -485,13 +507,15 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
   if (!reach.ok) return { status: 422, body: { error: `${to.name} is out of reach or not in line of sight (${reach.distanceFt} ft, ${strike.name}: ${strike.longRangeFt ?? strike.rangeFt ?? strike.reachFt} ft).` } };
   if (incapacitated(ctx.state, scene.id, actorOf(attacker))) return { status: 409, body: { error: `${from.name} is incapacitated.` } };
   const melee = strike.kind ? strike.kind === 'melee' : !strike.rangeFt;
+  // hex flanking: an ally of the attacker on the opposite side of the target (both adjacent)
+  const flanking = melee && reach.distanceFt <= 5 && figures.some((f) => f !== from && f !== to && !f.down && f.side === from.side && f.reachFt >= 5 && !incapacitated(ctx.state!, scene.id, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id)) && flanks(hexAt(map, from), hexAt(map, to), hexAt(map, f)));
   const mods = attackMods(ctx.state, scene.id, {
-    attacker: actorOf(attacker), target: actorOf(target), melee, distanceFt: reach.distanceFt,
+    attacker: actorOf(attacker), target: actorOf(target), melee, distanceFt: reach.distanceFt, flanking,
     longRange: !!strike.rangeFt && reach.distanceFt > strike.rangeFt,
     hostileAdjacent: figures.some((f) => !f.down && f.side !== from.side && feetBetween(map)(f, from) <= 5 && !incapacitated(ctx.state!, scene.id, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id))),
     manual: adv === 'adv' || adv === 'dis' ? adv : undefined,
   });
-  const extras = await attackExtras(ctx, map, attacker, target, strike, melee, mods, figures, sheet, smite);
+  const extras = await attackExtras(ctx, map, attacker, target, strike, melee, mods, figures, sheet, smite, sneakWanted !== false);
   if (typeof extras === 'string') return { status: 422, body: { error: extras } };
   const r = await rollAgainst(user, repo, ctx, from.name, strike, target, viaBonus ? ' (bonus action)' : '', { mode: mods.mode, reasons: mods.reasons, toHitDice: mods.toHitDice, toHitFlat: mods.toHit, autoCrit: mods.autoCrit, extraDice: extras.dice, extraFlat: extras.flat, attacker });
   if (typeof r === 'string') return { status: 404, body: { error: r } };
@@ -506,6 +530,7 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
     if (asReaction && st.sceneReadied?.[scene.id]?.[actorOf(attacker)]) { const r = { ...st.sceneReadied[scene.id] }; delete r[actorOf(attacker)]; st.sceneReadied = { ...st.sceneReadied, [scene.id]: r }; }
     if (err) return { ok: false, error: err };
     for (const id of mods.onceUsed) removeEffect(st, scene.id, actorOf(attacker), id);
+    if (reveal(st, scene.id, actorOf(attacker))) logCombat(st, scene.id, `${from.name} is no longer hidden (attacked).`);
     extras.after(st);
     // drawing the other weapon set is part of the attack (free object interaction)
     if (strike.switchSet && attacker.kind === 'pc') {
@@ -553,8 +578,18 @@ async function standardRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
     });
   }
   if (!STANDARD_ACTIONS.some((a) => a.id === v.act)) return { status: 400, body: { error: 'Unknown action.' } };
+  if (v.act === 'hide') return hideRequest(user, repo, scene, { actor: v.actor, viaBonus });
+  // Search: an active Perception check finds hidden opponents in sight
+  let search: { lines: string[]; found: string[] } | null = null;
+  if (v.act === 'search') {
+    const map = parseMap(scene.published_metadata);
+    const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+    if (map?.hex && ctx.state) search = await searchFor(ctx, map, actor);
+  }
   return mutate(user, repo, (s) => {
-    const r = takeStandardAction(s, scene.id, actorOf(actor), nameOf(s, scene.id, actor), v.act as StandardAction, viaBonus, user.role === 'gm');
+    let r = takeStandardAction(s, scene.id, actorOf(actor), nameOf(s, scene.id, actor), v.act as StandardAction, viaBonus, user.role === 'gm');
+    if (!r.ok && search && !activeEncounter(s, scene.id)) r = { ok: true, state: structuredClone(s) }; // searching is free outside initiative
+    if (r.ok && search) { for (const a of search.found) reveal(r.state, scene.id, a); r.message = search.lines.join(' '); }
     if (r.ok && r.message) logCombat(r.state, scene.id, r.message);
     return r;
   });
@@ -722,6 +757,7 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
     const err = useEconomy(e?.status === 'active' ? e : null, casterActor, kind, { gm: user.role === 'gm' });
     if (err) return { ok: false, error: err };
     if (conc) { const old = startConcentration(st, scene.id, casterActor, plan.spell.name); if (old) lines.push(`(${old} ends.)`); }
+    if (!plan.reaction && reveal(st, scene.id, casterActor)) lines.push(`${casterName} is no longer hidden.`);
     for (const step of steps) st = step(st);
     const enc = st.sceneEncounters?.[scene.id];
     if (enc?.status === 'active') { spend(enc, casterActor, { last: 'spell' }); enc.version++; }
@@ -1102,4 +1138,57 @@ async function featureRequest(user: AuthUser, repo: Repo, scene: Scene, v: Recor
     logCombat(st, scene.id, text);
     return { ok: true, state: st, message: text };
   });
+}
+
+/**
+ * Hide (Stealth): in initiative it takes the action (or the bonus action with Cunning Action / Nimble Escape);
+ * outside initiative it is free. `off` stops sneaking. Opponents notice a hidden creature when their passive
+ * Perception reaches the Stealth total (vision is filtered on the server) or when they Search.
+ */
+async function hideRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  const who = sideOf(v.actor);
+  if (!who) return { status: 400, body: { error: 'Invalid creature.' } };
+  if (!controls(user, who)) return { status: 403, body: { error: 'This is not your character.' } };
+  if (!(await playerInScene(user, repo, scene.id))) return { status: 409, body: { error: 'You are not in this scene.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
+  const actor = actorOf(who);
+  const name = nameOf(ctx.state, scene.id, who);
+  if (v.off === true) return mutate(user, repo, (s) => { const st = structuredClone(s); reveal(st, scene.id, actor); logCombat(st, scene.id, `${name} stops sneaking.`); return { ok: true, state: st, message: `${name} stops sneaking.` }; });
+  let bonus = 0;
+  let cunning = false;
+  if (who.kind === 'pc') { const sh = await sheetOf(ctx, who.tokenId); bonus = pcStealth(sh); cunning = sh.abilities.some((a) => /cunning action/i.test(a.name)); }
+  else { const e = enemiesOf(ctx.state, scene.id).find((x) => x.id === who.id); if (!e) return { status: 404, body: { error: 'Creature not found.' } }; bonus = npcStealth(e); cunning = /nimble escape/i.test(statBlock(ctx.state, e.templateId)?.traits.map((t) => t.name).join(' ') ?? ''); }
+  const viaBonus = v.viaBonus === true;
+  if (viaBonus && !cunning && user.role !== 'gm') return { status: 422, body: { error: 'Hiding as a bonus action needs Cunning Action.' } };
+  const d = die(20), total = d + bonus;
+  return mutate(user, repo, (s) => {
+    const st = structuredClone(s);
+    const e = activeEncounter(st, scene.id);
+    if (e) {
+      const err = useEconomy(st.sceneEncounters![scene.id], actor, viaBonus ? 'bonus' : 'action', { gm: user.role === 'gm' });
+      if (err) return { ok: false, error: err };
+      spend(st.sceneEncounters![scene.id], actor, { last: 'hide' });
+      st.sceneEncounters![scene.id].version++;
+    }
+    addEffect(st, scene.id, actor, hiddenEffect(total, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+    const text = `${name} ${e ? 'hides' : 'sneaks'}: Stealth d20 ${d} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${total}.`;
+    logCombat(st, scene.id, text);
+    return { ok: true, state: st, message: text };
+  });
+}
+
+/** Search: an active Wisdom (Perception) check against every hidden opponent in sight; found ones are revealed. */
+export async function searchFor(ctx: Ctx, map: SceneMap, searcher: Side): Promise<{ lines: string[]; found: string[] }> {
+  const state = ctx.state!, sceneId = ctx.sceneId!;
+  const figures = await battleFigures(ctx, sceneId, map);
+  const me = positionOf(figures, searcher);
+  if (!me) return { lines: [], found: [] };
+  let bonus = 0;
+  if (searcher.kind === 'pc') bonus = pcPerception(await sheetOf(ctx, searcher.tokenId));
+  else { const e = enemiesOf(state, sceneId).find((x) => x.id === searcher.id); if (e) bonus = npcPerception(state, e); }
+  const d = die(20), total = d + bonus;
+  const hidden = figures.filter((f) => f.side !== me.side && !f.down && hiddenOf(state, sceneId, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id)));
+  const found = hidden.filter((f) => (hiddenOf(state, sceneId, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id))!.value ?? 0) <= total && inReach(map, me, f, 600).ok);
+  return { lines: [`${me.name} searches: Perception d20 ${d} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${total}${found.length ? ` – finds ${found.map((f) => f.name).join(', ')}` : ' – finds nothing'}.`], found: found.map((f) => (f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id))) };
 }

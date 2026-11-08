@@ -57,6 +57,8 @@ export interface SceneEffect {
   /** Ends after this many turns of the affected creature (Rage: 10). */
   turns?: number;
   note?: string;
+  /** Hidden: the Dexterity (Stealth) total opponents must beat with their (passive) Wisdom (Perception). */
+  value?: number;
 }
 
 const C = (mods: EffectMods): EffectMods => mods;
@@ -170,6 +172,8 @@ export interface AttackContext {
   hostileAdjacent?: boolean;
   /** Manual choice (GM ruling or a feature the rules don't track). */
   manual?: 'adv' | 'dis';
+  /** An ally of the attacker stands directly opposite on the other side of the target (hex flanking). */
+  flanking?: boolean;
 }
 export interface AttackMods { mode: 'normal' | 'adv' | 'dis'; reasons: string[]; toHit: number; toHitDice: string[]; autoCrit: boolean; onceUsed: string[] }
 
@@ -183,6 +187,7 @@ export function attackMods(state: Pick<GameState, 'sceneEffects' | 'sceneEncount
     else if (a === 'dis') dis.push(`target ${e.name.toLowerCase()}`);
     else if (a === 'proneAware') (ctx.distanceFt <= 5 ? adv : dis).push(`target prone${ctx.distanceFt <= 5 ? ' (within 5 ft)' : ' (from afar)'}`);
   }
+  if (ctx.flanking) adv.push('flanking');
   if (ctx.longRange) dis.push('long range');
   if (!ctx.melee && ctx.hostileAdjacent) dis.push('ranged attack with a hostile within 5 ft');
   if (ctx.manual === 'adv') adv.push('GM / situational');
@@ -211,4 +216,23 @@ export function rollBonusDie(spec: string, die: (sides: number) => number): numb
   let t = 0;
   for (let i = 0; i < Number(m[2]); i++) t += die(Number(m[3]));
   return m[1] ? -t : t;
+}
+
+// ---------------------------------------------------------------- hiding
+
+export const hiddenOf = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string) => effectsOf(state, sceneId, actor).find((e) => e.key === 'hidden') ?? null;
+export function hiddenEffect(total: number, makeId: () => string): SceneEffect {
+  return { id: makeId(), name: `Hidden (Stealth ${total})`, key: 'hidden', mods: { attack: 'adv', attacked: 'dis' }, value: total };
+}
+/** Removes Hidden (attacking, casting, being found). Returns whether it was hidden. */
+export function reveal(state: GameState, sceneId: string, actor: string): boolean {
+  const h = hiddenOf(state, sceneId, actor);
+  if (h) removeEffect(state, sceneId, actor, h.id);
+  return !!h;
+}
+/** Hex flanking: the ally stands on the hex exactly opposite the attacker, both adjacent to the target. */
+export function flanks(attacker: { q: number; r: number }, target: { q: number; r: number }, ally: { q: number; r: number }): boolean {
+  const dq = attacker.q - target.q, dr = attacker.r - target.r;
+  const adjacent = (a: { q: number; r: number }) => { const x = a.q - target.q, y = a.r - target.r; return Math.max(Math.abs(x), Math.abs(y), Math.abs(x + y)) === 1; };
+  return adjacent(attacker) && ally.q === target.q - dq && ally.r === target.r - dr;
 }

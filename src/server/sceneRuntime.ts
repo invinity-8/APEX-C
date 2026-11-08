@@ -1,4 +1,6 @@
 import { parseMap, type SceneMap } from '../campaign/maps.js';
+import { emptySheet } from '../game/sheet.js';
+import { npcPassivePerception, pcPassivePerception } from '../game/perception.js';
 import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
 import { carriedLights, clockFor, figuresFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, withArrivalSlots, type SceneFigure, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
@@ -28,6 +30,8 @@ export interface SceneSnapshot {
   reactions?: ReactionOffer[];
   /** APEX 1.3: the viewer's own characters: effects, concentration and readied action. */
   self?: Record<string, { effects: Array<{ id: string; name: string; key: string; note?: string }>; concentration?: string; readied?: { trigger: string; attackIndex?: number } }>;
+  /** GM focus: movement left per character. */
+  pcMovement?: Record<string, ViewerMovement>;
   /** GM vision mode the fog was computed for ('all' = no fog). */
   view?: string;
   /** Recent attacks on this scene. */
@@ -79,7 +83,10 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
       if (fogged) { map.hex = fogged.hex; extra.fog = fogged.fog; }
     }
     // Allies and enemies only where the player can see them.
-    extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false);
+    // hidden enemies are only seen when one of the viewer's characters notices them (passive Perception)
+    let passive = 0;
+    for (const id of user.tokenIds) passive = Math.max(passive, pcPassivePerception(await sheetOf(ctx, id)));
+    extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false, { side: 'party', passive });
     extra.reactions = reactionsOf(ctx.state, s.id).filter((r) => r.reactor.kind === 'pc' && user.tokenIds.includes(r.reactor.id));
     extra.self = Object.fromEntries(user.tokenIds.map((id) => {
       const fxl = (ctx.state!.sceneEffects?.[s.id]?.[`pc-${id}`] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key }));
@@ -180,8 +187,24 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
             }
             fog = fogString(map.hex.radius, visible, side);
           }
-          const figures = figuresFor(stored.state, focus.id, map, pcs, [], visible, true);
-          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id) };
+          // group / figure views: hidden creatures of the other side only when the viewers notice them
+          let notice: { side: 'party' | 'enemy'; passive: number } | undefined;
+          if (view !== 'all') {
+            const npcList = enemiesOf(stored.state, focus.id).filter((e) => !e.defeated);
+            const pcPassive = async (ids: string[]) => { let m = 0; for (const id of ids) m = Math.max(m, pcPassivePerception(await sheetOf(ctx, id).catch(() => emptySheet()))); return m; };
+            const npcPassive = (list: typeof npcList) => Math.max(0, ...list.map((e) => npcPassivePerception(stored.state, e)));
+            if (view === 'party') notice = { side: 'party', passive: Math.max(await pcPassive(pcs.map((p) => p.tokenId)), npcPassive(npcList.filter((e) => e.side === 'ally'))) };
+            else if (view === 'enemies') notice = { side: 'enemy', passive: npcPassive(npcList.filter((e) => (e.side ?? 'enemy') === 'enemy')) };
+            else if (view.startsWith('pc-')) notice = { side: 'party', passive: await pcPassive([view.slice(3)]) };
+            else { const me = npcList.find((e) => e.id === view); if (me) notice = { side: me.side === 'ally' ? 'party' : 'enemy', passive: npcPassivePerception(stored.state, me) }; }
+          }
+          const figures = figuresFor(stored.state, focus.id, map, pcs, [], visible, true, notice);
+          // movement left of every character (GM acts for characters: reach area and budget)
+          let pcMovement: Record<string, ViewerMovement> = {};
+          try {
+            if (local) pcMovement = Object.fromEntries(await Promise.all(pcs.map(async (p) => [p.tokenId, movementFor(stored.state, focus.id, focus.category as 'battle' | 'region', p.tokenId, true, await sheetOf(ctx, p.tokenId).catch(() => emptySheet()), local)] as const)));
+          } catch { pcMovement = {}; }
+          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id), pcMovement };
         })() : {}),
       } };
     }

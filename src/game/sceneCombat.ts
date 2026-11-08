@@ -150,8 +150,11 @@ export function parseBonus(text: string): number | null {
 export function parseRangeFt(text: string): { reachFt: number; rangeFt?: number; longRangeFt?: number } {
   const ranged = /(\d{2,3})\s*\/\s*(\d{2,4})/.exec(text);
   if (ranged) return { reachFt: 5, rangeFt: Number(ranged[1]), longRangeFt: Number(ranged[2]) };
-  const reach = /reach\s*(\d{1,2})|^\s*(\d{1,2})\s*ft/i.exec(text);
-  const ft = reach ? Number(reach[1] ?? reach[2]) : 5;
+  const reach = /reach\s*(\d{1,2})/i.exec(text);
+  if (reach) return { reachFt: Math.max(5, Number(reach[1])) };
+  // "120 ft.", "Range 150 feet", "60 ft" – up to three digits (spells and thrown weapons)
+  const plain = /(?:range\s*)?(\d{1,3})\s*(?:ft|feet|')/i.exec(text);
+  const ft = plain ? Number(plain[1]) : 5;
   return ft > 15 ? { reachFt: 5, rangeFt: ft } : { reachFt: Math.max(5, ft) };
 }
 
