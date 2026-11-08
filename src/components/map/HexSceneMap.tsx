@@ -21,6 +21,7 @@ import { MapDefs } from './MapDefs';
 import { TokenStack } from './Markers';
 import { TerrainCanvas } from './TerrainCanvas';
 import { CombatFx } from './CombatFx';
+import { beastIcon } from './effectIcons';
 import type { SceneFx } from '../../game/sceneFx';
 import { useHexViewport } from './useHexViewport';
 
@@ -43,7 +44,7 @@ export interface SceneToken {
   /** APEX 1.6 – the same as icons above the figure (concentration, conditions, buffs). */
   icons?: Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }>;
   /** APEX 1.6 – hit points of a character (life bar under the figure). */
-  vitals?: { hp: number; maxHp: number; temp: number };
+  vitals?: { hp: number; maxHp: number; temp: number; form?: string };
 }
 
 interface Props {
@@ -415,6 +416,14 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                   <g key={k}>
                     <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} portraits />
                     <g transform={`translate(${c0.x},${c0.y})`} pointerEvents="none">
+                      {v?.form && (
+                        <g data-testid="beast-form">
+                          <title>{`Wild Shape: ${v.form}`}</title>
+                          <circle r={HEX_SIZE * 0.52} fill="#1d2b20" stroke="#6fe39b" strokeWidth={2.5} />
+                          <text y={HEX_SIZE * 0.2} textAnchor="middle" fontSize={HEX_SIZE * 0.62}>{beastIcon(v.form)}</text>
+                          <circle cx={HEX_SIZE * 0.4} cy={-HEX_SIZE * 0.4} r={HEX_SIZE * 0.2} fill={group[0].color} stroke="#14110d" strokeWidth={1.2} />
+                        </g>
+                      )}
                       {v && v.maxHp > 0 && <LifeBar hp={v.hp} maxHp={v.maxHp} temp={v.temp} y={HEX_SIZE * 0.66} party />}
                       {icons.length > 0 && <FigureIcons icons={icons} />}
                     </g>

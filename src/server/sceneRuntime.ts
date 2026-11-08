@@ -42,7 +42,7 @@ export interface SceneSnapshot {
   /** APEX 1.6: recent visual combat events (animated by the client). */
   fx?: SceneFx[];
   /** APEX 1.6: hit points of the party's characters on this scene (life bars on the map). */
-  vitals?: Record<string, { hp: number; maxHp: number; temp: number }>;
+  vitals?: Record<string, { hp: number; maxHp: number; temp: number; form?: string }>;
 }
 export interface SceneAssignment { user_id: string; scene_id: string | null; revision: number; spawn_x: number | null; spawn_y: number | null }
 export interface RuntimeScene { id: string; name: string; category: SceneCategory; revision: number; is_legacy_arena: boolean; is_draft: boolean; archived: boolean; published_metadata: unknown }
@@ -256,11 +256,11 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
 }
 
 /** Hit points (and temporary HP) of characters from their sheets – Wild Shape shows the beast's hit points. */
-async function vitalsOf(ctx: SceneViewContext, tokenIds: string[]): Promise<Record<string, { hp: number; maxHp: number; temp: number }>> {
-  const out: Record<string, { hp: number; maxHp: number; temp: number }> = {};
+async function vitalsOf(ctx: SceneViewContext, tokenIds: string[]): Promise<Record<string, { hp: number; maxHp: number; temp: number; form?: string }>> {
+  const out: Record<string, { hp: number; maxHp: number; temp: number; form?: string }> = {};
   for (const id of tokenIds) {
     const sheet = await ctx.loadSheet(id).catch(() => null);
-    if (sheet?.wildShape) out[id] = { hp: sheet.wildShape.hp, maxHp: sheet.wildShape.maxHp, temp: sheet.hitPoints?.temp ?? 0 };
+    if (sheet?.wildShape) out[id] = { hp: sheet.wildShape.hp, maxHp: sheet.wildShape.maxHp, temp: sheet.hitPoints?.temp ?? 0, form: sheet.wildShape.formName };
     else if (sheet?.hitPoints) out[id] = { hp: Math.max(0, sheet.hitPoints.current), maxHp: sheet.hitPoints.max, temp: sheet.hitPoints.temp };
   }
   return out;

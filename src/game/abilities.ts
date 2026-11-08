@@ -74,6 +74,17 @@ export function wildShapeLimits(druidLevel: number) {
   return { maxCr, fly: druidLevel >= 8, swim: druidLevel >= 4, hours: Math.floor(druidLevel / 2), spellcasting: druidLevel >= 18 };
 }
 
+/**
+ * Druid level for Wild Shape: the class level, but at least 2 when the GM granted Wild Shape on the sheet
+ * (a "Wild Shape" resource or ability) – e.g. a level-1 druid the table lets transform early.
+ */
+export function wildShapeLevel(sheet: Pick<CharacterSheet, 'details' | 'resources' | 'abilities'>): number | null {
+  const lvl = classLevel(sheet, 'druid');
+  const granted = sheet.resources.some((r) => /^wild shape$/i.test(r.name.trim())) || sheet.abilities.some((a) => /wild shape/i.test(a.name));
+  if (granted) return Math.max(2, lvl ?? 0);
+  return lvl;
+}
+
 export function formAllowed(form: BeastForm, druidLevel: number): string | null {
   const l = wildShapeLimits(druidLevel);
   if (!l) return 'Wild Shape needs druid level 2.';
@@ -92,7 +103,7 @@ export interface WildShapeState {
 }
 
 export function transform(sheet: CharacterSheet, form: BeastForm, now = new Date()): AbilityResult {
-  const lvl = classLevel(sheet, 'druid');
+  const lvl = wildShapeLevel(sheet);
   if (lvl === null) return fail('Only druids can use Wild Shape.');
   const why = formAllowed(form, lvl);
   if (why) return fail(why);

@@ -379,3 +379,15 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 **Noch offen:**
 - Haste: Lethargie nach dem Ende.
 - Lebensleisten anderer Charaktere sind für Spieler sichtbar (Gruppe), die von Gegnern nur für den GM.
+
+## APEX 1.7 – Druidin: Wild Shape, Shillelagh, Thunderwave
+
+- **Wild Shape freischalten:** Wild Shape gibt es regulär ab Druidenstufe 2. Hat der Bogen eine Ressource „Wild Shape“ (oder die Fähigkeit), geht es auch früher. Das werte ich als GM-Entscheidung; es gelten die Grenzen von Stufe 2 (CR ¼, kein Fliegen/Schwimmen).
+- **In Tierform:**
+  - **Auf der Karte:** Die Figur zeigt das Tier-Icon (🐺, 🐻, 🐈 …) mit grünem Ring; die Lebensleiste zeigt die TP der Tierform.
+  - **Im Kampf-Panel:** Ein grünes Banner zeigt die Tierform; Zauber sind gesperrt.
+  - **Werte:** Es gelten Angriffe, Rüstungsklasse und Tempo der Tierform. Angriffe und TP werden sofort neu geladen, auch beim GM.
+- **Zurückverwandeln bei 0 TP:** Fallen die TP der Tierform auf 0, verwandelt sich die Druidin zurück. Der Rest des Schadens geht auf ihre TP, das Log meldet es, und auf der Karte erscheint „Wolf → normal form“.
+- **Shillelagh:** wird auf sich selbst gewirkt (Bonusaktion, 10 Runden). Solange es wirkt, trifft der Kampfstab bzw. die Keule mit dem Zauberangriffsbonus (sonst Übung + Weisheit) und macht 1W8 + Weisheit magischen Wuchtschaden, z. B. „Quarterstaff (Shillelagh) +6“.
+- **Thunderwave und andere „Self (…)“-Flächen:** Der Würfel liegt immer direkt neben der Figur und zeigt in Richtung der Maus. „Self (10-foot radius)“ liegt um die Figur herum.
+- **Fehlende Zauberwerte:** Steht kein Zauberangriff oder Rettungswurf-SG im Bogen, werden sie aus Klasse, Attribut und Übungsbonus berechnet.

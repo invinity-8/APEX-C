@@ -2,7 +2,7 @@ import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import type { SceneInteraction } from './SceneSurface';
 import { pcInteraction } from './pcInteraction';
-import { activeActors, blockOf, pcActor, withSrdSpells } from '../game/sceneActions';
+import { activeActors, blockOf, pcActor, withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import { useEffect, useRef, useState } from 'react';
 import type { GameApi } from '../state/gameApi';
@@ -36,7 +36,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   // the readied attack is the character's default attack (right-click an enemy) – remembered on this device
   useEffect(() => { if (!me?.id) return; try { const v = localStorage.getItem(`apex.defaultAttack.${me.id}`); if (v !== null) setReady({ kind: 'attack', index: Number(v) }); } catch { /* storage unavailable */ } }, [me?.id]);
   useEffect(() => { if (!me?.id || ready?.kind !== 'attack') return; try { localStorage.setItem(`apex.defaultAttack.${me.id}`, String(ready.index)); } catch { /* storage unavailable */ } }, [me?.id, ready]);
-  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) { setMySheet(withSrdSpells(r.sheet.sheet)); setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); } }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
+  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) { setMySheet(withSrdSpells(r.sheet.sheet)); setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); } }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules, me?.id ? scene?.vitals?.[me.id]?.form : undefined, me?.id ? scene?.vitals?.[me.id]?.hp : undefined]); // a Wild Shape or damage changes the attacks and slots
   const [uncertain, setUncertain] = useState<Record<string, unknown> | null>(null);
   const pendingRef = useRef(false);
   /** Sends a move; resolves true when the character arrived (not paused by an opportunity attack). */
@@ -98,10 +98,12 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     setTarget(id);
   }
   const enemiesInSight = (scene.figures ?? []).filter(f => f.kind === 'enemy' && f.condition !== 'down');
+  // Shillelagh on: the staff attacks with Wisdom and a d8 (the server applies the same rule)
+  const attacksNow = mySheet && me ? withShillelagh(attacks, mySheet, !mySheet.wildShape && !!scene.self?.[me.id]?.effects.some(e => e.key === 'shillelagh')) : attacks;
   // APEX 1.4 map interaction (shared with the GM acting for a character): reach, path, LoS, right-click rules
   const acting = category === 'battle' && (myTurn || free);
   const interaction: SceneInteraction = category !== 'battle' || !me ? {} : pcInteraction({
-    snapshot: scene, tokenId: me.id, name: me.name, sheet: mySheet, attacks, acting, canMove, remaining: free ? null : remaining,
+    snapshot: scene, tokenId: me.id, name: me.name, sheet: mySheet, attacks: attacksNow, acting, canMove, remaining: free ? null : remaining,
     ready, setReady, setSpellTargets, act: (input) => sceneAction(input), move: (x, y) => move(x, y, true),
     openTargetMenu: (id) => setTarget(id), notify: setMessage,
     focusKey: myTurn && liveEncounter ? `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}` : null,
@@ -117,7 +119,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
       {category === 'battle' && me && <button className="btn btn-ghost" disabled={pending} aria-pressed={!!scene.torch} onClick={() => void sceneAction({ action: 'torch', tokenId: me.id, on: !scene.torch })} data-testid="torch">{scene.torch ? '🔥 Put out light' : '🕯 Light a torch'}</button>}
       <span role="status" data-testid="movement-status">{status}</span>
     </div>}
-    {category === 'battle' && me && <PlayerCombat snapshot={scene} encounter={liveEncounter} tokenId={me.id} sheet={mySheet} attacks={attacks} myTurn={myTurn} free={free} pending={pending} act={(input) => void sceneAction(input)} target={target} setTarget={setTarget} ready={ready} setReady={setReady} spellTargets={spellTargets} setSpellTargets={setSpellTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />}
+    {category === 'battle' && me && <PlayerCombat snapshot={scene} encounter={liveEncounter} tokenId={me.id} sheet={mySheet} attacks={attacksNow} myTurn={myTurn} free={free} pending={pending} act={(input) => void sceneAction(input)} target={target} setTarget={setTarget} ready={ready} setReady={setReady} spellTargets={spellTargets} setSpellTargets={setSpellTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />}
     {canAttack && attackIndex !== null && <p className="text-xs text-gold-200">{enemiesInSight.length ? 'Click an enemy on the map.' : 'No enemy in sight.'}</p>}
     {!!scene.combatLog?.length && <details className="combat-log" open><summary>Combat log</summary><ol>{scene.combatLog.slice().reverse().map(l => <li key={l.id}>{l.text}</li>)}</ol></details>}
     {moveMode && <p>Choose a destination on the map. The server checks your path, terrain, walls and {free ? 'nothing else – movement is free' : mv?.mode === 'turn' ? 'your speed this turn' : 'how far you can travel today'}.</p>}

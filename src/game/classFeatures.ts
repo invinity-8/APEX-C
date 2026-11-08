@@ -13,7 +13,7 @@
  *                               (uses = Charisma modifier, at least 1)
  *  Sneak Attack, Divine Smite   applied with attacks (see server/combatFeatures.ts)
  */
-import { classLevel } from './abilities.js';
+import { wildShapeLevel, classLevel } from './abilities.js';
 import type { CharacterSheet } from './sheet.js';
 
 export type FeatureId = 'actionSurge' | 'secondWind' | 'rage' | 'wildShape' | 'revertShape' | 'layOnHands' | 'bardicInspiration';
@@ -34,7 +34,7 @@ export function battleFeatures(sheet: CharacterSheet): FeatureInfo[] {
     const r = resource ? res(sheet, resource) : undefined;
     out.push({ id, name, cost, resource, max, current: resource ? (r?.current ?? max) : null, text, ...extra });
   };
-  const fighter = classLevel(sheet, 'fighter'), barbarian = classLevel(sheet, 'barbarian'), druid = classLevel(sheet, 'druid'), paladin = classLevel(sheet, 'paladin'), bard = classLevel(sheet, 'bard');
+  const fighter = classLevel(sheet, 'fighter'), barbarian = classLevel(sheet, 'barbarian'), druid = wildShapeLevel(sheet), paladin = classLevel(sheet, 'paladin'), bard = classLevel(sheet, 'bard');
   if (fighter && (fighter >= 2 || has(sheet, /action surge/i))) f('actionSurge', 'Action Surge', 'free', 'Action Surge', fighter >= 17 ? 2 : 1, 'One additional action on this turn.');
   if (fighter || has(sheet, /second wind/i)) f('secondWind', 'Second Wind', 'bonus', 'Second Wind', 1, `Regain 1d10 + ${fighter ?? 1} hit points.`);
   if (barbarian || has(sheet, /\brage\b/i)) f('rage', 'Rage', 'bonus', 'Rage', rageUses(barbarian ?? 1), `10 rounds: resistance to bludgeoning, piercing and slashing; +${rageDamage(barbarian ?? 1)} melee damage; advantage on Strength checks and saves (GM).`);

@@ -16,7 +16,7 @@ import { areaHexes } from '../campaign/hexArea';
 import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { speedWith } from '../game/combatEffects';
-import { withSrdSpells } from '../game/sceneActions';
+import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import { hexAt } from '../campaign/hexScene';
 import { distance, hexKey } from '../game/hex';
@@ -148,6 +148,20 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     });
     return () => { live = false; };
   }, [selectedPc, game.sheets.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pcAttacksNow = pcSheet && selectedPc ? withShillelagh(pcAttacks, pcSheet, !pcSheet.wildShape && !!(snapshot?.figures ?? []).find((f) => f.kind === 'pc' && f.tokenId === selectedPc)?.effects?.some((e) => e.key === 'shillelagh')) : pcAttacks;
+  // Wild Shape / damage of the selected character: reload its attacks (beast attacks) without dropping the readied action
+  const pcVitalsKey = selectedPc ? `${snapshot?.vitals?.[selectedPc]?.form ?? ''}:${snapshot?.vitals?.[selectedPc]?.hp ?? ''}` : '';
+  useEffect(() => {
+    if (!selectedPc || !pcVitalsKey) return;
+    let live = true;
+    void game.sheets.load(selectedPc).then((r) => {
+      if (!live || !r.ok) return;
+      const details = game.view.tokens.find((t) => t.id === selectedPc)?.details;
+      setPcSheet(withSrdSpells(r.sheet.sheet));
+      setPcAttacks(details ? combatAttacks(r.sheet.sheet, { inventory: details.inventory, equipment: details.equipment, armorWornAt: details.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks);
+    });
+    return () => { live = false; };
+  }, [pcVitalsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setPcTargets([]), [pcReady]);
   const sheets = game.sheets;
   const itemRules = game.view.itemRules;
@@ -822,7 +836,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       const free = !gmEncounter;
       const left = mv ? Math.max(0, mv.allowance - mv.spent) : null;
       const interaction = pcInteraction({
-        snapshot, tokenId: selected.id, name: fig.name, sheet: pcSheet, attacks: pcAttacks, acting: active, canMove: !!mv?.canMove && (free || (left ?? 0) > 0), remaining: free ? null : left,
+        snapshot, tokenId: selected.id, name: fig.name, sheet: pcSheet, attacks: pcAttacksNow, acting: active, canMove: !!mv?.canMove && (free || (left ?? 0) > 0), remaining: free ? null : left,
         ready: pcReady, setReady: setPcReady, setSpellTargets: setPcTargets,
         act: async (input) => (await sceneTurnP(input)).ok, move: (x, y) => moveCharacterP(selected.id, x, y),
         openTargetMenu: (id) => setPcMenu(id), notify: setNotice,
@@ -899,7 +913,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               return (
                 <div data-testid="gm-pc-panel">
                   <p className="px-1 text-[11px] text-marble-400">Acting for <b className="text-gold-200">{fig?.name ?? 'character'}</b> – same panel as the player; right-click on the map like the player.</p>
-                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacks} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />
+                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacksNow} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />
                 </div>
               );
             })()}
