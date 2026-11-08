@@ -158,12 +158,19 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
             const npcViewers = (side: 'enemy' | 'ally' | null, id?: string) => npcs.filter((e) => (id ? e.id === id : (e.side ?? 'enemy') === side)).map((e) => ({ at: { x: e.x, y: e.y }, darkvisionFt: e.darkvisionFt ?? ENEMY_TEMPLATES.find((t) => t.id === e.templateId)?.darkvisionFt ?? 0 }));
             const clock = clockFor(stored.state, focus.id);
             const lights = carriedLights(stored.state, focus.id, pcs);
-            if (view === 'party') visible = new Set([...await visionFor(ctx, map, clock, pcViewers, lights), ...sceneVision(map, clock, npcViewers('ally'), lights)]);
-            else if (view === 'enemies') visible = sceneVision(map, clock, npcViewers('enemy'), lights);
-            else if (view.startsWith('pc-')) visible = await visionFor(ctx, map, clock, pcViewers.filter((p) => `pc-${p.tokenId}` === view), lights);
-            else visible = sceneVision(map, clock, npcViewers(null, view), lights);
+            const partySight = async () => new Set([...await visionFor(ctx, map, clock, pcViewers, lights), ...sceneVision(map, clock, npcViewers('ally'), lights)]);
             const all = new Set(hexesInRange({ q: 0, r: 0 }, map.hex.radius).map(hexKey));
-            fog = fogString(map.hex.radius, visible, all);
+            // one figure: bright = it sees, grey = its side sees (could call out), dark = nobody on its side sees
+            let side: Set<string> = all;
+            if (view === 'party') visible = await partySight();
+            else if (view === 'enemies') visible = sceneVision(map, clock, npcViewers('enemy'), lights);
+            else if (view.startsWith('pc-')) { visible = await visionFor(ctx, map, clock, pcViewers.filter((p) => `pc-${p.tokenId}` === view), lights); side = await partySight(); }
+            else {
+              visible = sceneVision(map, clock, npcViewers(null, view), lights);
+              const me = npcs.find((e) => e.id === view);
+              side = me?.side === 'ally' ? await partySight() : sceneVision(map, clock, npcViewers('enemy'), lights);
+            }
+            fog = fogString(map.hex.radius, visible, side);
           }
           const figures = figuresFor(stored.state, focus.id, map, pcs, [], visible, true);
           return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id) };

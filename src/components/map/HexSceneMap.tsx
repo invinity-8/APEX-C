@@ -70,6 +70,8 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
   const toWorld = (p: { x: number; y: number }) => ({ x: p.x - ox, y: p.y - oy });
 
   const battle = tileSetOf(map.hex) === 'battle';
+  // GM vision modes: '.' = nobody on that side sees the hex (darker than "remembered")
+  const fogOf = (f: string): HexView['fog'] => (f === 'v' ? 'visible' : f === '.' && gm ? 'unexplored' : 'explored');
   const { hexes, byKey, defs } = useMemo(() => {
     const out: HexView[] = [];
     const tiles = map.hex ? decodeTiles(map.hex) : new Map();
@@ -79,10 +81,10 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
         const f = fog ? fog[i] : 'v';
         if (!t || f === '.' || f === undefined) return;
         const view: HexView = battle
-          ? { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe' }
+          ? { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: fogOf(f), zone: 'safe' }
           : t.id in TERRAIN
-            ? { key: hexKey(h), q: h.q, r: h.r, terrain: t.id as TerrainType, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe', elevation: sceneElevation(h, t.id as TerrainType) }
-            : { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe' };
+            ? { key: hexKey(h), q: h.q, r: h.r, terrain: t.id as TerrainType, fog: fogOf(f), zone: 'safe', elevation: sceneElevation(h, t.id as TerrainType) }
+            : { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: fogOf(f), zone: 'safe' };
         out.push(view);
       });
     }

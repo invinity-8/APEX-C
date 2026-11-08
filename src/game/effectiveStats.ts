@@ -65,7 +65,15 @@ export const targetAc = (sheet: CharacterSheet, token: StatsToken, rules?: ItemR
  * Attacks offered in scene combat: the equipped weapons of the active set (derived to-hit and damage, including
  * weapon modifiers) first, then the attacks written on the sheet. Indices are stable for a given sheet + equipment.
  */
-export function combatAttacks(sheet: CharacterSheet, token: StatsToken, rules: ItemRules = DEFAULT_ITEM_RULES): Array<SheetAttack & { source: 'equipment' | 'sheet' }> {
+export function combatAttacks(sheet: CharacterSheet, token: StatsToken, rules: ItemRules = DEFAULT_ITEM_RULES, withOtherSet = true): Array<SheetAttack & { source: 'equipment' | 'sheet'; otherSet?: boolean }> {
+  const base = gearAttacks(sheet, token, rules);
+  // the inactive weapon set comes last (indices of the active list stay stable); using it switches weapons
+  const eq = token.equipment;
+  const other = withOtherSet && eq ? gearAttacks(sheet, { ...token, equipment: { ...eq, activeSet: eq.activeSet === 1 ? 2 : 1 } }, rules).map((a) => ({ ...a, id: `${a.id}-other`, name: a.name.replace(' (equipped)', ` (set ${eq.activeSet === 1 ? 'II' : 'I'})`), otherSet: true })) : [];
+  return [...base, ...sheet.attacks.map((a) => ({ ...a, source: 'sheet' as const })), ...other];
+}
+
+function gearAttacks(sheet: CharacterSheet, token: StatsToken, rules: ItemRules): Array<SheetAttack & { source: 'equipment' }> {
   const derived = deriveStats(sheet, token, rules);
   const fromGear = derived.attacks.flatMap((a): Array<SheetAttack & { source: 'equipment' }> => {
     if (a.toHit === null) return [];
@@ -79,5 +87,5 @@ export function combatAttacks(sheet: CharacterSheet, token: StatsToken, rules: I
     const damage = dice ? `${dice[1]}${mod ? (mod > 0 ? `+${mod}` : `${mod}`) : ''}${item?.equip?.damageType ? ` ${item.equip.damageType}` : ''}` : a.damage;
     return [{ id: `eq-${a.slot}`, name: `${a.name} (equipped)`, bonus: a.toHit >= 0 ? `+${a.toHit}` : `${a.toHit}`, damage, range: props.includes('reach') ? 'Reach 10 ft' : range, notes: a.extra.join('; '), source: 'equipment' }];
   });
-  return [...fromGear, ...sheet.attacks.map((a) => ({ ...a, source: 'sheet' as const }))];
+  return fromGear;
 }

@@ -20,7 +20,10 @@ import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
 import { STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type StandardAction } from '../game/sceneActions.js';
-import { statBlock } from '../game/bestiary.js';
+import { statBlock, type AbilityKey } from '../game/bestiary.js';
+import { areaHexes, feetApart, parseArea, type AreaSpec } from '../campaign/hexArea.js';
+import { abilityMods } from '../game/equipment.js';
+import type { CharacterSheet } from '../game/sheet.js';
 import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { hexAt, hexCentre, hexMovementCost, passable, tileLookup } from '../campaign/hexScene.js';
@@ -182,6 +185,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     });
   }
   if (v.action === 'enemyAttack') return enemyAttackRequest(user, repo, scene, v);
+  if (v.action === 'npcArea') return npcAreaRequest(user, repo, scene, v);
   if (v.action === 'startInitiative') {
     if (scene.category !== 'battle') return { status: 400, body: { error: 'Initiative runs on battle maps.' } };
     const entries = await rollFor(user, repo, sceneId);
@@ -246,7 +250,7 @@ async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<
 }
 const feetBetween = (map: SceneMap) => (a: { x: number; y: number }, b: { x: number; y: number }) => distance(hexAt(map, a), hexAt(map, b)) * 5;
 
-interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string; kind?: 'melee' | 'ranged' | 'spell'; damageType?: string }
+interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string; kind?: 'melee' | 'ranged' | 'spell'; damageType?: string; /** the attack uses the inactive weapon set: switch to it */ switchSet?: boolean }
 
 /** Attack numbers of an attacker: a character's attack (equipment + sheet) or an NPC's attack. */
 async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefined): Promise<Strike | string> {
@@ -262,10 +266,11 @@ async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefine
   const sheet = await sheetOf(ctx, attacker.tokenId);
   const attack = combatAttacks(sheet, state.tokens[attacker.tokenId], itemRulesOf(state))[attackIndex ?? 0];
   if (!attack) return 'Choose an attack from your character sheet.';
+  const switchSet = !!(attack as { otherSet?: boolean }).otherSet;
   const bonus = parseBonus(attack.bonus), damage = parseDamage(attack.damage);
   if (bonus === null || !damage) return `“${attack.name}” has no readable attack bonus or damage (e.g. +5, 1d8+3). Resolve it by hand.`;
   const range = parseRangeFt(`${attack.range} ${attack.notes}`);
-  return { name: attack.name, bonus, damage, reachFt: range.reachFt, rangeFt: range.rangeFt };
+  return { name: attack.name, bonus, damage, reachFt: range.reachFt, rangeFt: range.rangeFt, ...(switchSet ? { switchSet: true } : {}) };
 }
 
 /**
@@ -347,6 +352,11 @@ async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker:
     const st = r.apply(s);
     const err = useEconomy(st.sceneEncounters?.[scene.id]?.status === 'active' ? st.sceneEncounters[scene.id] : null, actorOf(attacker), viaBonus ? 'bonus' : 'attack', { gm: user.role === 'gm', attacksAllowed: allowed });
     if (err) return { ok: false, error: err };
+    // drawing the other weapon set is part of the attack (free object interaction)
+    if (strike.switchSet && attacker.kind === 'pc') {
+      const t = st.tokens[attacker.tokenId];
+      if (t?.equipment) { t.equipment = { ...t.equipment, activeSet: t.equipment.activeSet === 1 ? 2 : 1 }; logCombat(st, scene.id, `${t.name} switches to weapon set ${t.equipment.activeSet === 1 ? 'I' : 'II'}.`); }
+    }
     if (st.sceneEncounters?.[scene.id]) st.sceneEncounters[scene.id].version++;
     return { ok: true, state: st, message: r.text };
   });
@@ -414,6 +424,8 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
   const me = positionOf(figures, caster);
   const there = target ? positionOf(figures, target) : null;
   if (target && (!there || there.down)) return { status: 404, body: { error: 'Target not on the map.' } };
+  const aim = v.point as { x?: unknown; y?: unknown } | undefined;
+  if (me && aim && typeof aim.x === 'number' && typeof aim.y === 'number' && plan.rangeFt !== null && !/^self/i.test(plan.spell.range.trim()) && feetApart(map, me, aim as { x: number; y: number }) > plan.rangeFt) return { status: 422, body: { error: `That point is out of range (${plan.spell.name}: ${plan.rangeFt} ft).` } };
   if (me && there && plan.rangeFt !== null) {
     const reach = inReach(map, me, there, plan.rangeFt);
     if (!reach.ok) return { status: 422, body: { error: `${there.name} is out of range or not in line of sight (${reach.distanceFt} ft, ${plan.spell.name}: ${plan.rangeFt} ft).` } };
@@ -434,7 +446,14 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
   let text = `${casterName} casts ${plan.spell.name}${slotText}`;
   let apply: (s: GameState) => GameState = (s) => structuredClone(s);
   const dmg = plan.damage ? parseDamage(plan.damage) : null;
-  if (plan.mode === 'attack' && target && nums.attack !== null && dmg) {
+  const area = parseArea(`${plan.spell.range} ${plan.spell.description}`);
+  const point = v.point as { x?: unknown; y?: unknown } | undefined;
+  if (area && plan.mode === 'save' && point && typeof point.x === 'number' && typeof point.y === 'number' && me && dc !== null) {
+    // area spell aimed at a point: every creature in the area saves, damage is applied
+    const r = await resolveArea(user, repo, ctx, map, me, { x: point.x, y: point.y }, { name: `${plan.spell.name}${slotText}`, area, save: (plan.save?.slice(0, 3) ?? 'dex') as AbilityKey, dc, damage: plan.damage ?? '0', damageType: /[a-z]+$/.exec(plan.damage ?? '')?.[0] ?? '', source: casterName });
+    text = r.lines.join(' ');
+    apply = r.apply;
+  } else if (plan.mode === 'attack' && target && nums.attack !== null && dmg) {
     const r = await rollAgainst(user, repo, ctx, casterName, { name: plan.spell.name, bonus, damage: dmg, reachFt: 5 }, target, slotText);
     if (typeof r === 'string') return { status: 404, body: { error: r } };
     text = r.text;
@@ -582,4 +601,97 @@ async function reactionRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
   const msg = (result.body as { message?: string }).message ?? '';
   const contMsg = cont.status === 200 ? ((cont.body as { message?: string }).message ?? `${offer.target.name} continues moving.`) : `The move could not continue: ${(cont.body as { error?: string }).error ?? 'blocked'}.`;
   return { status: 200, body: { ...(result.body as object), message: `${msg} ${contMsg}`.trim() } };
+}
+
+// ---------------------------------------------------------------- areas of effect (APEX 1.2)
+
+const ABILITY_NAME: Record<AbilityKey, string> = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
+
+/** Saving throw bonus of a character from the sheet (save row, else the ability modifier). */
+function pcSaveBonus(sheet: CharacterSheet, ability: AbilityKey): number {
+  const row = sheet.saves.find((x) => x.name.toLowerCase().startsWith(ABILITY_NAME[ability].toLowerCase().slice(0, 3)));
+  const m = row ? /([+-]?\d{1,2})/.exec(row.value) : null;
+  if (m) return Number(m[1]);
+  return abilityMods(sheet)[ability] ?? 0;
+}
+
+interface AreaEffect { name: string; area: AreaSpec; save: AbilityKey; dc: number; damage: string; damageType: string; source: string }
+
+/**
+ * Resolves an area: one damage roll, every creature in the area saves (d20 + its save bonus vs DC): full damage on
+ * a failure, half on a success. NPC hit points change on the scene, characters' on their sheets.
+ */
+async function resolveArea(user: AuthUser, repo: Repo, ctx: Ctx, map: SceneMap, origin: { x: number; y: number }, point: { x: number; y: number }, fx: AreaEffect): Promise<{ lines: string[]; apply: (s: GameState) => GameState }> {
+  const sceneId = ctx.sceneId!;
+  const state = ctx.state!;
+  const keys = new Set(areaHexes(map, origin, point, fx.area));
+  const figures = (await battleFigures(ctx, sceneId, map)).filter((f) => !f.down && keys.has(hexKeyAt(map, f)));
+  const dice = parseDamage(fx.damage);
+  const rolled = dice ? rollDice(dice) : { rolls: [], total: 0 };
+  const lines = [`${fx.source}: ${fx.name} – ${fx.area.sizeFt}-ft ${fx.area.shape}, DC ${fx.dc} ${ABILITY_NAME[fx.save]} save, ${rolled.total} ${fx.damageType} damage (${rolled.rolls.join('+')}${dice?.mod ? `+${dice.mod}` : ''}).${figures.length ? '' : ' Nobody is in the area.'}`];
+  const npcHits: Array<{ id: string; dmg: number }> = [];
+  for (const f of figures) {
+    let bonus = 0;
+    if (f.kind === 'npc') {
+      const e = enemiesOf(state, sceneId).find((x) => x.id === f.id)!;
+      bonus = e.abilities ? (e.saves?.[fx.save] ?? Math.floor((e.abilities[fx.save] - 10) / 2)) : 0;
+    } else bonus = pcSaveBonus(await sheetOf(ctx, f.id), fx.save);
+    const d20 = die(20);
+    const saved = d20 + bonus >= fx.dc;
+    const dmg = saved ? Math.floor(rolled.total / 2) : rolled.total;
+    let hp = '';
+    if (f.kind === 'npc') npcHits.push({ id: f.id, dmg });
+    else if (dmg > 0) {
+      const row = await repo.loadSheet(user.campaignId, f.id);
+      const sheet = await sheetOf(ctx, f.id);
+      const hurt = sheet.hitPoints ? applyDamage(sheet, dmg) : null;
+      if (hurt?.ok) {
+        const ok = await repo.saveSheet(user.campaignId, f.id, hurt.sheet, row?.version ?? 0, user.id);
+        hp = ok === null ? ' (sheet changed – apply by hand)' : ` (${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
+      } else hp = ' (apply by hand)';
+    }
+    lines.push(`${f.name}: d20 ${d20} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${d20 + bonus} → ${saved ? 'saved, half' : 'failed'}: ${dmg} damage${hp}.`);
+  }
+  return {
+    lines,
+    apply: (s) => {
+      let st = structuredClone(s);
+      for (const h of npcHits) {
+        if (!h.dmg) continue;
+        const r = updateEnemy(st, sceneId, h.id, { hpDelta: -h.dmg });
+        if (r.ok) st = r.state;
+        const after = enemiesOf(st, sceneId).find((x) => x.id === h.id);
+        if (after?.defeated) lines.push(`${after.name} is defeated.`);
+      }
+      for (const l of lines) logCombat(st, sceneId, l);
+      return st;
+    },
+  };
+}
+
+/** GM: an NPC uses an area ability of its stat block (on its turn, uses per encounter counted). */
+async function npcAreaRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  if (typeof v.id !== 'string' || !Number.isSafeInteger(v.area) || typeof (v.point as { x?: unknown })?.x !== 'number' || typeof (v.point as { y?: unknown })?.y !== 'number') return { status: 400, body: { error: 'Invalid area ability.' } };
+  const map = parseMap(scene.published_metadata);
+  if (!map?.hex) return { status: 400, body: { error: 'Areas need a battle map.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  const npc = ctx.state ? enemiesOf(ctx.state, scene.id).find((e) => e.id === v.id && !e.defeated) : undefined;
+  const area = npc?.areas?.[v.area as number];
+  if (!npc || !area) return { status: 404, body: { error: 'Unknown area ability.' } };
+  if (area.uses && (npc.areaUsed?.[area.name] ?? 0) >= area.uses) return { status: 409, body: { error: `${area.name} is used up for this encounter.` } };
+  const point = v.point as { x: number; y: number };
+  if (area.rangeFt && feetApart(map, npc, point) > area.rangeFt) return { status: 422, body: { error: `Out of range (${area.rangeFt} ft).` } };
+  const pre = useEconomy(activeEncounter(structuredClone(ctx.state!), scene.id), npcActor(npc.id), 'action', { gm: true });
+  if (pre) return { status: 409, body: { error: pre } };
+  const r = await resolveArea(user, repo, ctx, map, npc, area.rangeFt ? point : point, { name: area.name, area: { shape: area.shape, sizeFt: area.sizeFt }, save: area.save, dc: area.dc, damage: area.damage, damageType: area.damageType, source: npc.name });
+  return mutate(user, repo, (s) => {
+    const st = r.apply(s);
+    const e = st.sceneEncounters?.[scene.id];
+    const err = useEconomy(e?.status === 'active' ? e : null, npcActor(npc.id), 'action', { gm: true });
+    if (err) return { ok: false, error: err };
+    const me = enemiesOf(st, scene.id).find((x) => x.id === npc.id);
+    if (me) me.areaUsed = { ...(me.areaUsed ?? {}), [area.name]: (me.areaUsed?.[area.name] ?? 0) + 1 };
+    if (e) e.version++;
+    return { ok: true, state: st, message: r.lines.join(' ') };
+  });
 }
