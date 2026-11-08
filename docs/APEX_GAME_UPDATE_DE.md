@@ -180,3 +180,47 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Prüfung: Reichweite am Start- und Zielfeld. Ein Pfad, der nur an einem Gegner vorbeistreift, wird nicht erkannt; das ruft der GM von Hand aus.
 
 **Noch offen:** Vor- und Nachteil (z. B. Dodge wird nur angezeigt), Flächenschaden auf mehrere Ziele, automatische Rettungswürfe der Gegner, Ready-Trigger, Konzentration, Bewegungsbudget der NPCs.
+
+## APEX 1.2 – Battlemap: Zugablauf, Gegner-Bibliothek, Zielen
+
+**Zugablauf**
+- **Nur wer dran ist, handelt**, auch beim GM. Der GM kann weiterhin HP ändern, Figuren *platzieren* (Korrektur) und die Initiative steuern.
+- **Spielerblöcke:** Stehen Spieler direkt hintereinander in der Initiative (z. B. Gegner · Sinna · Aster · Gegner), handeln sie gleichzeitig. Jeder beendet seinen Teil, der Block endet, wenn alle fertig sind. „Nächster Zug“ des GM beendet den ganzen Block.
+- **Gegner haben ein Budget:** Bewegung pro Zug nach ihrem Speed (Dash verdoppelt), Angriffe pro Attack-Aktion nach Multiattack.
+- **Initiative als Porträtleiste** über der Karte, auch für den GM. Klick wählt die Figur aus.
+
+**Automatisch beim Zugwechsel**
+- **Spieler:** Die Bewegungsreichweite leuchtet auf, die Kamera fährt zur eigenen Figur.
+- **GM:**
+  - Die Figur am Zug wird automatisch ausgewählt, die Kamera fährt hin, die Reichweite leuchtet.
+  - Bei NPCs wird deren Sicht aktiv: hell ist, was die Figur sieht, grau, was ihre Seite sieht, dunkel, was niemand ihrer Seite sieht.
+  - Umschalten auf Gesamt-, Party- und Gegnersicht bleibt möglich.
+
+**Bewegung**
+- Beim Hovern zeigt die Karte den **Pfad** mit Kosten (gold = erreichbar, rot = zu weit).
+- **Rechtsklick** auf ein Feld bewegt dorthin (Spieler: eigene Figur; GM: ausgewählte Figur am Zug).
+- **Gelegenheitsangriffe halten die Bewegung an:** Die Figur bleibt auf dem letzten Feld in Reichweite stehen. Erst nach „Angreifen“ oder „Auslassen“ läuft sie automatisch weiter. Geprüft wird der ganze Pfad, auch wenn er nur an einem Gegner vorbeiführt.
+- Figuren **gleiten** entlang ihres Pfads, statt zu springen.
+
+**Zielen und Angreifen**
+- **„Ready“-Leiste** (Spieler): Waffe oder Zauber wählen.
+  - Fernkampf und Zauber: Beim Hovern zeigt eine weiße Linie die Sichtlinie (rot ohne Sicht oder außer Reichweite), dazu die Reichweite als helle Fläche.
+  - Flächenzauber (Fireball, Burning Hands …): Hovern zeigt die betroffenen Felder, **Rechtsklick** auf ein Feld castet dort.
+  - Slot-Wahl inklusive Upcast.
+- **Rechtsklick auf einen Gegner** öffnet das Angriffsmenü: Waffen von Waffenset I, **Waffenset II** (wechselt die Waffe automatisch), Sheet-Angriffe und Zauber.
+- **Flächeneffekte werden aufgelöst:** Schaden wird einmal gewürfelt, jede Figur in der Fläche würfelt ihren Rettungswurf (NPC aus dem Stat-Block, Charaktere aus dem Bogen). Bei Erfolg halber Schaden, er wird direkt abgezogen. Wände blockieren die Fläche.
+- **GM:** Angriff des NPC im Kommandofeld wählen, dann Rechtsklick auf das Ziel. Flächenfähigkeiten (z. B. „Burning howl“) mit Nutzungen pro Begegnung zielen ebenfalls per Rechtsklick.
+
+**Enemy Library (neuer Tab)**
+- Stat-Blocks der SRD-Basisgegner (vereinfacht): AC, HP, Speed, Attribute, Rettungswürfe, Sinne, Angriffe (Nah, Fern, Zauber), Multiattack, Flächenfähigkeiten, Merkmale.
+- Eigene Gegner anlegen, SRD-Gegner für die Kampagne anpassen und **Elites** erstellen (Name + Titel, z. B. „Grak the White“). Elites tragen einen **goldenen Drachenrahmen** auf der Karte und in der Bibliothek.
+- Beispiel-Elite: *Orc Bloodcaller* mit Zauberangriff und Kegel-Flächenfähigkeit.
+
+**Datenbank:** Migration `20261109120000_apex_scene_turn_blocks` (Schema 8). Nur die Bewegungsfunktion ändert sich (Spielerblöcke dürfen gleichzeitig ziehen); keine Tabellen, keine Daten.
+
+**Noch offen:**
+- Vorteil/Nachteil.
+- Konzentration und Dauerzauber.
+- Flächenzauber mit Angriffswurf (z. B. Scorching Ray mit mehreren Strahlen auf verschiedene Ziele).
+- Elite-Fähigkeiten über Schaden hinaus (Buffs, Bedingungen).
+- Weitere Reaktionen (Shield, Ready-Trigger).

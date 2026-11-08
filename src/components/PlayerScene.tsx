@@ -37,7 +37,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   async function send(input: Record<string, unknown>) {
     if (pendingRef.current) return;
     pendingRef.current = true; setPending(true); setMessage('');
-    try { await api.sceneMove(input); setUncertain(null); setMessage('Movement saved.'); setMoveMode(false); game.online?.refresh(); }
+    try { const r = await api.sceneMove(input); setUncertain(null); setMessage(r.message ?? 'Movement saved.'); setMoveMode(false); game.online?.refresh(); }
     catch (e) { setMessage(String(e)); if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) setUncertain(input); else { setUncertain(null); game.online?.refresh(); } }
     finally { pendingRef.current = false; setPending(false); }
   }
@@ -102,7 +102,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const interaction: SceneInteraction = category !== 'battle' || !me ? {} : {
     pathFrom: acting && canMove && myPos && !readyArea ? myPos : null,
     pathBudget: free ? null : remaining,
-    lineFrom: acting && myPos && readyRange && !readyArea ? myPos : null,
+    lineFrom: acting && myPos && readyRange && readyRange > 10 && !readyArea ? myPos : null,
     lineRangeFt: readyRange,
     areaAt: acting && myPos && readyArea && map ? (pt) => areaHexes(map, myPos, pt, readyArea) : null,
     focus: myTurn && liveEncounter && myPos ? { key: `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}`, x: myPos.x, y: myPos.y } : null,

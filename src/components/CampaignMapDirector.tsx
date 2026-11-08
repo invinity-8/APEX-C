@@ -130,20 +130,6 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     if (!r.ok) return [];
     return details ? combatAttacks(r.sheet.sheet, { inventory: details.inventory, equipment: details.equipment, armorWornAt: details.armorWornAt }, itemRules) : r.sheet.sheet.attacks;
   }, [sheets, tokensView, itemRules]);
-  // APEX 1.2: the figure whose turn it is is selected automatically, its sight is shown and the camera follows it
-  const liveEnc = game.gmState?.sceneEncounters?.[state.selected]?.status === 'active' ? game.gmState.sceneEncounters[state.selected] : null;
-  const liveTurnKey = liveEnc ? `${liveEnc.id}:${liveEnc.turnSerial ?? 0}` : '';
-  useEffect(() => {
-    if (!liveEnc) return;
-    const first = activeActors(liveEnc)[0];
-    const p = liveEnc.participants.find((x) => x.id === first);
-    if (!p) return;
-    setBattleMode(null);
-    setAreaMode(null);
-    setNpcAttack(0);
-    if (p.tokenId) { setSelected({ kind: 'pc', id: p.tokenId }); setView('party'); }
-    else { const id = p.id.replace(/^npc-/, ''); setSelected({ kind: 'npc', id }); setView(id); }
-  }, [liveTurnKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const snapshotRequest = useRef(0);
   const busyRef = useRef(false);
 
@@ -205,6 +191,20 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     setSelectedEnemy(null);
   }, [shown]);
 
+  // APEX 1.2: the figure whose turn it is is selected automatically, its sight is shown and the camera follows it
+  const liveEnc = game.gmState?.sceneEncounters?.[state.selected]?.status === 'active' ? game.gmState.sceneEncounters[state.selected] : null;
+  const liveTurnKey = liveEnc ? `${liveEnc.id}:${liveEnc.turnSerial ?? 0}` : '';
+  useEffect(() => {
+    if (!liveEnc) return;
+    const first = activeActors(liveEnc)[0];
+    const p = liveEnc.participants.find((x) => x.id === first);
+    if (!p) return;
+    setBattleMode(null);
+    setAreaMode(null);
+    setNpcAttack(0);
+    if (p.tokenId) { setSelected({ kind: 'pc', id: p.tokenId }); setView('party'); }
+    else { const id = p.id.replace(/^npc-/, ''); setSelected({ kind: 'npc', id }); setView(id); }
+  }, [liveTurnKey, state.selected]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownScene = snapshot?.scene && snapshot.scene.id === shown ? snapshot.scene : null;
   useEffect(() => {
     let live = true;
@@ -767,7 +767,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       reachFrom: fig,
       pathFrom: active && !area ? fig : null,
       pathBudget: left,
-      lineFrom: active && !area && range ? fig : null,
+      lineFrom: active && !area && range && range > 10 ? fig : null,
       lineRangeFt: range,
       areaAt: active && area ? (pt) => areaHexes(map, fig, pt, { shape: area.shape, sizeFt: area.sizeFt }) : null,
       focus: gmEncounter && active ? { key: `${turnKey}:${actor}`, x: fig.x, y: fig.y } : null,
