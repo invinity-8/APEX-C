@@ -7,13 +7,12 @@ import { useState } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import type { SceneEncounter } from '../game/types';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
-import { STANDARD_ACTIONS, budgetOf, characterLevel, ordinal, pcActor, planSpell, spellSlots } from '../game/sceneActions';
+import { STANDARD_ACTIONS, budgetOf, characterLevel, ordinal, pcActor, planSpell, reactionUsed, spellSlots } from '../game/sceneActions';
 import { parseRangeFt } from '../game/sceneCombat';
 import { hexAt } from '../campaign/hexScene';
 import { distance } from '../game/hex';
-import { EconomyChips } from './BattleCommand';
 import { flanks } from '../game/combatEffects';
-import { spellCount, spellEffectOf } from '../game/spellEffects';
+import { spellCount, spellEffectOf, supportive } from '../game/spellEffects';
 import { battleFeatures } from '../game/classFeatures';
 import { CONDITION_TEXT, type ConditionId } from '../game/combatEffects';
 import { beastsFor } from '../game/beastCatalog';
@@ -55,7 +54,6 @@ export function PlayerCombat(p: Props) {
   const actor = pcActor(tokenId);
   const b = budgetOf(encounter, actor);
   const canAct = p.free || p.myTurn;
-  const [more, setMore] = useState('');
   const [bonus, setBonus] = useState(false);
   const [adv, setAdv] = useState<'' | 'adv' | 'dis'>('');
   const [smite, setSmite] = useState(0);
@@ -68,6 +66,7 @@ export function PlayerCombat(p: Props) {
   const canSmite = !!sheet?.abilities.some((x) => /divine smite/i.test(x.name));
   const [slot, setSlot] = useState<Record<string, number>>({});
   const [spellOpen, setSpellOpen] = useState(false);
+  const [readyOpen, setReadyOpen] = useState(false);
   const reactions = snapshot.reactions ?? [];
   const melee = p.attacks.map((a, i) => ({ a, i })).filter(({ a }) => !parseRangeFt(`${a.range} ${a.notes}`).rangeFt);
   const [reactWith, setReactWith] = useState(0);
@@ -78,6 +77,14 @@ export function PlayerCombat(p: Props) {
   const moveTotal = p.movement ? Math.max(p.movement.allowance, 1) : 0;
   const moveLeft = p.movement ? Math.max(0, p.movement.allowance - p.movement.spent) : 0;
 
+  const friends = figures.filter((x) => (x.kind === 'pc' && x.tokenId !== tokenId) || (x.kind === 'enemy' && x.side === 'ally'));
+  const actionCost = bonus ? 'bonus' : 'action';
+  const spentCost = bonus ? !!b.bonus : !!b.action;
+  const standard = (id: string) => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: id, viaBonus: bonus });
+  const readySpellNow = p.ready?.kind === 'spell' ? spells.find((x) => x.id === (p.ready as { spellId: string }).spellId) : undefined;
+  const defaultAttack = p.attacks.length ? 0 : -1;
+  const castOn = (id: string, lv: number, t: { kind: 'pc'; tokenId: string } | { kind: 'npc'; id: string } | null) => p.act({ action: 'cast', tokenId, spellId: id, slotLevel: lv, ...(t ? { targets: [t] } : {}) });
+
   const spellRow = (id: string, withTarget: boolean) => {
     const s = spells.find((x) => x.id === id)!;
     const lv = slotFor(id, s.level);
@@ -86,16 +93,12 @@ export function PlayerCombat(p: Props) {
     const dist = withTarget && enemy ? feetTo(enemy) : null;
     const outOfRange = range !== null && dist !== null && dist > range;
     return (
-      <li key={id} className="flex flex-wrap items-center gap-1.5 rounded border border-ink-700 px-1.5 py-1">
+      <li key={id} className="flex flex-wrap items-center gap-1.5 rounded-md border border-ink-700 bg-ink-900/60 px-1.5 py-1">
         <span className="min-w-[8rem] flex-1">
-          <b className="text-marble-50">{s.name}</b> <span className="text-marble-500">{s.level ? `${ordinal(s.level)} level` : 'cantrip'}{s.range ? ` · ${s.range}` : ''}{s.castingTime ? ` · ${s.castingTime}` : ''}</span>
-          {'error' in plan ? <span className="block text-[10px] text-rose-300">{plan.error}</span> : <span className="block text-[10px] text-marble-400">{plan.mode === 'attack' ? 'Spell attack' : plan.mode === 'save' ? `${plan.save ?? ''} save` : 'Effect'}{plan.damage ? ` · ${plan.damage}` : ''}{outOfRange ? ` · out of range (${dist} ft)` : ''}</span>}
+          <LevelBadge level={s.level} /> <b className="text-marble-50">{s.name}</b> <span className="text-marble-500">{s.range ? `${s.range}` : ''}{s.castingTime ? ` · ${s.castingTime}` : ''}</span>
+          {'error' in plan ? <span className="block text-[10px] text-rose-300">{plan.error}</span> : <span className="block text-[10px] text-marble-300">{plan.mode === 'attack' ? 'Spell attack' : plan.mode === 'save' ? `${plan.save ?? ''} save` : 'Effect'}{plan.damage ? ` · ${plan.damage}` : ''}{outOfRange ? ` · out of range (${dist} ft)` : ''}</span>}
         </span>
-        {s.level > 0 && (
-          <select aria-label={`Slot for ${s.name}`} className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={lv} onChange={(e) => setSlot({ ...slot, [id]: Number(e.target.value) })}>
-            {slots.filter((x) => x.level >= s.level).map((x) => <option key={x.level} value={x.level} disabled={x.current < 1}>{ordinal(x.level)} slot ({x.current}{x.max !== null ? `/${x.max}` : ''}){x.level > s.level ? ' – upcast' : ''}</option>)}
-          </select>
-        )}
+        {s.level > 0 && <SlotSelect slots={slots} spellLevel={s.level} value={lv} onChange={(v) => setSlot({ ...slot, [id]: v })} label={`Slot for ${s.name}`} />}
         <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || 'error' in plan || outOfRange} onClick={() => { p.act({ action: 'cast', tokenId, spellId: id, slotLevel: lv, ...(withTarget && enemy ? { target: { kind: 'npc', id: enemy.id }, point: { x: enemy.x, y: enemy.y } } : {}) }); p.setTarget(null); setSpellOpen(false); }} data-testid="cast-spell">
           Cast{withTarget && enemy ? ` at ${enemy.name}` : ''}
         </button>
@@ -104,16 +107,16 @@ export function PlayerCombat(p: Props) {
   };
 
   return (
-    <section className="space-y-1.5 rounded-lg border border-gold-700/50 bg-ink-950/80 p-2 text-xs" aria-label="Combat actions" data-testid="player-combat">
+    <section className="space-y-2 rounded-xl border border-gold-700/60 bg-gradient-to-b from-ink-900/95 to-ink-950/95 p-2.5 text-xs shadow-[0_6px_24px_rgba(0,0,0,0.45)]" aria-label="Combat actions" data-testid="player-combat">
       {reactions.filter((r) => r.kind === 'shield').map((r) => (
-        <div key={r.id} role="alertdialog" aria-label="Shield" className="flex flex-wrap items-center gap-2 rounded border border-sky-400/70 bg-sky-500/15 px-2 py-1.5 text-sky-100" data-testid="shield-prompt">
+        <div key={r.id} role="alertdialog" aria-label="Shield" className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-400/70 bg-sky-500/15 px-2 py-1.5 text-sky-100" data-testid="shield-prompt">
           <span className="flex-1">🛡 <b>{r.target.name}</b> hits <b>{r.reactor.name}</b>. Cast <b>Shield</b> (reaction, +5 AC until your next turn – it may turn this hit into a miss)?</span>
           <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending} onClick={() => p.act({ action: 'reaction', offerId: r.id, accept: true })}>Cast Shield</button>
           <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} onClick={() => p.act({ action: 'reaction', offerId: r.id, accept: false })}>Take the hit</button>
         </div>
       ))}
       {reactions.filter((r) => r.kind !== 'shield').map((r) => (
-        <div key={r.id} role="alertdialog" aria-label="Opportunity attack" className="flex flex-wrap items-center gap-2 rounded border border-amber-400/70 bg-amber-500/15 px-2 py-1.5 text-amber-100" data-testid="reaction-prompt">
+        <div key={r.id} role="alertdialog" aria-label="Opportunity attack" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/70 bg-amber-500/15 px-2 py-1.5 text-amber-100" data-testid="reaction-prompt">
           <span className="flex-1">⚡ <b>{r.target.name}</b> leaves the reach of <b>{r.reactor.name}</b>. Use your reaction for an opportunity attack?</span>
           {melee.length > 1 && <select aria-label="Opportunity attack with" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={reactWith} onChange={(e) => setReactWith(Number(e.target.value))}>{melee.map(({ a, i }) => <option key={i} value={i}>{a.name}</option>)}</select>}
           <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !melee.length} onClick={() => p.act({ action: 'reaction', offerId: r.id, accept: true, attackIndex: melee.length > 1 ? reactWith : melee[0]?.i ?? 0 })}>Attack</button>
@@ -121,156 +124,137 @@ export function PlayerCombat(p: Props) {
         </div>
       ))}
 
+      {/* turn economy, movement, spell slots */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {encounter ? <EconomyOrbs encounter={encounter} actor={actor} /> : <span className="rounded-full border border-forest-400/60 px-2 py-0.5 text-forest-300">Free play – no initiative</span>}
+        {p.movement && !p.free && (
+          <span className="flex min-w-[11rem] flex-1 items-center gap-2" title={`${moveLeft} of ${p.movement.allowance} ft left${p.movement.dashed ? ' (Dash)' : ''}`}>
+            <span aria-hidden className="text-base">👣</span>
+            <span className="relative h-3 flex-1 overflow-hidden rounded-full border border-ink-600 bg-ink-800" role="meter" aria-label="Movement left" aria-valuemin={0} aria-valuemax={p.movement.allowance} aria-valuenow={moveLeft} data-testid="movement-bar">
+              <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-500 to-gold-200 transition-[width] duration-300" style={{ width: `${(moveLeft / moveTotal) * 100}%` }} />
+              {p.movement.dashed && <span className="absolute inset-y-0 border-l border-dashed border-sky-300" style={{ left: '50%' }} />}
+            </span>
+            <b className="tabular-nums text-marble-100">{Math.round(moveLeft)}<span className="text-marble-500"> / {Math.round(p.movement.allowance)} ft</span></b>
+          </span>
+        )}
+        {slots.length > 0 && <SlotTracker slots={slots} />}
+      </div>
+
       {(me2?.effects.length || me2?.concentration || me2?.readied) && (
         <div className="flex flex-wrap items-center gap-1" aria-label="Your conditions and effects" data-testid="my-effects">
-          {me2?.concentration && <span className="rounded-full border border-arcane-400/70 px-2 py-0.5 text-arcane-200" title="A new concentration spell ends it; damage forces a Constitution save">◎ Concentrating: {me2.concentration}</span>}
-          {me2?.effects.map((e) => <span key={e.id} className="rounded-full border border-ink-500 px-2 py-0.5 text-marble-100" title={CONDITION_TEXT[e.key as ConditionId] ?? e.name}>{e.name}</span>)}
+          {me2?.concentration && <span className="rounded-full border border-arcane-300/70 bg-arcane-500/15 px-2 py-0.5 text-arcane-300" title="A new concentration spell ends it; damage forces a Constitution save">◎ Concentrating: {me2.concentration}</span>}
+          {me2?.effects.map((e) => <span key={e.id} className="rounded-full border border-ink-500 bg-ink-800/80 px-2 py-0.5 text-marble-100" title={CONDITION_TEXT[e.key as ConditionId] ?? e.name}>{e.name}</span>)}
           {me2?.effects.some((e) => e.key === 'prone') && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} onClick={() => p.act({ action: 'condition', target: { kind: 'pc', tokenId }, condition: 'prone', add: false })}>Stand up</button>}
           {me2?.readied && <span className="rounded-full border border-gold-500/70 px-2 py-0.5 text-gold-200">⏳ Readied: {me2.readied.trigger} – right-click the target when it happens</span>}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2">
-        <EconomyChips encounter={encounter} actor={actor} />
-        {p.movement && !p.free && (
-          <span className="flex min-w-[10rem] flex-1 items-center gap-2" title={`${moveLeft} of ${p.movement.allowance} ft left${p.movement.dashed ? ' (Dash)' : ''}`}>
-            <span className="text-marble-400">Move</span>
-            <span className="relative h-2.5 flex-1 overflow-hidden rounded-full border border-ink-600 bg-ink-800" role="meter" aria-label="Movement left" aria-valuemin={0} aria-valuemax={p.movement.allowance} aria-valuenow={moveLeft} data-testid="movement-bar">
-              <span className="absolute inset-y-0 left-0 bg-gold-400 transition-[width] duration-300" style={{ width: `${(moveLeft / moveTotal) * 100}%` }} />
-              {p.movement.dashed && <span className="absolute inset-y-0 border-l border-dashed border-sky-300" style={{ left: '50%' }} />}
-            </span>
-            <b className="tabular-nums text-marble-100">{Math.round(moveLeft)} / {Math.round(p.movement.allowance)} ft</b>
-          </span>
-        )}
+
+      {/* action tiles */}
+      <div className="flex flex-wrap items-stretch gap-1.5" role="group" aria-label="Standard actions">
+        <Tile icon="⚔" label="Attack" cost="action" on={p.ready?.kind === 'attack'} disabled={!p.attacks.length || !canAct} title="Ready your first weapon – right-click an enemy to attack (walking into reach first)" onClick={() => p.setReady(p.ready?.kind === 'attack' ? null : { kind: 'attack', index: defaultAttack })} />
+        <Tile icon="✦" label="Cast spell" cost="action" on={spellOpen} disabled={!(sheet?.spells.length)} title="Open the spellbook" onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
+        {encounter && (['dash', 'disengage', 'dodge'] as const).map((id) => {
+          const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
+          const active = id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge;
+          return <Tile key={id} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} on={active} disabled={p.pending || !p.myTurn || spentCost} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
+        })}
+        <Tile icon="🥷" label={hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'} cost={encounter && !hidden ? actionCost : undefined} on={hidden} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) })} testid={encounter ? 'hide' : 'sneak'} />
+        <Tile icon="🔎" label="Search" cost={encounter ? actionCost : undefined} disabled={p.pending || (!!encounter && (!p.myTurn || spentCost))} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => standard('search')} />
+        {encounter && <>
+          <Tile icon="🤝" label="Help" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'help')!.text} onClick={() => standard('help')} />
+          <Tile icon="🧪" label="Use object" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
+          <Tile icon="⏳" label="Ready" cost="action" on={readyOpen} disabled={p.pending || !p.myTurn || !!b.action} title="Prepare the chosen attack with a trigger; it uses your reaction" onClick={() => setReadyOpen((v) => !v)} />
+          <span className="mx-0.5 w-px self-stretch bg-ink-700" aria-hidden />
+          <Tile icon="◆" label="Bonus mode" on={bonus} title="Take the next standard action as a bonus action (Cunning Action, off-hand attack …) – only if a feature allows it" onClick={() => setBonus((v) => !v)} />
+          <Tile icon="✧" label="Other bonus" cost="bonus" disabled={p.pending || !p.myTurn || !!b.bonus} title="Mark the bonus action as used (feature, off-hand attack …)" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'bonusOther' })} />
+        </>}
       </div>
-
-      {encounter && (
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Standard actions">
-          {(['dash', 'disengage', 'dodge'] as const).map((id) => {
-            const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
-            return (
-              <button key={id} type="button" className="btn btn-ghost px-2 py-0.5" title={a.text} disabled={p.pending || !p.myTurn || (bonus ? !!b.bonus : !!b.action)} onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: id, viaBonus: bonus })} data-testid={`act-${id}`}>
-                {a.label}
-              </button>
-            );
-          })}
-          <select aria-label="More actions" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={more} disabled={p.pending || !p.myTurn} onChange={(e) => setMore(e.target.value)}>
-            <option value="">More…</option>
-            {STANDARD_ACTIONS.filter((a) => !['dash', 'disengage', 'dodge'].includes(a.id)).map((a) => <option key={a.id} value={a.id} title={a.text}>{a.label}</option>)}
-          </select>
-          {more && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending || !p.myTurn} onClick={() => { p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: more, viaBonus: bonus }); setMore(''); }}>Do it</button>}
-          <button type="button" className={`btn px-2 py-0.5 ${hidden ? 'btn-gold' : 'btn-ghost'}`} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Hide / sneak: Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : { viaBonus: bonus }) })} data-testid="hide">
-            🥷 {hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'}
-          </button>
-          <label className="flex items-center gap-1 text-marble-300" title="E.g. Cunning Action, off-hand attack, bonus-action spells – only if a feature allows it">
-            <input type="checkbox" checked={bonus} onChange={(e) => setBonus(e.target.checked)} /> as bonus action
-          </label>
-          <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending || !p.myTurn || !!b.bonus} onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'bonusOther' })}>Other bonus action</button>
+      {readyOpen && encounter && p.myTurn && !b.action && (
+        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gold-700/60 bg-ink-900/70 p-1.5" aria-label="Ready an action">
+          <input className="w-64 rounded border border-ink-600 bg-ink-900 px-1.5 py-0.5" placeholder="Trigger (e.g. when the orc opens the door)" value={readyTrigger} onChange={(e) => setReadyTrigger(e.target.value)} />
+          <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !readyTrigger.trim() || p.ready?.kind !== 'attack'} title="Choose the attack in the hotbar first" onClick={() => { p.act({ action: 'ready', actor: { kind: 'pc', tokenId }, attackIndex: p.ready?.kind === 'attack' ? p.ready.index : 0, trigger: readyTrigger }); setReadyTrigger(''); setReadyOpen(false); }}>⏳ Ready {p.ready?.kind === 'attack' ? p.attacks[p.ready.index]?.name : 'the chosen attack'}</button>
         </div>
       )}
 
-      {!encounter && (
-        <div className="flex flex-wrap items-center gap-1">
-          <button type="button" className={`btn px-2 py-0.5 ${hidden ? 'btn-gold' : 'btn-ghost'}`} disabled={p.pending} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : {}) })} data-testid="sneak">🥷 {hidden ? 'Stop sneaking' : 'Sneak'}</button>
-          <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'search' })}>🔎 Search</button>
-        </div>
-      )}
       {features.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Class features" data-testid="features">
-          <span className="text-marble-400">Features:</span>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Class features" data-testid="features">
           {features.map((f) => f.id === 'wildShape' ? (
-            <select key={f.id} aria-label="Wild Shape" className="rounded border border-emerald-600/60 bg-ink-900 px-1 py-0.5 text-emerald-200" value="" disabled={p.pending || !canAct || f.current === 0} onChange={(e) => e.target.value && p.act({ action: 'feature', tokenId, feature: 'wildShape', formId: e.target.value })}>
+            <select key={f.id} aria-label="Wild Shape" className="h-14 rounded-lg border border-emerald-600/60 bg-ink-900 px-2 text-emerald-200" value="" disabled={p.pending || !canAct || f.current === 0} onChange={(e) => e.target.value && p.act({ action: 'feature', tokenId, feature: 'wildShape', formId: e.target.value })}>
               <option value="">🐾 Wild Shape ({f.current ?? f.max} left)…</option>
               {beastOptions(sheet).map((b) => <option key={b.id} value={b.id}>{b.name} · CR {b.cr} · AC {b.ac} · {b.hp} HP</option>)}
             </select>
           ) : f.target === 'ally' ? (
-            <select key={f.id} aria-label={f.name} className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value="" title={f.text} disabled={p.pending || !canAct || f.current === 0} onChange={(e) => { if (!e.target.value) return; const [kind, id] = e.target.value.split(':'); p.act({ action: 'feature', tokenId, feature: f.id, target: kind === 'pc' ? { kind: 'pc', tokenId: id } : { kind: 'npc', id }, ...(f.id === 'layOnHands' ? { amount: Math.max(1, Number(window.prompt('Hit points to restore?', '5')) || 5) } : {}) }); }}>
-              <option value="">{f.name} ({f.current ?? f.max} left)…</option>
+            <select key={f.id} aria-label={f.name} className="h-14 rounded-lg border border-forest-400/60 bg-ink-900 px-2 text-forest-300" value="" title={f.text} disabled={p.pending || !canAct || f.current === 0} onChange={(e) => { if (!e.target.value) return; const [kind, id] = e.target.value.split(':'); p.act({ action: 'feature', tokenId, feature: f.id, target: kind === 'pc' ? { kind: 'pc', tokenId: id } : { kind: 'npc', id }, ...(f.id === 'layOnHands' ? { amount: Math.max(1, Number(window.prompt('Hit points to restore?', '5')) || 5) } : {}) }); }}>
+              <option value="">✚ {f.name} ({f.current ?? f.max} left)…</option>
               {f.id === 'layOnHands' && <option value={`pc:${tokenId}`}>yourself</option>}
               {figures.filter((x) => x.kind === 'pc' || x.side === 'ally').map((x) => <option key={x.id} value={x.kind === 'pc' ? `pc:${x.tokenId}` : `npc:${x.id}`}>{x.name}</option>)}
             </select>
           ) : (
-            <button key={f.id} type="button" className="btn btn-ghost px-2 py-0.5" title={f.text} disabled={p.pending || !canAct || f.current === 0} onClick={() => p.act({ action: 'feature', tokenId, feature: f.id })} data-testid={`feature-${f.id}`}>
-              {f.name}{f.current !== null ? ` (${f.current})` : ''}
-            </button>
-          ))}
-        </div>
-      )}
-      {encounter && p.myTurn && !b.action && (
-        <div className="flex flex-wrap items-center gap-1" aria-label="Ready an action">
-          <input className="w-56 rounded border border-ink-600 bg-ink-900 px-1.5 py-0.5" placeholder="Ready: trigger (e.g. when the orc opens the door)" value={readyTrigger} onChange={(e) => setReadyTrigger(e.target.value)} />
-          <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending || !readyTrigger.trim() || p.ready?.kind !== 'attack'} title="Choose the attack in the Ready bar first" onClick={() => { p.act({ action: 'ready', actor: { kind: 'pc', tokenId }, attackIndex: p.ready?.kind === 'attack' ? p.ready.index : 0, trigger: readyTrigger }); setReadyTrigger(''); }}>⏳ Ready the chosen attack</button>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Ready an attack or spell" data-testid="ready-bar">
-        <span className="text-marble-400">Ready:</span>
-        {p.attacks.map((a, i) => {
-          const r = parseRangeFt(`${a.range} ${a.notes}`);
-          const on = p.ready?.kind === 'attack' && p.ready.index === i;
-          return <button key={`a${i}`} type="button" className={`rounded-full border px-2 py-0.5 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-100' : 'border-ink-600 text-marble-200 hover:border-gold-700'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')}</button>;
-        })}
-        {spells.map((sp) => {
-          const on = p.ready?.kind === 'spell' && p.ready.spellId === sp.id;
-          return <button key={sp.id} type="button" className={`rounded-full border px-2 py-0.5 ${on ? 'border-arcane-400 bg-arcane-400/20 text-arcane-100' : 'border-ink-600 text-marble-200 hover:border-arcane-400/60'}`} aria-pressed={on} title={`${sp.level ? `${ordinal(sp.level)} level` : 'cantrip'} · ${sp.range}`} onClick={() => p.setReady(on ? null : { kind: 'spell', spellId: sp.id, slotLevel: slotFor(sp.id, sp.level) })} data-testid="ready-spell">✦ {sp.name}</button>;
-        })}
-      </div>
-      {p.ready?.kind === 'spell' && (() => {
-        const sp = spells.find((x) => x.id === (p.ready as { spellId: string }).spellId);
-        if (!sp) return null;
-        const area = parseArea(`${sp.range} ${sp.description}`);
-        return (
-          <p className="text-arcane-200">
-            ✦ {sp.name}{sp.level > 0 && <> with a <select aria-label="Slot level" className="rounded border border-ink-600 bg-ink-900 px-1" value={(p.ready as { slotLevel: number }).slotLevel} onChange={(e) => p.setReady({ kind: 'spell', spellId: sp.id, slotLevel: Number(e.target.value) })}>{slots.filter((x) => x.level >= sp.level).map((x) => <option key={x.level} value={x.level} disabled={x.current < 1}>{ordinal(x.level)}-level slot ({x.current} left){x.level > sp.level ? ' – upcast' : ''}</option>)}</select></>}
-            {' · '}{(() => {
-              const def = spellEffectOf(sp);
-              if (area) return `${area.sizeFt}-ft ${area.shape}: hover to see the area, right-click to cast there.`;
-              if (def?.targeting === 'self' || (!def && /^self/i.test(sp.range.trim()) && !area)) return <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct} onClick={() => { p.act({ action: 'cast', tokenId, spellId: sp.id, slotLevel: (p.ready as { slotLevel: number }).slotLevel }); p.setReady(null); }}>Cast on yourself</button>;
-              if (def && (def.targeting === 'enemy' || def.targeting === 'ally')) {
-                const max = spellCount(def, sp.level, (p.ready as { slotLevel: number }).slotLevel || sp.level, lvl);
-                return (
-                  <span data-testid="spell-targets">
-                    right-click {def.targeting === 'ally' ? 'allies (or yourself)' : 'enemies'} to choose {max > 1 ? `up to ${max} targets${def.projectiles ? ` (${def.projectiles.label}s – the same target can be chosen again)` : ''}` : 'the target'}: <b>{p.spellTargets.map((t) => t.name).join(', ') || '–'}</b> ({p.spellTargets.length}/{max}){' '}
-                    <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || !p.spellTargets.length} onClick={() => { p.act({ action: 'cast', tokenId, spellId: sp.id, slotLevel: (p.ready as { slotLevel: number }).slotLevel, targets: p.spellTargets.map((t) => (t.kind === 'pc' ? { kind: 'pc', tokenId: t.tokenId } : { kind: 'npc', id: t.id })) }); p.setReady(null); }} data-testid="cast-targets">Cast</button>{' '}
-                    <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => p.setSpellTargets([])}>Clear</button>
-                  </span>
-                );
-              }
-              return /regains? .*hit points/i.test(sp.description) ? 'right-click an ally (or open the target menu) to heal.' : 'right-click an enemy to cast at it.';
-            })()}
-          </p>
-        );
-      })()}
-      <div className="flex flex-wrap items-center gap-1">
-        <button type="button" className="btn btn-ghost px-2 py-0.5" aria-expanded={spellOpen} disabled={!(sheet?.spells.length)} onClick={() => setSpellOpen((v) => !v)} data-testid="open-spells">✦ Spellbook{sheet?.spells.length ? ` (${spells.length} ready)` : ''}</button>
-        {slots.length > 0 && <span className="text-marble-400">Slots: {slots.map((s) => `${ordinal(s.level)} ${s.current}${s.max !== null ? `/${s.max}` : ''}`).join(' · ')}</span>}
-        {!enemy && <span className="text-marble-500">Click an enemy on the map to attack it or cast at it.</span>}
-      </div>
-      {spellOpen && !enemy && (
-        <div className="space-y-1" aria-label="Spellbook" data-testid="spellbook">
-          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter((l) => (sheet?.spells ?? []).some((x) => x.level === l)).map((l) => (
-            <details key={l} open={l <= 3}>
-              <summary className="cursor-pointer text-marble-300">{l === 0 ? 'Cantrips' : `${ordinal(l)} level`}{l > 0 ? ` · slots ${slots.find((x) => x.level === l)?.current ?? 0}/${slots.find((x) => x.level === l)?.max ?? 0}` : ''}</summary>
-              <ul className="mt-1 space-y-1">
-                {(sheet?.spells ?? []).filter((x) => x.level === l).sort((a, b) => a.name.localeCompare(b.name)).map((x) => (
-                  <li key={x.id} className={`rounded border px-1.5 py-1 ${x.level > 0 && !x.prepared ? 'border-ink-800 opacity-60' : 'border-ink-700'}`}>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <b className="text-marble-50">{x.name}</b>
-                      <span className="text-marble-500">{x.castingTime || '1 action'} · {x.range || '—'}{x.concentration ? ' · concentration' : ''}{x.level > 0 && !x.prepared ? ' · not prepared' : ''}</span>
-                      {(x.level === 0 || x.prepared) && <button type="button" className="btn btn-ghost ml-auto px-2 py-0.5" onClick={() => { p.setReady({ kind: 'spell', spellId: x.id, slotLevel: slotFor(x.id, x.level) }); setSpellOpen(false); }}>Ready</button>}
-                    </div>
-                    {x.description && <details><summary className="cursor-pointer text-[10px] text-marble-500">Description</summary><p className="whitespace-pre-wrap text-[11px] text-marble-300">{x.description}</p></details>}
-                  </li>
-                ))}
-              </ul>
-            </details>
+            <Tile key={f.id} icon={FEATURE_ICONS[f.id] ?? '★'} label={f.name} disabled={p.pending || !canAct || f.current === 0} title={f.text} onClick={() => p.act({ action: 'feature', tokenId, feature: f.id })} testid={`feature-${f.id}`} badge={f.current ?? undefined} tone="forest" />
           ))}
         </div>
       )}
 
+      {/* hotbar: what is "in hand" – its range shows on the map, right-click uses it */}
+      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-ink-700 bg-ink-950/70 p-1.5" role="toolbar" aria-label="Ready an attack or spell" data-testid="ready-bar">
+        <span className="pr-1 text-[10px] uppercase tracking-wider text-marble-500">In hand</span>
+        {p.attacks.map((a, i) => {
+          const r = parseRangeFt(`${a.range} ${a.notes}`);
+          const on = p.ready?.kind === 'attack' && p.ready.index === i;
+          return <button key={`a${i}`} type="button" className={`rounded-md border px-2 py-1 transition ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_8px_rgba(192,155,88,0.5)]' : 'border-ink-600 bg-ink-900 text-marble-100 hover:border-gold-500'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')} <span className="text-[10px] text-marble-500">{a.bonus}</span></button>;
+        })}
+        {spells.map((sp) => {
+          const on = p.ready?.kind === 'spell' && p.ready.spellId === sp.id;
+          const help = supportive(sp);
+          const noSlot = sp.level > 0 && !slots.some((x) => x.level >= sp.level && x.current > 0);
+          return <button key={sp.id} type="button" className={`rounded-md border px-2 py-1 transition ${on ? 'border-arcane-300 bg-arcane-500/25 text-arcane-300 shadow-[0_0_8px_rgba(122,99,194,0.6)]' : `border-ink-600 bg-ink-900 hover:border-arcane-300/70 ${help ? 'text-forest-300' : 'text-marble-100'}`} ${noSlot ? 'opacity-40' : ''}`} aria-pressed={on} title={`${sp.level ? `${ordinal(sp.level)} level` : 'cantrip'} · ${sp.range}${help ? ' · support' : ''}${noSlot ? ' · no slot left' : ''}`} onClick={() => p.setReady(on ? null : { kind: 'spell', spellId: sp.id, slotLevel: slotFor(sp.id, sp.level) })} data-testid="ready-spell"><LevelBadge level={sp.level} /> {help ? '✚' : '✦'} {sp.name}</button>;
+        })}
+      </div>
+      {readySpellNow && p.ready?.kind === 'spell' && (() => {
+        const sp = readySpellNow;
+        const lv = (p.ready as { slotLevel: number }).slotLevel;
+        const area = parseArea(`${sp.range} ${sp.description}`);
+        const def = spellEffectOf(sp);
+        const help = supportive(sp);
+        return (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-arcane-500/60 bg-arcane-500/10 px-2 py-1.5 text-arcane-300" data-testid="ready-spell-bar">
+            <b className="text-marble-50">✦ {sp.name}</b>
+            {sp.level > 0 && <SlotSelect slots={slots} spellLevel={sp.level} value={lv} onChange={(v) => p.setReady({ kind: 'spell', spellId: sp.id, slotLevel: v })} label="Slot level" />}
+            <span className="text-marble-300">·</span>
+            {(() => {
+              if (area) return <span>{area.sizeFt}-ft {area.shape}: hover to see the area, right-click to cast there.</span>;
+              if (def?.targeting === 'self' || (!def && /^self/i.test(sp.range.trim()))) return <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct} onClick={() => { castOn(sp.id, lv, null); p.setReady(null); }}>Cast on yourself</button>;
+              if (def && (def.targeting === 'enemy' || def.targeting === 'ally')) {
+                const max = spellCount(def, sp.level, lv || sp.level, lvl);
+                if (max === 1 && !def.projectiles && def.targeting === 'ally') return <span>right-click yourself or an ally – or <TargetPick self={tokenId} friends={friends} onPick={(t) => { castOn(sp.id, lv, t); p.setReady(null); }} disabled={p.pending || !canAct} /></span>;
+                return (
+                  <span data-testid="spell-targets">
+                    right-click {def.targeting === 'ally' ? 'allies (or yourself)' : 'enemies'} to choose {max > 1 ? `up to ${max} targets${def.projectiles ? ` (${def.projectiles.label}s – the same target can be chosen again)` : ''}` : 'the target'}: <b className="text-marble-50">{p.spellTargets.map((t) => t.name).join(', ') || '–'}</b> ({p.spellTargets.length}/{max}){' '}
+                    <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || !p.spellTargets.length} onClick={() => { p.act({ action: 'cast', tokenId, spellId: sp.id, slotLevel: lv, targets: p.spellTargets.map((t) => (t.kind === 'pc' ? { kind: 'pc', tokenId: t.tokenId } : { kind: 'npc', id: t.id })) }); p.setReady(null); }} data-testid="cast-targets">Cast</button>{' '}
+                    <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => p.setSpellTargets([])}>Clear</button>
+                  </span>
+                );
+              }
+              if (help) return <span>right-click yourself or an ally – or <TargetPick self={tokenId} friends={friends} onPick={(t) => { castOn(sp.id, lv, t); p.setReady(null); }} disabled={p.pending || !canAct} /></span>;
+              return <span>right-click an enemy to cast at it.</span>;
+            })()}
+            <button type="button" className="ml-auto text-marble-500 hover:text-gold-200" aria-label="Put the spell away" onClick={() => p.setReady(null)}>✕</button>
+          </div>
+        );
+      })()}
+      {!enemy && !p.ready && <p className="text-marble-500">Pick an attack or spell “in hand”, then right-click on the map. Right-click an enemy without one to see every option.</p>}
+
+      {spellOpen && !enemy && (
+        <Spellbook sheet={sheet} slots={slots} lvl={lvl} tokenId={tokenId} friends={friends} canAct={canAct} pending={p.pending} slotFor={slotFor}
+          onReady={(id, lv) => { p.setReady({ kind: 'spell', spellId: id, slotLevel: lv }); setSpellOpen(false); }}
+          onCast={(id, lv, t) => { castOn(id, lv, t); setSpellOpen(false); }} />
+      )}
+
       {enemy && (
-        <div className="space-y-1 rounded border border-gold-600/60 bg-ink-900/80 p-2" role="dialog" aria-label={`Target ${enemy.name}`} data-testid="target-menu">
+        <div className="space-y-1 rounded-lg border border-blood-400/60 bg-ink-900/90 p-2" role="dialog" aria-label={`Target ${enemy.name}`} data-testid="target-menu">
           <div className="flex items-center gap-2">
-            <b className="text-sm text-gold-200">🎯 {enemy.name}</b>
-            <span className="text-marble-400">{feetTo(enemy) ?? '?'} ft away{enemy.condition === 'bloodied' ? ' · bloodied' : ''}</span>
+            <b className="font-display text-sm text-gold-200">🎯 {enemy.name}</b>
+            <span className="text-marble-300">{feetTo(enemy) ?? '?'} ft away{enemy.condition === 'bloodied' ? ' · bloodied' : ''}</span>
             <button type="button" className="ml-auto text-marble-500 hover:text-gold-200" onClick={() => p.setTarget(null)} aria-label="Close target menu">✕</button>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-marble-300">
@@ -287,10 +271,10 @@ export function PlayerCombat(p: Props) {
             {p.attacks.map((a, i) => {
               const r = parseRangeFt(`${a.range} ${a.notes}`);
               const d = feetTo(enemy);
-              const ok = d === null || d <= (r.rangeFt ?? r.reachFt);
+              const ok = d === null || d <= (r.longRangeFt ?? r.rangeFt ?? r.reachFt);
               return (
-                <li key={i} className="flex flex-wrap items-center gap-1.5 rounded border border-ink-700 px-1.5 py-1">
-                  <span className="flex-1"><b className="text-marble-50">{r.rangeFt ? '🏹' : '⚔'} {a.name}</b> <span className="text-marble-400">{a.bonus} · {a.damage} · {r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}</span>{!ok && <span className="block text-[10px] text-rose-300">out of {r.rangeFt ? 'range' : 'reach'}</span>}</span>
+                <li key={i} className="flex flex-wrap items-center gap-1.5 rounded-md border border-ink-700 bg-ink-900/60 px-1.5 py-1">
+                  <span className="flex-1"><b className="text-marble-50">{r.rangeFt ? '🏹' : '⚔'} {a.name}</b> <span className="text-marble-300">{a.bonus} · {a.damage} · {r.rangeFt ? `range ${r.rangeFt}${r.longRangeFt ? `/${r.longRangeFt}` : ''} ft` : `reach ${r.reachFt} ft`}</span>{!ok && <span className="block text-[10px] text-rose-300">out of {r.rangeFt ? 'range' : 'reach'}</span>}</span>
                   <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || !ok} onClick={() => { p.act({ action: 'strike', attacker: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, attackIndex: i, bonus, ...(adv ? { adv } : {}), ...(smite ? { smite } : {}), ...(rogue && !sneakOn ? { sneak: false } : {}) }); p.setTarget(null); }} data-testid="attack-option">
                     Attack{bonus ? ' (bonus)' : ''}
                   </button>
@@ -298,16 +282,163 @@ export function PlayerCombat(p: Props) {
               );
             })}
           </ul>
-          {spells.length > 0 && (
+          {spells.some((s) => !supportive(s)) && (
             <>
               <p className="text-[10px] uppercase tracking-wider text-marble-500">Spells</p>
-              <ul className="space-y-1" aria-label="Spells at target">{spells.map((s) => spellRow(s.id, true))}</ul>
+              <ul className="space-y-1" aria-label="Spells at target">{spells.filter((s) => !supportive(s)).map((s) => spellRow(s.id, true))}</ul>
             </>
           )}
-          {b.attackAction && <p className="text-marble-400">Attack action: {b.attacks ?? 0} attack(s) made this turn.</p>}
+          {b.attackAction && <p className="text-marble-300">Attack action: {b.attacks ?? 0} attack(s) made this turn.</p>}
         </div>
       )}
     </section>
+  );
+}
+
+const ACTION_ICONS: Record<string, string> = { dash: '🏃', disengage: '↩', dodge: '🛡' };
+const FEATURE_ICONS: Record<string, string> = { actionSurge: '⚡', secondWind: '❤', rage: '😤', bardicInspiration: '🎵', revertShape: '🐾' };
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+
+/** One big action button (icon, label, cost marker: ● action, ◆ bonus action). */
+function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, tone }: { icon: string; label: string; cost?: 'action' | 'bonus'; on?: boolean; disabled?: boolean; title?: string; onClick: () => void; testid?: string; badge?: number; tone?: 'forest' }) {
+  return (
+    <button type="button" title={title} disabled={disabled} aria-pressed={on} onClick={onClick} data-testid={testid}
+      className={`relative flex h-14 w-[4.6rem] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-center text-[10px] leading-tight transition disabled:cursor-not-allowed disabled:opacity-35 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_10px_rgba(192,155,88,0.45)]' : tone === 'forest' ? 'border-forest-400/60 bg-forest-700/30 text-forest-300 hover:border-forest-300' : 'border-ink-600 bg-ink-850 text-marble-100 hover:border-gold-500 hover:bg-ink-800'}`}>
+      <span className="text-lg leading-none" aria-hidden>{icon}</span>
+      <span className="line-clamp-2">{label}</span>
+      {cost && <span aria-hidden className={`absolute left-1 top-1 h-2 w-2 ${cost === 'action' ? 'rounded-full bg-emerald-400' : 'rotate-45 bg-amber-400'}`} />}
+      {badge !== undefined && <span className="absolute right-1 top-0.5 rounded-full bg-ink-950/90 px-1 text-[9px] text-gold-200">{badge}</span>}
+    </button>
+  );
+}
+
+/** Action ●, bonus action ◆, reaction ↺ – lit while available. */
+function EconomyOrbs({ encounter, actor }: { encounter: SceneEncounter; actor: string }) {
+  const b = budgetOf(encounter, actor);
+  const orb = (id: string, label: string, used: boolean, shape: string, color: string, title: string) => (
+    <span key={id} title={`${label}: ${used ? 'used' : 'available'} – ${title}`} data-used={used} data-testid={`eco-${id}`} className={`flex items-center gap-1 ${used ? 'text-marble-500' : 'text-marble-100'}`}>
+      <span aria-hidden className={`flex h-5 w-5 items-center justify-center text-[11px] ${shape} ${used ? 'border border-ink-600 bg-ink-800 text-ink-500' : color}`}>{id === 'reaction' ? '↺' : ''}</span>
+      <span className={used ? 'line-through' : ''}>{label}</span>
+    </span>
+  );
+  return (
+    <span className="flex flex-wrap items-center gap-3" aria-label="Turn economy">
+      {orb('action', 'Action', !!b.action, 'rounded-full', 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]', b.attackAction ? `Attack action · ${b.attacks ?? 0} attack(s) made` : b.last ? `used: ${b.last}` : 'one per turn')}
+      {orb('bonus-action', 'Bonus', !!b.bonus, 'rotate-45 rounded-[3px] scale-75', 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.7)]', 'one per turn')}
+      {orb('reaction', 'Reaction', reactionUsed(encounter, actor), 'rounded-full', 'bg-arcane-500 text-white shadow-[0_0_8px_rgba(122,99,194,0.8)]', 'refreshes at the start of your turn')}
+      {b.dash && <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-[11px] text-sky-200">Dashing</span>}
+      {b.disengage && <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-[11px] text-sky-200">Disengaged</span>}
+      {b.dodge && <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-[11px] text-sky-200">Dodging</span>}
+    </span>
+  );
+}
+
+type Slot = ReturnType<typeof spellSlots>[number];
+/** Spell slots per level as pips: filled = left, hollow = spent. */
+function SlotTracker({ slots }: { slots: Slot[] }) {
+  return (
+    <span className="flex flex-wrap items-center gap-2" aria-label="Spell slots" data-testid="slot-tracker">
+      {slots.map((s) => {
+        const max = Math.max(s.max ?? s.current, s.current);
+        return (
+          <span key={s.level} className="flex items-center gap-1 rounded-md border border-arcane-500/40 bg-arcane-500/10 px-1.5 py-0.5" title={`${ordinal(s.level)}-level slots: ${s.current} of ${max} left`}>
+            <span className="font-display text-[10px] text-arcane-300">{ROMAN[s.level] ?? s.level}</span>
+            {Array.from({ length: Math.min(max, 9) }, (_, i) => <span key={i} aria-hidden className={`h-2 w-2 rotate-45 ${i < s.current ? 'bg-arcane-300 shadow-[0_0_5px_rgba(185,168,227,0.8)]' : 'border border-arcane-500/60'}`} />)}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function LevelBadge({ level }: { level: number }) {
+  return <span className={`inline-flex h-4 min-w-4 items-center justify-center rounded px-0.5 font-display text-[9px] ${level ? 'bg-arcane-500/40 text-arcane-300' : 'bg-ink-700 text-marble-300'}`} title={level ? `${ordinal(level)} level` : 'cantrip'}>{level ? ROMAN[level] : '∞'}</span>;
+}
+
+function SlotSelect({ slots, spellLevel, value, onChange, label }: { slots: Slot[]; spellLevel: number; value: number; onChange: (v: number) => void; label: string }) {
+  return (
+    <select aria-label={label} className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={value} onChange={(e) => onChange(Number(e.target.value))}>
+      {slots.filter((x) => x.level >= spellLevel).map((x) => <option key={x.level} value={x.level} disabled={x.current < 1}>{ordinal(x.level)} slot ({x.current}{x.max !== null ? `/${x.max}` : ''}){x.level > spellLevel ? ' – upcast' : ''}</option>)}
+    </select>
+  );
+}
+
+type Friend = NonNullable<SceneSnapshot['figures']>[number];
+type CastTarget = { kind: 'pc'; tokenId: string } | { kind: 'npc'; id: string };
+/** "Cast on …" – yourself or an ally. */
+function TargetPick({ self, friends, onPick, disabled }: { self: string; friends: Friend[]; onPick: (t: CastTarget) => void; disabled?: boolean }) {
+  return (
+    <select aria-label="Cast on" className="rounded border border-forest-400/60 bg-ink-900 px-1 py-0.5 text-forest-300" value="" disabled={disabled} onChange={(e) => { const v = e.target.value; if (!v) return; const [kind, id] = v.split(':'); onPick(kind === 'pc' ? { kind: 'pc', tokenId: id } : { kind: 'npc', id }); }} data-testid="cast-on">
+      <option value="">cast on…</option>
+      <option value={`pc:${self}`}>yourself</option>
+      {friends.map((f) => <option key={f.id} value={f.kind === 'pc' ? `pc:${f.tokenId}` : `npc:${f.id}`}>{f.name}</option>)}
+    </select>
+  );
+}
+
+/** Spellbook: a tab per spell level with its slots, spell cards with tags, Ready and (support spells) Cast on …. */
+function Spellbook({ sheet, slots, lvl, tokenId, friends, canAct, pending, slotFor, onReady, onCast }: { sheet: CharacterSheet | null; slots: Slot[]; lvl: number; tokenId: string; friends: Friend[]; canAct: boolean; pending: boolean; slotFor: (id: string, level: number) => number; onReady: (id: string, lv: number) => void; onCast: (id: string, lv: number, t: CastTarget | null) => void }) {
+  const all = sheet?.spells ?? [];
+  const levels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter((l) => all.some((x) => x.level === l));
+  const [tab, setTab] = useState(levels[0] ?? 0);
+  const [onlyReady, setOnlyReady] = useState(false);
+  const list = all.filter((x) => x.level === tab && (!onlyReady || x.level === 0 || x.prepared)).sort((a, b) => Number(b.prepared) - Number(a.prepared) || a.name.localeCompare(b.name));
+  return (
+    <div className="rounded-lg border border-arcane-500/50 bg-ink-950/90 p-2" aria-label="Spellbook" data-testid="spellbook">
+      <div className="mb-2 flex flex-wrap items-center gap-1" role="tablist">
+        {levels.map((l) => {
+          const s = slots.find((x) => x.level === l);
+          return (
+            <button key={l} type="button" role="tab" aria-selected={tab === l} onClick={() => setTab(l)} className={`rounded-md border px-2 py-1 ${tab === l ? 'border-arcane-300 bg-arcane-500/25 text-marble-50' : 'border-ink-600 text-marble-300 hover:border-arcane-300/60'}`}>
+              <span className="font-display">{l === 0 ? 'Cantrips' : `Level ${ROMAN[l]}`}</span>
+              {l > 0 && <span className="ml-1 text-[10px] text-arcane-300">{s ? `${s.current}/${s.max ?? s.current}` : '0'}</span>}
+            </button>
+          );
+        })}
+        <label className="ml-auto flex items-center gap-1 text-marble-300"><input type="checkbox" checked={onlyReady} onChange={(e) => setOnlyReady(e.target.checked)} /> prepared only</label>
+      </div>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {list.map((x) => {
+          const lv = slotFor(x.id, x.level);
+          const plan = sheet ? planSpell(sheet, x.id, lv, lvl) : null;
+          const usable = x.level === 0 || x.prepared;
+          const area = parseArea(`${x.range} ${x.description}`);
+          const help = supportive(x);
+          const def = spellEffectOf(x);
+          const heal = /regains? .*hit points/i.test(x.description);
+          const tags = [
+            plan && !('error' in plan) && plan.mode === 'attack' ? 'Attack' : '',
+            plan && !('error' in plan) && plan.mode === 'save' ? `${(plan.save ?? '').slice(0, 3).toUpperCase()} save` : '',
+            heal ? 'Heal' : help ? 'Buff' : '',
+            area ? `${area.sizeFt}-ft ${area.shape}` : '',
+            x.concentration ? 'Concentration' : '',
+            /bonus/i.test(x.castingTime) ? 'Bonus action' : /reaction/i.test(x.castingTime) ? 'Reaction' : '',
+          ].filter(Boolean);
+          const noSlot = x.level > 0 && !slots.some((s) => s.level >= x.level && s.current > 0);
+          return (
+            <li key={x.id} className={`rounded-md border px-2 py-1.5 ${usable ? (help ? 'border-forest-400/50 bg-forest-700/15' : 'border-ink-600 bg-ink-900/70') : 'border-ink-800 opacity-55'}`}>
+              <div className="flex items-start gap-1.5">
+                <LevelBadge level={x.level} />
+                <div className="min-w-0 flex-1">
+                  <b className="text-marble-50">{x.name}</b>
+                  <div className="text-[10px] text-marble-500">{x.castingTime || '1 action'} · {x.range || '—'}{plan && !('error' in plan) && plan.damage ? ` · ${plan.damage}` : ''}{!usable ? ' · not prepared' : ''}{noSlot && usable ? ' · no slot left' : ''}</div>
+                </div>
+              </div>
+              {tags.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{tags.map((t) => <span key={t} className={`rounded-full px-1.5 text-[9px] ${t === 'Heal' || t === 'Buff' ? 'bg-forest-500/40 text-forest-300' : t === 'Attack' ? 'bg-blood-600/40 text-blood-400' : 'bg-ink-700 text-marble-300'}`}>{t}</span>)}</div>}
+              {usable && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => onReady(x.id, lv)} title="Take it in hand: range on the map, right-click to cast">In hand</button>
+                  {(def?.targeting === 'self' || (!def && /^self/i.test(x.range.trim()) && !area)) && <button type="button" className="btn btn-gold px-2 py-0.5" disabled={pending || !canAct || noSlot} onClick={() => onCast(x.id, lv, null)}>Cast on yourself</button>}
+                  {help && def?.targeting !== 'self' && !(def && spellCount(def, x.level, lv || x.level, lvl) > 1) && <TargetPick self={tokenId} friends={friends} disabled={pending || !canAct || noSlot} onPick={(t) => onCast(x.id, lv, t)} />}
+                </div>
+              )}
+              {x.description && <details><summary className="cursor-pointer text-[10px] text-marble-500">Description</summary><p className="whitespace-pre-wrap text-[11px] text-marble-300">{x.description}</p></details>}
+            </li>
+          );
+        })}
+        {!list.length && <li className="text-marble-500">No spells on this level{onlyReady ? ' prepared' : ''}.</li>}
+      </ul>
+    </div>
   );
 }
 

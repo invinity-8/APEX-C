@@ -34,6 +34,8 @@ export async function attackExtras(ctx: CtxLike, map: SceneMap, attacker: Side, 
   const steps: Array<(st: GameState) => void> = [];
   // marks put on the target by this attacker (Hunter's Mark, Hex)
   for (const e of effectsOf(state, sceneId, them)) if (e.mods.markDamage && e.source?.actor === me) dice.push({ dice: e.mods.markDamage, label: e.name });
+  // Divine Favor and similar: extra dice on weapon hits
+  if (strike.kind !== 'spell') for (const e of effectsOf(state, sceneId, me)) if (e.mods.weaponDamage) dice.push({ dice: e.mods.weaponDamage, label: e.name });
   // rage: bonus melee damage
   if (melee) for (const e of effectsOf(state, sceneId, me)) if (e.mods.meleeDamage) flat.push({ value: e.mods.meleeDamage, label: e.name });
   if (attacker.kind === 'pc' && sheet) {

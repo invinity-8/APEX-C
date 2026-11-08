@@ -16,7 +16,10 @@ import { hexAt, hexCentre, hexMovementCost, tileLookup } from '../campaign/hexSc
 import { distance, hexKey, hexesInRange } from '../game/hex';
 import { parseRangeFt } from '../game/sceneCombat';
 import { characterLevel, spellRangeFt } from '../game/sceneActions';
-import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects';
+import { spellCount, spellEffectOf, spellHealing, supportive } from '../game/spellEffects';
+
+/** Attack roll, saving throw or damage: a spell for enemies, not friends (unless the table says otherwise). */
+export const harmful = (spell: { name: string; description: string; level: number }) => !supportive(spell) && /spell attack|saving throw|\bdamage\b/i.test(spell.description);
 
 export type SpellTarget = { kind: 'pc'; tokenId: string; name: string } | { kind: 'npc'; id: string; name: string };
 
@@ -76,6 +79,8 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
     pathBudget: i.remaining,
     lineFrom: i.acting && readyRange && readyRange > 10 && !readyArea ? pos : null,
     lineRangeFt: readyRange,
+    sightFrom: i.acting && !readyArea ? pos : null,
+    sightSide: 'hostile',
     areaAt: i.acting && readyArea ? (pt) => areaHexes(map, pos, pt, readyArea) : null,
     focus: i.focusKey ? { key: i.focusKey, x: pos.x, y: pos.y } : null,
     onTokenContext: (id) => {
@@ -92,7 +97,21 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
       if (readySpell && def && !readyArea && (def.targeting === 'enemy' || def.targeting === 'ally') && i.sheet) {
         const max = spellCount(def, readySpell.level, i.ready?.kind === 'spell' ? i.ready.slotLevel || readySpell.level : readySpell.level, characterLevel(i.sheet));
         const t: SpellTarget | null = isMe ? { kind: 'pc', tokenId: i.tokenId, name: i.name } : f ? (f.kind === 'pc' ? { kind: 'pc', tokenId: f.tokenId!, name: f.name } : { kind: 'npc', id: f.id, name: f.name }) : null;
-        if (t) i.setSpellTargets((list) => (list.length >= max ? list : [...list, t]));
+        if (!t) return;
+        // a single target: cast at once (Mage Armor on an ally, Hold Person on an enemy)
+        if (max === 1 && !def.projectiles && i.ready?.kind === 'spell') { void i.act({ action: 'cast', tokenId: i.tokenId, spellId: readySpell.id, slotLevel: i.ready.slotLevel, targets: [t.kind === 'pc' ? { kind: 'pc', tokenId: t.tokenId } : { kind: 'npc', id: t.id }] }); i.setReady(null); i.setSpellTargets(() => []); return; }
+        i.setSpellTargets((list) => (list.length >= max ? list : [...list, t]));
+        return;
+      }
+      // a spell on yourself (Shield, False Life, Divine Favor): right-click your own figure
+      if (readySpell && i.ready?.kind === 'spell' && isMe && (def?.targeting === 'self' || /^self/i.test(readySpell.range.trim()))) { void i.act({ action: 'cast', tokenId: i.tokenId, spellId: readySpell.id, slotLevel: i.ready.slotLevel }); i.setReady(null); return; }
+      // other spells on a friend (yourself, a character, an allied NPC): only when the spell isn't harmful
+      const friendly = isMe || (f && (f.kind === 'pc' || f.side === 'ally'));
+      if (readySpell && i.ready?.kind === 'spell' && !readyArea && friendly) {
+        if (harmful(readySpell)) { i.notify(`${readySpell.name} harms its target – right-click an enemy.`); return; }
+        const t = isMe ? { kind: 'pc', tokenId: i.tokenId } : f!.kind === 'pc' ? { kind: 'pc', tokenId: f!.tokenId } : { kind: 'npc', id: f!.id };
+        void i.act({ action: 'cast', tokenId: i.tokenId, spellId: readySpell.id, slotLevel: i.ready.slotLevel, targets: [t] });
+        i.setReady(null);
         return;
       }
       if (!f || f.kind !== 'enemy' || f.side === 'ally' || f.condition === 'down') return;

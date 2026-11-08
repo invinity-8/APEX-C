@@ -68,6 +68,10 @@ interface Props {
   /** Line of sight / range while hovering: white line within range and in sight, plus the reachable area. */
   lineFrom?: { x: number; y: number } | null;
   lineRangeFt?: number | null;
+  /** APEX 1.5 – sight preview: hovering a hex shows which opponents would be in line of sight from THERE. */
+  sightFrom?: { x: number; y: number } | null;
+  /** Whose opponents: 'hostile' = enemies (characters, allies), 'party' = characters and allies (an enemy acting). */
+  sightSide?: 'hostile' | 'party' | null;
   /** Area of effect preview for the hovered point. */
   areaAt?: ((point: { x: number; y: number }) => HexKey[]) | null;
   /** Centre the camera on a point whenever `key` changes (active turn). */
@@ -77,7 +81,7 @@ interface Props {
 const MAX_K = 3.5;
 const NO_TEAMS = new Set<string>();
 
-export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, lineFrom = null, lineRangeFt = null, areaAt = null, focus = null }: Props) {
+export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null }: Props) {
   const { tokens, moving } = useAnimatedTokens(targetTokens, map);
   const reducedMotion = usePrefersReducedMotion();
   const [hover, setHover] = useState<HexKey | null>(null);
@@ -163,11 +167,30 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
     const keys = hexesInRange(from, cells).map(hexKey).filter((k) => known(k) && lineOfSight(from, parseKey(k), blocksSight));
     return { keys: new Set(keys), d: keys.map((k) => { const c = center(parseKey(k)); return `M${hexCorners(c.x, c.y, HEX_SIZE * 0.9).replace(/ /g, 'L')}Z`; }).join('') };
   }, [lineFrom?.x, lineFrom?.y, lineRangeFt, map.hex, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const losLine = lineFrom && hover && lineRangeFt ? (() => {
-    const a = center(hexAt(map, lineFrom)), b = center(parseKey(hover));
-    const ok = !!rangeArea?.keys.has(hover);
-    return { a, b, ok, ft: distance(hexAt(map, lineFrom), parseKey(hover)) * (map.unitsPerCell || 5) };
-  })() : null;
+  // Sight preview: from the hovered hex (where the figure could stand) to every opponent – white within the readied
+  // range, gold in sight but beyond it. Hovering an opponent instead shows the line from the figure to it.
+  const opponents = useMemo(() => (sightSide ? targetTokens.filter((t) => (sightSide === 'hostile' ? !!t.enemy && !t.enemy.ally : !t.enemy || !!t.enemy.ally) && t.enemy?.condition !== 'down') : []), [targetTokens, sightSide]);
+  const sight = useMemo(() => {
+    const origin = sightFrom ?? lineFrom;
+    if (!origin || !hover || !map.hex || !known(hover)) return null;
+    const unitFt = map.unitsPerCell || 5;
+    const self = hexAt(map, origin);
+    const h = parseKey(hover);
+    const onOpponent = opponents.some((t) => hexKey(hexAt(map, t)) === hover);
+    if (onOpponent || hexKey(self) === hover) {
+      if (!onOpponent || !lineRangeFt) return null;
+      const ft = distance(self, h) * unitFt;
+      const ok = ft <= lineRangeFt && lineOfSight(self, h, blocksSight);
+      return { kind: 'target' as const, a: center(self), lines: [{ b: center(h), ok, ft, label: `${ft} ft${ok ? '' : ' – no line of sight or out of range'}` }] };
+    }
+    const lines = opponents.flatMap((t) => {
+      const to = hexAt(map, t);
+      const ft = distance(h, to) * unitFt;
+      if (ft > 40 * unitFt || !lineOfSight(h, to, blocksSight)) return [];
+      return [{ b: center(to), ok: !lineRangeFt || ft <= lineRangeFt, ft, label: `${ft} ft` }];
+    });
+    return { kind: 'from' as const, a: center(h), lines, hidden: opponents.length - lines.length };
+  }, [sightFrom?.x, sightFrom?.y, lineFrom?.x, lineFrom?.y, hover, opponents, lineRangeFt, map.hex, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const areaKeys = useMemo(() => (areaAt && hoverPoint ? areaAt(hoverPoint) : null), [areaAt, hover]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arena-style light layer (water glints, motes) without Arena sites or party torches.
@@ -292,11 +315,19 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                 <text x={pathPreview.end.x} y={pathPreview.end.y - HEX_SIZE * 0.7} textAnchor="middle" fontSize={12} fontWeight={700} fill={pathPreview.ok ? '#f3dc9a' : '#ff9a8a'} stroke="#000" strokeWidth={3} paintOrder="stroke">{fmt(pathPreview.cost)} {unit}{pathPreview.ok ? '' : ' – too far'}</text>
               </g>
             )}
-            {losLine && (
-              <g pointerEvents="none" data-testid="los-line">
-                <line x1={losLine.a.x} y1={losLine.a.y} x2={losLine.b.x} y2={losLine.b.y} stroke="#000" strokeOpacity={0.5} strokeWidth={4} />
-                <line x1={losLine.a.x} y1={losLine.a.y} x2={losLine.b.x} y2={losLine.b.y} stroke={losLine.ok ? '#ffffff' : '#ff6b5a'} strokeWidth={2} strokeDasharray={losLine.ok ? undefined : '6 5'} />
-                <text x={(losLine.a.x + losLine.b.x) / 2} y={(losLine.a.y + losLine.b.y) / 2 - 6} textAnchor="middle" fontSize={11} fill={losLine.ok ? '#fff' : '#ff9a8a'} stroke="#000" strokeWidth={3} paintOrder="stroke">{losLine.ft} ft{losLine.ok ? '' : ' – no line of sight or out of range'}</text>
+            {sight && (
+              <g pointerEvents="none" data-testid={sight.kind === 'target' ? 'los-line' : 'sight-preview'}>
+                {sight.lines.map((l, i) => (
+                  <g key={i}>
+                    <line x1={sight.a.x} y1={sight.a.y} x2={l.b.x} y2={l.b.y} stroke="#000" strokeOpacity={0.5} strokeWidth={4} />
+                    <line x1={sight.a.x} y1={sight.a.y} x2={l.b.x} y2={l.b.y} stroke={sight.kind === 'target' && !l.ok ? '#ff6b5a' : l.ok ? '#ffffff' : '#f3c86a'} strokeWidth={2} strokeDasharray={l.ok ? undefined : '6 5'} />
+                    <circle cx={l.b.x} cy={l.b.y} r={HEX_SIZE * 0.62} fill="none" stroke={l.ok ? '#ffffff' : '#f3c86a'} strokeOpacity={0.8} strokeWidth={1.6} />
+                    <text x={(sight.a.x + l.b.x) / 2} y={(sight.a.y + l.b.y) / 2 - 6} textAnchor="middle" fontSize={11} fill={sight.kind === 'target' && !l.ok ? '#ff9a8a' : l.ok ? '#fff' : '#f3dc9a'} stroke="#000" strokeWidth={3} paintOrder="stroke">{l.label}</text>
+                  </g>
+                ))}
+                {sight.kind === 'from' && (
+                  <text x={sight.a.x} y={sight.a.y + HEX_SIZE * 1.15} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={3} paintOrder="stroke">👁 {sight.lines.length} in sight{sight.hidden ? ` · ${sight.hidden} blocked` : ''}</text>
+                )}
               </g>
             )}
             {markers.map((n) => {

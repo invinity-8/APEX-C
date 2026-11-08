@@ -298,3 +298,49 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
   - Auf der Karte erscheint 🥷 unter der Figur.
 - **Sneak Attack:** Schurken sehen im Angriffsmenü, ob Sneak Attack möglich ist (versteckt, unsichtbar, Flanking, Verbündeter am Ziel …) und können ihn an- oder abwählen. Der Server prüft die Bedingungen.
 - **Flanking (Hex):** Steht ein Verbündeter genau gegenüber auf der anderen Seite des Ziels und sind beide angrenzend, gibt es Vorteil auf Nahkampfangriffe – für Spieler und Gegner.
+
+## APEX 1.5 – Sicht-Vorschau, Buffs auf Verbündete, neues Kampf-Panel
+
+- **Sicht-Vorschau:** Wer am Zug ist und über ein Hex fährt, sieht Linien von **diesem Hex** zu allen Gegnern, die man von dort sehen würde. Angezeigt werden die Entfernung und unten „👁 n in sight · m blocked“.
+  - **Weiß:** in Reichweite des Angriffs oder Zaubers in der Hand.
+  - **Gold gestrichelt:** sichtbar, aber zu weit.
+  - Fährt man über einen Gegner, erscheint wie bisher die Linie von der eigenen Figur zum Ziel.
+  - Gilt für Spieler, für den GM bei Spielerfiguren und bei NPCs (deren Gegner sind die Gruppe).
+- **Buffs und Heilung auf Verbündete und sich selbst:**
+  - Rechtsklick auf sich selbst oder einen Verbündeten wirkt einen unterstützenden Zauber auf ihn. Zauber für ein einzelnes Ziel wirken sofort.
+  - Schadenszauber lassen sich nicht auf Freunde wirken.
+  - Im Zauberbuch gibt es bei Unterstützungszaubern „cast on…“ (dich selbst oder einen Verbündeten).
+  - Im Zielmenü eines Gegners stehen keine Buffs mehr.
+  - Neu mit Spielmechanik (SRD-5.1-Zahlen, keine Texte):
+    - **Mage Armor:** AC 13 + Dex, falls höher.
+    - **Barkskin:** AC mindestens 16.
+    - **Longstrider:** +10 ft.
+    - **Haste:** +2 AC, doppelte Geschwindigkeit.
+    - **Stoneskin:** Resistenz gegen physischen Schaden.
+    - **Greater Invisibility.**
+    - **Divine Favor:** +1d4 auf Waffentreffer.
+    - **False Life, Armor of Agathys, Heroism:** temporäre TP auf dem Bogen.
+    - **Lesser Restoration:** beendet blinded, deafened, paralyzed oder poisoned.
+    - **Cure Wounds, Healing Word, Mass Healing Word, Mass Cure Wounds, Prayer of Healing:** mit Zielanzahl.
+  - AC- und Tempo-Effekte zählen für Angriffe, für die Bewegung im Zug und für die Bewegungsvorschau von NPCs.
+- **Kampf-Panel neu gestaltet:**
+  - **Aktion, Bonusaktion, Reaktion:** ● Aktion, ◆ Bonus und ↺ Reaktion als leuchtende Marker, durchgestrichen wenn verbraucht.
+  - **Bewegung:** Leiste mit 👣.
+  - **Zauberplätze:** Rauten je Grad (I ◆◆◆◇), gefüllt = übrig.
+  - **Aktionen als Kacheln:**
+    - Attack, Cast spell, Dash, Disengage, Dodge, Hide/Sneak, Search, Help, Use object, Ready, Bonus mode und Other bonus.
+    - Eine grüne Ecke steht für Aktion, eine gelbe Raute für Bonusaktion.
+    - Aktive Zustände wie Dashing leuchten gold.
+  - **Klassenfähigkeiten:** eigene Kacheln mit Restanzahl.
+  - **„In hand“-Leiste:** Waffen mit Trefferbonus, Zauber mit Grad (∞, I, II, …). Unterstützungszauber sind grün mit ✚.
+    - Ein Zauber in der Hand bekommt eine eigene Zeile mit Slotwahl und Anleitung.
+  - **Zauberbuch:**
+    - Reiter je Grad mit Slots und Karten mit Tags (Attack, Save, Heal/Buff, Fläche, Concentration, Bonus action).
+    - „In hand“, „Cast on yourself“ oder „cast on…“ direkt auf der Karte.
+    - Filter „prepared only“.
+
+**Noch offen:**
+- **Aid:** Erhöhung der maximalen TP nicht automatisiert.
+- **Haste:** Zusatzaktion nicht automatisiert.
+- **Heroism:** Temp-TP gibt es nur beim Wirken, nicht jede Runde.
+- **NPC-Ziele:** Temp-TP auf NPCs notiert der GM.

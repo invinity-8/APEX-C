@@ -21,7 +21,7 @@ import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
 import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
 import { statBlock, type AbilityKey } from '../game/bestiary.js';
-import { flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, PHYSICAL, acBonus, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
+import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
 import type { AttackOptions } from '../game/sceneCombat.js';
 import { attackExtras } from './combatFeatures.js';
 import { areaHexes, feetApart, parseArea, type AreaSpec } from '../campaign/hexArea.js';
@@ -33,10 +33,10 @@ import { hexAt, hexCentre, hexMovementCost, passable, tileLookup } from '../camp
 import { continuePcMove } from './sceneMotion.js';
 import { lineOfSight } from '../campaign/hexVision.js';
 import { distance } from '../game/hex.js';
-import { applyDamage, applyHealing, classLevel, revert, transform } from '../game/abilities.js';
+import { applyDamage, applyHealing, classLevel, revert, setTempHp, transform } from '../game/abilities.js';
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
 import { findBeast } from '../game/beastCatalog.js';
-import { npcPerception, npcStealth, pcPerception, pcStealth } from '../game/perception.js';
+import { npcPerception, npcStealth, pcAbilityMod, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { parseMap } from '../campaign/maps.js';
@@ -419,13 +419,12 @@ async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: s
   const state = ctx.state!;
   const sceneId = ctx.sceneId!;
   const targetActor = actorOf(target);
-  const fxAc = acBonus(state, sceneId, targetActor);
   const physical = PHYSICAL.test(strike.damageType ?? strike.name) || (!strike.damageType && strike.kind !== 'spell');
   const halve = resistsPhysical(state, sceneId, targetActor) && physical ? 'resistance' : undefined;
   if (target.kind === 'npc') {
     const e = enemiesOf(state, sceneId).find((x) => x.id === target.id && !x.defeated);
     if (!e) return 'Target not found.';
-    const roll = resolveAttack(attackerName, e.name, strike.name, strike.bonus, strike.damage, e.ac + fxAc, die, { ...o, halve });
+    const roll = resolveAttack(attackerName, e.name, strike.name, strike.bonus, strike.damage, effectiveAc(state, sceneId, targetActor, e.ac, e.abilities ? Math.floor((e.abilities.dex - 10) / 2) : 0), die, { ...o, halve });
     const conc = roll.hit ? await concentrationCheck(ctx, targetActor, roll.damage) : null;
     const text = roll.text + extraText + (conc?.text ?? '');
     return {
@@ -444,7 +443,7 @@ async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: s
   const token = state.tokens[target.tokenId];
   if (!token) return 'Target not found.';
   const sheet = await sheetOf(ctx, target.tokenId);
-  const ac = targetAc(sheet, token, itemRulesOf(state)) + fxAc;
+  const ac = effectiveAc(state, sceneId, targetActor, targetAc(sheet, token, itemRulesOf(state)), pcAbilityMod(sheet, /^dex/i));
   const roll = resolveAttack(attackerName, token.name, strike.name, strike.bonus, strike.damage, ac, die, { ...o, halve });
   // Shield: the hit would miss against AC + 5 – the character decides first
   if (roll.hit && roll.d20 !== 20 && roll.total < ac + 5 && shieldReady(state, sceneId, sheet, target.tokenId)) {
@@ -595,7 +594,7 @@ async function standardRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
   });
 }
 
-const CONCENTRATION_SPELLS = new Set(['bless', 'bane', 'shield of faith', "hunter's mark", 'hex', 'hold person', 'hold monster', 'faerie fire', 'web', 'entangle', 'invisibility', 'blur', 'tasha’s hideous laughter']);
+const CONCENTRATION_SPELLS = new Set(['bless', 'bane', 'shield of faith', "hunter's mark", 'hex', 'hold person', 'hold monster', 'faerie fire', 'web', 'entangle', 'invisibility', 'blur', 'tasha’s hideous laughter', 'barkskin', 'haste', 'stoneskin', 'greater invisibility', 'heroism', 'divine favor']);
 
 /** Saving throw bonus of any creature on the scene. */
 async function saveOf(ctx: Ctx, who: Side, ability: AbilityKey): Promise<number> {
@@ -680,6 +679,29 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
     steps.push((st) => { addEffect(st, scene.id, actorOf(who), fx); return st; });
   };
 
+  /** Buffs and support (APEX 1.5): the effect, temporary hit points, ending a condition. */
+  const support = async (who: Side, name: string) => {
+    if (def?.effect) await affect(who, name);
+    if (def?.tempHp) {
+      const spellMod = (nums.attack ?? 0) - (Number(/[+-]?\d+/.exec(sheet.combat.find((c) => /proficiency/i.test(c.label))?.value ?? '')?.[0]) || 2);
+      const base = def.tempHp.amount === 'mod' ? Math.max(1, spellMod) : (() => { const d = parseDamage(def.tempHp!.amount); return d ? rollDice(d).total : Number(def.tempHp!.amount) || 0; })();
+      const amount = base + (def.tempHp.perSlot ?? 0) * Math.max(0, (plan.slotLevel || plan.spell.level) - plan.spell.level);
+      if (who.kind === 'pc') {
+        const trow = await repo.loadSheet(user.campaignId, who.tokenId);
+        const ts = await sheetOf(ctx, who.tokenId);
+        const r = setTempHp(ts, 'grant', amount);
+        if (r.ok) await repo.saveSheet(user.campaignId, who.tokenId, r.sheet, trow?.version ?? 0, user.id);
+        lines.push(`${name} gains ${amount} temporary hit points${r.ok ? ` (temporary HP ${r.sheet.hitPoints?.temp})` : ' (apply by hand)'}.`);
+      } else lines.push(`${name} gains ${amount} temporary hit points (GM: note them).`);
+    }
+    if (def?.removes) {
+      const actor = actorOf(who);
+      const found = effectsOf(ctx.state!, scene.id, actor).find((x) => (def.removes as string[]).includes(x.key));
+      if (found) { lines.push(`${name} is no longer ${found.key}.`); steps.push((st) => { removeEffect(st, scene.id, actor, found.id); return st; }); }
+      else lines.push(`${name}: no condition this spell ends (${def.removes.join(', ')}).`);
+    }
+  };
+
   if (def?.projectiles) {
     // several rays / darts / beams – each is its own attack (or hits automatically)
     if (!targets.length) return { status: 422, body: { error: `Choose up to ${count} target${count > 1 ? 's' : ''} for the ${def.projectiles.label}s.` } };
@@ -721,16 +743,16 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
         steps.push((st) => { const u = updateEnemy(st, scene.id, t.id, { hpDelta: amount }); return u.ok ? u.state : st; });
       }
     }
-  } else if (def?.effect && def.targeting === 'self') {
-    await affect(caster, casterName);
+  } else if (def && def.targeting === 'self' && (def.effect || def.tempHp || def.removes)) {
+    await support(caster, casterName);
   } else if (def?.effect && def.targeting === 'point' && area && point && me) {
     const keys = new Set(areaHexes(map, me, point, area));
     const inside = figures.filter((f) => !f.down && keys.has(hexKeyAt(map, f)));
     lines.push(`${area.sizeFt}-ft ${area.shape}: ${inside.length ? inside.map((f) => f.name).join(', ') : 'nobody inside'}.`);
     for (const f of inside) await affect(f.kind === 'pc' ? { kind: 'pc', tokenId: f.id } : { kind: 'npc', id: f.id }, f.name);
-  } else if (def?.effect && (def.targeting === 'ally' || def.targeting === 'enemy')) {
+  } else if (def && (def.targeting === 'ally' || def.targeting === 'enemy') && (def.effect || def.tempHp || def.removes)) {
     if (!targets.length) return { status: 422, body: { error: `Choose ${count > 1 ? `up to ${count} targets` : 'a target'} for ${plan.spell.name}.` } };
-    for (const t of targets) await affect(t, positionOf(figures, t)!.name);
+    for (const t of targets) await (def.targeting === 'ally' ? support(t, positionOf(figures, t)!.name) : affect(t, positionOf(figures, t)!.name));
   } else if (area && plan.mode === 'save' && point && me && dc !== null) {
     // area damage spell aimed at a point: every creature in the area saves, damage is applied
     const r = await resolveArea(user, repo, ctx, map, me, point, { name: `${plan.spell.name}${slotText}`, area, save: (plan.save?.slice(0, 3) ?? 'dex') as AbilityKey, dc, damage: plan.damage ?? '0', damageType: /[a-z]+$/.exec(plan.damage ?? '')?.[0] ?? '', source: casterName });
@@ -819,7 +841,7 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
   if (!path.ok) return { status: 422, body: { error: path.error } };
   const b = budgetOf(e, actor);
   if (speedZero(state, scene.id, actor)) return { status: 422, body: { error: `${npc.name} cannot move (speed 0: ${effectsOf(state, scene.id, actor).filter((x) => x.mods.speedZero).map((x) => x.name).join(', ')}).` } };
-  const allowance = npc.speedFt * (b.dash ? 2 : 1);
+  const allowance = effectiveSpeed(state, scene.id, actor, npc.speedFt) * (b.dash ? 2 : 1);
   if (e && (b.moved ?? 0) + path.cost > allowance + 1e-9) return { status: 422, body: { error: `${npc.name} has only ${Math.max(0, allowance - (b.moved ?? 0))} ft of movement left this turn.` } };
   const points = [{ x: npc.x, y: npc.y }, ...path.steps];
   const stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'npc', id: npc.id }, points, declined);

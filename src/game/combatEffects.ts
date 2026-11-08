@@ -41,6 +41,15 @@ export interface EffectMods {
   resistPhysical?: boolean;
   /** Extra damage on this creature's melee weapon hits (Rage). */
   meleeDamage?: number;
+  /** APEX 1.5 – base AC 13 + Dex for an unarmoured creature (Mage Armor); the higher of this and the normal AC. */
+  acBase?: number;
+  /** AC can't be lower than this (Barkskin 16). */
+  acMin?: number;
+  /** Walking speed bonus in feet (Longstrider +10) and a multiplier (Haste ×2). */
+  speed?: number;
+  speedMult?: number;
+  /** Extra damage dice on this creature's weapon hits (Divine Favor 1d4 radiant). */
+  weaponDamage?: string;
   /** On the TARGET: the marker (source actor) deals this extra damage dice on hits against it (Hunter's Mark, Hex). */
   markDamage?: string;
 }
@@ -204,6 +213,25 @@ export function attackMods(state: Pick<GameState, 'sceneEffects' | 'sceneEncount
 
 /** AC bonus from effects (Shield +5, Shield of Faith +2 …). */
 export const acBonus = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string) => effectsOf(state, sceneId, actor).reduce((s, e) => s + (e.mods.ac ?? 0), 0);
+/**
+ * AC with effects: Mage Armor (13 + Dex, if higher), Barkskin (at least 16), then flat bonuses (Shield, Haste,
+ * Shield of Faith). `dexMod` is the creature's Dexterity modifier.
+ */
+export function acWith(effects: Array<Pick<SceneEffect, 'mods'>>, base: number, dexMod: number): number {
+  let ac = base;
+  for (const e of effects) if (e.mods.acBase) ac = Math.max(ac, e.mods.acBase + dexMod);
+  for (const e of effects) if (e.mods.acMin) ac = Math.max(ac, e.mods.acMin);
+  return ac + effects.reduce((s, e) => s + (e.mods.ac ?? 0), 0);
+}
+export const effectiveAc = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string, base: number, dexMod: number) => acWith(effectsOf(state, sceneId, actor), base, dexMod);
+/** Walking speed with effects: speed 0 wins, then bonuses (Longstrider), then the highest multiplier (Haste). */
+export function speedWith(effects: Array<Pick<SceneEffect, 'mods'>>, base: number): number {
+  if (effects.some((e) => e.mods.speedZero)) return 0;
+  const plus = effects.reduce((s, e) => s + (e.mods.speed ?? 0), 0);
+  const mult = Math.max(1, ...effects.map((e) => e.mods.speedMult ?? 1));
+  return Math.max(0, (base + plus) * mult);
+}
+export const effectiveSpeed = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string, base: number) => speedWith(effectsOf(state, sceneId, actor), base);
 export const incapacitated = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string) => has(state, sceneId, actor, (m) => !!m.incapacitated);
 export const speedZero = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string) => has(state, sceneId, actor, (m) => !!m.speedZero);
 export const resistsPhysical = (state: Pick<GameState, 'sceneEffects'>, sceneId: string, actor: string) => has(state, sceneId, actor, (m) => !!m.resistPhysical);
