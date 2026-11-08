@@ -391,3 +391,38 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - **Shillelagh:** wird auf sich selbst gewirkt (Bonusaktion, 10 Runden). Solange es wirkt, trifft der Kampfstab bzw. die Keule mit dem Zauberangriffsbonus (sonst Übung + Weisheit) und macht 1W8 + Weisheit magischen Wuchtschaden, z. B. „Quarterstaff (Shillelagh) +6“.
 - **Thunderwave und andere „Self (…)“-Flächen:** Der Würfel liegt immer direkt neben der Figur und zeigt in Richtung der Maus. „Self (10-foot radius)“ liegt um die Figur herum.
 - **Fehlende Zauberwerte:** Steht kein Zauberangriff oder Rettungswurf-SG im Bogen, werden sie aus Klasse, Attribut und Übungsbonus berechnet.
+
+## APEX 1.8 – 3D-Battlemap, Stufe 1: Höhen und 3D-Ansicht
+
+- **Höhen pro Hex** in Stufen zu 5 ft (0–175 ft):
+  - Gespeichert mit der Karte (`hex.heights`). Ältere Karten sind flach und bleiben unverändert; es gibt keine Migration.
+  - Für Spieler werden unbekannte Hexes ohne Höhe übertragen.
+- **Editor:** Neues Werkzeug „⛰ Height“ für Battle-Maps.
+  - Stufe per Regler, ±, oder Schnellwahl 0/5/10/20/30 ft wählen und Hexes anklicken oder überstreichen. Ein großer Pinsel ist möglich.
+  - „Flatten all“ macht die Karte wieder flach.
+- **2D-Karte:**
+  - Höheres Gelände ist heller.
+  - Stufen (5 ft Unterschied) sind gestrichelte helle Kanten, Klippen (10 ft und mehr) dicke dunkle Kanten.
+  - Der GM sieht die Höhe als ▲-Angabe, alle sehen sie im Hover-Tooltip.
+- **Regeln:**
+  - **Bewegung:** Eine Stufe hinauf kostet 5 ft extra, hinunter nichts. Klippen (zwei und mehr Stufen) sind für Gehende nicht passierbar. Das gilt für Pfad-Vorschau, Reichweite, Server-Bewegung, Gegnerbewegung und das „Hinlaufen und angreifen“.
+  - **Sichtlinie:** Augen eine Stufe über dem Boden. Gelände, das höher ist als die Linie zwischen zwei Figuren, blockiert. Eine Stufe blockiert nicht, ein Hügel oder eine Klippe schon. Von oben sieht man darüber hinweg.
+  - Das gilt für Sicht/Nebel, Angriffsreichweite, Flächen und die Sicht-Vorschau.
+- **3D-Ansicht:**
+  - Knopf „⛰ 3D“ oben rechts auf der Battlemap, für Spieler und GM. Die Wahl wird pro Gerät gemerkt.
+  - **Gelände:** Hexes als Säulen in ihrer Höhe mit Felswänden; Mauern, Bäume und Felsen stehen als Objekte; Lichtquellen leuchten. Die Szene folgt der Tageszeit.
+  - **Figuren:** stehen als Aufsteller mit Porträt bzw. Icon, Namen, Lebensleiste und Zustands-Icons, die Tierform mit Tier-Icon.
+  - **Steuerung:**
+    - Mittlere Maustaste gedrückt halten: drehen (links/rechts) und kippen (hoch/runter); alternativ Shift + linke Maustaste.
+    - Linke Maustaste ziehen: verschieben. Mausrad: zoomen.
+    - Tastatur: Q/E drehen, R/F kippen, Pfeiltasten verschieben, 0 zentriert.
+  - **Bedienung wie in 2D:** Hover mit Info, goldene Pfad-Vorschau, Bewegungsbereich, Flächen-Vorschau, Rechtsklick zum Bewegen, Angreifen und Zaubern. Die Kamera folgt dem aktiven Zug.
+  - three.js wird erst beim Umschalten geladen (≈150 KB gzip); die 2D-Karte bleibt so schnell wie bisher.
+
+**Stufe 2 (geplant):**
+- Fliegen und Höhe von Figuren (Fluggeschwindigkeit aus Bogen und Stat-Block, in der Luft stehen bleiben, Absturz).
+- Shift + Mausrad wählt die Ebene in der Luft.
+- 3D-Abstände für Reichweite und Gelegenheitsangriffe.
+- Feuerball als Kugel mit verschiebbarem Mittelpunkt.
+- Animationen auch in 3D.
+- Klettern mit Klettergeschwindigkeit (Sinna hat 30 ft) und Fallschaden.

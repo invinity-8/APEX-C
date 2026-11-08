@@ -4,7 +4,7 @@
  * for hex centres) and line (5 ft wide from the caster). Shared by the area preview and the server.
  */
 import { hexAt, hexCentre, tileLookup } from './hexScene.js';
-import { lineOfSight } from './hexVision.js';
+import { lineOfSight, sightRules } from './hexVision.js';
 import type { SceneMap } from './maps.js';
 import { axialRound, distance, hexKey, hexesInRange, type HexKey } from '../game/hex.js';
 
@@ -67,8 +67,8 @@ export function areaHexes(map: MapLike, origin: { x: number; y: number }, point:
   }
   // walls stop the effect: every hex needs a line of effect from the area's point of origin
   const src = area.fromSelf ? o : area.shape === 'sphere' || area.shape === 'cube' ? p : o;
-  const blocks = (k: HexKey) => !!inMap(k)?.blocksSight;
-  return out.filter((h) => !!inMap(hexKey(h)) && (hexKey(h) === hexKey(src) || lineOfSight(src, h, blocks))).map(hexKey);
+  const sight = sightRules(map);
+  return out.filter((h) => !!inMap(hexKey(h)) && (hexKey(h) === hexKey(src) || lineOfSight(src, h, sight.blocks, sight.height))).map(hexKey);
 }
 
 /** Distance in feet between two map points (hex steps × 5 ft). */

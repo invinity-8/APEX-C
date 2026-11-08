@@ -148,7 +148,8 @@ export function fogMap(map: SceneMap, visible: Set<HexKey>, seen: string[]): { h
   if (!map.hex) return null;
   const explored = new Set<HexKey>([...seen, ...visible]);
   const fog = fogString(map.hex.radius, visible, explored);
-  return { hex: { ...map.hex, terrain: maskTerrain(map.hex.terrain, fog) }, fog };
+  const heights = map.hex.heights ? map.hex.heights.split('').map((c, i) => (fog[i] === '.' ? '0' : c)).join('') : undefined; // unknown hexes reveal no relief
+  return { hex: { ...map.hex, terrain: maskTerrain(map.hex.terrain, fog), ...(heights ? { heights } : {}) }, fog };
 }
 
 export const clockFor = (state: GameState | null, sceneId: string) => clockOf(state ?? {}, sceneId);

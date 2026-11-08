@@ -29,9 +29,9 @@ import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
 import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
-import { hexAt, hexCentre, hexMovementCost, passable, tileLookup } from '../campaign/hexScene.js';
+import { hexAt, hexCentre, hexMovementCost, passable } from '../campaign/hexScene.js';
 import { continuePcMove } from './sceneMotion.js';
-import { lineOfSight } from '../campaign/hexVision.js';
+import { lineOfSight, sightRules } from '../campaign/hexVision.js';
 import { distance } from '../game/hex.js';
 import { applyDamage, applyHealing, classLevel, revert, setTempHp, transform } from '../game/abilities.js';
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
@@ -337,8 +337,8 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
 const die = (sides: number) => (crypto.getRandomValues(new Uint32Array(1))[0] % Math.max(1, sides)) + 1;
 const inReach = (map: SceneMap, from: { x: number; y: number }, to: { x: number; y: number }, reachFt: number, rangeFt?: number) => {
   const d = distance(hexAt(map, from), hexAt(map, to)) * 5;
-  const blocks = (k: string) => !!tileLookup(map)(k)?.blocksSight;
-  return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), blocks), distanceFt: d };
+  const sight = sightRules(map);
+  return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), sight.blocks, sight.height), distanceFt: d };
 };
 
 // ---------------------------------------------------------------- combat actions (APEX 1.1)

@@ -45,7 +45,7 @@ export function parseMap(value: unknown): SceneMap | null {
     if (!r || !text(r.id, 64) || !/^[\w-]{1,64}$/.test(r.id) || routeIds.has(r.id) || !ids.has(r.from) || !ids.has(r.to) || r.from === r.to || !num(r.hours, 0, 1e6) || !num(r.distance, 0, 1e6) || typeof r.visible !== 'boolean') return null;
     routeIds.add(r.id); routes.push({ id: r.id, from: r.from, to: r.to, hours: r.hours, distance: r.distance, visible: r.visible });
   }
-  return { width: v.width, height: v.height, grid: v.grid, cell: v.cell, unitsPerCell: v.unitsPerCell, unit: v.unit, interval: v.interval, gmNotes: v.gmNotes, nodes, routes, backgroundAsset: v.backgroundAsset ?? null, playerBackgroundAsset: v.playerBackgroundAsset ?? null, revealBackground: v.revealBackground ?? false, ...(v.palette ? { palette: { colors: [...v.palette.colors], strength: v.palette.strength } } : {}), ...(v.hex ? { hex: { radius: v.hex.radius, terrain: v.hex.terrain, ...(v.hex.set === 'battle' ? { set: 'battle' as const } : {}) } } : {}) };
+  return { width: v.width, height: v.height, grid: v.grid, cell: v.cell, unitsPerCell: v.unitsPerCell, unit: v.unit, interval: v.interval, gmNotes: v.gmNotes, nodes, routes, backgroundAsset: v.backgroundAsset ?? null, playerBackgroundAsset: v.playerBackgroundAsset ?? null, revealBackground: v.revealBackground ?? false, ...(v.palette ? { palette: { colors: [...v.palette.colors], strength: v.palette.strength } } : {}), ...(v.hex ? { hex: { radius: v.hex.radius, terrain: v.hex.terrain, ...(v.hex.set === 'battle' ? { set: 'battle' as const } : {}), ...(v.hex.heights ? { heights: v.hex.heights } : {}) } } : {}) };
 }
 
 /** Explicit time conversion: 600 six-second rounds in one hour; no conversion to legacy daily MP. */

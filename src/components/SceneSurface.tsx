@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent } from 'react';
+import { Suspense, lazy, useEffect, useState, type PointerEvent } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import { api } from '../online/api';
 import { hexCorners } from '../game/hex';
@@ -8,6 +8,8 @@ import { HexSceneMap, type SceneToken } from './map/HexSceneMap';
 import { hexReach } from '../campaign/hexScene';
 import type { TokenView } from '../game/visibility';
 import { figureIcons } from './map/effectIcons';
+
+const HexScene3D = lazy(() => import('./map/HexScene3D'));
 
 export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | 'width' | 'height'>; id: string }) {
   if (map.grid === 'none') return null;
@@ -38,6 +40,9 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   const [url, setUrl] = useState<string | null>(null);
   const zoom = useMapZoom();
   const [info, setInfo] = useState<string | null>(null);
+  // APEX 1.8: 2D or 3D battle map (remembered per device)
+  const [view3d, setView3dState] = useState(() => { try { return localStorage.getItem('apex.map.view3d') === '1'; } catch { return false; } });
+  const setView3d = (on: boolean) => { setView3dState(on); try { localStorage.setItem('apex.map.view3d', on ? '1' : '0'); } catch { /* private mode */ } };
   const id = snapshot.scene?.map.playerBackgroundAsset;
   useEffect(() => { let live = true; setUrl(null); if (id) api.mapImage(id).then(r => { if (live) setUrl(r.url); }).catch(() => undefined); return () => { live = false; }; }, [id]);
   if (snapshot.kind !== 'scene' || !snapshot.scene) return <p>{snapshot.kind === 'arena' ? 'Legacy Arena' : 'Character Sanctuary'}</p>;
@@ -79,7 +84,16 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p>
-      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} /></div>
+      <div className="hex-scene-frame">
+        {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
+        {view3d && category === 'battle' ? (
+          <Suspense fallback={<p className="p-4 text-marble-300">Loading 3D view…</p>}>
+            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} areaAt={interaction.areaAt} focus={interaction.focus} />
+          </Suspense>
+        ) : (
+          <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} />
+        )}
+      </div>
     </section>;
   }
   function destination(e: PointerEvent<SVGSVGElement>) {
