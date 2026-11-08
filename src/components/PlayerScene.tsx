@@ -1,7 +1,7 @@
 import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import type { SceneInteraction } from './SceneSurface';
-import { activeActors, pcActor, spellRangeFt } from '../game/sceneActions';
+import { activeActors, blockOf, pcActor, spellRangeFt } from '../game/sceneActions';
 import { parseRangeFt } from '../game/sceneCombat';
 import { areaHexes, parseArea } from '../campaign/hexArea';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -138,14 +138,17 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   </div>;
 }
 
-/** Turn order across the top of the map: portraits in initiative order, the active turn highlighted. */
-function InitiativeBar({ encounter, tokens, myTokenId }: { encounter: NonNullable<GameApi['view']['sceneEncounter']>; tokens: GameApi['view']['tokens']; myTokenId: string | null }) {
+/** Turn order across the top of the map: portraits in initiative order, the active turn (or block) highlighted. */
+export function InitiativeBar({ encounter, tokens, myTokenId, onSelect, elites }: { encounter: NonNullable<GameApi['view']['sceneEncounter']>; tokens: GameApi['view']['tokens']; myTokenId: string | null; onSelect?: (p: { id: string; tokenId?: string }) => void; elites?: Set<string> }) {
+  const live = new Set(activeActors(encounter));
+  const block = new Set(blockOf(encounter));
   return <section className="initiative-bar" aria-label={`Initiative, round ${encounter.round}`} data-testid="initiative-bar">
     <span className="initiative-round">Round {encounter.round}</span>
     <ol>{encounter.participants.map((p, i) => {
       const t = p.tokenId ? tokens.find(x => x.id === p.tokenId) : undefined;
-      return <li key={p.id} aria-current={encounter.turnIndex === i ? 'true' : undefined} className={p.tokenId && p.tokenId === myTokenId ? 'is-mine' : ''} title={`${p.name} · initiative ${p.initiative}`}>
-        {t ? <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online color={t.color} accent={t.accent} initials={t.initials} name={t.name} size={40} /> : <span className="initiative-npc">{p.name.slice(0, 2)}</span>}
+      void i;
+      return <li key={p.id} aria-current={live.has(p.id) ? 'true' : undefined} className={`${p.tokenId && p.tokenId === myTokenId ? 'is-mine' : ''} ${block.has(p.id) && !live.has(p.id) ? 'opacity-50' : ''} ${onSelect ? 'cursor-pointer' : ''}`} title={`${p.name} · initiative ${p.initiative}${block.has(p.id) && !live.has(p.id) ? ' · done' : ''}`} onClick={onSelect ? () => onSelect(p) : undefined}>
+        {t ? <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online color={t.color} accent={t.accent} initials={t.initials} name={t.name} size={40} /> : <span className={`initiative-npc ${elites?.has(p.id) ? 'ring-2 ring-amber-400' : ''}`}>{elites?.has(p.id) ? '🐉' : p.name.slice(0, 2)}</span>}
         <small>{p.name}</small><em>{p.initiative}</em>
       </li>;
     })}</ol>

@@ -9,7 +9,10 @@
  * player revisions the GM saw, and stale revisions are reported instead of being overwritten.
  */
 import { BattleCommand, refKey, toSide, type BattleMode, type FigureRef } from './BattleCommand';
-import { budgetOf } from '../game/sceneActions';
+import { activeActors, budgetOf, isActiveActor } from '../game/sceneActions';
+import { InitiativeBar } from './PlayerScene';
+import type { SceneInteraction } from './SceneSurface';
+import { areaHexes } from '../campaign/hexArea';
 import { combatAttacks } from '../game/effectiveStats';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { GameApi, DispatchResult } from '../state/gameApi';
@@ -114,6 +117,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [selected, setSelected] = useState<FigureRef | null>(null);
   const [battleMode, setBattleMode] = useState<BattleMode>(null);
   const [pcAttack, setPcAttack] = useState(0);
+  const [npcAttack, setNpcAttack] = useState(0);
+  const [areaMode, setAreaMode] = useState<number | null>(null);
   const viewRef = useRef(view);
   viewRef.current = view;
   const sheets = game.sheets;
@@ -125,6 +130,20 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     if (!r.ok) return [];
     return details ? combatAttacks(r.sheet.sheet, { inventory: details.inventory, equipment: details.equipment, armorWornAt: details.armorWornAt }, itemRules) : r.sheet.sheet.attacks;
   }, [sheets, tokensView, itemRules]);
+  // APEX 1.2: the figure whose turn it is is selected automatically, its sight is shown and the camera follows it
+  const liveEnc = game.gmState?.sceneEncounters?.[state.selected]?.status === 'active' ? game.gmState.sceneEncounters[state.selected] : null;
+  const liveTurnKey = liveEnc ? `${liveEnc.id}:${liveEnc.turnSerial ?? 0}` : '';
+  useEffect(() => {
+    if (!liveEnc) return;
+    const first = activeActors(liveEnc)[0];
+    const p = liveEnc.participants.find((x) => x.id === first);
+    if (!p) return;
+    setBattleMode(null);
+    setAreaMode(null);
+    setNpcAttack(0);
+    if (p.tokenId) { setSelected({ kind: 'pc', id: p.tokenId }); setView('party'); }
+    else { const id = p.id.replace(/^npc-/, ''); setSelected({ kind: 'npc', id }); setView(id); }
+  }, [liveTurnKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const snapshotRequest = useRef(0);
   const busyRef = useRef(false);
 
@@ -671,16 +690,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               <h3 className="font-bold text-marble-300">Initiative{encounter ? ` · round ${encounter.round}` : ' · off (free movement)'}</h3>
               {encounter ? (
                 <>
-                  <ol className="space-y-0.5">
-                    {encounter.participants.map((p, i) => (
-                      <li key={p.id} className={`flex items-center gap-2 rounded px-1 ${i === encounter.turnIndex ? 'bg-gold-400/20 text-gold-200' : 'text-marble-300'}`} aria-current={i === encounter.turnIndex ? 'true' : undefined}>
-                        <span className="w-6 text-right tabular-nums">{p.initiative}</span>
-                        <button type="button" className="flex-1 text-left hover:text-gold-200" title="Select on the map" onClick={() => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })}>{p.name}</button>
-                        {(() => { const b = budgetOf(encounter, p.id); return <span className="text-[10px] text-marble-500" title="Action · Bonus action · Reaction">{b.action ? '◌' : '●'}{b.bonus ? '◌' : '●'}{encounter.reactions?.[p.id] !== undefined ? '◌' : '●'}</span>; })()}
-                        {i === encounter.turnIndex && <em className="not-italic">active</em>}
-                      </li>
-                    ))}
-                  </ol>
+                  <p className="text-marble-400">The order is shown as portraits above the map – click one to select that creature. Active: <b className="text-gold-200">{activeActors(encounter).map((id) => encounter.participants.find((p) => p.id === id)?.name).join(' & ')}</b></p>
                   <div className="flex flex-wrap gap-2">
                     <button className="btn btn-gold" type="button" disabled={busy} onClick={() => sceneTurn({ action: 'endTurn', encounterId: encounter.id, turnSerial: encounter.turnSerial ?? 0 })}>
                       Next turn
@@ -738,6 +748,44 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     else moveCharacter(selected.id, x, y, 'move');
   }
 
+  const turnKey = gmEncounter ? `${gmEncounter.id}:${gmEncounter.turnSerial ?? 0}` : '';
+  const battle = (() => {
+    const none = { reach: null as number | null, interaction: {} as SceneInteraction };
+    const map = shownScene?.map;
+    if (!snapshot || !map?.hex || shownScene?.category !== 'battle' || !selected) return none;
+    const fig = (snapshot.figures ?? []).find((f) => (selected.kind === 'pc' ? f.kind === 'pc' && f.tokenId === selected.id : f.kind === 'enemy' && f.id === selected.id));
+    if (!fig) return none;
+    const actor = refKey(selected);
+    const active = !gmEncounter || isActiveActor(gmEncounter, actor);
+    const npc = selected.kind === 'npc' ? gmEnemies.find((e) => e.id === selected.id) : undefined;
+    const b = budgetOf(gmEncounter, actor);
+    const left = npc && gmEncounter ? Math.max(0, npc.speedFt * (b.dash ? 2 : 1) - (b.moved ?? 0)) : null;
+    const attack = npc ? npcAttacks(npc)[npcAttack] : undefined;
+    const range = attack ? (attack.kind === 'melee' ? attack.reachFt : attack.rangeFt ?? attack.reachFt) : null;
+    const area = npc && areaMode !== null ? npc.areas?.[areaMode] : undefined;
+    const interaction: SceneInteraction = {
+      reachFrom: fig,
+      pathFrom: active && !area ? fig : null,
+      pathBudget: left,
+      lineFrom: active && !area && range ? fig : null,
+      lineRangeFt: range,
+      areaAt: active && area ? (pt) => areaHexes(map, fig, pt, { shape: area.shape, sizeFt: area.sizeFt }) : null,
+      focus: gmEncounter && active ? { key: `${turnKey}:${actor}`, x: fig.x, y: fig.y } : null,
+      onHexContext: (_k, p) => {
+        if (!active) return setNotice(`It is not ${fig.name}'s turn – only the creature whose turn it is acts.`);
+        if (area && npc && areaMode !== null) { setAreaMode(null); return sceneTurn({ action: 'npcArea', id: npc.id, area: areaMode, point: p }); }
+        battleMove(p.x, p.y);
+      },
+      onTokenContext: (id) => {
+        const ref = refOf(id);
+        if (!ref || refKey(ref) === actor) return;
+        if (!active) return setNotice(`It is not ${fig.name}'s turn.`);
+        sceneTurn({ action: 'strike', attacker: toSide(selected), target: toSide(ref), attackIndex: selected.kind === 'pc' ? pcAttack : npcAttack });
+      },
+    };
+    return { reach: active && left !== null ? left : null, interaction };
+  })();
+
   const renderMap = (arena: ReactNode) => {
     const banner = previewing ? (
       <div className="game-map-banner" role="status">
@@ -756,8 +804,9 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
         {banner}
         {shownScene && snapshot ? (
           <>
+            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
             {shownScene.category === 'battle' && shownScene.map.hex && (
-              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={setSelected} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} />
+              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} />
             )}
             <SceneSurface
               snapshot={snapshot}
@@ -768,6 +817,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               onDestination={enemyMode ? enemyClick : placeMode ? placeToken : battleMode === 'move' && selected ? battleMove : undefined}
               onFigureClick={figureClick}
               targets={battleMode === 'attack' ? (snapshot.figures ?? []).map((f) => (f.kind === 'pc' ? f.tokenId! : f.id)).filter((id) => id !== selected?.id) : selectedEnemy ? [selectedEnemy] : undefined}
+              reachBudget={battle.reach}
+              interaction={battle.interaction}
             />
           </>
         ) : mapError ? (
