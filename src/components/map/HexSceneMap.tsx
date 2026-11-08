@@ -29,7 +29,7 @@ export interface SceneToken {
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
-  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number };
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ally?: boolean };
   /** Carries a light (torch glow). */
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
@@ -234,7 +234,8 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
                 return (
                   <g key={k} transform={`translate(${c.x},${c.y})`} onClick={(ev) => (ev.stopPropagation(), onTokenClick?.(enemy.tokenId))} style={{ cursor: onTokenClick ? 'pointer' : undefined }} data-testid="enemy-token" opacity={down ? 0.45 : 1}>
                     {enemy.target && <circle r={HEX_SIZE * 0.78} fill="none" stroke="#ffd36b" strokeWidth={2.5} strokeDasharray="5 4" />}
-                    <circle r={HEX_SIZE * 0.55} fill={enemy.color} stroke={e.condition === 'bloodied' ? '#ff5a4a' : '#b3261e'} strokeWidth={3} />
+                    {enemy.tokenId === selectedTokenId && <circle r={HEX_SIZE * 0.72} fill="none" stroke="#f3dc9a" strokeWidth={3} />}
+                    <circle r={HEX_SIZE * 0.55} fill={enemy.color} stroke={e.condition === 'bloodied' ? '#ff5a4a' : e.ally ? '#7fb8ff' : '#b3261e'} strokeWidth={3} />
                     <text y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={2.5} paintOrder="stroke">{down ? '✕' : e.icon}</text>
                     {e.hp !== undefined && e.maxHp ? (
                       <g transform={`translate(${-HEX_SIZE * 0.55},${HEX_SIZE * 0.62})`}>
@@ -242,13 +243,23 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
                         <rect width={(HEX_SIZE * 1.1 * e.hp) / e.maxHp} height={4} fill={e.hp * 2 <= e.maxHp ? '#e5484d' : '#6fcf6f'} />
                       </g>
                     ) : null}
-                    <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill="#ffd6d0" stroke="#000" strokeWidth={2.5} paintOrder="stroke">
+                    <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill={e.ally ? '#cfe4ff' : '#ffd6d0'} stroke="#000" strokeWidth={2.5} paintOrder="stroke">
+                      {e.ally ? '🛡 ' : ''}
                       {enemy.name}{e.hp !== undefined ? ` ${e.hp}/${e.maxHp}` : e.condition === 'bloodied' ? ' (bloodied)' : ''}
                     </text>
                   </g>
                 );
               }
               const views = group.map((t) => t.view && ({ ...t.view, pos: parseKey(k) } as TokenView)).filter((v): v is TokenView => !!v);
+              if (views.length === group.length && group.some((t) => t.target)) {
+                const c = center(parseKey(k));
+                return (
+                  <g key={k}>
+                    <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />
+                    <circle cx={c.x} cy={c.y} r={HEX_SIZE * 0.8} fill="none" stroke="#ffd36b" strokeWidth={2.5} strokeDasharray="5 4" pointerEvents="none" />
+                  </g>
+                );
+              }
               if (views.length === group.length) return <TokenStack key={k} tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />;
               const c = center(parseKey(k));
               return (

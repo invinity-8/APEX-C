@@ -157,3 +157,26 @@ Die lokale Typprüfung der ersten Navigations- und Anzeigeänderungen wurde erfo
 - **Icons** je Basis (Waffenfamilie, Rüstungsslot und Gewichtsklasse, Schmuck …). Die Farbe zeigt die Gewichtsklasse, der Rahmen die Seltenheit.
 
 Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
+
+## APEX 1.1 – Kampf auf der Battlemap
+
+**GM**
+- **Kommandoleiste über der Karte:** Figur anklicken (Charakter, Gegner oder Verbündeter) oder einen Eintrag in der Initiative-Liste. Danach gibt es *Bewegen* (Feld anklicken), *Angreifen* (Ziel anklicken; Reichweite, Range und Sichtlinie prüft der Server), Standardaktionen, Bonusaktion, HP ±, Entfernen und *Zug beenden*.
+- **Sichtmodi:** Gesamtsicht, Spielersicht kumuliert (Charaktere + Verbündete), Gegnersicht kumuliert, Sicht der ausgewählten Figur. Nicht sichtbare Felder werden grau.
+- **Verbündete:** NPC-Vorlagen lassen sich „als Verbündeter“ platzieren (blau). Sie kämpfen auf Seite der Gruppe und können Gegner angreifen.
+- **Charaktere bewegen:** Der GM kann sie nach den Bewegungsregeln bewegen (auch außerhalb ihres Zugs) oder wie bisher frei platzieren.
+- **Initiative-Liste:** zeigt ●/◌ für Aktion, Bonusaktion und Reaktion.
+
+**Spieler**
+- **Leiste:** Aktion / Bonusaktion / Reaktion als Chips, Bewegungsbalken (Rest/Gesamt, mit Dash verdoppelt).
+- **Standardaktionen:** Dash, Disengage, Dodge, Help, Hide, Ready, Search, Use an object, optional „als Bonusaktion“ (z. B. Cunning Action), dazu „andere Bonusaktion“.
+- **Gegner anklicken** öffnet ein Ziel-Menü: alle Angriffe (ausgerüstete Waffen und Bogen-Angriffe) mit Reichweite und Hinweis „außer Reichweite“, außerdem die vorbereiteten Zauber und Cantrips.
+- **Zauber:** Slot-Wahl inklusive Upcast. Der Slot wird serverseitig abgezogen. Spell-Attack-Zauber würfeln gegen AC. Bei Rettungswurf-Zaubern werden DC und Schaden (voll/halb) gewürfelt und geloggt, der GM wendet sie an. Bonusaktions- und Reaktionszauber verbrauchen die passende Ressource. Cantrips skalieren mit Stufe 5/11/17.
+- **Extra Attack:** Mehrere Angriffe pro Attack-Aktion (aus „Extra Attack“ bzw. Kämpferstufe 11/20).
+
+**Gelegenheitsangriffe (Reaktionen)**
+- Wer ohne Disengage die Reichweite eines feindlichen Wesens verlässt, löst ein Angebot für dessen Reaktion aus. Gegner/Verbündete fragt der GM, Charaktere ihr Spieler.
+- *Angreifen* würfelt einen Nahkampfangriff und verbraucht die Reaktion. Die Reaktion lädt sich zu Beginn des eigenen Zugs wieder auf.
+- Prüfung: Reichweite am Start- und Zielfeld. Ein Pfad, der nur an einem Gegner vorbeistreift, wird nicht erkannt; das ruft der GM von Hand aus.
+
+**Noch offen:** Vor- und Nachteil (z. B. Dodge wird nur angezeigt), Flächenschaden auf mehrere Ziele, automatische Rettungswürfe der Gegner, Ready-Trigger, Konzentration, Bewegungsbudget der NPCs.
