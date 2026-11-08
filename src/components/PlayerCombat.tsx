@@ -12,6 +12,10 @@ import { parseRangeFt } from '../game/sceneCombat';
 import { hexAt } from '../campaign/hexScene';
 import { distance } from '../game/hex';
 import { EconomyChips } from './BattleCommand';
+import { parseArea } from '../campaign/hexArea';
+
+/** The attack or spell "in hand": its range is shown on the map, area spells are aimed with a right-click. */
+export type ReadyAction = { kind: 'attack'; index: number } | { kind: 'spell'; spellId: string; slotLevel: number } | null;
 
 interface Props {
   snapshot: SceneSnapshot;
@@ -27,6 +31,8 @@ interface Props {
   target: string | null;
   setTarget: (id: string | null) => void;
   movement: { allowance: number; spent: number; dashed?: boolean } | null;
+  ready: ReadyAction;
+  setReady: (r: ReadyAction) => void;
 }
 
 export function PlayerCombat(p: Props) {
@@ -71,7 +77,7 @@ export function PlayerCombat(p: Props) {
             {slots.filter((x) => x.level >= s.level).map((x) => <option key={x.level} value={x.level} disabled={x.current < 1}>{ordinal(x.level)} slot ({x.current}{x.max !== null ? `/${x.max}` : ''}){x.level > s.level ? ' – upcast' : ''}</option>)}
           </select>
         )}
-        <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || 'error' in plan || outOfRange} onClick={() => { p.act({ action: 'cast', tokenId, spellId: id, slotLevel: lv, ...(withTarget && enemy ? { target: { kind: 'npc', id: enemy.id } } : {}) }); p.setTarget(null); setSpellOpen(false); }} data-testid="cast-spell">
+        <button type="button" className="btn btn-gold px-2 py-0.5" disabled={p.pending || !canAct || 'error' in plan || outOfRange} onClick={() => { p.act({ action: 'cast', tokenId, spellId: id, slotLevel: lv, ...(withTarget && enemy ? { target: { kind: 'npc', id: enemy.id }, point: { x: enemy.x, y: enemy.y } } : {}) }); p.setTarget(null); setSpellOpen(false); }} data-testid="cast-spell">
           Cast{withTarget && enemy ? ` at ${enemy.name}` : ''}
         </button>
       </li>
@@ -125,6 +131,29 @@ export function PlayerCombat(p: Props) {
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Ready an attack or spell" data-testid="ready-bar">
+        <span className="text-marble-400">Ready:</span>
+        {p.attacks.map((a, i) => {
+          const r = parseRangeFt(`${a.range} ${a.notes}`);
+          const on = p.ready?.kind === 'attack' && p.ready.index === i;
+          return <button key={`a${i}`} type="button" className={`rounded-full border px-2 py-0.5 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-100' : 'border-ink-600 text-marble-200 hover:border-gold-700'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')}</button>;
+        })}
+        {spells.map((sp) => {
+          const on = p.ready?.kind === 'spell' && p.ready.spellId === sp.id;
+          return <button key={sp.id} type="button" className={`rounded-full border px-2 py-0.5 ${on ? 'border-arcane-400 bg-arcane-400/20 text-arcane-100' : 'border-ink-600 text-marble-200 hover:border-arcane-400/60'}`} aria-pressed={on} title={`${sp.level ? `${ordinal(sp.level)} level` : 'cantrip'} · ${sp.range}`} onClick={() => p.setReady(on ? null : { kind: 'spell', spellId: sp.id, slotLevel: slotFor(sp.id, sp.level) })} data-testid="ready-spell">✦ {sp.name}</button>;
+        })}
+      </div>
+      {p.ready?.kind === 'spell' && (() => {
+        const sp = spells.find((x) => x.id === (p.ready as { spellId: string }).spellId);
+        if (!sp) return null;
+        const area = parseArea(`${sp.range} ${sp.description}`);
+        return (
+          <p className="text-arcane-200">
+            ✦ {sp.name}{sp.level > 0 && <> with a <select aria-label="Slot level" className="rounded border border-ink-600 bg-ink-900 px-1" value={(p.ready as { slotLevel: number }).slotLevel} onChange={(e) => p.setReady({ kind: 'spell', spellId: sp.id, slotLevel: Number(e.target.value) })}>{slots.filter((x) => x.level >= sp.level).map((x) => <option key={x.level} value={x.level} disabled={x.current < 1}>{ordinal(x.level)}-level slot ({x.current} left){x.level > sp.level ? ' – upcast' : ''}</option>)}</select></>}
+            {' · '}{area ? `${area.sizeFt}-ft ${area.shape}: hover to see the area, right-click to cast there.` : 'right-click an enemy to cast at it.'}
+          </p>
+        );
+      })()}
       <div className="flex flex-wrap items-center gap-1">
         <button type="button" className="btn btn-ghost px-2 py-0.5" aria-expanded={spellOpen} disabled={!spells.length} onClick={() => setSpellOpen((v) => !v)} data-testid="open-spells">✦ Spells{spells.length ? ` (${spells.length})` : ''}</button>
         {slots.length > 0 && <span className="text-marble-400">Slots: {slots.map((s) => `${ordinal(s.level)} ${s.current}${s.max !== null ? `/${s.max}` : ''}`).join(' · ')}</span>}
