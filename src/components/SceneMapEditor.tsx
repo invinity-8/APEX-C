@@ -42,18 +42,20 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
   }
   function add(event: PointerEvent<SVGSVGElement>) {
     if (playerPreview || tool === 'select' || busy) return;
-    const n: MapNode = { id: crypto.randomUUID(), ...point(event), label: tool === 'spawn' ? 'Entry' : 'New ' + tool, kind: tool, visible: tool === 'spawn', width: 60, height: 60, description: '', targetScene: null };
+    const n: MapNode = { id: crypto.randomUUID(), ...point(event), label: tool === 'spawn' ? 'Entry' : 'New ' + tool, kind: tool, visible: tool === 'spawn' || (picture && tool !== 'area' && tool !== 'wall'), width: 60, height: 60, description: '', targetScene: null };
     change({ nodes: [...map.nodes, n] }); setSelected(n.id); setTool('select');
   }
   async function save(publish = false) {
     setBusy(true); setMessage('');
     try {
       let candidate = map;
+      // Picture maps (world / celestial) need a spawn for player assignment; add a hidden one in the centre.
+      if (publish && picture && !map.nodes.some(n => n.kind === 'spawn')) candidate = { ...map, nodes: [...map.nodes, { id: 'entry', x: map.width / 2, y: map.height / 2, label: 'Arrival', description: '', kind: 'spawn', visible: false, width: 50, height: 50, targetScene: null }] };
       if (publish && map.backgroundAsset && !map.hex) {
         const source = await api.mapImage(map.backgroundAsset);
-        const safe = await playerSafeBackground(map, source.url);
+        const safe = await playerSafeBackground(candidate, source.url);
         const asset = await api.mapUpload(scene.id, 'players', safe.image, safe.thumbnail);
-        candidate = { ...map, playerBackgroundAsset: asset.id };
+        candidate = { ...candidate, playerBackgroundAsset: asset.id };
       }
       const result = await api.sceneAction(scene.id, revision, publish ? 'publish' : 'save', { map: candidate });
       setMap(candidate);

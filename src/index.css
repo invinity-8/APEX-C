@@ -3,7 +3,7 @@
 .journal-panel { display: grid; gap: .8rem; }
 .scene-director { display: grid; gap: .7rem; }
 .scene-director label { display: grid; gap: .3rem; margin-block: .5rem; }
-.scene-director input:not([type="checkbox"]):not([type="range"]), .scene-director select, .scene-director textarea, .journal-panel input:not([type="checkbox"]), .journal-panel select, .journal-panel textarea { background: #161a22; color: #e6d8bc; border: 1px solid #665843; border-radius: .3rem; padding: .4rem; max-width: 100%; }
+.scene-director input:not([type="checkbox"]):not([type="range"]):not([type="color"]), .scene-director select, .scene-director textarea, .journal-panel input:not([type="checkbox"]), .journal-panel select, .journal-panel textarea { background: #161a22; color: #e6d8bc; border: 1px solid #665843; border-radius: .3rem; padding: .4rem; max-width: 100%; }
 .scene-director button:not([class]) { background: #272a2e; border: 1px solid #685a42; color: #e6d8bc; padding: .35rem .6rem; border-radius: .35rem; margin: .2rem; }
 .scene-director button:disabled { opacity: .5; cursor: not-allowed; }
 .scene-library { display: grid; gap: .8rem; }
@@ -493,3 +493,4 @@
 .location-card { position: relative; margin-top: .5rem; max-width: 28rem; padding: .7rem .9rem; border: 1px solid rgba(192,155,88,.55); border-radius: .5rem; background: rgba(20,18,14,.95); color: #e6d8bc; }
 .location-card h3 { font: 700 1rem/1.2 Georgia, serif; color: #e4c786; margin-bottom: .3rem; }
 .location-card .ws-icon { position: absolute; top: .3rem; right: .3rem; }
+.scene-director input[type=color] { width: 2.2rem; height: 1.8rem; padding: .1rem; cursor: pointer; }
