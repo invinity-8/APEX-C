@@ -7,7 +7,9 @@
 import { DIRECTIONS, add, hexKey } from '../../game/hex';
 import type { HexView } from '../../game/visibility';
 import { HEX_SIZE, center, corner } from './geometry';
-import { EDGE, h32, hexPath, makeTone, type PaintEnv, type Tone } from './painter';
+import { EDGE, h32, hexPath, makeTone, paintDetails, paintEdges, paintGround, paintOverlays, paintSprites, type PaintEnv, type Tone } from './painter';
+import { tileDef } from '../../campaign/hexScene';
+import { paintGenericHex } from './tilePainter';
 
 const S = HEX_SIZE;
 const TAU = Math.PI * 2;
@@ -237,9 +239,11 @@ function sprites(ctx: CanvasRenderingContext2D, h: HexView, tone: Tone) {
 /** Paints one chunk of battle hexes (ground → details → tall sprites → 5-ft grid). */
 export function paintBattleChunk(ctx: CanvasRenderingContext2D, hexes: HexView[], env: PaintEnv) {
   const tones = new Map<HexView, Tone>(hexes.map((h) => [h, makeTone(dimOf(h, env))]));
-  for (const h of hexes) ground(ctx, h, tones.get(h)!);
-  for (const h of hexes) details(ctx, h, tones.get(h)!, env);
-  for (const h of hexes) sprites(ctx, h, tones.get(h)!);
+  // Library tiles (with a generic style) use the shared tile painter; the original set keeps its art.
+  const generic = (h: HexView) => { const d = tileDef('battle', h.tile ?? ''); return d?.style ? d : null; };
+  for (const h of hexes) { const d = generic(h); if (d) paintGenericHex(ctx, h, d, tones.get(h)!, 'battle', 'ground'); else ground(ctx, h, tones.get(h)!); }
+  for (const h of hexes) { const d = generic(h); if (d) paintGenericHex(ctx, h, d, tones.get(h)!, 'battle', 'details'); else details(ctx, h, tones.get(h)!, env); }
+  for (const h of hexes) { const d = generic(h); if (d) paintGenericHex(ctx, h, d, tones.get(h)!, 'battle', 'sprites'); else sprites(ctx, h, tones.get(h)!); }
   ctx.strokeStyle = 'rgba(20,18,14,0.28)';
   ctx.lineWidth = 0.8;
   for (const h of hexes) {
@@ -247,4 +251,19 @@ export function paintBattleChunk(ctx: CanvasRenderingContext2D, hexes: HexView[]
     hexPath(ctx, x, y, S);
     ctx.stroke();
   }
+}
+
+/** Region chunk: Arena terrain uses the Arena painter, library tiles the shared tile painter. */
+export function paintRegionChunk(ctx: CanvasRenderingContext2D, hexes: HexView[], env: PaintEnv) {
+  const generic = hexes.filter((h) => !h.terrain && h.tile);
+  const tones = new Map<HexView, Tone>(generic.map((h) => [h, makeTone(dimOf(h, env))]));
+  const defOf = (h: HexView) => tileDef('region', h.tile!)!;
+  for (const h of generic) paintGenericHex(ctx, h, defOf(h), tones.get(h)!, 'region', 'ground');
+  for (const h of hexes) if (h.terrain) paintGround(ctx, h, env);
+  for (const h of hexes) if (h.terrain) paintEdges(ctx, h, env);
+  for (const h of hexes) if (h.terrain) paintDetails(ctx, h, env);
+  for (const h of generic) paintGenericHex(ctx, h, defOf(h), tones.get(h)!, 'region', 'details');
+  for (const h of hexes) if (h.terrain) paintSprites(ctx, h, env);
+  for (const h of generic) paintGenericHex(ctx, h, defOf(h), tones.get(h)!, 'region', 'sprites');
+  for (const h of hexes) if (h.terrain) paintOverlays(ctx, h, env);
 }

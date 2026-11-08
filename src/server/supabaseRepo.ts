@@ -314,7 +314,7 @@ export class SupabaseRepo implements Repo {
   readonly sceneCatalog: import('./scenes.js').SceneCatalog = {
     list: async (campaignId, offset, filters={}) => {
       let query = this.db.from('apex_scenes')
-        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id')
+        .select('id,category,name,is_draft,is_legacy_arena,created_at,updated_at,revision,published_revision,archived,parent_scene_id,thumbnail_asset_id,hex:metadata->hex,palette:metadata->palette')
         .eq('campaign_id', campaignId);
       if(filters.category) query=query.eq('category',filters.category);
       if(filters.archived!==undefined) query=query.eq('archived',filters.archived);

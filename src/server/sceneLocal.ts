@@ -2,8 +2,9 @@
  * Scene-local view and movement rules (server only). Shared by the player snapshot, the GM focus and
  * scene movement so that what a player sees and what the server accepts always agree.
  */
-import { hexAt, tileSetOf } from '../campaign/hexScene.js';
-import { darkvisionFeet, fogString, maskTerrain, sceneVision, type Viewer } from '../campaign/hexVision.js';
+import { hexAt, hexCentre, spawnSlots, tileSetOf } from '../campaign/hexScene.js';
+import { CARRIED_LIGHT_FT, enemiesOf, torchesOf } from '../game/sceneCombat.js';
+import { darkvisionFeet, fogString, maskTerrain, sceneVision, type CarriedLight, type Viewer } from '../campaign/hexVision.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { hexKey, type HexKey } from '../game/hex.js';
 import { characterMovementLoad } from '../game/items/weight.js';
@@ -15,7 +16,44 @@ import type { LocalMotionSnapshot, MotionSnapshot } from './sceneMotion.js';
 export interface SceneViewContext {
   state: GameState | null;
   loadSheet: (tokenId: string) => Promise<CharacterSheet | null>;
+  /** Player characters on a scene with positions (stored, else their arrival slot). */
+  pcs?: (sceneId: string, map: SceneMap) => Promise<PcPosition[]>;
 }
+export interface PcPosition { tokenId: string; userId: string; x: number; y: number; stored: boolean }
+
+/** A figure a viewer may see on the map: another character or an enemy. */
+export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
+
+/** Arrival slots for characters without a stored position (no two on the same hex). */
+export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } | null, rows: Array<{ tokenId: string; userId: string; stored?: { x: number; y: number } }>, blocked: Array<{ x: number; y: number }>): PcPosition[] {
+  const taken = new Set([...rows.filter((r) => r.stored).map((r) => hexKeyAt(map, r.stored!)), ...blocked.map((b) => hexKeyAt(map, b))]);
+  const free = spawn && map.hex ? spawnSlots(map, spawn).map((h) => hexCentre(map, h)).filter((p) => !taken.has(hexKeyAt(map, p))) : [];
+  return [...rows].sort((a, b) => a.tokenId.localeCompare(b.tokenId)).map((r) => {
+    if (r.stored) return { tokenId: r.tokenId, userId: r.userId, ...r.stored, stored: true };
+    const slot = free.shift() ?? spawn ?? { x: 0, y: 0 };
+    return { tokenId: r.tokenId, userId: r.userId, x: slot.x, y: slot.y, stored: false };
+  });
+}
+
+export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs: PcPosition[], exclude: string[], visible: Set<HexKey> | null, gm: boolean): SceneFigure[] {
+  const torches = new Set(torchesOf(state, sceneId));
+  const condition = (hp: number, max: number): SceneFigure['condition'] => (hp <= 0 ? 'down' : hp * 2 <= max ? 'bloodied' : 'healthy');
+  const seen = (p: { x: number; y: number }) => !visible || visible.has(hexKeyAt(map, p));
+  const out: SceneFigure[] = [];
+  for (const p of pcs) {
+    const t = state.tokens[p.tokenId];
+    if (!t || exclude.includes(p.tokenId) || !seen(p)) continue;
+    out.push({ id: `pc-${p.tokenId}`, kind: 'pc', tokenId: p.tokenId, name: t.name, color: t.color, x: p.x, y: p.y, condition: 'healthy', torch: torches.has(p.tokenId) });
+  }
+  for (const e of enemiesOf(state, sceneId)) {
+    if (!seen(e)) continue;
+    out.push({ id: e.id, kind: 'enemy', name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
+  }
+  return out;
+}
+
+/** Carried lights of the characters on the scene. */
+export const carriedLights = (state: GameState, sceneId: string, pcs: PcPosition[]) => { const on = new Set(torchesOf(state, sceneId)); return pcs.filter((p) => on.has(p.tokenId)).map((p) => ({ x: p.x, y: p.y, ft: CARRIED_LIGHT_FT })); };
 
 export interface ViewerMovement {
   tokenId: string;
@@ -75,10 +113,10 @@ export function motionShape(local: LocalMotionSnapshot, state: GameState | null,
 }
 
 /** Vision of the given characters (positions from the ledger, else the assignment spawn). */
-export async function visionFor(ctx: SceneViewContext, map: SceneMap, clock: SceneClockState, positions: Array<{ tokenId: string; x: number; y: number }>): Promise<Set<HexKey>> {
+export async function visionFor(ctx: SceneViewContext, map: SceneMap, clock: SceneClockState, positions: Array<{ tokenId: string; x: number; y: number }>, carried: CarriedLight[] = []): Promise<Set<HexKey>> {
   const viewers: Viewer[] = [];
   for (const p of positions) viewers.push({ at: p, darkvisionFt: sheetDarkvision(await sheetOf(ctx, p.tokenId)) });
-  return sceneVision(map, clock, viewers);
+  return sceneVision(map, clock, viewers, carried);
 }
 
 /** Player map: terrain masked to visible + remembered hexes, and the fog string for the renderer. */

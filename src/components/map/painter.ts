@@ -48,9 +48,20 @@ const FOG_RGB: [number, number, number] = [16, 15, 22];
 /** Colour transform for a hex: brightness tweak (relief) and fog dimming for remembered hexes. */
 export type Tone = (hex: string, alpha?: number, lift?: number) => string;
 
+/**
+ * Scene colour scheme (gradient map): set by TerrainCanvas while a chunk is painted. Applied before the
+ * fog dimming, so remembered hexes keep their grey look whatever the palette.
+ */
+let RECOLOR: ((rgb: [number, number, number]) => [number, number, number]) | null = null;
+export function withRecolor<T>(fn: typeof RECOLOR, paint: () => T): T {
+  const prev = RECOLOR;
+  RECOLOR = fn;
+  try { return paint(); } finally { RECOLOR = prev; }
+}
+
 export function makeTone(dim: number): Tone {
   return (hex, alpha = 1, lift = 0) => {
-    let [r, g, b] = parse(hex);
+    let [r, g, b] = RECOLOR ? RECOLOR(parse(hex)) : parse(hex);
     if (lift) {
       const t = Math.max(-1, Math.min(1, lift));
       const target = t > 0 ? 255 : 0;

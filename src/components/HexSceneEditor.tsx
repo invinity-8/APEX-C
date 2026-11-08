@@ -29,6 +29,7 @@ import { loadPictureForSampling } from '../campaign/pictureSampling';
 import { hexKey, parseKey, type HexKey } from '../game/hex';
 import type { SceneDefinition } from '../server/scenes';
 import { HexSceneMap } from './map/HexSceneMap';
+import { PALETTE_PRESETS, paletteKey } from '../campaign/palette';
 
 type Tool = 'brush' | 'select' | 'spawn' | 'location' | 'label' | 'light';
 const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light' };
@@ -138,12 +139,17 @@ export function HexSceneEditor({
           ))}
         </div>
         {tool === 'brush' && (
-          <div className="hex-palette" role="radiogroup" aria-label="Terrain">
-            {palette.map((t) => (
-              <button key={t.id} type="button" role="radio" aria-checked={terrain === t.id} title={`${t.label} – ${t.cost === null ? 'impassable' : `cost ×${t.cost}`}${t.blocksSight ? ', blocks sight' : ''}`} onClick={() => setTerrain(t.id)}>
-                <span style={{ background: t.fill }} />
-                {t.label}
-              </button>
+          <div className="hex-palette" role="radiogroup" aria-label="Tile library">
+            {[...new Set(palette.map((t) => t.group))].map((group) => (
+              <div key={group} className="hex-palette-group">
+                <span className="hex-palette-title">{group}</span>
+                {palette.filter((t) => t.group === group).map((t) => (
+                  <button key={t.id} type="button" role="radio" aria-checked={terrain === t.id} title={`${t.label} – ${t.cost === null ? 'blocks movement' : t.cost > 1 ? `difficult (×${t.cost})` : 'open'}${t.blocksSight ? ', blocks sight' : ''}${t.light ? `, light ${t.light} ft` : ''}`} onClick={() => setTerrain(t.id)}>
+                    <span style={{ background: t.fill, boxShadow: t.accent ? `inset -4px -4px 0 ${t.accent}` : undefined }} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             ))}
             <label className="hex-brush-size">
               <input type="checkbox" checked={brush === 1} onChange={(e) => setBrush(e.target.checked ? 1 : 0)} /> Large brush
@@ -156,6 +162,42 @@ export function HexSceneEditor({
         </div>
       </div>
       <aside className="scene-editor-inspector" aria-label="Hex map settings">
+        <fieldset disabled={busy} className="scene-generator-panel" data-testid="colour-scheme">
+          <legend>Colour scheme</legend>
+          <p>Recolours all tiles of this map (remembered fog stays grey).</p>
+          <label>
+            Preset{' '}
+            <select value={PALETTE_PRESETS.find((p) => paletteKey(p.palette) === paletteKey(map.palette))?.id ?? (map.palette ? 'custom' : '')} onChange={(e) => change({ palette: e.target.value ? PALETTE_PRESETS.find((p) => p.id === e.target.value)?.palette ?? map.palette : undefined })}>
+              <option value="">Original colours</option>
+              {PALETTE_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+              {map.palette && !PALETTE_PRESETS.some((p) => paletteKey(p.palette) === paletteKey(map.palette)) && <option value="custom">Custom</option>}
+            </select>
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(map.palette?.colors ?? []).map((c, i) => (
+              <span key={i} className="inline-flex items-center gap-0.5">
+                <input type="color" aria-label={`Scheme colour ${i + 1}`} value={c} onChange={(e) => change({ palette: { ...map.palette!, colors: map.palette!.colors.map((x, j) => (j === i ? e.target.value : x)) } })} />
+                {map.palette!.colors.length > 2 && (
+                  <button type="button" className="ws-icon" aria-label={`Remove colour ${i + 1}`} onClick={() => change({ palette: { ...map.palette!, colors: map.palette!.colors.filter((_, j) => j !== i) } })}>
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+            <button type="button" className="btn btn-ghost" disabled={(map.palette?.colors.length ?? 0) >= 6} onClick={() => change({ palette: { colors: [...(map.palette?.colors ?? ['#3a2a1a']), '#d8b060'], strength: map.palette?.strength ?? 0.6 } })}>
+              + Colour
+            </button>
+          </div>
+          {map.palette && (
+            <label>
+              Strength · {Math.round(map.palette.strength * 100)}% <input type="range" min="0" max="100" value={Math.round(map.palette.strength * 100)} onChange={(e) => change({ palette: { ...map.palette!, strength: Number(e.target.value) / 100 } })} />
+            </label>
+          )}
+        </fieldset>
         <fieldset disabled={busy || importing} className="scene-generator-panel">
           <legend>Generate terrain</legend>
           <label>

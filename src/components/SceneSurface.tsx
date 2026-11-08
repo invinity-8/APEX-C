@@ -17,9 +17,10 @@ export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | '
 }
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
-export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean }) {
+export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted enemy ids (attack mode). */ targets?: string[] }) {
   const [url, setUrl] = useState<string | null>(null);
   const zoom = useMapZoom();
+  const [info, setInfo] = useState<string | null>(null);
   const id = snapshot.scene?.map.playerBackgroundAsset;
   useEffect(() => { let live = true; setUrl(null); if (id) api.mapImage(id).then(r => { if (live) setUrl(r.url); }).catch(() => undefined); return () => { live = false; }; }, [id]);
   if (snapshot.kind !== 'scene' || !snapshot.scene) return <p>{snapshot.kind === 'arena' ? 'Legacy Arena' : 'Character Sanctuary'}</p>;
@@ -35,17 +36,25 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     // Assigned characters that have not moved yet stand on the spawn (the server starts them there too).
     const spawnNode = map.nodes.find(n => n.kind === 'spawn');
     const waiting = spawnNode ? (tokenLabels ?? []).filter(t => !positions.some(p => p.tokenId === t.tokenId)).map(t => ({ tokenId: t.tokenId, x: spawnNode.x, y: spawnNode.y })) : [];
-    const tokens: SceneToken[] = [...positions, ...waiting].map(p => {
+    const figures = snapshot.figures ?? [];
+    // GM: figures carry every character and enemy; players: own token plus what they can see.
+    const own = gm && figures.length ? [] : [...positions, ...waiting].filter(p => !figures.some(f => f.tokenId === p.tokenId)).map(p => {
       const marker = tokenLabels?.find(t => t.tokenId === p.tokenId);
-      return { tokenId: p.tokenId, x: p.x, y: p.y, name: marker?.name ?? (category === 'world' ? 'Party' : name), color: marker?.color ?? color, view: view(p.tokenId) };
+      return { tokenId: p.tokenId, x: p.x, y: p.y, name: marker?.name ?? (category === 'world' ? 'Party' : name), color: marker?.color ?? color, view: view(p.tokenId), torch: !gm && p.tokenId === tokenId && !!snapshot.torch } as SceneToken;
     });
-    const own = point && reachBudget !== null && reachBudget > 0 ? hexReach(map, point, reachBudget) : null;
+    const tokens: SceneToken[] = [...own, ...figures.map(f => ({
+      tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
+      view: f.tokenId ? view(f.tokenId) : undefined,
+      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
+      target: f.kind === 'enemy' && !!targets?.includes(f.id),
+    }))];
+    const reachArea = point && reachBudget !== null && reachBudget > 0 ? hexReach(map, point, reachBudget) : null;
     // Scene-local light: region night like the Arena; battle lighting dim/dark.
     const clock = snapshot.clock;
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p>
-      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={tokenId ?? null} reach={own} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
+      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
     </section>;
   }
   function destination(e: PointerEvent<SVGSVGElement>) {
@@ -59,11 +68,12 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       {url && <image href={url} width={map.width} height={map.height} preserveAspectRatio="none" />}
       <SceneGrid map={map} id={'player-grid-' + snapshot.scene.id} />
       {map.routes.map(r => { const a = map.nodes.find(n => n.id === r.from), b = map.nodes.find(n => n.id === r.to); return a && b ? <g key={r.id}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#beab80" strokeDasharray="8 6" /><text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fill="#f3e4bd">{r.hours}h</text></g> : null; })}
-      {map.nodes.map(n => <g key={n.id}>{n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={n.proceduralFeature === 'water' ? 12 : 3} fill={n.proceduralFeature ? terrainColors[n.proceduralFeature] : n.kind === 'wall' ? '#877566' : '#52664d'} opacity={n.proceduralFeature === 'water' ? '.72' : '.5'} /> : <circle cx={n.x} cy={n.y} r="8" fill="#d9bd76" />}<text x={n.x + 14} y={n.y} fill="#f3e4bd">{n.label}</text></g>)}
+      {map.nodes.map(n => <g key={n.id} style={n.kind === 'location' ? { cursor: 'pointer' } : undefined} onPointerDown={n.kind === 'location' ? (e => { e.stopPropagation(); setInfo(info === n.id ? null : n.id); }) : undefined} data-testid={n.kind === 'location' ? 'map-location' : undefined}>{n.kind === 'wall' || n.kind === 'area' ? <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={n.proceduralFeature === 'water' ? 12 : 3} fill={n.proceduralFeature ? terrainColors[n.proceduralFeature] : n.kind === 'wall' ? '#877566' : '#52664d'} opacity={n.proceduralFeature === 'water' ? '.72' : '.5'} /> : <circle cx={n.x} cy={n.y} r="8" fill="#d9bd76" />}<text x={n.x + 14} y={n.y} fill="#f3e4bd">{n.label}</text></g>)}
       {positions.map(position => {
         const marker = tokenLabels?.find(token => token.tokenId === position.tokenId);
         return <g key={position.tokenId}><circle cx={position.x} cy={position.y} r="14" fill={marker?.color ?? color} stroke="#fff" /><text x={position.x + 18} y={position.y} fill="#fff">{marker?.name ?? (category === 'world' ? 'Party' : name)}</text></g>;
       })}
     </svg></div>
+    {(() => { const n = map.nodes.find(x => x.id === info); return n ? <aside className="location-card" role="dialog" aria-label={n.label}><button type="button" className="ws-icon" aria-label="Close" onClick={() => setInfo(null)}>×</button><h3>{n.label}</h3>{n.description ? <p>{n.description}</p> : <p className="text-marble-500">No description yet.</p>}</aside> : null; })()}
   </section>;
 }

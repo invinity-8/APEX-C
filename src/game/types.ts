@@ -385,6 +385,8 @@ export interface SceneEncounter {
   status: 'active' | 'ended'; participants: SceneEncounterParticipant[];
   /** Increases whenever the active turn changes; movement budgets are per turn (scene motion epoch). */
   turnSerial?: number;
+  /** tokenId → turnSerial of the last attack (one attack per turn). */
+  attacked?: Record<string, number>;
 }
 
 /** Scene-local time and light (independent of the Arena day/night). */
@@ -420,6 +422,10 @@ export interface GameState {
   sceneEncounters?: Record<string, SceneEncounter>;
   /** Scene-local clocks (region day/night, battle lighting). Never touched by the Arena. */
   sceneClocks?: Record<string, SceneClockState>;
+  /** Scene enemies (GM-placed), carried lights and the bounded combat log, per scene. */
+  sceneEnemies?: Record<string, import('./sceneCombat.js').SceneEnemy[]>;
+  sceneLights?: Record<string, string[]>;
+  sceneCombatLog?: Record<string, import('./sceneCombat.js').CombatLogEntry[]>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */
   merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */

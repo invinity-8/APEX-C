@@ -8,6 +8,8 @@ type Character = { tokenId: string; name: string };
 type Run = (cmd: Command) => Promise<DispatchResult>;
 
 export function SceneLiveControls({ game, scene, characters, run }: { game: GameApi; scene: SceneSummary; characters: Character[]; run: Run }) {
+  // Battle maps start initiative with server dice (Scene tools → Initiative); here it can only be adjusted.
+  const rolledInitiative = scene.category === 'battle';
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [selected, setSelected] = useState<string[]>(() => characters.map(c => c.tokenId));
@@ -71,8 +73,8 @@ export function SceneLiveControls({ game, scene, characters, run }: { game: Game
     </section>
 
     <section className="rounded-md border border-ink-700 p-2" aria-label="Scene encounter controls">
-      <h3 className="text-xs font-bold text-marble-300">Encounter · {scene.name}</h3>
-      {!encounter || encounter.status === 'ended' ? <form className="mt-2 space-y-2" onSubmit={startEncounter}>
+      <h3 className="text-xs font-bold text-marble-300">{rolledInitiative ? 'Adjust initiative' : 'Encounter'} · {scene.name}</h3>
+      {(!encounter || encounter.status === 'ended') && rolledInitiative ? <p className="mt-1 text-xs text-marble-500">Start initiative in Scene tools – everyone on the map rolls automatically. Here you can then change values, add NPCs without a map figure or hide them.</p> : !encounter || encounter.status === 'ended' ? <form className="mt-2 space-y-2" onSubmit={startEncounter}>
         <fieldset className="flex flex-wrap gap-x-3 gap-y-1 text-xs" disabled={busy || !characters.length}>
           <legend className="mb-1 text-marble-400">Player characters · initiative starts at 10; edit after starting</legend>
           {characters.map(character => <label key={character.tokenId} className="inline-flex items-center gap-1"><input type="checkbox" checked={selected.includes(character.tokenId)} onChange={e => setSelected(current => e.target.checked ? [...current, character.tokenId] : current.filter(id => id !== character.tokenId))} />{character.name}</label>)}

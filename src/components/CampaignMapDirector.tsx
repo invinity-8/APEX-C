@@ -31,9 +31,11 @@ import {
 } from '../game/sceneDirector';
 import { SceneSurface } from './SceneSurface';
 import { SceneThumbnail } from './SceneThumbnail';
+import { HexThumbnail } from './HexThumbnail';
 import { GmLootRolls } from './LootRolls';
 import { SceneLiveControls } from './SceneLiveControls';
 import { WorldTravel } from './WorldTravel';
+import { ENEMY_TEMPLATES } from '../game/sceneCombat';
 
 /** Kept for existing callers/tests: a short location label relative to a focused scene. */
 export function assignmentLocation(player: { sceneId: string | null }, focusId: string | null, scenes: Pick<SceneSummary, 'id' | 'name'>[]): string {
@@ -97,6 +99,11 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [confirmSwitch, setConfirmSwitch] = useState(false);
   const [placementToken, setPlacementToken] = useState('');
   const [placeMode, setPlaceMode] = useState(false);
+  // Enemy tools: place a new enemy / move the selected one by clicking a hex.
+  const [enemyTemplate, setEnemyTemplate] = useState(ENEMY_TEMPLATES[0].id);
+  const [enemyMode, setEnemyMode] = useState<null | 'place' | 'move'>(null);
+  const [selectedEnemy, setSelectedEnemy] = useState<string | null>(null);
+  const [enemyTarget, setEnemyTarget] = useState('');
   const snapshotRequest = useRef(0);
   const busyRef = useRef(false);
 
@@ -151,6 +158,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     setPlaceMode(false);
     setPlacementToken('');
     setConfirmSwitch(false);
+    setEnemyMode(null);
+    setSelectedEnemy(null);
   }, [shown]);
 
   const shownScene = snapshot?.scene && snapshot.scene.id === shown ? snapshot.scene : null;
@@ -274,6 +283,11 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     if (intent) void guarded(async () => void (await send(intent)));
   }
 
+  function enemyClick(x: number, y: number) {
+    if (enemyMode === 'place') sceneTurn({ action: 'enemyAdd', templateId: enemyTemplate, x, y });
+    else if (enemyMode === 'move' && selectedEnemy) { sceneTurn({ action: 'enemyMove', id: selectedEnemy, x, y }); setEnemyMode(null); }
+  }
+
   function placeToken(x: number, y: number) {
     const scene = shownScene;
     if (!scene || !placementToken || !placeMode) return;
@@ -343,9 +357,9 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const previewing = state.selected !== state.current;
   const movable = players.filter(canMove);
   const selectedDest = destinationFor(state.selected);
-  const entries: Array<{ id: string; name: string; meta: string; thumb?: string | null }> = [
+  const entries: Array<{ id: string; name: string; meta: string; thumb?: string | null; hex?: SceneSummary['hex']; palette?: SceneSummary['palette'] }> = [
     { id: ARENA_ID, name: 'Arena', meta: 'Arena · hex campaign map', thumb: null },
-    ...published.map((s) => ({ id: s.id, name: s.name, meta: CATEGORY_LABEL[s.category], thumb: s.thumbnail_asset_id })),
+    ...published.map((s) => ({ id: s.id, name: s.name, meta: CATEGORY_LABEL[s.category], thumb: s.thumbnail_asset_id, hex: s.hex, palette: s.palette })),
   ];
 
   const scenesWidget: WidgetDef = {
@@ -419,6 +433,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
                     <div className="scene-thumbnail">
                       <span aria-hidden="true">⬢</span>
                     </div>
+                  ) : entry.hex ? (
+                    <HexThumbnail hex={entry.hex} palette={entry.palette} label={entry.name} width={72} height={48} />
                   ) : (
                     <SceneThumbnail assetId={entry.thumb} label={entry.name} />
                   )}
@@ -495,6 +511,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
 
   const clock = snapshot?.clock;
   const encounter = shownScene && game.gmState?.sceneEncounters?.[shownScene.id]?.status === 'active' ? game.gmState.sceneEncounters[shownScene.id] : null;
+  const enemies = shownScene ? (game.gmState?.sceneEnemies?.[shownScene.id] ?? []) : [];
   const placeable = !!shownScene && ['battle', 'region'].includes(shownScene.category) && markers.length > 0;
   const toolsWidget: WidgetDef = {
     id: 'game-scene-tools',
@@ -551,6 +568,69 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
                 </button>
               ))}
             </div>
+          )}
+          {shownScene.category === 'battle' && shownScene.map.hex && (
+            <section className="space-y-1 text-xs" aria-label="Enemies" data-testid="gm-enemies">
+              <h3 className="font-bold text-marble-300">Enemies · {enemies.filter((e) => !e.defeated).length} active</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <select aria-label="Enemy type" className="rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs" value={enemyTemplate} onChange={(e) => setEnemyTemplate(e.target.value)}>
+                  {ENEMY_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · AC {t.ac} · HP {t.hp}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-ghost" aria-pressed={enemyMode === 'place'} disabled={busy} onClick={() => setEnemyMode((m) => (m === 'place' ? null : 'place'))}>
+                  {enemyMode === 'place' ? 'Done placing' : 'Place on map'}
+                </button>
+              </div>
+              {enemyMode && <p className="text-gold-200">{enemyMode === 'place' ? 'Click free hexes to place enemies.' : 'Click the destination hex.'}</p>}
+              <ul className="space-y-1">
+                {enemies.map((e) => (
+                  <li key={e.id} className={`rounded border px-1.5 py-1 ${selectedEnemy === e.id ? 'border-gold-500' : 'border-ink-700'} ${e.defeated ? 'opacity-50' : ''}`}>
+                    <button type="button" className="font-semibold text-marble-100" onClick={() => setSelectedEnemy(e.id)}>
+                      {e.name}
+                    </button>{' '}
+                    <span className="text-marble-400">
+                      AC {e.ac} · HP {e.hp}/{e.maxHp}
+                      {e.defeated ? ' · defeated' : ''} · {e.attack.name} +{e.attack.bonus} ({e.attack.damage})
+                    </span>
+                    {selectedEnemy === e.id && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {[-10, -5, -1, 1, 5].map((d) => (
+                          <button key={d} type="button" className="btn btn-ghost px-1.5 py-0.5" disabled={busy} onClick={() => sceneTurn({ action: 'enemyHp', id: e.id, delta: d })}>
+                            {d > 0 ? `+${d}` : d}
+                          </button>
+                        ))}
+                        <button type="button" className="btn btn-ghost px-1.5 py-0.5" disabled={busy || e.defeated} onClick={() => setEnemyMode('move')}>
+                          Move
+                        </button>
+                        <select aria-label={`${e.name} attacks`} className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={enemyTarget} onChange={(ev) => setEnemyTarget(ev.target.value)}>
+                          <option value="">Target…</option>
+                          {markers.map((m) => (
+                            <option key={m.tokenId} value={m.tokenId}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button type="button" className="btn btn-gold px-1.5 py-0.5" disabled={busy || !enemyTarget || e.defeated} onClick={() => sceneTurn({ action: 'enemyAttack', id: e.id, tokenId: enemyTarget })}>
+                          Attack
+                        </button>
+                        <button type="button" className="btn btn-ghost px-1.5 py-0.5" disabled={busy} onClick={() => (sceneTurn({ action: 'enemyRemove', id: e.id }), setSelectedEnemy(null))}>
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {!!snapshot?.combatLog?.length && (
+            <details className="combat-log" open>
+              <summary>Combat log</summary>
+              <ol>{snapshot.combatLog.slice().reverse().map((l) => <li key={l.id}>{l.text}</li>)}</ol>
+            </details>
           )}
           {shownScene.category === 'battle' && (
             <section className="space-y-1 text-xs" aria-label="Initiative" data-testid="gm-initiative">
@@ -615,7 +695,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       <div className="game-map" aria-label="Campaign map">
         {banner}
         {shownScene && snapshot ? (
-          <SceneSurface snapshot={snapshot} tokenLabels={markers} tokenViews={game.view.tokens} gm onDestination={placeMode ? placeToken : undefined} />
+          <SceneSurface snapshot={snapshot} tokenLabels={markers} tokenViews={game.view.tokens} gm onDestination={enemyMode ? enemyClick : placeMode ? placeToken : undefined} onFigureClick={(id) => { if ((snapshot.figures ?? []).some((f) => f.kind === 'enemy' && f.id === id)) setSelectedEnemy(id); }} targets={selectedEnemy ? [selectedEnemy] : undefined} />
         ) : mapError ? (
           <p role="alert" className="p-6 text-sm text-red-300">
             {mapError}
