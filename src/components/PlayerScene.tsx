@@ -1,4 +1,6 @@
 import { combatAttacks } from '../game/effectiveStats';
+import { PlayerCombat } from './PlayerCombat';
+import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import { useEffect, useRef, useState } from 'react';
 import type { GameApi } from '../state/gameApi';
 import { CharacterPortrait } from './CharacterVisuals';
@@ -19,10 +21,12 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   useEffect(() => { let live = true; setSanctuaryImage(null); if (chosenAsset && scene?.kind === 'sanctuary') api.mapImage(chosenAsset).then(r => { if (live) setSanctuaryImage(r.url); }).catch(() => undefined); return () => { live = false; }; }, [chosenAsset, scene?.kind]);
   const [moveMode, setMoveMode] = useState(false), [pending, setPending] = useState(false), [message, setMessage] = useState('');
   const [attackIndex, setAttackIndex] = useState<number | null>(null);
-  const [attacks, setAttacks] = useState<Array<{ name: string; bonus: string; damage: string; range: string }>>([]);
+  const [attacks, setAttacks] = useState<SheetAttack[]>([]);
   // Attacks: equipped weapons (derived from the inventory, same rule as the server) and the sheet's attacks.
   const myDetails = me?.details;
-  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
+  const [mySheet, setMySheet] = useState<CharacterSheet | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
+  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) { setMySheet(r.sheet.sheet); setAttacks(myDetails ? combatAttacks(r.sheet.sheet, { inventory: myDetails.inventory, equipment: myDetails.equipment, armorWornAt: myDetails.armorWornAt }, game.view.itemRules) : r.sheet.sheet.attacks); } }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision, myDetails, game.view.itemRules]);
   const [uncertain, setUncertain] = useState<Record<string, unknown> | null>(null);
   const pendingRef = useRef(false);
   async function send(input: Record<string, unknown>) {
@@ -74,10 +78,11 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     finally { pendingRef.current = false; setPending(false); }
   }
   function figureClick(id: string) {
-    if (attackIndex === null || !me) return;
-    if (!(scene?.figures ?? []).some(f => f.kind === 'enemy' && f.id === id)) return;
-    setAttackIndex(null);
-    void sceneAction({ action: 'attack', tokenId: me.id, enemyId: id, attackIndex });
+    if (!me || moveMode) return;
+    const f = (scene?.figures ?? []).find(x => x.kind === 'enemy' && x.id === id);
+    if (!f || f.condition === 'down' || f.side === 'ally') return;
+    if (attackIndex !== null) { setAttackIndex(null); void sceneAction({ action: 'attack', tokenId: me.id, enemyId: id, attackIndex }); return; }
+    setTarget(id);
   }
   const enemiesInSight = (scene.figures ?? []).filter(f => f.kind === 'enemy' && f.condition !== 'down');
   const canAttack = category === 'battle' && (free || myTurn) && attacks.length > 0;
@@ -90,13 +95,8 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
       {category === 'battle' && me && <button className="btn btn-ghost" disabled={pending} aria-pressed={!!scene.torch} onClick={() => void sceneAction({ action: 'torch', tokenId: me.id, on: !scene.torch })} data-testid="torch">{scene.torch ? '🔥 Put out light' : '🕯 Light a torch'}</button>}
       <span role="status" data-testid="movement-status">{status}</span>
     </div>}
-    {canAttack && <div className="journal-toolbar" aria-label="Attack">
-      <label className="text-xs">Attack <select aria-label="Choose attack" value={attackIndex ?? ''} onChange={e => { setMoveMode(false); setAttackIndex(e.target.value === '' ? null : Number(e.target.value)); }}>
-        <option value="">– choose to attack –</option>
-        {attacks.map((a, i) => <option key={i} value={i}>{a.name} {a.bonus} · {a.damage}{a.range ? ` · ${a.range}` : ''}</option>)}
-      </select></label>
-      {attackIndex !== null && <span className="text-xs text-gold-200">{enemiesInSight.length ? 'Click an enemy on the map.' : 'No enemy in sight.'}</span>}
-    </div>}
+    {category === 'battle' && me && <PlayerCombat snapshot={scene} encounter={liveEncounter} tokenId={me.id} sheet={mySheet} attacks={attacks} myTurn={myTurn} free={free} pending={pending} act={(input) => void sceneAction(input)} target={target} setTarget={setTarget} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} />}
+    {canAttack && attackIndex !== null && <p className="text-xs text-gold-200">{enemiesInSight.length ? 'Click an enemy on the map.' : 'No enemy in sight.'}</p>}
     {!!scene.combatLog?.length && <details className="combat-log" open><summary>Combat log</summary><ol>{scene.combatLog.slice().reverse().map(l => <li key={l.id}>{l.text}</li>)}</ol></details>}
     {moveMode && <p>Choose a destination on the map. The server checks your path, terrain, walls and {free ? 'nothing else – movement is free' : mv?.mode === 'turn' ? 'your speed this turn' : 'how far you can travel today'}.</p>}
     {message && <p role="status">{message}</p>}
@@ -104,7 +104,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     {!!game.view.sceneAnnouncements.length && <section className="mx-auto my-2 w-full max-w-4xl space-y-2" aria-label="Scene announcements">
       {game.view.sceneAnnouncements.map(item => <article key={item.id} className="rounded-lg border border-gold-700/60 bg-ink-950/90 p-3"><p className="eyebrow">Scene event</p><h2 className="font-display text-lg text-gold-200">{item.title}</h2><p className="whitespace-pre-wrap text-sm text-marble-200">{item.text}</p></article>)}
     </section>}
-    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode && !free ? remaining : null} onDestination={moveMode ? move : undefined} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : undefined} />
+    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode && !free ? remaining : null} onDestination={moveMode ? move : undefined} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />
     {category === 'world' && scene.travel && <WorldTravel sceneId={scene.scene.id} sceneRevision={scene.scene.revision} assignmentRevision={scene.assignmentRevision} map={scene.scene.map} travel={scene.travel} onChanged={() => game.online?.refresh()} />}
     <p>The Game Master controls scene transitions{category === 'region' ? ', day and night' : category === 'battle' ? ' and initiative' : ''}.</p>
   </div>;

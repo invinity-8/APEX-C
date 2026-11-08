@@ -4,6 +4,7 @@ import type { AuthUser, Repo } from './repo.js';
 import { carriedLights, clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
 import { enemiesOf } from '../game/sceneCombat.js';
 import { sceneContext } from './sceneRuntime.js';
+import { offerOpportunityAttacks } from './sceneTurns.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
 export interface MotionSnapshot { tokens: SceneTokenPosition[]; round: number; hour: number; known: MapNode[]; budgets: Record<string, { tacticalSpent: number; regionSpent: number }> }
@@ -82,7 +83,9 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && (map.hex ? seenSet.has(hexKeyAt(map, n)) : Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell)))).map(n => ({ ...n, targetScene: null, discoverable: false }));
   const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: to.x, y: to.y, requestId: v.requestId };
   const result = await repo.sceneMotion.localWrite(user, input, v.action === 'place' ? 0 : checked.cost, mv.allowance, mv.epoch, observed, seen);
-  return { status: result.ok ? 200 : 409, body: { ...result, ...(result.ok ? { position: to, spent: mv.spent + (v.action === 'place' ? 0 : checked.cost), allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
+  // Leaving a hostile's reach without Disengage offers it an opportunity attack (GM / player prompt).
+  const opportunities = result.ok && v.action === 'move' && scene.category === 'battle' ? await offerOpportunityAttacks(user, repo, scene.id, { kind: 'pc', tokenId: token.id }, start, to).catch(() => 0) : 0;
+  return { status: result.ok ? 200 : 409, body: { ...result, ...(opportunities ? { message: `Moved – ${opportunities} opportunity attack${opportunities > 1 ? 's' : ''} possible against ${token.name}.` } : {}), ...(result.ok ? { position: to, spent: mv.spent + (v.action === 'place' ? 0 : checked.cost), allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
 }
 
 async function ownerAssignmentOf(repo: Repo, campaignId: string, tokenId: string) {

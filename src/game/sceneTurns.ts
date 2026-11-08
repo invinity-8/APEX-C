@@ -70,6 +70,9 @@ export function endTurn(prev: GameState, sceneId: string, encounterId: string, t
   enc.turnIndex++;
   if (enc.turnIndex >= enc.participants.length) { enc.turnIndex = 0; enc.round++; }
   enc.turnSerial = (enc.turnSerial ?? 0) + 1;
+  // the new active creature gets its reaction back (5e: it refreshes at the start of your turn)
+  const next = enc.participants[enc.turnIndex];
+  if (next && enc.reactions?.[next.id] !== undefined) { const { [next.id]: _r, ...rest } = enc.reactions; void _r; enc.reactions = rest; }
   enc.version++;
   return { ok: true, state, message: `${enc.participants[enc.turnIndex].name}'s turn${enc.turnIndex === 0 ? ` · round ${enc.round}` : ''}.` };
 }

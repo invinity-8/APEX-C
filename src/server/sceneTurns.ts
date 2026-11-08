@@ -4,6 +4,10 @@
  *   startInitiative  GM: everyone assigned to the battle map rolls d20 + initiative (server dice)
  *   endInitiative    GM: free movement until initiative starts again
  *   clock            GM: region day/night, next day; battle lighting
+ *   strike           attacker → target (character, enemy or ally); uses the Attack action or the bonus action
+ *   standard         Dash, Disengage, Dodge, Help, Hide, Ready, Search, Use an object, other bonus action
+ *   cast             cast a known spell with a chosen slot (spent on the server); attack spells roll vs AC
+ *   reaction         take or skip an offered opportunity attack
  * All changes are compare-and-swap writes of the game state; scene movement re-checks the turn
  * inside the database transaction.
  */
@@ -14,8 +18,9 @@ import { orderParticipants } from '../game/sceneOperations.js';
 import type { GameState } from '../game/types.js';
 import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
-import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor } from './sceneLocal.js';
-import { ENEMY_TEMPLATES, addEnemy, attackUsed, enemiesOf, logCombat, markAttack, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy } from '../game/sceneCombat.js';
+import { carriedLights, clockFor, hexKeyAt, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
+import { STANDARD_ACTIONS, addOffers, attacksPerAction, characterLevel, dropOffer, npcActor, opportunityOffers, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type StandardAction } from '../game/sceneActions.js';
+import { ENEMY_TEMPLATES, addEnemy, enemiesOf, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { hexAt, hexCentre, passable, tileLookup } from '../campaign/hexScene.js';
 import { lineOfSight } from '../campaign/hexVision.js';
@@ -139,6 +144,14 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     return mutate(user, repo, (s) => setCarriedLight(s, sceneId, v.tokenId as string, v.on as boolean));
   }
   if (v.action === 'attack') return attackRequest(user, repo, scene, v);
+  if (v.action === 'strike') {
+    const attacker = sideOf(v.attacker), target = sideOf(v.target);
+    if (!attacker || !target || (v.attackIndex !== undefined && !Number.isSafeInteger(v.attackIndex))) return { status: 400, body: { error: 'Invalid attack.' } };
+    return strikeRequest(user, repo, scene, attacker, target, v.attackIndex as number | undefined, v.bonus === true);
+  }
+  if (v.action === 'standard') return standardRequest(user, repo, scene, v);
+  if (v.action === 'cast') return castRequest(user, repo, scene, v);
+  if (v.action === 'reaction') return reactionRequest(user, repo, scene, v);
   if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM can do that.' } };
   if (v.action === 'enemyAdd' || v.action === 'enemyMove') {
     const map = parseMap(scene.published_metadata);
@@ -153,10 +166,17 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     if (v.action === 'enemyAdd') {
       if (typeof v.templateId !== 'string' || !ENEMY_TEMPLATES.some((t) => t.id === v.templateId)) return { status: 400, body: { error: 'Unknown enemy.' } };
       const id = `en-${crypto.randomUUID().slice(0, 8)}`, roll = d20();
-      return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll));
+      return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy'));
     }
     if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid enemy.' } };
-    return mutate(user, repo, (s) => updateEnemy(s, sceneId, v.id as string, at));
+    const before = ctx.state ? enemiesOf(ctx.state, sceneId).find((e) => e.id === v.id) : undefined;
+    const moved = await mutate(user, repo, (s) => updateEnemy(s, sceneId, v.id as string, at));
+    // the GM moved an NPC: characters (and NPCs of the other side) whose reach it left may react
+    if (moved.status === 200 && before && !before.defeated) {
+      const n = await offerOpportunityAttacks(user, repo, sceneId, { kind: 'npc', id: before.id }, before, at);
+      if (n) (moved.body as { message?: string }).message = `${before.name} moved – ${n} opportunity attack${n > 1 ? 's' : ''} possible.`;
+    }
+    return moved;
   }
   if (v.action === 'enemyRemove' || v.action === 'enemyHp') {
     if (typeof v.id !== 'string' || (v.action === 'enemyHp' && (!Number.isSafeInteger(v.delta) || Math.abs(v.delta as number) > 1000))) return { status: 400, body: { error: 'Invalid enemy change.' } };
@@ -209,69 +229,296 @@ const inReach = (map: SceneMap, from: { x: number; y: number }, to: { x: number;
   return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), blocks), distanceFt: d };
 };
 
-/** A player (own turn, one attack per turn) or the GM attacks an enemy with an attack from the sheet. */
-async function attackRequest(user: AuthUser, repo: Repo, scene: NonNullable<Awaited<ReturnType<NonNullable<Repo['sceneRuntime']>['scene']>>>, v: Record<string, unknown>): Promise<SceneResult> {
-  if (typeof v.tokenId !== 'string' || typeof v.enemyId !== 'string' || !Number.isSafeInteger(v.attackIndex)) return { status: 400, body: { error: 'Invalid attack.' } };
-  if (user.role !== 'gm' && !user.tokenIds.includes(v.tokenId)) return { status: 403, body: { error: 'This is not your character.' } };
-  const map = parseMap(scene.published_metadata);
-  if (!map?.hex || scene.category !== 'battle') return { status: 400, body: { error: 'Attacks happen on battle maps.' } };
-  const ctx = await sceneContext(repo, user.campaignId);
-  const state = ctx.state;
-  if (!state) return { status: 409, body: { error: 'Campaign unavailable.' } };
-  const enc = activeEncounter(state, scene.id);
-  if (user.role !== 'gm') {
-    if ((await repo.sceneRuntime!.assignment(user.campaignId, user.id))?.scene_id !== scene.id) return { status: 409, body: { error: 'You are not in this scene.' } };
-    if (enc && enc.participants[enc.turnIndex]?.tokenId !== v.tokenId) return { status: 409, body: { error: 'Attack on your own turn.' } };
-    if (attackUsed(state, scene.id, v.tokenId)) return { status: 409, body: { error: 'You already attacked this turn.' } };
+// ---------------------------------------------------------------- combat actions (APEX 1.1)
+
+type Ctx = SceneViewContext & { sceneId?: string };
+type Side = { kind: 'pc'; tokenId: string } | { kind: 'npc'; id: string };
+const actorOf = (s: Side) => (s.kind === 'pc' ? pcActor(s.tokenId) : npcActor(s.id));
+const sideOf = (x: unknown): Side | null => {
+  const o = x as { kind?: unknown; tokenId?: unknown; id?: unknown } | null;
+  if (o?.kind === 'pc' && typeof o.tokenId === 'string' && o.tokenId.length <= 64) return { kind: 'pc', tokenId: o.tokenId };
+  if (o?.kind === 'npc' && typeof o.id === 'string' && o.id.length <= 64) return { kind: 'npc', id: o.id };
+  return null;
+};
+
+/** Everybody on the battle map as rule figures (positions, side, melee reach). */
+async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<Figure[]> {
+  const state = ctx.state!;
+  const pcs = await ctx.pcs!(sceneId, map);
+  const out: Figure[] = pcs.map((p) => ({ kind: 'pc', id: p.tokenId, name: state.tokens[p.tokenId]?.name ?? 'Character', side: 'party', x: p.x, y: p.y, reachFt: 5 }));
+  for (const e of enemiesOf(state, sceneId)) out.push({ kind: 'npc', id: e.id, name: e.name, side: e.side === 'ally' ? 'party' : 'enemy', x: e.x, y: e.y, reachFt: e.attack.reachFt || 5, down: e.defeated });
+  return out;
+}
+const feetBetween = (map: SceneMap) => (a: { x: number; y: number }, b: { x: number; y: number }) => distance(hexAt(map, a), hexAt(map, b)) * 5;
+
+interface Strike { name: string; bonus: number; damage: { count: number; sides: number; mod: number }; reachFt: number; rangeFt?: number; label?: string }
+
+/** Attack numbers of an attacker: a character's attack (equipment + sheet) or an NPC's attack. */
+async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefined): Promise<Strike | string> {
+  const state = ctx.state!;
+  if (attacker.kind === 'npc') {
+    const e = enemiesOf(state, ctx.sceneId!).find((x) => x.id === attacker.id && !x.defeated);
+    if (!e) return 'That creature cannot attack.';
+    const dmg = parseDamage(e.attack.damage);
+    return dmg ? { name: e.attack.name, bonus: e.attack.bonus, damage: dmg, reachFt: e.attack.reachFt, rangeFt: e.attack.rangeFt } : 'Unreadable damage.';
   }
-  const sheet = await sheetOf(ctx, v.tokenId);
-  const attack = combatAttacks(sheet, state.tokens[v.tokenId], itemRulesOf(state))[v.attackIndex as number];
-  if (!attack) return { status: 400, body: { error: 'Choose an attack from your character sheet.' } };
+  const sheet = await sheetOf(ctx, attacker.tokenId);
+  const attack = combatAttacks(sheet, state.tokens[attacker.tokenId], itemRulesOf(state))[attackIndex ?? 0];
+  if (!attack) return 'Choose an attack from your character sheet.';
   const bonus = parseBonus(attack.bonus), damage = parseDamage(attack.damage);
-  if (bonus === null || !damage) return { status: 422, body: { error: `“${attack.name}” has no readable attack bonus or damage (e.g. +5, 1d8+3). Resolve it by hand.` } };
-  const pcs = await ctx.pcs!(scene.id, map);
-  const me = pcs.find((p) => p.tokenId === v.tokenId);
-  const enemy = enemiesOf(state, scene.id).find((e) => e.id === v.enemyId && !e.defeated);
-  if (!me || !enemy) return { status: 404, body: { error: 'Target or attacker not on the map.' } };
+  if (bonus === null || !damage) return `“${attack.name}” has no readable attack bonus or damage (e.g. +5, 1d8+3). Resolve it by hand.`;
   const range = parseRangeFt(`${attack.range} ${attack.notes}`);
-  const reach = inReach(map, me, enemy, range.reachFt, range.rangeFt);
-  if (!reach.ok) return { status: 422, body: { error: `${enemy.name} is out of reach or not in line of sight (${reach.distanceFt} ft, ${attack.name}: ${range.rangeFt ?? range.reachFt} ft).` } };
-  const roll = resolveAttack(state.tokens[v.tokenId]?.name ?? 'Character', enemy.name, attack.name, bonus, damage, enemy.ac, die);
-  return mutate(user, repo, (s) => {
-    if (user.role !== 'gm' && attackUsed(s, scene.id, v.tokenId as string)) return { ok: false, error: 'You already attacked this turn.' };
-    const r = roll.hit ? updateEnemy(s, scene.id, enemy.id, { hpDelta: -roll.damage }) : { ok: true as const, state: structuredClone(s) };
-    if (!r.ok) return r;
-    markAttack(r.state, scene.id, v.tokenId as string);
-    const after = enemiesOf(r.state, scene.id).find((e) => e.id === enemy.id);
-    logCombat(r.state, scene.id, roll.text + (after?.defeated ? ` ${enemy.name} is defeated.` : ''));
-    return { ok: true, state: r.state, message: roll.text };
-  });
+  return { name: attack.name, bonus, damage, reachFt: range.reachFt, rangeFt: range.rangeFt };
 }
 
-/** GM: an enemy attacks a character; damage is applied to the character sheet. */
-async function enemyAttackRequest(user: AuthUser, repo: Repo, scene: NonNullable<Awaited<ReturnType<NonNullable<Repo['sceneRuntime']>['scene']>>>, v: Record<string, unknown>): Promise<SceneResult> {
-  if (typeof v.id !== 'string' || typeof v.tokenId !== 'string') return { status: 400, body: { error: 'Invalid attack.' } };
-  const map = parseMap(scene.published_metadata);
-  const ctx = await sceneContext(repo, user.campaignId);
-  const enemy = ctx.state ? enemiesOf(ctx.state, scene.id).find((e) => e.id === v.id && !e.defeated) : undefined;
-  if (!map?.hex || !enemy || !ctx.state?.tokens[v.tokenId]) return { status: 404, body: { error: 'Enemy or character not found.' } };
-  const pcs = await ctx.pcs!(scene.id, map);
-  const target = pcs.find((p) => p.tokenId === v.tokenId);
-  if (!target) return { status: 404, body: { error: 'The character is not on this map.' } };
-  const reach = inReach(map, enemy, target, enemy.attack.reachFt, enemy.attack.rangeFt);
-  if (!reach.ok) return { status: 422, body: { error: `${ctx.state.tokens[v.tokenId].name} is out of reach (${reach.distanceFt} ft).` } };
-  const row = await repo.loadSheet(user.campaignId, v.tokenId);
-  const sheet = await sheetOf(ctx, v.tokenId);
-  // APEX 1.0: equipment counts – the effective AC (armour pieces, shield, modifiers), not the imported number
-  const ac = targetAc(sheet, ctx.state.tokens[v.tokenId], itemRulesOf(ctx.state));
-  const roll = resolveAttack(enemy.name, ctx.state.tokens[v.tokenId].name, enemy.attack.name, enemy.attack.bonus, parseDamage(enemy.attack.damage)!, ac, die);
-  let hpText = '';
+/**
+ * Rolls an attack and applies the damage: characters lose hit points on their sheet, NPCs on the scene. Returns
+ * the log text and a state mutation (the NPC hit points) to run inside the compare-and-swap write.
+ */
+async function rollAgainst(user: AuthUser, repo: Repo, ctx: Ctx, attackerName: string, strike: Strike, target: Side, extraText = ''): Promise<{ text: string; apply: (s: GameState) => GameState } | string> {
+  const state = ctx.state!;
+  const sceneId = ctx.sceneId!;
+  if (target.kind === 'npc') {
+    const e = enemiesOf(state, sceneId).find((x) => x.id === target.id && !x.defeated);
+    if (!e) return 'Target not found.';
+    const roll = resolveAttack(attackerName, e.name, strike.name, strike.bonus, strike.damage, e.ac, die);
+    return {
+      text: roll.text + extraText,
+      apply: (s) => {
+        const r = roll.hit ? updateEnemy(s, sceneId, e.id, { hpDelta: -roll.damage }) : { ok: true as const, state: structuredClone(s) };
+        const st = r.ok ? r.state : structuredClone(s);
+        const after = enemiesOf(st, sceneId).find((x) => x.id === e.id);
+        logCombat(st, sceneId, roll.text + extraText + (after?.defeated ? ` ${e.name} is defeated.` : ''));
+        return st;
+      },
+    };
+  }
+  const token = state.tokens[target.tokenId];
+  if (!token) return 'Target not found.';
+  const row = await repo.loadSheet(user.campaignId, target.tokenId);
+  const sheet = await sheetOf(ctx, target.tokenId);
+  const ac = targetAc(sheet, token, itemRulesOf(state));
+  const roll = resolveAttack(attackerName, token.name, strike.name, strike.bonus, strike.damage, ac, die);
+  let hp = '';
   if (roll.hit && sheet.hitPoints) {
     const hurt = applyDamage(sheet, roll.damage);
     if (hurt.ok) {
-      const saved = await repo.saveSheet(user.campaignId, v.tokenId, hurt.sheet, row?.version ?? 0, user.id);
-      hpText = saved === null ? ' (the sheet changed meanwhile – apply the damage by hand)' : ` (${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
+      const saved = await repo.saveSheet(user.campaignId, target.tokenId, hurt.sheet, row?.version ?? 0, user.id);
+      hp = saved === null ? ' (the sheet changed meanwhile – apply the damage by hand)' : ` (${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
     }
-  } else if (roll.hit) hpText = ' (no hit points on the sheet – apply by hand)';
-  return mutate(user, repo, (s) => { const st = structuredClone(s); logCombat(st, scene.id, roll.text + hpText); return { ok: true, state: st, message: roll.text + hpText }; });
+  } else if (roll.hit) hp = ' (no hit points on the sheet – apply by hand)';
+  return { text: roll.text + hp + extraText, apply: (s) => { const st = structuredClone(s); logCombat(st, sceneId, roll.text + hp + extraText); return st; } };
+}
+
+const positionOf = (figures: Figure[], s: Side) => figures.find((f) => (s.kind === 'pc' ? f.kind === 'pc' && f.id === s.tokenId : f.kind === 'npc' && f.id === s.id));
+const nameOf = (state: GameState, sceneId: string, s: Side) => (s.kind === 'pc' ? state.tokens[s.tokenId]?.name : enemiesOf(state, sceneId).find((e) => e.id === s.id)?.name) ?? 'Creature';
+
+/** Who may command an attacker: the GM always, a player only their own character. */
+const controls = (user: AuthUser, s: Side) => user.role === 'gm' || (s.kind === 'pc' && user.tokenIds.includes(s.tokenId));
+
+async function playerInScene(user: AuthUser, repo: Repo, sceneId: string) {
+  return user.role === 'gm' || (await repo.sceneRuntime!.assignment(user.campaignId, user.id))?.scene_id === sceneId;
+}
+
+/**
+ * An attack on the battle map: a character (player on its turn, or the GM) or an NPC (GM) attacks a target.
+ * Uses the Attack action (Extra Attack allows several) or, with `bonus`, the bonus action.
+ */
+async function strikeRequest(user: AuthUser, repo: Repo, scene: Scene, attacker: Side, target: Side, attackIndex: number | undefined, viaBonus: boolean): Promise<SceneResult> {
+  const map = parseMap(scene.published_metadata);
+  if (!map?.hex || scene.category !== 'battle') return { status: 400, body: { error: 'Attacks happen on battle maps.' } };
+  if (!controls(user, attacker)) return { status: 403, body: { error: 'This is not your character.' } };
+  if (!(await playerInScene(user, repo, scene.id))) return { status: 409, body: { error: 'You are not in this scene.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
+  if (attacker.kind === 'pc' && target.kind === 'pc') return { status: 422, body: { error: 'Characters do not attack each other here – the GM resolves that by hand.' } };
+  const sheet = attacker.kind === 'pc' ? await sheetOf(ctx, attacker.tokenId) : null;
+  const allowed = attacksPerAction(sheet);
+  // pre-check the economy before rolling (the write re-checks it)
+  const pre = useEconomy(activeEncounter(structuredClone(ctx.state), scene.id), actorOf(attacker), viaBonus ? 'bonus' : 'attack', { gm: user.role === 'gm', attacksAllowed: allowed });
+  if (pre) return { status: 409, body: { error: pre } };
+  const strike = await strikeOf(ctx, attacker, attackIndex);
+  if (typeof strike === 'string') return { status: 422, body: { error: strike } };
+  const figures = await battleFigures(ctx, scene.id, map);
+  const from = positionOf(figures, attacker), to = positionOf(figures, target);
+  if (!from || !to || to.down) return { status: 404, body: { error: 'Target or attacker not on the map.' } };
+  const reach = inReach(map, from, to, strike.reachFt, strike.rangeFt);
+  if (!reach.ok) return { status: 422, body: { error: `${to.name} is out of reach or not in line of sight (${reach.distanceFt} ft, ${strike.name}: ${strike.rangeFt ?? strike.reachFt} ft).` } };
+  const r = await rollAgainst(user, repo, ctx, from.name, strike, target, viaBonus ? ' (bonus action)' : '');
+  if (typeof r === 'string') return { status: 404, body: { error: r } };
+  return mutate(user, repo, (s) => {
+    const st = r.apply(s);
+    const err = useEconomy(st.sceneEncounters?.[scene.id]?.status === 'active' ? st.sceneEncounters[scene.id] : null, actorOf(attacker), viaBonus ? 'bonus' : 'attack', { gm: user.role === 'gm', attacksAllowed: allowed });
+    if (err) return { ok: false, error: err };
+    if (st.sceneEncounters?.[scene.id]) st.sceneEncounters[scene.id].version++;
+    return { ok: true, state: st, message: r.text };
+  });
+}
+
+type Scene = NonNullable<Awaited<ReturnType<NonNullable<Repo['sceneRuntime']>['scene']>>>;
+
+/** Old request shape: a character attacks an enemy. */
+async function attackRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  if (typeof v.tokenId !== 'string' || typeof v.enemyId !== 'string' || !Number.isSafeInteger(v.attackIndex)) return { status: 400, body: { error: 'Invalid attack.' } };
+  return strikeRequest(user, repo, scene, { kind: 'pc', tokenId: v.tokenId }, { kind: 'npc', id: v.enemyId }, v.attackIndex as number, v.bonus === true);
+}
+
+/** Old request shape: the GM lets an enemy attack a character. */
+async function enemyAttackRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  if (typeof v.id !== 'string' || typeof v.tokenId !== 'string') return { status: 400, body: { error: 'Invalid attack.' } };
+  return strikeRequest(user, repo, scene, { kind: 'npc', id: v.id }, { kind: 'pc', tokenId: v.tokenId }, undefined, false);
+}
+
+/** Dash, Disengage, Dodge, Help, Hide, Ready, Search, Use an object – or a generic bonus action. */
+async function standardRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  const actor = sideOf(v.actor);
+  if (!actor) return { status: 400, body: { error: 'Invalid actor.' } };
+  if (!controls(user, actor)) return { status: 403, body: { error: 'This is not your character.' } };
+  if (!(await playerInScene(user, repo, scene.id))) return { status: 409, body: { error: 'You are not in this scene.' } };
+  const viaBonus = v.viaBonus === true;
+  if (v.act === 'bonusOther') {
+    const note = typeof v.note === 'string' ? v.note.trim().slice(0, 80) : '';
+    return mutate(user, repo, (s) => {
+      const st = structuredClone(s);
+      const e = activeEncounter(st, scene.id);
+      if (!e) return { ok: false, error: 'Actions are tracked while initiative runs.' };
+      const err = useEconomy(st.sceneEncounters![scene.id], actorOf(actor), 'bonus', { gm: user.role === 'gm' });
+      if (err) return { ok: false, error: err };
+      st.sceneEncounters![scene.id].version++;
+      const text = `${nameOf(st, scene.id, actor)} uses the bonus action${note ? `: ${note}` : ''}.`;
+      logCombat(st, scene.id, text);
+      return { ok: true, state: st, message: text };
+    });
+  }
+  if (!STANDARD_ACTIONS.some((a) => a.id === v.act)) return { status: 400, body: { error: 'Unknown action.' } };
+  return mutate(user, repo, (s) => {
+    const r = takeStandardAction(s, scene.id, actorOf(actor), nameOf(s, scene.id, actor), v.act as StandardAction, viaBonus, user.role === 'gm');
+    if (r.ok && r.message) logCombat(r.state, scene.id, r.message);
+    return r;
+  });
+}
+
+/** Cast a spell: a known (prepared or cantrip) spell, a slot of its level or higher (spent on the server). */
+async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  if (typeof v.tokenId !== 'string' || typeof v.spellId !== 'string' || !Number.isSafeInteger(v.slotLevel)) return { status: 400, body: { error: 'Invalid spell.' } };
+  const caster: Side = { kind: 'pc', tokenId: v.tokenId };
+  if (!controls(user, caster)) return { status: 403, body: { error: 'This is not your character.' } };
+  if (!(await playerInScene(user, repo, scene.id))) return { status: 409, body: { error: 'You are not in this scene.' } };
+  const map = parseMap(scene.published_metadata);
+  if (!map?.hex) return { status: 400, body: { error: 'Spells are cast on hex maps.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state?.tokens[v.tokenId]) return { status: 404, body: { error: 'Character unavailable.' } };
+  const row = await repo.loadSheet(user.campaignId, v.tokenId);
+  const sheet = await sheetOf(ctx, v.tokenId);
+  const plan = planSpell(sheet, v.spellId, v.slotLevel as number, characterLevel(sheet));
+  if ('error' in plan) return { status: 422, body: { error: plan.error } };
+  const target = v.target ? sideOf(v.target) : null;
+  const figures = await battleFigures(ctx, scene.id, map);
+  const me = positionOf(figures, caster);
+  const there = target ? positionOf(figures, target) : null;
+  if (target && (!there || there.down)) return { status: 404, body: { error: 'Target not on the map.' } };
+  if (me && there && plan.rangeFt !== null) {
+    const reach = inReach(map, me, there, plan.rangeFt);
+    if (!reach.ok) return { status: 422, body: { error: `${there.name} is out of range or not in line of sight (${reach.distanceFt} ft, ${plan.spell.name}: ${plan.rangeFt} ft).` } };
+  }
+  const kind = plan.reaction ? 'reaction' : plan.bonusAction ? 'bonus' : 'action';
+  const pre = useEconomy(activeEncounter(structuredClone(ctx.state), scene.id), actorOf(caster), kind, { gm: user.role === 'gm' });
+  if (pre) return { status: 409, body: { error: pre } };
+  // the slot is spent first – a failed sheet write (changed elsewhere) stops the cast
+  if (plan.slotLevel) {
+    const saved = await repo.saveSheet(user.campaignId, v.tokenId, spendSlot(sheet, plan.slotLevel), row?.version ?? 0, user.id);
+    if (saved === null) return { status: 409, body: { error: 'The character sheet changed meanwhile – try again.' } };
+  }
+  const nums = spellNumbers(sheet);
+  const bonus = (nums.attack ?? 0) + effectiveStats(sheet, ctx.state.tokens[v.tokenId], itemRulesOf(ctx.state)).derived.bonuses.spellAttack.value;
+  const dc = nums.dc !== null ? nums.dc + effectiveStats(sheet, ctx.state.tokens[v.tokenId], itemRulesOf(ctx.state)).derived.bonuses.spellDc.value : null;
+  const casterName = ctx.state.tokens[v.tokenId].name;
+  const slotText = plan.slotLevel ? ` (${ordinal(plan.slotLevel)}-level slot${plan.slotLevel > plan.spell.level ? ', upcast' : ''})` : ' (cantrip)';
+  let text = `${casterName} casts ${plan.spell.name}${slotText}`;
+  let apply: (s: GameState) => GameState = (s) => structuredClone(s);
+  const dmg = plan.damage ? parseDamage(plan.damage) : null;
+  if (plan.mode === 'attack' && target && nums.attack !== null && dmg) {
+    const r = await rollAgainst(user, repo, ctx, casterName, { name: plan.spell.name, bonus, damage: dmg, reachFt: 5 }, target, slotText);
+    if (typeof r === 'string') return { status: 404, body: { error: r } };
+    text = r.text;
+    apply = r.apply;
+  } else {
+    if (plan.mode === 'attack' && nums.attack === null) text += ' – no spell attack bonus on the sheet, roll by hand';
+    if (plan.mode === 'save') {
+      const rolled = dmg ? rollDice(dmg) : null;
+      text += ` – ${plan.save ? `${plan.save[0].toUpperCase()}${plan.save.slice(1)}` : ''} save${dc !== null ? ` DC ${dc}` : ''}${there ? ` for ${there.name}` : ''}${rolled ? `: ${rolled.total} ${plan.damage!.replace(/^[\d d+]+/, '').trim()} damage on a failed save (${rolled.rolls.join('+')}${dmg!.mod ? `+${dmg!.mod}` : ''}), half (${Math.floor(rolled.total / 2)}) on a success – the GM applies it` : ' – the GM resolves the effect'}`;
+    } else if (plan.mode === 'utility') text += there ? ` on ${there.name}` : '';
+    text += '.';
+    apply = (s) => { const st = structuredClone(s); logCombat(st, scene.id, text); return st; };
+  }
+  return mutate(user, repo, (s) => {
+    const st = apply(s);
+    const e = st.sceneEncounters?.[scene.id];
+    const err = useEconomy(e?.status === 'active' ? e : null, actorOf(caster), kind, { gm: user.role === 'gm' });
+    if (err) return { ok: false, error: err };
+    if (e) { spend(e, actorOf(caster), { last: 'spell' }); e.version++; }
+    return { ok: true, state: st, message: text };
+  });
+}
+
+function rollDice(d: { count: number; sides: number; mod: number }) {
+  const rolls = Array.from({ length: d.count }, () => die(d.sides));
+  return { rolls, total: Math.max(0, rolls.reduce((a, b) => a + b, 0) + d.mod) };
+}
+
+/**
+ * Opportunity attacks after a move on a battle map in initiative: hostiles whose reach the mover left are offered
+ * their reaction (prompt for the GM or the reacting character's player). Called after the move was saved.
+ */
+export async function offerOpportunityAttacks(user: AuthUser, repo: Repo, sceneId: string, mover: Side, from: { x: number; y: number }, to: { x: number; y: number }): Promise<number> {
+  const scene = await repo.sceneRuntime?.scene(user.campaignId, sceneId);
+  const map = scene ? parseMap(scene.published_metadata) : null;
+  if (!scene || !map?.hex || scene.category !== 'battle') return 0;
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
+  if (!ctx.state || !activeEncounter(ctx.state, sceneId)) return 0;
+  const figures = await battleFigures(ctx, sceneId, map);
+  const me = positionOf(figures, mover);
+  if (!me) return 0;
+  const others = figures.filter((f) => f !== me).map((f) => f);
+  let count = 0;
+  await mutate(user, repo, (s) => {
+    const e = activeEncounter(s, sceneId);
+    const offers = opportunityOffers({ ...me, x: from.x, y: from.y }, to, others, feetBetween(map), e, () => `ro-${crypto.randomUUID().slice(0, 8)}`, new Date().toISOString());
+    count = offers.length;
+    if (!offers.length) return { ok: true, state: s };
+    const st = structuredClone(s);
+    addOffers(st, sceneId, offers);
+    for (const o of offers) logCombat(st, sceneId, `${o.target.name} leaves the reach of ${o.reactor.name} – opportunity attack possible (reaction).`);
+    return { ok: true, state: st };
+  });
+  return count;
+}
+
+/** Take or skip an offered reaction (opportunity attack). */
+async function reactionRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  if (typeof v.offerId !== 'string' || typeof v.accept !== 'boolean') return { status: 400, body: { error: 'Invalid reaction.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
+  const offer = reactionsOf(ctx.state, scene.id).find((o) => o.id === v.offerId);
+  if (!offer) return { status: 409, body: { error: 'This reaction is no longer available.' } };
+  const reactor: Side = offer.reactor.kind === 'pc' ? { kind: 'pc', tokenId: offer.reactor.id } : { kind: 'npc', id: offer.reactor.id };
+  const target: Side = offer.target.kind === 'pc' ? { kind: 'pc', tokenId: offer.target.id } : { kind: 'npc', id: offer.target.id };
+  if (!controls(user, reactor)) return { status: 403, body: { error: 'Only the reacting creature’s controller can decide.' } };
+  if (!v.accept) return mutate(user, repo, (s) => { const st = structuredClone(s); dropOffer(st, scene.id, offer.id); logCombat(st, scene.id, `${offer.reactor.name} lets ${offer.target.name} go.`); return { ok: true, state: st, message: 'Reaction skipped.' }; });
+  const strike = await strikeOf(ctx, reactor, Number.isSafeInteger(v.attackIndex) ? (v.attackIndex as number) : undefined);
+  if (typeof strike === 'string') return { status: 422, body: { error: strike } };
+  if (strike.rangeFt && strike.reachFt <= 5 && reactor.kind === 'pc' && strike.rangeFt > 15) return { status: 422, body: { error: 'An opportunity attack is a melee attack – choose a melee weapon.' } };
+  if (reactionUsed(activeEncounter(ctx.state, scene.id), actorOf(reactor))) return { status: 409, body: { error: 'The reaction was already used this round.' } };
+  const r = await rollAgainst(user, repo, ctx, offer.reactor.name, strike, target, ' (opportunity attack)');
+  if (typeof r === 'string') return { status: 404, body: { error: r } };
+  return mutate(user, repo, (s) => {
+    if (!reactionsOf(s, scene.id).some((o) => o.id === offer.id)) return { ok: false, error: 'This reaction is no longer available.' };
+    const st = r.apply(s);
+    dropOffer(st, scene.id, offer.id);
+    const e = st.sceneEncounters?.[scene.id];
+    const err = useEconomy(e?.status === 'active' ? e : null, actorOf(reactor), 'reaction', { gm: user.role === 'gm' });
+    if (err) return { ok: false, error: err };
+    if (e) e.version++;
+    return { ok: true, state: st, message: r.text };
+  });
 }

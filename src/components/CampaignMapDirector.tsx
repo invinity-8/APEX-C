@@ -8,6 +8,9 @@
  * separate state (src/game/sceneDirector.ts) and never reset each other; every transfer carries the
  * player revisions the GM saw, and stale revisions are reported instead of being overwritten.
  */
+import { BattleCommand, refKey, toSide, type BattleMode, type FigureRef } from './BattleCommand';
+import { budgetOf } from '../game/sceneActions';
+import { combatAttacks } from '../game/effectiveStats';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { GameApi, DispatchResult } from '../state/gameApi';
 import type { SceneCategory, SceneSummary } from '../server/scenes';
@@ -104,6 +107,23 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [enemyMode, setEnemyMode] = useState<null | 'place' | 'move'>(null);
   const [selectedEnemy, setSelectedEnemy] = useState<string | null>(null);
   const [enemyTarget, setEnemyTarget] = useState('');
+  const [enemySide, setEnemySide] = useState<'enemy' | 'ally'>('enemy');
+  // APEX 1.1 battle command: vision mode, selected figure, click mode, GM attack choice for characters
+  const [view, setView] = useState('all');
+  const [selected, setSelected] = useState<FigureRef | null>(null);
+  const [battleMode, setBattleMode] = useState<BattleMode>(null);
+  const [pcAttack, setPcAttack] = useState(0);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const sheets = game.sheets;
+  const itemRules = game.view.itemRules;
+  const tokensView = game.view.tokens;
+  const loadAttacks = useCallback(async (tokenId: string) => {
+    const r = await sheets.load(tokenId);
+    const details = tokensView.find((t) => t.id === tokenId)?.details;
+    if (!r.ok) return [];
+    return details ? combatAttacks(r.sheet.sheet, { inventory: details.inventory, equipment: details.equipment, armorWornAt: details.armorWornAt }, itemRules) : r.sheet.sheet.attacks;
+  }, [sheets, tokensView, itemRules]);
   const snapshotRequest = useRef(0);
   const busyRef = useRef(false);
 
@@ -144,7 +164,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       return;
     }
     api
-      .sceneFocus(shown)
+      .sceneFocus(shown, view)
       .then((s) => {
         if (snapshotRequest.current === request) setSnapshot(s);
       })
@@ -153,8 +173,11 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
         setSnapshot(null);
         setMapError(e instanceof ApiError && e.status === 404 ? 'This scene is not published (or was archived). Publish it in Scenes first.' : String(e));
       });
-  }, [online?.campaignId, online?.version, shown]);
+  }, [online?.campaignId, online?.version, shown, view]);
   useEffect(() => {
+    setView('all');
+    setSelected(null);
+    setBattleMode(null);
     setPlaceMode(false);
     setPlacementToken('');
     setConfirmSwitch(false);
@@ -284,31 +307,37 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   }
 
   function enemyClick(x: number, y: number) {
-    if (enemyMode === 'place') sceneTurn({ action: 'enemyAdd', templateId: enemyTemplate, x, y });
+    if (enemyMode === 'place') sceneTurn({ action: 'enemyAdd', templateId: enemyTemplate, x, y, side: enemySide });
     else if (enemyMode === 'move' && selectedEnemy) { sceneTurn({ action: 'enemyMove', id: selectedEnemy, x, y }); setEnemyMode(null); }
   }
 
   function placeToken(x: number, y: number) {
+    if (placementToken && placeMode) moveCharacter(placementToken, x, y, 'place');
+  }
+
+  /** GM moves a character: 'place' sets it down anywhere (no cost), 'move' follows the movement rules. */
+  function moveCharacter(tokenId: string, x: number, y: number, how: 'place' | 'move') {
     const scene = shownScene;
-    if (!scene || !placementToken || !placeMode) return;
+    if (!scene) return;
     void guarded(async () => {
-      const position = snapshot?.motion?.tokens.find((t) => t.tokenId === placementToken);
-      const assignment = shownPlayers.find((p) => p.tokenIds.includes(placementToken));
+      const position = snapshot?.motion?.tokens.find((t) => t.tokenId === tokenId);
+      const assignment = shownPlayers.find((p) => p.tokenIds.includes(tokenId));
       const interval = scene.category === 'battle' ? 'round' : 'hour';
-      await api.sceneMove({
-        action: 'place',
+      const r = await api.sceneMove({
+        action: how,
         requestId: crypto.randomUUID(),
         sceneId: scene.id,
         sceneRevision: scene.revision,
-        tokenId: placementToken,
+        tokenId,
         tokenVersion: position?.version ?? 0,
         assignmentRevision: assignment?.revision ?? 0,
         epoch: interval === 'round' ? (snapshot?.motion?.round ?? 0) : (snapshot?.motion?.hour ?? 0),
         x,
         y,
       });
-      setSnapshot(await api.sceneFocus(scene.id));
-      setNotice('Token position saved to this scene.');
+      setSnapshot(await api.sceneFocus(scene.id, viewRef.current));
+      setNotice(r.message ?? (how === 'place' ? 'Token position saved to this scene.' : 'Moved.'));
+      game.online?.refresh();
     });
   }
 
@@ -320,7 +349,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       const r = await api.sceneTurn({ sceneId: scene.id, ...input });
       setNotice(r.message ?? 'Done.');
       game.online?.refresh();
-      setSnapshot(await api.sceneFocus(scene.id));
+      setSnapshot(await api.sceneFocus(scene.id, viewRef.current));
     });
   }
 
@@ -571,7 +600,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
           )}
           {shownScene.category === 'battle' && shownScene.map.hex && (
             <section className="space-y-1 text-xs" aria-label="Enemies" data-testid="gm-enemies">
-              <h3 className="font-bold text-marble-300">Enemies · {enemies.filter((e) => !e.defeated).length} active</h3>
+              <h3 className="font-bold text-marble-300">Enemies & allies · {enemies.filter((e) => !e.defeated && e.side !== 'ally').length} enemies, {enemies.filter((e) => !e.defeated && e.side === 'ally').length} allies</h3>
               <div className="flex flex-wrap items-center gap-2">
                 <select aria-label="Enemy type" className="rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs" value={enemyTemplate} onChange={(e) => setEnemyTemplate(e.target.value)}>
                   {ENEMY_TEMPLATES.map((t) => (
@@ -579,6 +608,10 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
                       {t.name} · AC {t.ac} · HP {t.hp}
                     </option>
                   ))}
+                </select>
+                <select aria-label="Side" className="rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs" value={enemySide} onChange={(e) => setEnemySide(e.target.value as 'enemy' | 'ally')}>
+                  <option value="enemy">as enemy</option>
+                  <option value="ally">as ally (fights with the party)</option>
                 </select>
                 <button type="button" className="btn btn-ghost" aria-pressed={enemyMode === 'place'} disabled={busy} onClick={() => setEnemyMode((m) => (m === 'place' ? null : 'place'))}>
                   {enemyMode === 'place' ? 'Done placing' : 'Place on map'}
@@ -588,8 +621,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               <ul className="space-y-1">
                 {enemies.map((e) => (
                   <li key={e.id} className={`rounded border px-1.5 py-1 ${selectedEnemy === e.id ? 'border-gold-500' : 'border-ink-700'} ${e.defeated ? 'opacity-50' : ''}`}>
-                    <button type="button" className="font-semibold text-marble-100" onClick={() => setSelectedEnemy(e.id)}>
-                      {e.name}
+                    <button type="button" className="font-semibold text-marble-100" onClick={() => (setSelectedEnemy(e.id), setSelected({ kind: 'npc', id: e.id }))}>
+                      {e.side === 'ally' ? '🛡 ' : ''}{e.name}
                     </button>{' '}
                     <span className="text-marble-400">
                       AC {e.ac} · HP {e.hp}/{e.maxHp}
@@ -641,7 +674,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
                     {encounter.participants.map((p, i) => (
                       <li key={p.id} className={`flex items-center gap-2 rounded px-1 ${i === encounter.turnIndex ? 'bg-gold-400/20 text-gold-200' : 'text-marble-300'}`} aria-current={i === encounter.turnIndex ? 'true' : undefined}>
                         <span className="w-6 text-right tabular-nums">{p.initiative}</span>
-                        <span className="flex-1">{p.name}</span>
+                        <button type="button" className="flex-1 text-left hover:text-gold-200" title="Select on the map" onClick={() => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })}>{p.name}</button>
+                        {(() => { const b = budgetOf(encounter, p.id); return <span className="text-[10px] text-marble-500" title="Action · Bonus action · Reaction">{b.action ? '◌' : '●'}{b.bonus ? '◌' : '●'}{encounter.reactions?.[p.id] !== undefined ? '◌' : '●'}</span>; })()}
                         {i === encounter.turnIndex && <em className="not-italic">active</em>}
                       </li>
                     ))}
@@ -678,6 +712,31 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       ) : null,
   };
 
+  const gmEncounter = shownScene && game.gmState?.sceneEncounters?.[shownScene.id]?.status === 'active' ? game.gmState.sceneEncounters[shownScene.id] : null;
+  const gmEnemies = shownScene ? (game.gmState?.sceneEnemies?.[shownScene.id] ?? []) : [];
+  const refOf = (id: string): FigureRef | null => {
+    const f = (snapshot?.figures ?? []).find((x) => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
+    return f ? (f.kind === 'pc' ? { kind: 'pc', id: f.tokenId! } : { kind: 'npc', id: f.id }) : markers.some((m) => m.tokenId === id) ? { kind: 'pc', id } : null;
+  };
+  function figureClick(id: string) {
+    const ref = refOf(id);
+    if (!ref) return;
+    if (battleMode === 'attack' && selected && refKey(ref) !== refKey(selected)) {
+      setBattleMode(null);
+      sceneTurn({ action: 'strike', attacker: toSide(selected), target: toSide(ref), ...(selected.kind === 'pc' ? { attackIndex: pcAttack } : {}) });
+      return;
+    }
+    setSelected(ref);
+    setBattleMode(null);
+    if (ref.kind === 'npc') setSelectedEnemy(ref.id);
+  }
+  function battleMove(x: number, y: number) {
+    if (!selected) return;
+    setBattleMode(null);
+    if (selected.kind === 'npc') sceneTurn({ action: 'enemyMove', id: selected.id, x, y });
+    else moveCharacter(selected.id, x, y, 'move');
+  }
+
   const renderMap = (arena: ReactNode) => {
     const banner = previewing ? (
       <div className="game-map-banner" role="status">
@@ -695,7 +754,21 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       <div className="game-map" aria-label="Campaign map">
         {banner}
         {shownScene && snapshot ? (
-          <SceneSurface snapshot={snapshot} tokenLabels={markers} tokenViews={game.view.tokens} gm onDestination={enemyMode ? enemyClick : placeMode ? placeToken : undefined} onFigureClick={(id) => { if ((snapshot.figures ?? []).some((f) => f.kind === 'enemy' && f.id === id)) setSelectedEnemy(id); }} targets={selectedEnemy ? [selectedEnemy] : undefined} />
+          <>
+            {shownScene.category === 'battle' && shownScene.map.hex && (
+              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={setSelected} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} />
+            )}
+            <SceneSurface
+              snapshot={snapshot}
+              tokenLabels={markers}
+              tokenViews={game.view.tokens}
+              gm
+              selectedId={selected?.id ?? null}
+              onDestination={enemyMode ? enemyClick : placeMode ? placeToken : battleMode === 'move' && selected ? battleMove : undefined}
+              onFigureClick={figureClick}
+              targets={battleMode === 'attack' ? (snapshot.figures ?? []).map((f) => (f.kind === 'pc' ? f.tokenId! : f.id)).filter((id) => id !== selected?.id) : selectedEnemy ? [selectedEnemy] : undefined}
+            />
+          </>
         ) : mapError ? (
           <p role="alert" className="p-6 text-sm text-red-300">
             {mapError}

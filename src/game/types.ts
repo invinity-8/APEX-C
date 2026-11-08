@@ -387,6 +387,10 @@ export interface SceneEncounter {
   turnSerial?: number;
   /** tokenId → turnSerial of the last attack (one attack per turn). */
   attacked?: Record<string, number>;
+  /** Participant id → what it used in its current turn (action, bonus action, Dash …), see sceneActions.ts. */
+  economy?: Record<string, import('./sceneActions.js').TurnBudget>;
+  /** Participant id → turn serial when its reaction was used; cleared when its own turn starts. */
+  reactions?: Record<string, number>;
 }
 
 /** Scene-local time and light (independent of the Arena day/night). */
@@ -426,6 +430,8 @@ export interface GameState {
   sceneEnemies?: Record<string, import('./sceneCombat.js').SceneEnemy[]>;
   sceneLights?: Record<string, string[]>;
   sceneCombatLog?: Record<string, import('./sceneCombat.js').CombatLogEntry[]>;
+  /** Open reaction prompts per scene (opportunity attacks) – valid during the turn they were offered in. */
+  sceneReactions?: Record<string, import('./sceneActions.js').ReactionOffer[]>;
   /** APEX 0.7: the GM Merchant (stock, prices, gold). */
   merchant?: Merchant;
   /** APEX 0.6: item audit trail (GM-only, bounded). */

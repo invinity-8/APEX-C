@@ -84,9 +84,9 @@ export const api = {
   sceneTravelAction: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string }>('POST', 'scene-travel', {}, input),
   /** Scene time and initiative: endTurn (players: own turn), startInitiative / endInitiative / clock (GM). */
   sceneTurn: (input: Record<string, unknown>) => request<{ ok: boolean; message?: string; error?: string }>('POST', 'scene-turn', {}, input),
-  sceneMove: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string }>('POST', 'scene-motion', {}, input),
+  sceneMove: (input: Record<string, unknown>) => request<{ ok: boolean; error?: string; message?: string }>('POST', 'scene-motion', {}, input),
   playerScenePreview: (player: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { player }),
-  sceneFocus: (sceneId: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { focus: sceneId }),
+  sceneFocus: (sceneId: string, view?: string) => request<import('../server/sceneRuntime').SceneSnapshot>('GET', 'scene-runtime', { focus: sceneId, ...(view && view !== 'all' ? { view } : {}) }),
   mapImage: (id: string, thumbnail = false) => request<{ url: string; expiresIn: number }>('GET', 'scene-assets', { id, thumbnail: thumbnail ? '1' : undefined }),
   mapUpload: (sceneId: string, audience: 'gm' | 'players', image: string, thumbnail: string) => request<{ id: string; width: number; height: number }>('POST', 'scene-assets', {}, { sceneId, audience, image, thumbnail }, { timeoutMs: 30_000 }),
   scenePlayers: () => request<{ players: { userId: string; name: string; tokenIds: string[]; sceneId: string | null; revision: number; inheritedArena: boolean; joined?: boolean }[] }>('GET', 'scene-runtime'),

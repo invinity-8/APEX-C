@@ -9,6 +9,7 @@ import type { SceneMap } from '../campaign/maps.js';
 import { hexKey, type HexKey } from '../game/hex.js';
 import { characterMovementLoad } from '../game/items/weight.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
+import { budgetOf, pcActor } from '../game/sceneActions.js';
 import { activeEncounter, clockOf, epochAllowance, movementEpoch, type MovementMode } from '../game/sceneTurns.js';
 import type { GameState, SceneClockState } from '../game/types.js';
 import type { LocalMotionSnapshot, MotionSnapshot } from './sceneMotion.js';
@@ -22,7 +23,7 @@ export interface SceneViewContext {
 export interface PcPosition { tokenId: string; userId: string; x: number; y: number; stored: boolean }
 
 /** A figure a viewer may see on the map: another character or an enemy. */
-export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
+export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
 
 /** Arrival slots for characters without a stored position (no two on the same hex). */
 export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } | null, rows: Array<{ tokenId: string; userId: string; stored?: { x: number; y: number } }>, blocked: Array<{ x: number; y: number }>): PcPosition[] {
@@ -47,7 +48,7 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   }
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e)) continue;
-    out.push({ id: e.id, kind: 'enemy', name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
+    out.push({ id: e.id, kind: 'enemy', side: e.side ?? 'enemy', reachFt: e.attack.rangeFt ?? e.attack.reachFt, name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
   }
   return out;
 }
@@ -66,6 +67,7 @@ export interface ViewerMovement {
   spent: number;
   unit: 'feet' | 'miles';
   overloaded: boolean;
+  dashed?: boolean;
 }
 
 export const sheetOf = async (ctx: SceneViewContext, tokenId: string) => (await ctx.loadSheet(tokenId)) ?? emptySheet();
@@ -94,7 +96,9 @@ export function movementFor(state: GameState, sceneId: string, category: 'battle
     epoch: e.epoch,
     canMove: e.canMove && !overloaded,
     reason: overloaded ? 'Over carrying capacity – reduce the carried load before moving.' : e.reason,
-    allowance: epochAllowance(e.mode, speedFt),
+    // Dash: extra movement equal to the speed for this turn
+    allowance: epochAllowance(e.mode, speedFt) * (e.mode === 'turn' && budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash ? 2 : 1),
+    dashed: e.mode === 'turn' && !!budgetOf(activeEncounter(state, sceneId), pcActor(tokenId)).dash,
     spent: row && row.epoch === e.epoch ? row.spent : 0,
     unit: category === 'battle' ? 'feet' : 'miles',
     overloaded,

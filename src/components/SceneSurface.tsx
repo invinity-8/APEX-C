@@ -17,7 +17,7 @@ export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | '
 }
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
-export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted enemy ids (attack mode). */ targets?: string[] }) {
+export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets, selectedId = null }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted figure ids (attack mode). */ targets?: string[]; /** GM: the selected figure (token or NPC id). */ selectedId?: string | null }) {
   const [url, setUrl] = useState<string | null>(null);
   const zoom = useMapZoom();
   const [info, setInfo] = useState<string | null>(null);
@@ -45,8 +45,8 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const tokens: SceneToken[] = [...own, ...figures.map(f => ({
       tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
       view: f.tokenId ? view(f.tokenId) : undefined,
-      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
-      target: f.kind === 'enemy' && !!targets?.includes(f.id),
+      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
+      target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
     }))];
     const reachArea = point && reachBudget !== null && reachBudget > 0 ? hexReach(map, point, reachBudget) : null;
     // Scene-local light: region night like the Arena; battle lighting dim/dark.
@@ -54,7 +54,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene"><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p>
-      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
+      <div className="hex-scene-frame"><HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} /></div>
     </section>;
   }
   function destination(e: PointerEvent<SVGSVGElement>) {

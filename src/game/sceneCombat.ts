@@ -44,6 +44,9 @@ export interface SceneEnemy {
   color: string;
   icon: string;
   defeated?: boolean;
+  /** APEX: 'ally' = a GM-controlled companion fighting with the party (default 'enemy'). */
+  side?: 'enemy' | 'ally';
+  darkvisionFt?: number;
 }
 
 export interface CombatLogEntry { id: number; at: string; text: string }
@@ -65,12 +68,12 @@ export function setCarriedLight(prev: GameState, sceneId: string, tokenId: strin
   return { ok: true, state, message: on ? `${prev.tokens[tokenId].name} lights a torch.` : `${prev.tokens[tokenId].name} puts out the light.` };
 }
 
-export function addEnemy(prev: GameState, sceneId: string, id: string, templateId: string, at: { x: number; y: number }, name: string | undefined, roll: number | null): Result {
+export function addEnemy(prev: GameState, sceneId: string, id: string, templateId: string, at: { x: number; y: number }, name: string | undefined, roll: number | null, side: 'enemy' | 'ally' = 'enemy'): Result {
   const t = ENEMY_TEMPLATES.find((e) => e.id === templateId);
   if (!t) return { ok: false, error: 'Unknown enemy.' };
   if (enemiesOf(prev, sceneId).length >= 60) return { ok: false, error: 'Too many enemies on this map.' };
   const count = enemiesOf(prev, sceneId).filter((e) => e.templateId === templateId).length;
-  const enemy: SceneEnemy = { id, templateId, name: (name?.trim() || `${t.name} ${count + 1}`).slice(0, 60), x: at.x, y: at.y, hp: t.hp, maxHp: t.hp, ac: t.ac, speedFt: t.speedFt, init: t.init, attack: { ...t.attack }, color: t.color, icon: t.icon };
+  const enemy: SceneEnemy = { id, templateId, name: (name?.trim() || `${t.name} ${count + 1}`).slice(0, 60), x: at.x, y: at.y, hp: t.hp, maxHp: t.hp, ac: t.ac, speedFt: t.speedFt, init: t.init, attack: { ...t.attack }, color: side === 'ally' ? '#3f7fbf' : t.color, icon: t.icon, darkvisionFt: t.darkvisionFt, ...(side === 'ally' ? { side } : {}) };
   const state = structuredClone(prev);
   state.sceneEnemies = { ...(state.sceneEnemies ?? {}), [sceneId]: [...enemiesOf(state, sceneId), enemy] };
   const enc = activeEncounter(state, sceneId);

@@ -2,7 +2,10 @@ import { parseMap, type SceneMap } from '../campaign/maps.js';
 import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
 import { carriedLights, clockFor, figuresFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, withArrivalSlots, type SceneFigure, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
-import { enemiesOf, torchesOf, type CombatLogEntry } from '../game/sceneCombat.js';
+import { ENEMY_TEMPLATES, enemiesOf, torchesOf, type CombatLogEntry } from '../game/sceneCombat.js';
+import { reactionsOf, type ReactionOffer } from '../game/sceneActions.js';
+import { fogString, sceneVision } from '../campaign/hexVision.js';
+import { hexKey, hexesInRange } from '../game/hex.js';
 import type { SceneClockState } from '../game/types.js';
 import { initiativeForArrivals, placeArrivals, rememberCurrentVision } from './sceneTurns.js';
 
@@ -21,6 +24,10 @@ export interface SceneSnapshot {
   movement?: ViewerMovement;
   /** Other characters and enemies the viewer can see (players: only visible hexes). */
   figures?: SceneFigure[];
+  /** Open reaction prompts this viewer decides (GM: all; player: their characters'). */
+  reactions?: ReactionOffer[];
+  /** GM vision mode the fog was computed for ('all' = no fog). */
+  view?: string;
   /** Recent attacks on this scene. */
   combatLog?: CombatLogEntry[];
   /** The viewer carries a light. */
@@ -55,7 +62,7 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
   const full = parseMap(s.published_metadata)!;
   const local = ctx && motionStore && (s.category === 'battle' || s.category === 'region') ? await motionStore.localSnapshot(user.campaignId, s.id, user.id, user.tokenIds) : null;
   const motion = local ? motionShape(local, ctx!.state, s.id) : await motionStore?.snapshot(user.campaignId, s.id, user.id, user.tokenIds);
-  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch'> = {};
+  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch' | 'reactions'> = {};
   if (local && ctx?.state) {
     const clock = clockFor(ctx.state, s.id);
     const pcs = ctx.pcs ? await ctx.pcs(s.id, full) : [];
@@ -71,6 +78,7 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
     }
     // Allies and enemies only where the player can see them.
     extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false);
+    extra.reactions = reactionsOf(ctx.state, s.id).filter((r) => r.reactor.kind === 'pc' && user.tokenIds.includes(r.reactor.id));
     const tokenId = user.tokenIds.find(id => ctx.state!.tokens[id]);
     if (tokenId) extra.movement = movementFor(ctx.state, s.id, s.category as 'battle' | 'region', tokenId, user.role === 'gm', await sheetOf(ctx, tokenId), local);
   }
@@ -140,7 +148,25 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
         ...(stored && (focus.category === 'battle' || focus.category === 'region') ? await (async () => {
           const ctx = await sceneContext(repo, user.campaignId, stored.state);
           const pcs = await ctx.pcs!(focus.id, map);
-          return { figures: figuresFor(stored.state, focus.id, map, pcs, [], null, true), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12) };
+          // GM vision modes: everything, the party's combined sight, the enemies' combined sight, or one figure's sight
+          const view = typeof query.view === 'string' ? query.view.slice(0, 80) : 'all';
+          let visible: Set<string> | null = null;
+          let fog: string | undefined;
+          if (map.hex && view !== 'all') {
+            const npcs = enemiesOf(stored.state, focus.id).filter((e) => !e.defeated);
+            const pcViewers = pcs.map((p) => ({ tokenId: p.tokenId, x: p.x, y: p.y }));
+            const npcViewers = (side: 'enemy' | 'ally' | null, id?: string) => npcs.filter((e) => (id ? e.id === id : (e.side ?? 'enemy') === side)).map((e) => ({ at: { x: e.x, y: e.y }, darkvisionFt: e.darkvisionFt ?? ENEMY_TEMPLATES.find((t) => t.id === e.templateId)?.darkvisionFt ?? 0 }));
+            const clock = clockFor(stored.state, focus.id);
+            const lights = carriedLights(stored.state, focus.id, pcs);
+            if (view === 'party') visible = new Set([...await visionFor(ctx, map, clock, pcViewers, lights), ...sceneVision(map, clock, npcViewers('ally'), lights)]);
+            else if (view === 'enemies') visible = sceneVision(map, clock, npcViewers('enemy'), lights);
+            else if (view.startsWith('pc-')) visible = await visionFor(ctx, map, clock, pcViewers.filter((p) => `pc-${p.tokenId}` === view), lights);
+            else visible = sceneVision(map, clock, npcViewers(null, view), lights);
+            const all = new Set(hexesInRange({ q: 0, r: 0 }, map.hex.radius).map(hexKey));
+            fog = fogString(map.hex.radius, visible, all);
+          }
+          const figures = figuresFor(stored.state, focus.id, map, pcs, [], visible, true);
+          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id) };
         })() : {}),
       } };
     }
