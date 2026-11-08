@@ -74,20 +74,26 @@ describe('initiative and scene clock', () => {
     expect(r.ok).toBe(true); if (!r.ok) return; s = r.state;
     // Tie at 11: the higher modifier goes first.
     expect(s.sceneEncounters!.scene.participants.map((p) => p.tokenId)).toEqual([b, a]);
-    r = endTurn(s, 'scene', 'enc', 1, (t) => t === a);
-    expect(r).toMatchObject({ ok: false });
-    r = endTurn(s, 'scene', 'enc', 1, (t) => t === b); if (!r.ok) throw new Error(r.error); s = r.state;
-    expect(s.sceneEncounters!.scene.turnIndex).toBe(1);
-    expect(s.sceneEncounters!.scene.turnSerial).toBe(2);
-    expect(endTurn(s, 'scene', 'enc', 1, () => true)).toMatchObject({ ok: false, error: 'The turn already changed.' });
-    r = joinInitiative(s, 'scene', 'other', [{ tokenId: c, name: 'C', roll: 20, bonus: 0 }]); if (!r.ok) throw new Error(); s = r.state;
-    const e = s.sceneEncounters!.scene;
-    expect(e.participants[0].tokenId).toBe(c);
-    expect(e.participants[e.turnIndex].tokenId).toBe(a); // still A's turn
-    r = endTurn(s, 'scene', 'enc', 2, () => true); if (!r.ok) throw new Error(); s = r.state;
-    expect(s.sceneEncounters!.scene.round).toBe(2);
-    expect(movementEpoch(s, 'scene', 'battle', c, false)).toMatchObject({ mode: 'turn', canMove: true, epoch: 't:enc:3' });
+    // B and A follow each other: they act together as one block; each ends its own part
+    expect(movementEpoch(s, 'scene', 'battle', a, false)).toMatchObject({ canMove: true });
+    r = endTurn(s, 'scene', 'enc', 1, (t) => t === a); if (!r.ok) throw new Error(r.error); s = r.state;
+    expect(s.sceneEncounters!.scene).toMatchObject({ turnSerial: 1, blockDone: [`pc-${a}`] });
     expect(movementEpoch(s, 'scene', 'battle', a, false)).toMatchObject({ canMove: false });
+    expect(endTurn(s, 'scene', 'enc', 1, (t) => t === a)).toMatchObject({ ok: false });
+    r = endTurn(s, 'scene', 'enc', 1, (t) => t === b); if (!r.ok) throw new Error(r.error); s = r.state;
+    expect(s.sceneEncounters!.scene).toMatchObject({ turnIndex: 0, round: 2, turnSerial: 2, blockDone: [] });
+    expect(endTurn(s, 'scene', 'enc', 1, () => true)).toMatchObject({ ok: false, error: 'The turn already changed.' });
+    // an enemy between two characters splits the block
+    r = joinInitiative(s, 'scene', 'other', [{ tokenId: c, name: 'C', roll: 20, bonus: 0 }]); if (!r.ok) throw new Error(); s = r.state;
+    expect(s.sceneEncounters!.scene.participants[0].tokenId).toBe(c); // late arrival sorted in, active turn unchanged
+    const ps = s.sceneEncounters!.scene.participants;
+    s.sceneEncounters!.scene.participants = [ps.find((p) => p.tokenId === c)!, ps.find((p) => p.tokenId === b)!, { id: 'npc-x', name: 'X', initiative: 11, visible: true }, ps.find((p) => p.tokenId === a)!];
+    s.sceneEncounters!.scene.turnIndex = 0;
+    expect(movementEpoch(s, 'scene', 'battle', c, false)).toMatchObject({ canMove: true });
+    expect(movementEpoch(s, 'scene', 'battle', a, false)).toMatchObject({ canMove: false });
+    r = endTurn(s, 'scene', 'enc', 2, () => true, true); if (!r.ok) throw new Error(); s = r.state; // GM: next turn ends the block
+    expect(s.sceneEncounters!.scene.participants[s.sceneEncounters!.scene.turnIndex].id).toBe('npc-x');
+    expect(movementEpoch(s, 'scene', 'battle', c, false)).toMatchObject({ mode: 'turn', canMove: false, epoch: 't:enc:3' });
     r = endInitiative(s, 'scene'); if (!r.ok) throw new Error(); s = r.state;
     expect(movementEpoch(s, 'scene', 'battle', a, false)).toEqual({ mode: 'free', epoch: 'free', canMove: true });
   });
@@ -164,22 +170,23 @@ describe('API: battle map turns, region days, fog of war', () => {
     expect(`${a.x},${a.y}`).not.toBe(`${b.x},${b.y}`);
     void spawn;
     const dir = a.x >= b.x ? 1 : -1; // move away from the other character
-    expect((await move(who(second), scene, b.x - dir * step, b.y)).status).toBe(409); // not their turn
+    const together = await move(who(second), scene, b.x - dir * step, b.y);
+    expect(together.status, JSON.stringify(together.body)).toBe(200); // consecutive characters act together
     const ok = await move(who(first), scene, a.x + dir * step * 6, a.y);
     expect(ok.status).toBe(200);
     expect((ok.body as { spent: number }).spent).toBe(30);
     expect((await move(who(first), scene, a.x + dir * step * 7, a.y)).status).toBe(422);
     const p1 = await state(who(first));
     expect(p1.scene?.movement).toMatchObject({ mode: 'turn', spent: 30, allowance: 30 });
-    // Ending someone else's turn is refused; ending your own passes the turn.
-    expect((await request(who(second), 'scene-turn', { action: 'endTurn', sceneId: scene.id, encounterId: enc.id, turnSerial: 1 })).status).toBe(409);
+    // Each ends their own part; the block (and the round) ends when both are done.
+    expect((await request(who(second), 'scene-turn', { action: 'endTurn', sceneId: scene.id, encounterId: enc.id, turnSerial: 1 })).status).toBe(200);
+    expect((await move(who(second), scene, b.x - dir * step * 2, b.y)).status).toBe(409); // already done
     expect((await request(who(first), 'scene-turn', { action: 'endTurn', sceneId: scene.id, encounterId: enc.id, turnSerial: 1 })).status).toBe(200);
-    expect((await move(who(second), scene, b.x - dir * step, b.y)).status).toBe(200);
     // Nobody can end on an occupied hex.
     const c = await pos(second);
     expect((await move(who(second), scene, a.x + dir * step * 6, a.y)).status).not.toBe(200);
     void c;
-    expect((await state(who(first))).view?.sceneEncounter?.turnIndex).toBe(1);
+    expect((await state(who(first))).view?.sceneEncounter?.turnIndex).toBe(0);
     // Players cannot control initiative; the GM ends it → unlimited free movement.
     expect((await request(who(first), 'scene-turn', { action: 'endInitiative', sceneId: scene.id })).status).toBe(403);
     expect((await request('gm', 'scene-turn', { action: 'endInitiative', sceneId: scene.id })).status).toBe(200);

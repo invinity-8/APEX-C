@@ -169,6 +169,9 @@ describe('API: enemies, attacks, torches, library preview', () => {
     expect(repo.states.get(cid)!.state.sceneCombatLog![scene.id].at(-1)!.text).toMatch(/Sinna attacks Goblin 1 with Quarterstaff: d20/);
     // A living goblin attacks Sinna (AC 1): the sheet loses HP.
     if (!after.defeated) {
+      // only the creature whose turn it is acts – also for the GM
+      expect((await turn(scene.id, { action: 'enemyAttack', id: goblin.id, tokenId: sinna })).status).toBe(409);
+      while (enc().participants[enc().turnIndex].id !== `npc-${goblin.id}`) await turn(scene.id, { action: 'endTurn', encounterId: enc().id, turnSerial: enc().turnSerial });
       const r = await turn(scene.id, { action: 'enemyAttack', id: goblin.id, tokenId: sinna });
       expect(r.status).toBe(200);
       const hp = ((await request('hannah', 'sheet', undefined, { token: sinna })).body as SheetPayload).sheet.hitPoints!.current;

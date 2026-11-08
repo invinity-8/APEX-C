@@ -475,7 +475,7 @@ export function passable(map: Pick<SceneMap, 'hex'>, h: Axial): boolean {
 }
 
 /** Movement on a hex scene: cheapest path by tile costs × units per hex (5 ft or 3 mi). */
-export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[] } | { ok: false; error: string } {
+export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
   const lookup = tileLookup(map);
   const goal = hexAt(map, end);
   const goalTile = lookup(hexKey(goal));
@@ -485,7 +485,10 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
   const reach = dijkstra(hexKey(from), (k) => lookup(k)?.cost ?? null, Infinity, hexKey(goal));
   const info = reach.get(hexKey(goal));
   if (!info) return { ok: false, error: 'No passable path to that hex.' };
-  return { ok: true, cost: Math.round(info.cost * map.unitsPerCell * 1e6) / 1e6, to: hexCentre(map, goal), path: pathTo(reach, hexKey(goal)) ?? [] };
+  const path = pathTo(reach, hexKey(goal)) ?? [];
+  // every entered hex with the cumulative cost (feet / miles) – for previews, animation and interrupted moves
+  const steps = path.map((h) => ({ ...hexCentre(map, h), cost: Math.round((reach.get(hexKey(h))?.cost ?? 0) * map.unitsPerCell * 1e6) / 1e6 }));
+  return { ok: true, cost: Math.round(info.cost * map.unitsPerCell * 1e6) / 1e6, to: hexCentre(map, goal), path, steps };
 }
 
 /** Hexes reachable with a remaining budget (in feet or miles) – the gold movement area. */

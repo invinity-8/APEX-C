@@ -8,8 +8,8 @@
 import { useEffect, useState } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import type { SceneEncounter } from '../game/types';
-import type { SceneEnemy } from '../game/sceneCombat';
-import { STANDARD_ACTIONS, budgetOf, npcActor, pcActor, reactionUsed } from '../game/sceneActions';
+import { npcAttacks, type SceneEnemy } from '../game/sceneCombat';
+import { STANDARD_ACTIONS, budgetOf, isActiveActor, npcActor, pcActor, reactionUsed } from '../game/sceneActions';
 import type { SheetAttack } from '../game/sheet';
 
 export type FigureRef = { kind: 'pc'; id: string } | { kind: 'npc'; id: string };
@@ -57,6 +57,11 @@ interface Props {
   loadAttacks: (tokenId: string) => Promise<SheetAttack[]>;
   pcAttack: number;
   setPcAttack: (i: number) => void;
+  npcAttack: number;
+  setNpcAttack: (i: number) => void;
+  /** Index of the NPC area ability being aimed (right-click a hex). */
+  areaMode: number | null;
+  setAreaMode: (i: number | null) => void;
 }
 
 export function BattleCommand(p: Props) {
@@ -73,7 +78,7 @@ export function BattleCommand(p: Props) {
     return () => { live = false; };
   }, [selected?.kind, selected?.id, loadAttacks]);
   const actor = selected ? refKey(selected) : '';
-  const isTurn = !!encounter && encounter.participants[encounter.turnIndex]?.id === actor;
+  const isTurn = !!encounter && isActiveActor(encounter, actor);
   const reactions = snapshot.reactions ?? [];
   const viewOpts = ['all', 'party', 'enemies', ...(selected ? [actor.startsWith('pc-') ? actor : selected.id] : [])];
   return (
@@ -106,7 +111,7 @@ export function BattleCommand(p: Props) {
         <div className="space-y-1.5" data-testid="selected-figure">
           <div className="flex flex-wrap items-center gap-2">
             <b className="text-sm text-gold-200">{fig.name}</b>
-            <span className="text-marble-400">{selected.kind === 'pc' ? 'character' : fig.side === 'ally' ? 'ally' : 'enemy'}{npc ? ` · AC ${npc.ac} · HP ${npc.hp}/${npc.maxHp} · ${npc.speedFt} ft · ${npc.attack.name} +${npc.attack.bonus} (${npc.attack.damage}${npc.attack.rangeFt ? `, ${npc.attack.rangeFt} ft` : ''})` : ''}</span>
+            <span className="text-marble-400">{selected.kind === 'pc' ? 'character' : fig.side === 'ally' ? 'ally' : 'enemy'}{npc ? ` · AC ${npc.ac} · HP ${npc.hp}/${npc.maxHp} · speed ${npc.speedFt} ft${encounter ? ` (${Math.max(0, npc.speedFt * (budgetOf(encounter, actor).dash ? 2 : 1) - (budgetOf(encounter, actor).moved ?? 0))} ft left)` : ''}${(npc.multiattack ?? 1) > 1 ? ` · Multiattack ${npc.multiattack}` : ''}` : ''}</span>
             {isTurn && <span className="rounded bg-gold-400/20 px-1.5 text-gold-200">their turn</span>}
             <button type="button" className="ml-auto text-marble-500 hover:text-gold-200" onClick={() => (p.setSelected(null), p.setMode(null))}>✕</button>
           </div>
@@ -115,6 +120,15 @@ export function BattleCommand(p: Props) {
             <button type="button" className="btn btn-ghost px-2 py-0.5" aria-pressed={p.mode === 'move'} disabled={p.busy || npc?.defeated} onClick={() => p.setMode(p.mode === 'move' ? null : 'move')} data-testid="gm-move">
               {p.mode === 'move' ? 'Click a hex…' : 'Move'}
             </button>
+            {npc && (
+              <select aria-label="NPC attack" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={p.npcAttack} onChange={(e) => p.setNpcAttack(Number(e.target.value))}>
+                {npcAttacks(npc).map((a, i) => <option key={i} value={i}>{a.kind === 'melee' ? '⚔' : a.kind === 'ranged' ? '🏹' : '✦'} {a.name} +{a.bonus} · {a.damage}{a.damageType ? ` ${a.damageType}` : ''} · {a.kind === 'melee' ? `reach ${a.reachFt}` : `range ${a.rangeFt}`} ft</option>)}
+              </select>
+            )}
+            {npc?.areas?.map((a, i) => {
+              const left = a.uses ? a.uses - (npc.areaUsed?.[a.name] ?? 0) : null;
+              return <button key={a.name} type="button" className="btn btn-ghost px-2 py-0.5" aria-pressed={p.areaMode === i} disabled={p.busy || left === 0} title={`${a.sizeFt}-ft ${a.shape} · DC ${a.dc} ${a.save.toUpperCase()} · ${a.damage} ${a.damageType}`} onClick={() => p.setAreaMode(p.areaMode === i ? null : i)}>🔥 {a.name}{left !== null ? ` (${left})` : ''}</button>;
+            })}
             {selected.kind === 'pc' && attacks.length > 0 && (
               <select aria-label="Attack with" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={p.pcAttack} onChange={(e) => p.setPcAttack(Number(e.target.value))}>
                 {attacks.map((a, i) => <option key={i} value={i}>{a.name} {a.bonus} · {a.damage}</option>)}
@@ -136,6 +150,8 @@ export function BattleCommand(p: Props) {
           </div>
           {p.mode === 'move' && <p className="text-gold-200">Click the destination hex. {selected.kind === 'pc' ? 'Characters move with their speed rules (the GM may move them out of turn).' : 'NPCs move freely.'} Leaving a hostile’s reach offers it an opportunity attack.</p>}
           {p.mode === 'attack' && <p className="text-gold-200">Click the target on the map (reach, range and line of sight are checked).</p>}
+          {p.areaMode !== null && <p className="text-amber-200">Hover to see the area, right-click a hex to use it.</p>}
+          {isTurn && p.mode === null && p.areaMode === null && <p className="text-marble-400">Hover a hex for the path, <b>right-click</b> a hex to move there, <b>right-click</b> a hostile to attack with the chosen attack.</p>}
         </div>
       )}
     </section>

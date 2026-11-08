@@ -561,7 +561,7 @@ describe('Infrastructure and deployment health', () => {
   it('reports a complete deployment without email/SMTP checks', async () => {
     const h = (await call('GET', 'health')).body as { migrationsComplete: boolean; errors: string[]; schemaVersion: number };
     expect(h.migrationsComplete).toBe(true);
-    expect(h.schemaVersion).toBe(7);
+    expect(h.schemaVersion).toBe(8);
     expect(h.errors).toEqual([]);
     expect(JSON.stringify(h)).not.toMatch(/smtp|email/i);
   });

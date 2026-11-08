@@ -4,7 +4,8 @@ import type { AuthUser, Repo } from './repo.js';
 import { carriedLights, clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
 import { enemiesOf } from '../game/sceneCombat.js';
 import { sceneContext } from './sceneRuntime.js';
-import { offerOpportunityAttacks } from './sceneTurns.js';
+import { pausedMoveOf, planInterruption, registerInterruption } from './sceneTurns.js';
+import { hexMovementCost } from '../campaign/hexScene.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
 export interface MotionSnapshot { tokens: SceneTokenPosition[]; round: number; hour: number; known: MapNode[]; budgets: Record<string, { tacticalSpent: number; regionSpent: number }> }
@@ -41,6 +42,16 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
     return { status: result.ok ? 200 : 409, body: result };
   }
   if (!['move', 'place'].includes(v.action as string) || !uuid(v.sceneId) || typeof v.tokenId !== 'string' || v.tokenId.length > 64 || typeof v.x !== 'number' || typeof v.y !== 'number' || !Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isSafeInteger(v.sceneRevision) || !Number.isSafeInteger(v.assignmentRevision) || !Number.isSafeInteger(v.tokenVersion) || (v.tokenVersion as number) < 0 || !Number.isSafeInteger(v.epoch) || (v.epoch as number) < 0) return { status: 400, body: { error: 'Invalid movement coordinates or revision.' } };
+  return performMove(user, repo, v as MoveInput, []);
+}
+
+/**
+ * Moves (or places) a character. Battle maps in initiative: the move follows the cheapest path and stops where it
+ * leaves a hostile's reach until the opportunity attack is decided (it continues afterwards, see sceneTurns.ts).
+ */
+type MoveInput = Record<string, unknown> & { action: string; sceneId: string; tokenId: string; x: number; y: number; requestId: string };
+async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: string[], internal = false): Promise<SceneResult> {
+  if (!repo.sceneMotion || !repo.sceneRuntime) return { status: 503, body: { error: 'Scene movement unavailable.' } };
   if (v.action === 'place' && user.role !== 'gm') return { status: 403, body: { error: 'Only the GM can place tokens.' } };
   if (user.role !== 'gm' && !user.tokenIds.includes(v.tokenId)) return { status: 403, body: { error: 'This is not your character.' } };
   const [scene, state] = await Promise.all([repo.sceneRuntime.scene(user.campaignId, v.sceneId), repo.loadState(user.campaignId)]);
@@ -49,7 +60,7 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   const map = parseMap(scene.published_metadata);
   if (!map || !['battle', 'region'].includes(scene.category)) return { status: 400, body: { error: 'This scene uses GM navigation or route travel.' } };
   const assignment = await repo.sceneRuntime.assignment(user.campaignId, user.id);
-  if (user.role !== 'gm' && (!assignment || assignment.scene_id !== scene.id || assignment.revision !== v.assignmentRevision)) return { status: 409, body: { error: 'Scene assignment changed.' } };
+  if (!internal && user.role !== 'gm' && (!assignment || assignment.scene_id !== scene.id || assignment.revision !== v.assignmentRevision)) return { status: 409, body: { error: 'Scene assignment changed.' } };
   // Scene-local budgets (schema 7): per scene and per turn / free / day – nothing is shared with the Arena.
   const ctx = await sceneContext(repo, user.campaignId, state!.state);
   const local = await repo.sceneMotion.localSnapshot(user.campaignId, scene.id, user.id, [token.id]);
@@ -66,6 +77,7 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   }
   const checked = movementCost(map, v.action === 'place' ? to : start, to);
   if (!checked.ok) return { status: 422, body: { error: checked.error } };
+  if (v.action === 'move' && !internal && pausedMoveOf(state!.state, scene.id, { kind: 'pc', tokenId: token.id })) return { status: 409, body: { error: 'Movement is paused for an opportunity attack – wait for the decision.' } };
   const category = scene.category as 'battle' | 'region';
   const mv = movementFor(state!.state, scene.id, category, token.id, user.role === 'gm', await sheetOf(ctx, token.id), local);
   if (v.action === 'move') {
@@ -76,19 +88,55 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
       return { status: 422, body: { error: `Only ${Math.round(left * 100) / 100} ${mv.unit} of movement left ${mv.mode === 'turn' ? 'this turn' : 'today'}.` } };
     }
   }
+  // Opportunity attacks: stop on the last hex inside a hostile's reach until the reaction is decided.
+  let dest = to;
+  let cost = v.action === 'place' ? 0 : checked.cost;
+  let stop: Awaited<ReturnType<typeof planInterruption>> = null;
+  if (v.action === 'move' && category === 'battle' && map.hex) {
+    const path = hexMovementCost(map, start, to);
+    if (path.ok) {
+      const points = [{ x: start.x, y: start.y }, ...path.steps];
+      stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'pc', tokenId: token.id }, points, declined);
+      if (stop) { dest = points[stop.stop]; cost = stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost; }
+    }
+  }
   // Exploration: hexes the character sees from start and destination are remembered for its player.
   const clock = clockFor(state!.state, scene.id);
   const seen = map.hex ? [...await visionFor(ctx, map, clock, [{ tokenId: token.id, ...start }, { tokenId: token.id, ...to }], carriedLights(state!.state, scene.id, pcs.map(p => (p.tokenId === token.id ? { ...p, ...to } : p))))] : [];
   const seenSet = new Set(seen);
   const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && (map.hex ? seenSet.has(hexKeyAt(map, n)) : Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell)))).map(n => ({ ...n, targetScene: null, discoverable: false }));
-  const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: to.x, y: to.y, requestId: v.requestId };
-  const result = await repo.sceneMotion.localWrite(user, input, v.action === 'place' ? 0 : checked.cost, mv.allowance, mv.epoch, observed, seen);
-  // Leaving a hostile's reach without Disengage offers it an opportunity attack (GM / player prompt).
-  const opportunities = result.ok && v.action === 'move' && scene.category === 'battle' ? await offerOpportunityAttacks(user, repo, scene.id, { kind: 'pc', tokenId: token.id }, start, to).catch(() => 0) : 0;
-  return { status: result.ok ? 200 : 409, body: { ...result, ...(opportunities ? { message: `Moved – ${opportunities} opportunity attack${opportunities > 1 ? 's' : ''} possible against ${token.name}.` } : {}), ...(result.ok ? { position: to, spent: mv.spent + (v.action === 'place' ? 0 : checked.cost), allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
+  const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: dest.x, y: dest.y, requestId: v.requestId };
+  const result = stop && cost === 0 ? { ok: true } : await repo.sceneMotion.localWrite(user, input, cost, mv.allowance, mv.epoch, observed, seen);
+  if (result.ok && stop) {
+    const pause = stop;
+    await mutateState(user, repo, (s) => registerInterruption(s, scene.id, { kind: 'pc', tokenId: token.id }, token.name, dest, to, pause.reactors, declined));
+  }
+  const message = stop ? `${token.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack. The move continues after the decision.` : undefined;
+  return { status: result.ok ? 200 : 409, body: { ...result, ...(message ? { message, paused: true } : {}), ...(result.ok ? { position: dest, spent: mv.spent + cost, allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
 }
 
 async function ownerAssignmentOf(repo: Repo, campaignId: string, tokenId: string) {
   const owner = (await repo.profiles(campaignId)).find(p => p.active && p.role === 'player' && p.tokenIds.includes(tokenId));
   return owner ? repo.sceneRuntime!.assignment(campaignId, owner.userId) : null;
+}
+
+/** Continues a character's paused move after its opportunity attacks were decided (server-initiated). */
+export async function continuePcMove(user: AuthUser, repo: Repo, sceneId: string, tokenId: string, to: { x: number; y: number }, declined: string[]): Promise<SceneResult> {
+  if (!repo.sceneMotion || !repo.sceneRuntime) return { status: 503, body: { error: 'Scene movement unavailable.' } };
+  const scene = await repo.sceneRuntime.scene(user.campaignId, sceneId);
+  const owner = await ownerAssignmentOf(repo, user.campaignId, tokenId);
+  const local = await repo.sceneMotion.localSnapshot(user.campaignId, sceneId, user.id, [tokenId]);
+  const row = local.tokens.find((t) => t.tokenId === tokenId);
+  if (!scene) return { status: 404, body: { error: 'Scene unavailable.' } };
+  // the GM's authority writes the continuation (the original request was checked when the move started)
+  const gm: AuthUser = { ...user, role: 'gm' };
+  return performMove(gm, repo, { action: 'move', requestId: crypto.randomUUID(), sceneId, tokenId, x: to.x, y: to.y, sceneRevision: scene.revision, assignmentRevision: owner?.revision ?? 0, tokenVersion: row?.version ?? 0, epoch: 0 }, declined, true);
+}
+
+async function mutateState(user: AuthUser, repo: Repo, fn: (s: import('../game/types.js').GameState) => import('../game/types.js').GameState) {
+  for (let i = 0; i < 5; i++) {
+    const stored = await repo.loadState(user.campaignId);
+    if (!stored) return;
+    if ((await repo.saveState(user.campaignId, fn(stored.state), stored.version, user.id)) !== null) return;
+  }
 }

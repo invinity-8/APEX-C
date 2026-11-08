@@ -25,6 +25,7 @@ import { PlayersPanel } from './components/PlayersPanel';
 import { CharacterPanel } from './components/CharacterPanel';
 import { InventoryPanel } from './components/InventoryPanel';
 import { ArsenalPanel } from './components/ArsenalPanel';
+import { EnemyLibrary } from './components/EnemyLibrary';
 import { LootRollDock } from './components/LootRolls';
 import { MerchantShop } from './components/Merchant';
 import { FeedbackInbox } from './components/Feedback';
@@ -35,7 +36,7 @@ import { MapStage } from './components/map/MapStage';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 
-type View = 'map' | 'scenes' | 'character' | 'spells' | 'inventory' | 'journal' | 'merchant' | 'arsenal' | 'feedback';
+type View = 'map' | 'scenes' | 'enemies' | 'character' | 'spells' | 'inventory' | 'journal' | 'merchant' | 'arsenal' | 'feedback';
 
 interface Toast {
   id: number;
@@ -401,6 +402,7 @@ export default function App({ game }: { game: GameApi }) {
   const tabs: Array<{ id: View; label: string }> = [
     { id: 'map', label: '🗺 Game' },
     ...(isGm && game.online ? [{ id: 'scenes' as View, label: '🧭 Scenes' }] : []),
+    ...(isGm && state ? [{ id: 'enemies' as View, label: '🐉 Enemy Library' }] : []),
     { id: 'character', label: '📜 Character' },
     ...(game.online ? [{ id: 'journal' as View, label: '📖 Journal' }] : []),
     { id: 'inventory', label: '🎒 Inventory' },
@@ -446,7 +448,7 @@ export default function App({ game }: { game: GameApi }) {
       <Header
         game={game}
         notify={notify}
-        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'journal' ? 'Journal' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
+        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'enemies' ? 'Enemy Library' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'journal' ? 'Journal' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
         arenaClock={isGm ? director.arenaShown : !game.scene || game.scene.kind === 'arena'}
       />
@@ -463,7 +465,7 @@ export default function App({ game }: { game: GameApi }) {
             {t.label}
           </button>
         ))}
-        {isGm && screen !== 'map' && screen !== 'arsenal' && screen !== 'feedback' && (
+        {isGm && screen !== 'map' && screen !== 'arsenal' && screen !== 'enemies' && screen !== 'feedback' && (
           <label className="ml-auto flex items-center gap-2 text-xs text-marble-300">
             Character
             <select
@@ -500,6 +502,8 @@ export default function App({ game }: { game: GameApi }) {
             <FeedbackInbox online={game.online} notify={notify} />
           ) : screen === 'scenes' && isGm && game.online ? (
             <SceneDirector />
+          ) : screen === 'enemies' && isGm && state ? (
+            <EnemyLibrary state={state} run={run} busy={game.busy} />
           ) : screen === 'arsenal' && isGm && state ? (
             <ArsenalPanel state={state} run={run} />
           ) : screen === 'merchant' && !isGm && view.merchant && myToken ? (

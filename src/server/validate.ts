@@ -3,6 +3,7 @@
  * Anything that does not match the expected shape exactly is rejected before
  * it reaches the game logic.
  */
+import { parseStatBlock } from '../game/bestiary.js';
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
@@ -214,6 +215,13 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'combineFragments':
       if (!isId(c.tokenId) || !isInt(c.sets, 500) || c.sets < 1 || !isInt(c.currencyRev, 1e9)) return bad('combineFragments');
       return { ok: true, command: { type: 'combineFragments', tokenId: c.tokenId, sets: c.sets, currencyRev: c.currencyRev } };
+    case 'enemyLibrarySave': {
+      const parsed = parseStatBlock(c.block);
+      return parsed.ok ? { ok: true, command: { type: 'enemyLibrarySave', block: parsed.block } } : bad(`block: ${parsed.error}`);
+    }
+    case 'enemyLibraryRemove':
+      if (typeof c.id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(c.id)) return bad('id');
+      return { ok: true, command: { type: 'enemyLibraryRemove', id: c.id } };
     case 'setItemRules': {
       if (c.rules === null) return { ok: true, command: { type: 'setItemRules', rules: null } };
       if (!isObj(c.rules)) return bad('rules');

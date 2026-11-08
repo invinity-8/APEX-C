@@ -37,10 +37,11 @@ begin
   insert into public.apex_scenes(campaign_id,name,category,is_draft,published_metadata,published_revision) values(cid,'Battle A','battle',false,'{"width":1200,"height":800,"nodes":[{"id":"entry","kind":"spawn","x":100,"y":100}]}',1) returning id into s1;
   insert into public.apex_scenes(campaign_id,name,category,is_draft,published_metadata,published_revision) values(cid,'Battle B','battle',false,'{"width":1200,"height":800,"nodes":[{"id":"entry","kind":"spawn","x":100,"y":100}]}',1) returning id into s2;
   insert into public.apex_scenes(campaign_id,name,category,is_draft,published_metadata,published_revision) values(cid,'Region','region',false,'{"width":1200,"height":800,"nodes":[{"id":"entry","kind":"spawn","x":100,"y":100}]}',1) returning id into r1;
-  -- Arena flag "sneaking" must not matter on scenes; initiative on A: sinna first, then aster.
+  -- Arena flag "sneaking" must not matter on scenes; initiative on A: sinna, a goblin, then aster
+  -- (the goblin separates them – consecutive characters would act together, see scene_turn_blocks_check.sql).
   doc := jsonb_build_object('tokens', jsonb_build_object('sinna', jsonb_build_object('id','sinna','speedFt',30,'sneaking',true), 'aster', jsonb_build_object('id','aster','speedFt',30)),
     'sceneEncounters', jsonb_build_object(s1::text, jsonb_build_object('id','enc1','status','active','turnIndex',0,'turnSerial',1,
-      'participants', jsonb_build_array(jsonb_build_object('id','pc-sinna','tokenId','sinna'), jsonb_build_object('id','pc-aster','tokenId','aster')))));
+      'participants', jsonb_build_array(jsonb_build_object('id','pc-sinna','tokenId','sinna'), jsonb_build_object('id','npc-goblin'), jsonb_build_object('id','pc-aster','tokenId','aster')))));
   update public.apex_game_states set state = doc where campaign_id = cid;
   result := public.apex_assign_scene(cid,gm,s1,jsonb_build_array(jsonb_build_object('userId',p1,'revision',0),jsonb_build_object('userId',p2,'revision',0)),gen_random_uuid());
   assert (result->>'ok')::boolean, result::text;
@@ -59,7 +60,7 @@ begin
   result := public.apex_write_scene_motion_v2(cid,p2,input,5,1000000,'free','[]','{}');
   assert not (result->>'ok')::boolean, 'free movement is refused while initiative runs';
   -- Next turn (serial 2, aster active): Jean may move; Hannah's stale epoch is refused.
-  update public.apex_game_states set state = jsonb_set(jsonb_set(state, array['sceneEncounters', s1::text, 'turnIndex'], '1'), array['sceneEncounters', s1::text, 'turnSerial'], '2') where campaign_id = cid;
+  update public.apex_game_states set state = jsonb_set(jsonb_set(state, array['sceneEncounters', s1::text, 'turnIndex'], '2'), array['sceneEncounters', s1::text, 'turnSerial'], '2') where campaign_id = cid;
   input := input || jsonb_build_object('requestId',gen_random_uuid());
   result := public.apex_write_scene_motion_v2(cid,p2,input,10,30,'t:enc1:2','[]','{}');
   assert (result->>'ok')::boolean, result::text;

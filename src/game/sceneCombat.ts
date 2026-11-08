@@ -10,24 +10,15 @@
  *  - Enemy stats are SRD 5.1 basics (no flavour text), enough to try out a fight.
  */
 import type { GameState } from './types.js';
+import { BUILTIN_BESTIARY, displayName, initBonus, statBlock, type AbilityKey, type NpcArea, type NpcAttack, type StatBlock } from './bestiary.js';
 import { activeEncounter } from './sceneTurns.js';
 import { orderParticipants } from './sceneOperations.js';
 
+/** Compact view of a library creature (kept for older callers). */
 export interface EnemyTemplate { id: string; name: string; ac: number; hp: number; speedFt: number; init: number; attack: { name: string; bonus: number; damage: string; reachFt: number; rangeFt?: number }; color: string; icon: string; darkvisionFt: number }
-export const ENEMY_TEMPLATES: EnemyTemplate[] = [
-  { id: 'goblin', name: 'Goblin', ac: 15, hp: 7, speedFt: 30, init: 2, attack: { name: 'Scimitar', bonus: 4, damage: '1d6+2', reachFt: 5 }, color: '#6f8a3a', icon: 'Gb', darkvisionFt: 60 },
-  { id: 'bandit', name: 'Bandit', ac: 12, hp: 11, speedFt: 30, init: 1, attack: { name: 'Scimitar', bonus: 3, damage: '1d6+1', reachFt: 5 }, color: '#8a5a3a', icon: 'Bd', darkvisionFt: 0 },
-  { id: 'archer', name: 'Bandit archer', ac: 12, hp: 11, speedFt: 30, init: 1, attack: { name: 'Light crossbow', bonus: 3, damage: '1d8+1', reachFt: 5, rangeFt: 80 }, color: '#7a6a3a', icon: 'Ar', darkvisionFt: 0 },
-  { id: 'wolf', name: 'Wolf', ac: 13, hp: 11, speedFt: 40, init: 2, attack: { name: 'Bite', bonus: 4, damage: '2d4+2', reachFt: 5 }, color: '#7a7a80', icon: 'Wf', darkvisionFt: 0 },
-  { id: 'skeleton', name: 'Skeleton', ac: 13, hp: 13, speedFt: 30, init: 2, attack: { name: 'Shortsword', bonus: 4, damage: '1d6+2', reachFt: 5 }, color: '#d8d0b8', icon: 'Sk', darkvisionFt: 60 },
-  { id: 'zombie', name: 'Zombie', ac: 8, hp: 22, speedFt: 20, init: -2, attack: { name: 'Slam', bonus: 3, damage: '1d6+1', reachFt: 5 }, color: '#5a7a5a', icon: 'Zb', darkvisionFt: 60 },
-  { id: 'orc', name: 'Orc', ac: 13, hp: 15, speedFt: 30, init: 1, attack: { name: 'Greataxe', bonus: 5, damage: '1d12+3', reachFt: 5 }, color: '#4a6a3a', icon: 'Or', darkvisionFt: 60 },
-  { id: 'cultist', name: 'Cultist', ac: 12, hp: 9, speedFt: 30, init: 1, attack: { name: 'Scimitar', bonus: 3, damage: '1d6+1', reachFt: 5 }, color: '#6a2a3a', icon: 'Cu', darkvisionFt: 0 },
-  { id: 'spider', name: 'Giant spider', ac: 14, hp: 26, speedFt: 30, init: 3, attack: { name: 'Bite', bonus: 5, damage: '1d8+3', reachFt: 5 }, color: '#3a3040', icon: 'Sp', darkvisionFt: 0 },
-  { id: 'bear', name: 'Brown bear', ac: 11, hp: 34, speedFt: 40, init: 0, attack: { name: 'Claws', bonus: 6, damage: '2d6+4', reachFt: 5 }, color: '#6a4a2a', icon: 'Br', darkvisionFt: 0 },
-  { id: 'thug', name: 'Thug', ac: 11, hp: 32, speedFt: 30, init: 0, attack: { name: 'Mace', bonus: 4, damage: '1d6+2', reachFt: 5 }, color: '#5a5a6a', icon: 'Th', darkvisionFt: 0 },
-  { id: 'ogre', name: 'Ogre', ac: 11, hp: 59, speedFt: 40, init: -1, attack: { name: 'Greatclub', bonus: 6, damage: '2d8+4', reachFt: 5 }, color: '#8a6a4a', icon: 'Og', darkvisionFt: 60 },
-];
+const templateOf = (b: StatBlock): EnemyTemplate => ({ id: b.id, name: displayName(b), ac: b.ac, hp: b.hp, speedFt: b.speedFt, init: initBonus(b), attack: legacyAttack(b.attacks[0]), color: b.color, icon: b.icon, darkvisionFt: b.darkvisionFt });
+const legacyAttack = (a: NpcAttack | undefined) => (a ? { name: a.name, bonus: a.bonus, damage: a.damage, reachFt: a.reachFt, ...(a.rangeFt ? { rangeFt: a.rangeFt } : {}) } : { name: 'Unarmed', bonus: 0, damage: '1', reachFt: 5 });
+export const ENEMY_TEMPLATES: EnemyTemplate[] = BUILTIN_BESTIARY.map(templateOf);
 
 export interface SceneEnemy {
   id: string;
@@ -41,6 +32,15 @@ export interface SceneEnemy {
   speedFt: number;
   init: number;
   attack: EnemyTemplate['attack'];
+  /** APEX 1.2 stat block copy (older saves only have `attack`). */
+  attacks?: NpcAttack[];
+  multiattack?: number;
+  abilities?: Record<AbilityKey, number>;
+  saves?: Partial<Record<AbilityKey, number>>;
+  areas?: NpcArea[];
+  /** Area ability name → uses spent this encounter. */
+  areaUsed?: Record<string, number>;
+  elite?: boolean;
   color: string;
   icon: string;
   defeated?: boolean;
@@ -69,11 +69,17 @@ export function setCarriedLight(prev: GameState, sceneId: string, tokenId: strin
 }
 
 export function addEnemy(prev: GameState, sceneId: string, id: string, templateId: string, at: { x: number; y: number }, name: string | undefined, roll: number | null, side: 'enemy' | 'ally' = 'enemy'): Result {
-  const t = ENEMY_TEMPLATES.find((e) => e.id === templateId);
-  if (!t) return { ok: false, error: 'Unknown enemy.' };
+  const b = statBlock(prev, templateId);
+  if (!b) return { ok: false, error: 'Unknown enemy.' };
   if (enemiesOf(prev, sceneId).length >= 60) return { ok: false, error: 'Too many enemies on this map.' };
   const count = enemiesOf(prev, sceneId).filter((e) => e.templateId === templateId).length;
-  const enemy: SceneEnemy = { id, templateId, name: (name?.trim() || `${t.name} ${count + 1}`).slice(0, 60), x: at.x, y: at.y, hp: t.hp, maxHp: t.hp, ac: t.ac, speedFt: t.speedFt, init: t.init, attack: { ...t.attack }, color: side === 'ally' ? '#3f7fbf' : t.color, icon: t.icon, darkvisionFt: t.darkvisionFt, ...(side === 'ally' ? { side } : {}) };
+  const t = templateOf(b);
+  const label = b.elite ? displayName(b) : `${b.name} ${count + 1}`;
+  const enemy: SceneEnemy = {
+    id, templateId, name: (name?.trim() || label).slice(0, 60), x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, init: t.init, attack: t.attack,
+    attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.elite ? { elite: true } : {}),
+    color: side === 'ally' ? '#3f7fbf' : b.color, icon: b.icon, darkvisionFt: b.darkvisionFt, ...(side === 'ally' ? { side } : {}),
+  };
   const state = structuredClone(prev);
   state.sceneEnemies = { ...(state.sceneEnemies ?? {}), [sceneId]: [...enemiesOf(state, sceneId), enemy] };
   const enc = activeEncounter(state, sceneId);
@@ -170,3 +176,11 @@ export function markAttack(state: GameState, sceneId: string, tokenId: string) {
   const e = state.sceneEncounters?.[sceneId];
   if (e && e.status === 'active') e.attacked = { ...(e.attacked ?? {}), [tokenId]: e.turnSerial ?? 0 };
 }
+
+/** Attacks of an NPC (stat block copy, or the single attack of older saves). */
+export function npcAttacks(e: Pick<SceneEnemy, 'attacks' | 'attack'>): NpcAttack[] {
+  if (e.attacks?.length) return e.attacks;
+  return [{ name: e.attack.name, kind: e.attack.rangeFt ? 'ranged' : 'melee', bonus: e.attack.bonus, damage: e.attack.damage, damageType: '', reachFt: e.attack.reachFt || 5, ...(e.attack.rangeFt ? { rangeFt: e.attack.rangeFt } : {}) }];
+}
+/** Melee reach of an NPC (for opportunity attacks): its longest melee reach, 5 ft by default. */
+export const npcReach = (e: Pick<SceneEnemy, 'attacks' | 'attack'>) => Math.max(5, ...npcAttacks(e).filter((a) => a.kind === 'melee').map((a) => a.reachFt));

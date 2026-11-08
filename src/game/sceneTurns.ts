@@ -10,6 +10,7 @@
  *    initiative on battle maps, one day on region maps (8 hexes at speed 30).
  */
 import { orderParticipants } from './sceneOperations.js';
+import { activeActors, blockOf } from './sceneActions.js';
 import type { GameState, SceneClockState, SceneEncounter, SceneEncounterParticipant } from './types.js';
 
 export const defaultClock = (): SceneClockState => ({ day: 1, phase: 'day', lighting: 'bright', version: 0 });
@@ -57,24 +58,39 @@ export function joinInitiative(prev: GameState, sceneId: string, encounterId: st
   return { ok: true, state, message: `${fresh.map((f) => f.name).join(', ')} joined initiative.` };
 }
 
-/** Ends the active turn. Players may only end the turn of a character they control. */
-export function endTurn(prev: GameState, sceneId: string, encounterId: string, turnSerial: number, controls: (tokenId: string) => boolean): Result {
+/**
+ * Ends a turn. Players end their own part of the current block (consecutive characters act together); the block
+ * – and with it the turn – ends when every character in it is done. `force` (GM “Next turn”) ends the whole block.
+ */
+export function endTurn(prev: GameState, sceneId: string, encounterId: string, turnSerial: number, controls: (tokenId: string) => boolean, force = false): Result {
   const e = activeEncounter(prev, sceneId);
   if (!e || e.id !== encounterId) return { ok: false, error: 'Initiative is not running in this scene.' };
   if ((e.turnSerial ?? 0) !== turnSerial) return { ok: false, error: 'The turn already changed.' };
   const active = e.participants[e.turnIndex];
   if (!active) return { ok: false, error: 'Nobody is in the initiative order.' };
-  if (!controls(active.tokenId ?? '')) return { ok: false, error: `It is ${active.name}'s turn.` };
+  const block = blockOf(e);
+  const open = activeActors(e);
   const state = structuredClone(prev);
   const enc = state.sceneEncounters![sceneId];
-  enc.turnIndex++;
+  if (!force) {
+    const mine = open.find((id) => controls(e.participants.find((p) => p.id === id)?.tokenId ?? ''));
+    if (!mine) return { ok: false, error: `It is ${open.map((id) => e.participants.find((p) => p.id === id)?.name).join(' & ') || active.name}'s turn.` };
+    if (open.length > 1) {
+      enc.blockDone = [...(enc.blockDone ?? []), mine];
+      enc.version++;
+      const name = e.participants.find((p) => p.id === mine)?.name ?? 'Character';
+      return { ok: true, state, message: `${name} is done – waiting for ${open.filter((id) => id !== mine).map((id) => e.participants.find((p) => p.id === id)?.name).join(' & ')}.` };
+    }
+  }
+  enc.turnIndex += Math.max(1, block.length);
   if (enc.turnIndex >= enc.participants.length) { enc.turnIndex = 0; enc.round++; }
   enc.turnSerial = (enc.turnSerial ?? 0) + 1;
-  // the new active creature gets its reaction back (5e: it refreshes at the start of your turn)
-  const next = enc.participants[enc.turnIndex];
-  if (next && enc.reactions?.[next.id] !== undefined) { const { [next.id]: _r, ...rest } = enc.reactions; void _r; enc.reactions = rest; }
+  enc.blockDone = [];
+  // the new active creatures get their reaction back (5e: it refreshes at the start of your turn)
+  for (const id of blockOf(enc)) if (enc.reactions?.[id] !== undefined) { const { [id]: _r, ...rest } = enc.reactions; void _r; enc.reactions = rest; }
   enc.version++;
-  return { ok: true, state, message: `${enc.participants[enc.turnIndex].name}'s turn${enc.turnIndex === 0 ? ` · round ${enc.round}` : ''}.` };
+  const names = blockOf(enc).map((id) => enc.participants.find((p) => p.id === id)?.name).join(' & ');
+  return { ok: true, state, message: `${names}'s turn${enc.turnIndex === 0 ? ` · round ${enc.round}` : ''}.` };
 }
 
 export function endInitiative(prev: GameState, sceneId: string): Result {
@@ -101,8 +117,9 @@ export function movementEpoch(state: Pick<GameState, 'sceneEncounters' | 'sceneC
   if (!e) return { mode: 'free', epoch: 'free', canMove: true };
   const active = e.participants[e.turnIndex];
   const epoch = `t:${e.id}:${e.turnSerial ?? 0}`;
-  if (active?.tokenId === tokenId) return { mode: 'turn', epoch, canMove: true };
-  return { mode: 'turn', epoch, canMove: gm, reason: active ? `Wait for your turn – it is ${active.name}'s turn.` : 'Nobody is in the initiative order.' };
+  if (activeActors(e).includes(`pc-${tokenId}`)) return { mode: 'turn', epoch, canMove: true };
+  void gm; // in initiative only the active creature moves – the GM places a figure to correct a position
+  return { mode: 'turn', epoch, canMove: false, reason: active ? `Wait for your turn – it is ${active.name}'s turn.` : 'Nobody is in the initiative order.' };
 }
 
 /** Allowance for one epoch: speed (ft) per turn, unlimited when free, 8 hexes × 3 mi per day at speed 30. */

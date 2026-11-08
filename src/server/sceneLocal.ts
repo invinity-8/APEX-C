@@ -3,7 +3,7 @@
  * scene movement so that what a player sees and what the server accepts always agree.
  */
 import { hexAt, hexCentre, spawnSlots, tileSetOf } from '../campaign/hexScene.js';
-import { CARRIED_LIGHT_FT, enemiesOf, torchesOf } from '../game/sceneCombat.js';
+import { CARRIED_LIGHT_FT, enemiesOf, npcReach, torchesOf } from '../game/sceneCombat.js';
 import { darkvisionFeet, fogString, maskTerrain, sceneVision, type CarriedLight, type Viewer } from '../campaign/hexVision.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { hexKey, type HexKey } from '../game/hex.js';
@@ -23,7 +23,7 @@ export interface SceneViewContext {
 export interface PcPosition { tokenId: string; userId: string; x: number; y: number; stored: boolean }
 
 /** A figure a viewer may see on the map: another character or an enemy. */
-export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
+export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; ac?: number; torch?: boolean }
 
 /** Arrival slots for characters without a stored position (no two on the same hex). */
 export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } | null, rows: Array<{ tokenId: string; userId: string; stored?: { x: number; y: number } }>, blocked: Array<{ x: number; y: number }>): PcPosition[] {
@@ -48,7 +48,7 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   }
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e)) continue;
-    out.push({ id: e.id, kind: 'enemy', side: e.side ?? 'enemy', reachFt: e.attack.rangeFt ?? e.attack.reachFt, name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
+    out.push({ id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac } : {}) });
   }
   return out;
 }
