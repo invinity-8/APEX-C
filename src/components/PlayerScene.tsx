@@ -17,6 +17,10 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const chosenAsset = preset ? null : personalAsset ?? settings?.defaultAsset;
   useEffect(() => { let live = true; setSanctuaryImage(null); if (chosenAsset && scene?.kind === 'sanctuary') api.mapImage(chosenAsset).then(r => { if (live) setSanctuaryImage(r.url); }).catch(() => undefined); return () => { live = false; }; }, [chosenAsset, scene?.kind]);
   const [moveMode, setMoveMode] = useState(false), [pending, setPending] = useState(false), [message, setMessage] = useState('');
+  const [attackIndex, setAttackIndex] = useState<number | null>(null);
+  const [attacks, setAttacks] = useState<Array<{ name: string; bonus: string; damage: string; range: string }>>([]);
+  // Attacks come from the character sheet (Character → attacks); loaded once per character.
+  useEffect(() => { let live = true; if (me?.id && scene?.scene?.category === 'battle') void game.sheets.load(me.id).then(r => { if (live && r.ok) setAttacks(r.sheet.sheet.attacks); }); return () => { live = false; }; }, [me?.id, scene?.scene?.category, game.sheets.revision]);
   const [uncertain, setUncertain] = useState<Record<string, unknown> | null>(null);
   const pendingRef = useRef(false);
   async function send(input: Record<string, unknown>) {
@@ -60,21 +64,45 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     catch (e) { setMessage(String(e)); game.online?.refresh(); }
     finally { pendingRef.current = false; setPending(false); }
   }
+  async function sceneAction(input: Record<string, unknown>) {
+    if (!scene?.scene || pendingRef.current) return;
+    pendingRef.current = true; setPending(true); setMessage('');
+    try { const r = await api.sceneTurn({ sceneId: scene.scene.id, ...input }); setMessage(r.message ?? 'Done.'); game.online?.refresh(); }
+    catch (e) { setMessage(String(e)); game.online?.refresh(); }
+    finally { pendingRef.current = false; setPending(false); }
+  }
+  function figureClick(id: string) {
+    if (attackIndex === null || !me) return;
+    if (!(scene?.figures ?? []).some(f => f.kind === 'enemy' && f.id === id)) return;
+    setAttackIndex(null);
+    void sceneAction({ action: 'attack', tokenId: me.id, enemyId: id, attackIndex });
+  }
+  const enemiesInSight = (scene.figures ?? []).filter(f => f.kind === 'enemy' && f.condition !== 'down');
+  const canAttack = category === 'battle' && (free || myTurn) && attacks.length > 0;
   const status = !mv ? '' : free ? 'Free movement – no initiative running.' : mv.mode === 'turn' ? (myTurn ? `Your turn · ${remaining.toFixed(0)} ft left` : mv.reason ?? 'Waiting for your turn.') : `${remaining.toFixed(1)} of ${mv.allowance.toFixed(1)} miles left today (day ${scene.clock?.day ?? 1}${scene.clock?.phase === 'night' ? ', night' : ''})`;
   return <div className="player-scene">
     {liveEncounter && <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me?.id ?? null} />}
     {['battle', 'region'].includes(category) && <div className="journal-toolbar">
       <button className="btn btn-gold" disabled={pending || !!uncertain || !canMove} aria-pressed={moveMode} onClick={() => setMoveMode(!moveMode)}>{moveMode ? 'Cancel movement' : 'Move your character'}</button>
       {myTurn && <button className="btn btn-gold" disabled={pending} onClick={() => void endTurn()} data-testid="end-turn">End turn</button>}
+      {category === 'battle' && me && <button className="btn btn-ghost" disabled={pending} aria-pressed={!!scene.torch} onClick={() => void sceneAction({ action: 'torch', tokenId: me.id, on: !scene.torch })} data-testid="torch">{scene.torch ? '🔥 Put out light' : '🕯 Light a torch'}</button>}
       <span role="status" data-testid="movement-status">{status}</span>
     </div>}
+    {canAttack && <div className="journal-toolbar" aria-label="Attack">
+      <label className="text-xs">Attack <select aria-label="Choose attack" value={attackIndex ?? ''} onChange={e => { setMoveMode(false); setAttackIndex(e.target.value === '' ? null : Number(e.target.value)); }}>
+        <option value="">– choose to attack –</option>
+        {attacks.map((a, i) => <option key={i} value={i}>{a.name} {a.bonus} · {a.damage}{a.range ? ` · ${a.range}` : ''}</option>)}
+      </select></label>
+      {attackIndex !== null && <span className="text-xs text-gold-200">{enemiesInSight.length ? 'Click an enemy on the map.' : 'No enemy in sight.'}</span>}
+    </div>}
+    {!!scene.combatLog?.length && <details className="combat-log" open><summary>Combat log</summary><ol>{scene.combatLog.slice().reverse().map(l => <li key={l.id}>{l.text}</li>)}</ol></details>}
     {moveMode && <p>Choose a destination on the map. The server checks your path, terrain, walls and {free ? 'nothing else – movement is free' : mv?.mode === 'turn' ? 'your speed this turn' : 'how far you can travel today'}.</p>}
     {message && <p role="status">{message}</p>}
     {uncertain && <button className="btn btn-ghost" disabled={pending} onClick={() => void send(uncertain)}>Verify or retry previous movement</button>}
     {!!game.view.sceneAnnouncements.length && <section className="mx-auto my-2 w-full max-w-4xl space-y-2" aria-label="Scene announcements">
       {game.view.sceneAnnouncements.map(item => <article key={item.id} className="rounded-lg border border-gold-700/60 bg-ink-950/90 p-3"><p className="eyebrow">Scene event</p><h2 className="font-display text-lg text-gold-200">{item.title}</h2><p className="whitespace-pre-wrap text-sm text-marble-200">{item.text}</p></article>)}
     </section>}
-    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode && !free ? remaining : null} onDestination={moveMode ? move : undefined} />
+    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={moveMode && !free ? remaining : null} onDestination={moveMode ? move : undefined} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : undefined} />
     {category === 'world' && scene.travel && <WorldTravel sceneId={scene.scene.id} sceneRevision={scene.scene.revision} assignmentRevision={scene.assignmentRevision} map={scene.scene.map} travel={scene.travel} onChanged={() => game.online?.refresh()} />}
     <p>The Game Master controls scene transitions{category === 'region' ? ', day and night' : category === 'battle' ? ' and initiative' : ''}.</p>
   </div>;

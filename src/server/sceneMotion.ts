@@ -1,7 +1,8 @@
 import { parseMap, regionMilesPerHour, type MapNode } from '../campaign/maps.js';
 import { movementCost, snappedPoint } from '../campaign/sceneMovement.js';
 import type { AuthUser, Repo } from './repo.js';
-import { clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
+import { carriedLights, clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
+import { enemiesOf } from '../game/sceneCombat.js';
 import { sceneContext } from './sceneRuntime.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
@@ -53,8 +54,15 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   const local = await repo.sceneMotion.localSnapshot(user.campaignId, scene.id, user.id, [token.id]);
   const old = local.tokens.find(p => p.tokenId === token.id);
   const ownerAssignment = user.role === 'gm' ? await ownerAssignmentOf(repo, user.campaignId, token.id) : assignment;
-  const start = old ?? { x: ownerAssignment?.spawn_x ?? 0, y: ownerAssignment?.spawn_y ?? 0 };
+  const pcs = ctx.pcs ? await ctx.pcs(scene.id, map) : [];
+  const start = old ?? pcs.find(p => p.tokenId === token.id) ?? { x: ownerAssignment?.spawn_x ?? 0, y: ownerAssignment?.spawn_y ?? 0 };
   const to = snappedPoint(map, { x: v.x, y: v.y });
+  // Two figures never share a hex (battle and region hex maps).
+  if (map.hex) {
+    const target = hexKeyAt(map, to);
+    const occupied = pcs.some(p => p.tokenId !== token.id && hexKeyAt(map, p) === target) || enemiesOf(state!.state, scene.id).some(e => !e.defeated && hexKeyAt(map, e) === target);
+    if (occupied) return { status: 409, body: { error: 'Another figure stands on that hex.' } };
+  }
   const checked = movementCost(map, v.action === 'place' ? to : start, to);
   if (!checked.ok) return { status: 422, body: { error: checked.error } };
   const category = scene.category as 'battle' | 'region';
@@ -69,7 +77,7 @@ export async function motionRequest(user: AuthUser, method: string, body: unknow
   }
   // Exploration: hexes the character sees from start and destination are remembered for its player.
   const clock = clockFor(state!.state, scene.id);
-  const seen = map.hex ? [...await visionFor(ctx, map, clock, [{ tokenId: token.id, ...start }, { tokenId: token.id, ...to }])] : [];
+  const seen = map.hex ? [...await visionFor(ctx, map, clock, [{ tokenId: token.id, ...start }, { tokenId: token.id, ...to }], carriedLights(state!.state, scene.id, pcs.map(p => (p.tokenId === token.id ? { ...p, ...to } : p))))] : [];
   const seenSet = new Set(seen);
   const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && (map.hex ? seenSet.has(hexKeyAt(map, n)) : Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell)))).map(n => ({ ...n, targetScene: null, discoverable: false }));
   const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: to.x, y: to.y, requestId: v.requestId };

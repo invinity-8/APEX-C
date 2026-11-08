@@ -14,6 +14,7 @@ const legacyFeatureColors = { tree: '#41664b', rock: '#877c6e', obstacle: '#7855
  * world maps keep the route/overview editor. Saved drafts and published definitions are separate.
  */
 export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onSaved: (scene: SceneDefinition) => void }) {
+  const picture = scene.category === 'world' || scene.category === 'celestial';
   const [map, setMap] = useState<SceneMap>(() => parseMap(scene.metadata) ?? emptyMap(scene.category));
   const [revision, setRevision] = useState(scene.revision);
   const [selected, setSelected] = useState<string | null>(null);
@@ -41,18 +42,20 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
   }
   function add(event: PointerEvent<SVGSVGElement>) {
     if (playerPreview || tool === 'select' || busy) return;
-    const n: MapNode = { id: crypto.randomUUID(), ...point(event), label: tool === 'spawn' ? 'Entry' : 'New ' + tool, kind: tool, visible: tool === 'spawn', width: 60, height: 60, description: '', targetScene: null };
+    const n: MapNode = { id: crypto.randomUUID(), ...point(event), label: tool === 'spawn' ? 'Entry' : 'New ' + tool, kind: tool, visible: tool === 'spawn' || (picture && tool !== 'area' && tool !== 'wall'), width: 60, height: 60, description: '', targetScene: null };
     change({ nodes: [...map.nodes, n] }); setSelected(n.id); setTool('select');
   }
   async function save(publish = false) {
     setBusy(true); setMessage('');
     try {
       let candidate = map;
+      // Picture maps (world / celestial) need a spawn for player assignment; add a hidden one in the centre.
+      if (publish && picture && !map.nodes.some(n => n.kind === 'spawn')) candidate = { ...map, nodes: [...map.nodes, { id: 'entry', x: map.width / 2, y: map.height / 2, label: 'Arrival', description: '', kind: 'spawn', visible: false, width: 50, height: 50, targetScene: null }] };
       if (publish && map.backgroundAsset && !map.hex) {
         const source = await api.mapImage(map.backgroundAsset);
-        const safe = await playerSafeBackground(map, source.url);
+        const safe = await playerSafeBackground(candidate, source.url);
         const asset = await api.mapUpload(scene.id, 'players', safe.image, safe.thumbnail);
-        candidate = { ...map, playerBackgroundAsset: asset.id };
+        candidate = { ...candidate, playerBackgroundAsset: asset.id };
       }
       const result = await api.sceneAction(scene.id, revision, publish ? 'publish' : 'save', { map: candidate });
       setMap(candidate);
@@ -62,7 +65,17 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
   async function upload(file?: File) {
     if (!file || busy) return;
     setBusy(true); setMessage('Processing map image…');
-    try { const image = await prepareMapUpload(file); const asset = await api.mapUpload(scene.id, 'gm', image.image, image.thumbnail); change({ backgroundAsset: asset.id, playerBackgroundAsset: null }); setMessage('Private map uploaded. Publish to generate a separate player-safe image.'); }
+    try {
+      const image = await prepareMapUpload(file); const asset = await api.mapUpload(scene.id, 'gm', image.image, image.thumbnail);
+      if (picture) {
+        // World / celestial maps are pictures: the map takes the picture's proportions (longest side 2000) and
+        // players see the whole picture; markers keep their relative position.
+        const k = 2000 / Math.max(image.width, image.height), width = Math.max(100, Math.round(image.width * k)), height = Math.max(100, Math.round(image.height * k));
+        const sx = width / map.width, sy = height / map.height;
+        change({ backgroundAsset: asset.id, playerBackgroundAsset: null, revealBackground: true, grid: 'none', width, height, nodes: map.nodes.map(n => ({ ...n, x: Math.min(width, n.x * sx), y: Math.min(height, n.y * sy) })) });
+        setMessage('Map picture uploaded. Add locations, then publish – players see the whole picture with the revealed locations.');
+      } else { change({ backgroundAsset: asset.id, playerBackgroundAsset: null }); setMessage('Private map uploaded. Publish to generate a separate player-safe image.'); }
+    }
     catch (e) { setMessage(String(e)); } finally { setBusy(false); }
   }
   const displayedNodes = map.nodes;
@@ -83,7 +96,8 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
     <div className="scene-editor-columns">
     <div className="scene-editor-canvas-panel">
     <p>{scene.category} · {map.interval} movement · {dirty ? 'Unsaved changes' : 'Saved definition'}</p>
-    <div className="journal-toolbar" role="toolbar" aria-label="Map editor tools">{(['select', 'location', 'label', 'spawn', 'wall', 'area'] as const).map(t => <button className="btn btn-ghost" key={t} disabled={playerPreview || busy} aria-pressed={tool === t} onClick={() => setTool(t)}>{t}</button>)}</div>
+    {picture && <p className="text-xs text-marble-400">World and celestial maps are pictures with clickable locations: upload a PNG/JPG, place locations (name + description) and routes, then publish.</p>}
+    <div className="journal-toolbar" role="toolbar" aria-label="Map editor tools">{(picture ? ['select', 'location', 'label'] as const : ['select', 'location', 'label', 'spawn', 'wall', 'area'] as const).map(t => <button className="btn btn-ghost" key={t} disabled={playerPreview || busy} aria-pressed={tool === t} onClick={() => setTool(t)}>{t}</button>)}</div>
     <p>Choose a tool and click the map. Drag markers to move them. Scroll the map area to pan.</p>
     <label>Zoom <input type="range" min="0.4" max="2" step="0.1" value={zoom} onChange={e => setZoom(Number(e.target.value))} /></label>
     <label><input type="checkbox" checked={playerPreview} onChange={e => setPlayerPreview(e.target.checked)} /> Preview revealed map elements</label>
@@ -105,14 +119,15 @@ export function SceneMapEditor({ scene, onSaved }: { scene: SceneDefinition; onS
     </section>}
     {!playerPreview && <fieldset disabled={busy}>
       <legend>Map settings</legend>
-      <label>Map width <input type="number" min="100" max="5000" value={map.width} onChange={e => change({ width: Number(e.target.value) })} /></label>
+      {!picture && <><label>Map width <input type="number" min="100" max="5000" value={map.width} onChange={e => change({ width: Number(e.target.value) })} /></label>
       <label>Map height <input type="number" min="100" max="5000" value={map.height} onChange={e => change({ height: Number(e.target.value) })} /></label>
       <label>Upload private map image <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0]); e.target.value = ''; }} /></label>
       <label><input type="checkbox" checked={map.revealBackground} onChange={e => change({ revealBackground: e.target.checked })} /> Reveal the entire background image</label>
       <p>Otherwise only revealed area rectangles are copied into the player image when publishing. The private source image remains GM-only.</p>
       <label>Grid <select value={map.grid} onChange={e => change({ grid: e.target.value as SceneMap['grid'] })}>{['none', 'square', 'hex'].map(g => <option key={g}>{g}</option>)}</select></label>
       <label>Cell size <input type="number" min="10" max="500" value={map.cell} onChange={e => change({ cell: Number(e.target.value) })} /></label>
-      <label>{map.unit} per cell <input type="number" min="0.01" max="10000" step="0.01" value={map.unitsPerCell} onChange={e => change({ unitsPerCell: Number(e.target.value) })} /></label>
+      <label>{map.unit} per cell <input type="number" min="0.01" max="10000" step="0.01" value={map.unitsPerCell} onChange={e => change({ unitsPerCell: Number(e.target.value) })} /></label></>}
+      {picture && <label>Upload map picture (PNG / JPG / WebP) <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e => { void upload(e.target.files?.[0]); e.target.value = ''; }} /></label>}
       <label>GM notes <textarea maxLength={20000} value={map.gmNotes} onChange={e => change({ gmNotes: e.target.value })} /></label>
       {current && <fieldset><legend>Selected {current.kind}</legend>
         <label>Label <input maxLength={120} value={current.label} onChange={e => nodeChange({ label: e.target.value })} /></label>

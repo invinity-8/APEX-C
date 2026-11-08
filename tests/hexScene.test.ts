@@ -78,7 +78,7 @@ describe('hex movement (server rule)', () => {
   it('blocks impassable destinations and walls of water', () => {
     const map = plainsMap(3);
     map.hex = paintHexes(map.hex!, [hexKey({ q: 2, r: 0 })], 'wall');
-    expect(movementCost(map, east(map, 0), east(map, 2))).toEqual({ ok: false, error: 'Wall cannot be entered.' });
+    expect(movementCost(map, east(map, 0), east(map, 2))).toEqual({ ok: false, error: 'Stone wall cannot be entered.' });
     expect(movementCost(map, east(map, 0), { x: 1, y: 1 })).toMatchObject({ ok: false });
     // Ring of water around the centre: nothing outside can be reached.
     const ring = ['1,0', '1,-1', '0,-1', '-1,0', '-1,1', '0,1'];

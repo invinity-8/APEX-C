@@ -5,6 +5,7 @@ import { SceneMapEditor } from './SceneMapEditor';
 import { SCENE_TEMPLATES } from '../campaign/templates';
 import { parseMap } from '../campaign/maps';
 import { SceneThumbnail } from './SceneThumbnail';
+import { HexThumbnail } from './HexThumbnail';
 import { SanctuarySettingsPanel } from './SanctuarySettings';
 
 const labels = { celestial: 'Celestial Maps', world: 'World Maps', region: 'Region Maps', battle: 'Battle Maps' };
@@ -61,7 +62,7 @@ export function SceneDirector() {
     setBusy(true); setError('');
     try {
       const { scene } = await api.sceneCreate(name, category, SCENE_TEMPLATES.some(t => t.id === template && t.category === category) ? template : undefined);
-      cache([scene]); setName(''); setPreview(scene);
+      cache([{ ...scene, hex: (scene.metadata as { hex?: SceneSummary['hex'] })?.hex ?? null, palette: (scene.metadata as { palette?: SceneSummary['palette'] })?.palette ?? null }]); setName(''); setPreview(scene);
       // Reset pagination after insertion to keep the server's page boundaries authoritative.
       const page = await api.sceneList(0,{category,archived,sort,search:appliedSearch||undefined}); cache(page.scenes);setLibraryIds(page.scenes.map(s=>s.id));setOffset(page.nextOffset);
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
@@ -75,7 +76,10 @@ export function SceneDirector() {
     } catch (e) { if (generation.current === request) setError(String(e)); }
   }
   function saved(scene: SceneDefinition,force=false) {
-    if(force || previewIdRef.current===scene.id) setPreview(scene); cache([scene]);
+    if(force || previewIdRef.current===scene.id) setPreview(scene);
+    // Library preview follows the saved draft (tiles + colour scheme).
+    const meta = scene.metadata as { hex?: SceneSummary['hex']; palette?: SceneSummary['palette'] };
+    cache([{ ...scene, hex: meta?.hex ?? null, palette: meta?.palette ?? null }]);
     setLibraryIds(old=>scene.category===category && scene.archived===archived && scene.name.toLowerCase().includes(appliedSearch.toLowerCase())?[...new Set([scene.id,...old])]:old.filter(id=>id!==scene.id));
   }
   async function action(action: string, fields: Record<string, unknown> = {}) {
@@ -101,7 +105,7 @@ export function SceneDirector() {
     {error && <p role="alert">{error}</p>}
     {libraryLoading && <p role="status">Loading scene metadata…</p>}
     <ul className="scene-library">{[...scenes].filter(s => libraryIds.includes(s.id) && s.category === category && s.archived === archived).sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : b.updated_at.localeCompare(a.updated_at)).map(s =>
-      <li key={s.id}><SceneThumbnail assetId={s.thumbnail_asset_id} label={s.name} /><strong>{s.name}</strong><span>{labels[s.category]} · {s.is_legacy_arena ? 'Legacy Arena' : s.archived ? 'Archived' : s.is_draft ? 'Draft' : 'Published'}</span><small>Modified {new Date(s.updated_at).toLocaleDateString()} · Parent: {scenes.find(p => p.id === s.parent_scene_id)?.name ?? (s.parent_scene_id ? 'Linked location' : 'Campaign root')}</small><button disabled={busy} onClick={() => void open(s.id)}>Edit scene</button></li>)}</ul>
+      <li key={s.id}>{s.hex ? <HexThumbnail hex={s.hex} palette={s.palette} label={s.name} /> : <SceneThumbnail assetId={s.thumbnail_asset_id} label={s.name} />}<strong>{s.name}</strong><span>{labels[s.category]} · {s.is_legacy_arena ? 'Legacy Arena' : s.archived ? 'Archived' : s.is_draft ? 'Draft' : 'Published'}</span><small>Modified {new Date(s.updated_at).toLocaleDateString()} · Parent: {scenes.find(p => p.id === s.parent_scene_id)?.name ?? (s.parent_scene_id ? 'Linked location' : 'Campaign root')}</small><button disabled={busy} onClick={() => void open(s.id)}>Edit scene</button></li>)}</ul>
     {!libraryLoading && !scenes.some(s => libraryIds.includes(s.id) && s.category === category && s.archived === archived) && <p role="status">No {archived ? 'archived ' : ''}{labels[category].toLowerCase()} yet.</p>}
     {offset !== null && <button disabled={busy || libraryLoading} onClick={() => void more()}>Load more scenes</button>}
     </aside>

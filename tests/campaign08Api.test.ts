@@ -8,6 +8,8 @@ import type { PlayerPayload } from '../src/server/protocol';
 import type { SceneDefinition } from '../src/server/scenes';
 import type { SceneMap } from '../src/campaign/maps';
 /** Centre of the hex `n` steps east of the scene's spawn (hex spacing = √3 × 30 px). */
+/** Arrival placement stores the first position (version 1). */
+const ver=(scene:SceneDefinition)=>repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)?.version ?? 0;
 const east=(scene:SceneDefinition,n:number)=>{ const spawn=(scene.metadata as unknown as SceneMap).nodes.find(x=>x.kind==='spawn')!; return { x: spawn.x+n*Math.sqrt(3)*30, y: spawn.y }; };
 import { neighbors } from '../src/game/hex';
 import { validateMove } from '../src/game/commands';
@@ -42,7 +44,7 @@ describe('campaign engine API integration',()=>{
     expect(repo.states.get(cid)!.version).toBe(before);
     const p=(await request('hannah','state')).body as PlayerPayload;
     expect(p.scene?.scene?.revision).toBe(1); expect(JSON.stringify(p)).not.toContain('Never send this draft');
-    const move=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,...east(scene,1),requestId:crypto.randomUUID()}); expect(move.status).toBe(200);
+    const move=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:ver(scene),epoch:0,...east(scene,1),requestId:crypto.randomUUID()}); expect(move.status).toBe(200);
   });
   it('scopes scene loot rolls to assigned players and rejects votes after leaving the scene',async()=>{
     const scene=await battle(); await assign(scene.id,0);
@@ -157,10 +159,11 @@ describe('campaign engine API integration',()=>{
     stored.state.tokens.sinna.inventory=[{ id:'overload', name:'Stone crate', kind:'misc', description:'', quantity:1, weightKg:70 }];
     const sheet=emptySheet(); sheet.attributes.push({ id:'str', name:'Strength', value:'10', modifier:'0' });
     expect(await repo.saveSheet(cid,'sinna',sheet,0,user('gm').userId)).toBe(1);
-    const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,...east(scene,1),requestId:crypto.randomUUID()});
+    const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:ver(scene),epoch:0,...east(scene,1),requestId:crypto.randomUUID()});
     expect(response.status).toBe(422);
     expect((response.body as {error:string}).error).toMatch(/over carrying capacity/i);
-    expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)).toBeUndefined();
+    // Refused: the character stays on its arrival hex.
+    expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)?.version).toBe(1);
   });
   it('enforces variant encumbrance speed limits for scene-map movement',async()=>{
     const scene=await battle(); await assign(scene.id,0);
@@ -170,10 +173,11 @@ describe('campaign engine API integration',()=>{
     stored.state.tokens.sinna.speedFt=30;
     const sheet=emptySheet(); sheet.attributes.push({ id:'str', name:'Strength', value:'10', modifier:'0' });
     expect(await repo.saveSheet(cid,'sinna',sheet,0,user('gm').userId)).toBe(1);
-    const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:0,epoch:0,...east(scene,5),requestId:crypto.randomUUID()});
+    const response=await request('hannah','scene-motion',{action:'move',sceneId:scene.id,sceneRevision:1,assignmentRevision:1,tokenId:'sinna',tokenVersion:ver(scene),epoch:0,...east(scene,5),requestId:crypto.randomUUID()});
     expect(response.status).toBe(422);
     expect((response.body as {error:string}).error).toMatch(/only 20 feet of movement left this turn/i);
-    expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)).toBeUndefined();
+    // Refused: the character stays on its arrival hex.
+    expect(repo.sceneTokenRows.get(`${cid}:${scene.id}:sinna`)?.version).toBe(1);
   });
   it('falls back to Sanctuary for missing or invalid assignments',async()=>{
     repo.sceneAssignments=repo.sceneAssignments.filter(a=>a.user_id!==user('hannah').userId);

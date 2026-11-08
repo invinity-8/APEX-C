@@ -10,7 +10,9 @@ import { fmt } from '../../game/text';
 import type { MapNode, SceneMap } from '../../campaign/maps';
 import { decodeTiles, hexAt, sceneElevation, tileSetOf } from '../../campaign/hexScene';
 import type { TerrainType } from '../../game/terrain';
-import { paintBattleChunk } from './battlePainter';
+import { paintBattleChunk, paintRegionChunk } from './battlePainter';
+import { gradientMap, paletteKey } from '../../campaign/palette';
+import { TERRAIN } from '../../game/terrain';
 import { HEX_SIZE, boundaryPath, center } from './geometry';
 import { LightCanvas, usePrefersReducedMotion } from './LightCanvas';
 import { MapDefs } from './MapDefs';
@@ -26,10 +28,16 @@ export interface SceneToken {
   color: string;
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
+  /** Enemy figure (red ring, icon, condition; HP for the GM). */
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number };
+  /** Carries a light (torch glow). */
+  torch?: boolean;
+  /** Highlight as a valid target (attack mode). */
+  target?: boolean;
 }
 
 interface Props {
-  map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'unitsPerCell' | 'unit'> & { nodes: MapNode[] };
+  map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'unitsPerCell' | 'unit' | 'palette'> & { nodes: MapNode[] };
   label: string;
   tokens?: SceneToken[];
   /** Show hidden markers and the spawn (GM editor / GM table). */
@@ -71,7 +79,9 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
         if (!t || f === '.' || f === undefined) return;
         const view: HexView = battle
           ? { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe' }
-          : { key: hexKey(h), q: h.q, r: h.r, terrain: t.id as TerrainType, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe', elevation: sceneElevation(h, t.id as TerrainType) };
+          : t.id in TERRAIN
+            ? { key: hexKey(h), q: h.q, r: h.r, terrain: t.id as TerrainType, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe', elevation: sceneElevation(h, t.id as TerrainType) }
+            : { key: hexKey(h), q: h.q, r: h.r, terrain: null, tile: t.id, fog: f === 'v' ? 'visible' : 'explored', zone: 'safe' };
         out.push(view);
       });
     }
@@ -95,6 +105,8 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
   const known = (k: HexKey) => !!byKey[k];
 
   // Arena-style light layer (water glints, motes) without Arena sites or party torches.
+  const pKey = paletteKey(map.palette);
+  const recolor = useMemo(() => (map.palette ? { key: pKey, fn: gradientMap(map.palette) } : null), [pKey]);
   const lightView = useMemo(() => ({ phase: phase === 'day' ? 'day' : 'night', hexes, hexByKey: byKey, sites: [], tokens: [] }) as unknown as ViewModel, [phase, hexes, byKey]);
 
   const stacks = useMemo(() => {
@@ -171,7 +183,7 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
         onHexClick(k, { x: c.x + ox, y: c.y + oy });
       }}
     >
-      <TerrainCanvas hexes={hexes} byKey={byKey} overlayFog={null} fogUnknown={!!fog && !battle} tf={tf} size={vp.size} paintChunk={battle ? paintBattleChunk : undefined} />
+      <TerrainCanvas hexes={hexes} byKey={byKey} overlayFog={null} fogUnknown={!!fog && !battle} tf={tf} size={vp.size} paintChunk={battle ? paintBattleChunk : paintRegionChunk} recolor={recolor} />
       <div className={`atmo atmo-day ${phase === 'day' ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" />
       <div className="atmo atmo-night" style={{ opacity: phase === 'night' ? 1 : phase === 'dusk' ? 0.5 : 0 }} aria-hidden="true" />
       <LightCanvas view={lightView} tf={tf} size={vp.size} reducedMotion={reducedMotion} />
@@ -214,7 +226,28 @@ export function HexSceneMap({ map, label, tokens = [], gm = false, phase = 'day'
             })}
             {selectedHex && byKey[selectedHex] && <HexOutline k={selectedHex} color="#e8d4a6" width={3} />}
             {hover && hover !== selectedHex && <HexOutline k={hover} color="rgba(255,255,255,0.75)" width={1.6} />}
+            {tokens.filter((t) => t.torch).map((t) => { const c = center(hexAt(map, t)); return <circle key={`torch-${t.tokenId}`} cx={c.x} cy={c.y} r={HEX_SIZE * 8 * 1.6} fill="url(#scene-light-glow)" pointerEvents="none" opacity={phase === 'day' ? 0.2 : 0.85} />; })}
             {stacks.map(([k, group]) => {
+              const enemy = group.find((t) => t.enemy);
+              if (enemy?.enemy) {
+                const c = center(parseKey(k)), e = enemy.enemy, down = e.condition === 'down';
+                return (
+                  <g key={k} transform={`translate(${c.x},${c.y})`} onClick={(ev) => (ev.stopPropagation(), onTokenClick?.(enemy.tokenId))} style={{ cursor: onTokenClick ? 'pointer' : undefined }} data-testid="enemy-token" opacity={down ? 0.45 : 1}>
+                    {enemy.target && <circle r={HEX_SIZE * 0.78} fill="none" stroke="#ffd36b" strokeWidth={2.5} strokeDasharray="5 4" />}
+                    <circle r={HEX_SIZE * 0.55} fill={enemy.color} stroke={e.condition === 'bloodied' ? '#ff5a4a' : '#b3261e'} strokeWidth={3} />
+                    <text y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={2.5} paintOrder="stroke">{down ? '✕' : e.icon}</text>
+                    {e.hp !== undefined && e.maxHp ? (
+                      <g transform={`translate(${-HEX_SIZE * 0.55},${HEX_SIZE * 0.62})`}>
+                        <rect width={HEX_SIZE * 1.1} height={4} fill="#2a0e0e" />
+                        <rect width={(HEX_SIZE * 1.1 * e.hp) / e.maxHp} height={4} fill={e.hp * 2 <= e.maxHp ? '#e5484d' : '#6fcf6f'} />
+                      </g>
+                    ) : null}
+                    <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill="#ffd6d0" stroke="#000" strokeWidth={2.5} paintOrder="stroke">
+                      {enemy.name}{e.hp !== undefined ? ` ${e.hp}/${e.maxHp}` : e.condition === 'bloodied' ? ' (bloodied)' : ''}
+                    </text>
+                  </g>
+                );
+              }
               const views = group.map((t) => t.view && ({ ...t.view, pos: parseKey(k) } as TokenView)).filter((v): v is TokenView => !!v);
               if (views.length === group.length) return <TokenStack key={k} tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} />;
               const c = center(parseKey(k));

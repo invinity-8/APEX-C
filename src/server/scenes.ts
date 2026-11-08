@@ -18,6 +18,9 @@ export interface SceneSummary {
   revision: number;
   archived: boolean;
   updated_at: string;
+  /** Hex terrain and colour scheme of the current draft – drawn as the library preview. */
+  hex?: import('../campaign/hexScene.js').HexSceneData | null;
+  palette?: import('../campaign/palette.js').ScenePalette | null;
 }
 export interface SceneDefinition extends SceneSummary { metadata: Record<string, unknown>; published_metadata?: unknown }
 export interface SceneCatalog {

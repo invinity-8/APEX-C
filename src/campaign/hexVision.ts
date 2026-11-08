@@ -12,7 +12,7 @@
  * Light itself is blocked by walls.
  */
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type Axial, type HexKey } from '../game/hex.js';
-import { hexAt, hexLine, tileLookup, tileSetOf } from './hexScene.js';
+import { decodeTiles, hexAt, hexLine, tileLookup, tileSetOf } from './hexScene.js';
 import type { SceneMap } from './maps.js';
 
 export type Lighting = 'bright' | 'dim' | 'dark';
@@ -49,8 +49,11 @@ export function darkvisionFeet(text: string | undefined): number {
   return m ? Math.min(300, Number(m[1])) : 0;
 }
 
+/** A light somewhere on the map (carried torch); light markers and glowing tiles are read from the map. */
+export interface CarriedLight { x: number; y: number; ft: number }
+
 /** Hexes the viewers can see right now. */
-export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'nodes'>, clock: SceneClock, viewers: Viewer[]): Set<HexKey> {
+export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'nodes'>, clock: SceneClock, viewers: Viewer[], carried: CarriedLight[] = []): Set<HexKey> {
   const seen = new Set<HexKey>();
   if (!map.hex) return seen;
   const tiles = tileLookup(map);
@@ -61,9 +64,13 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
   // Battle: hexes lit by light markers (each light is blocked by walls, too).
   const lit = new Set<HexKey>();
   if (battle && clock.lighting !== 'bright') {
-    for (const n of map.nodes) {
-      if (n.kind !== 'light') continue;
-      const at = hexAt(map, n), r = Math.round((n.lightFt ?? DEFAULT_LIGHT_FT) / 5);
+    const sources: Array<{ at: ReturnType<typeof hexAt>; ft: number }> = [
+      ...map.nodes.filter((n) => n.kind === 'light').map((n) => ({ at: hexAt(map, n), ft: n.lightFt ?? DEFAULT_LIGHT_FT })),
+      ...carried.map((c) => ({ at: hexAt(map, c), ft: c.ft })),
+      ...[...decodeTiles(map.hex)].filter(([, t]) => t.light).map(([k, t]) => ({ at: parseKey(k), ft: t.light! })),
+    ];
+    for (const { at, ft } of sources) {
+      const r = Math.round(ft / 5);
       for (const h of hexesInRange(at, r)) if (inMap(hexKey(h)) && lineOfSight(at, h, blocks)) lit.add(hexKey(h));
     }
   }

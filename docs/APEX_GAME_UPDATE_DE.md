@@ -102,15 +102,37 @@ Keine Datenbankmigration, keine Änderung an gespeicherten Szenen oder Karten.
   - Die Datenbank prüft die Zugreihenfolge erneut in derselben Transaktion.
   - Der GM sieht die Reihenfolge, kann „Next turn“, „End initiative“ (danach unbegrenzt freie Bewegung) und „Start initiative“ auslösen.
 
+### Umgesetzt (Folge-PR: Kachelbibliothek, Farbschema, Gegner, Fackeln, Vorschauen)
+
+- **Kachelbibliothek.**
+  - Gebietskarten (3 mi pro Hex): 42 Kacheln, darunter Steppe, Ackerland, Savanne, Moor, Nadelwald, Dschungel, toter Wald, Klippen, Canyon, offenes Meer, Küste, Sumpf, Wüste, Dünen, Mesa, Salzebene, Oase, Tundra, Schneefeld, Gletscher, Vulkan, Lavafeld, Aschelande, Kristallfeld, Verderbtes Land, Dorf, Stadt, Burg, Brücke, Lager, Wachturm, Höhleneingang und Schrein.
+  - Battle Maps (5 ft): 47 Kacheln in 8 Gruppen, darunter Sand, Schlamm, Schnee, Eis, Kopfstein, Marmor, Teppich, hohes Gras, Busch, Hecke, Kiefer, Baumstumpf, Leuchtpilze, Sumpfwasser, Holzbrücke, Höhlenwand, Grube, Stalagmit, Holzwand, Zaun, Tür, Säule, Treppe, Statue, Tisch, Kisten, Fässer, Bett, Altar, Lagerfeuer, Kohlebecken, Lava, Spinnennetz, Falle und Magiekreis.
+  - Jede Kachel legt Bewegungskosten, Sichtblockade und gegebenenfalls Licht fest (Lagerfeuer und Kohlebecken 20 ft, Lava, Pilze, Kristalle). Gezeichnet wird mit einem allgemeinen Kachel-Painter in beiden Maßstäben.
+- **Farbschema pro Karte.** Im Editor rechts: Voreinstellungen (Mesa, Wüste, Tundra, Sumpf, Vulkan, Herbst, Underdark, Feywild), eigene Farben (2–6) und Stärke. Die Kacheln werden per Gradient-Map umgefärbt, und zwar vor der Nebelabdunklung, sodass erinnerte Felder grau bleiben.
+- **4×4-Einstieg.** Ankommende Figuren werden auf die 16 nächsten freien, begehbaren Felder um den Spawn gestellt. Zwei Figuren stehen nie auf demselben Hex; ein voller Bereich wird gemeldet.
+- **Verbündete und Gegner sichtbar.** Spieler sehen andere Charaktere und Gegner nur in Sicht; die HP der Gegner sieht nur der GM, Spieler sehen „bloodied“.
+- **Fackeln.** Spieler schalten ihr Licht selbst an und aus, ohne Gegenstandsprüfung. Das Licht leuchtet 40 ft aus, ist für alle sichtbar und wird durch Wände blockiert. Dunkelsicht gilt zusätzlich.
+- **Generische Gegner (SRD 5.1).** 12 Typen: Goblin, Bandit, Bandit archer, Wolf, Skeleton, Zombie, Orc, Cultist, Giant spider, Brown bear, Thug, Ogre.
+  - Der GM platziert, bewegt und entfernt Gegner, ändert ihre HP und lässt sie angreifen; der Schaden geht auf den Charakterbogen.
+  - Neue Gegner würfeln in eine laufende Initiative; besiegte fallen heraus.
+- **Angriffe.**
+  - Spieler wählen einen Angriff aus dem Charakterbogen und klicken einen Gegner an: eigener Zug, ein Angriff pro Zug, Reichweite bzw. Fernkampfreichweite und Sichtlinie werden geprüft.
+  - Gewürfelt wird d20 + Bonus gegen die AC; eine natürliche 20 verdoppelt die Schadenswürfel, eine natürliche 1 verfehlt.
+  - Alles erscheint im Kampfprotokoll.
+  - Vorteil/Nachteil, Rettungswürfe, Zauber und AoE bleiben vorerst manuell.
+- **Alte Encounter-Steuerung zusammengeführt.** Auf Battle Maps wird Initiative nur noch über Serverwürfe gestartet; die alte Steuerung dient zum Anpassen (Werte, NPC ohne Figur, Sichtbarkeit).
+- **Vorschaubilder.** Bibliothek und Game-Liste zeigen eine Minikarte des aktuellen Entwurfs mit Farbschema, ohne Upload.
+- **Welt- und Himmelskarten als Bilder.** PNG/JPG hochladen; die Karte übernimmt das Seitenverhältnis und das ganze Bild wird für Spieler freigegeben. Orte sind standardmäßig sichtbar und lassen sich anklicken (Name und Beschreibung). Ein versteckter Spawn wird beim Veröffentlichen ergänzt; Hex-Werkzeuge entfallen.
+
 ### Offene Folgeaufgaben (Kampf, Sicht, Zeit)
 
 Grundlage ab jetzt: Alle Battle- und Region-Szenen laufen auf Hex-Kacheln mit Arena-Wegfindung. Sicht, 4×4-Spawn, Reichweite und AoE können deshalb auf Hex-Distanzen aufsetzen. Vorhandene Bausteine: Encounter-Tracker pro Szene (`sceneEncounter*`, Initiative manuell, sortiert, versionsgeprüft), Bewegung mit Runden-/Stundenbudget und Wand-/Terrainprüfung (`sceneMotion`), Hex-Sicht der Arena (`visibility.ts`), serverseitige Schadens-/Heilungs- und Mage-Armor-Regeln am Charakterbogen. Es fehlen:
 
 1. ~~Szenenzeit und Licht~~ – umgesetzt (siehe oben).
-2. ~~Sichtweite, Dunkelsicht, Lichtquellen~~ – umgesetzt für Gelände. Offen: Gegnerfiguren und Verbündete nur bei Sicht übertragen (Gegner-Tokens gibt es noch nicht), getragene Fackeln der Spieler.
-3. **4 × 4-Einstiegsbereich.** Spawn als Fläche, deterministische Verteilung auf freie, begehbare Zellen; Überfüllung wird gemeldet. *Abnahme:* Vier Spieler landen auf vier verschiedenen freien Feldern, nie auf Wänden.
-4. **Encounter-Ablauf.** Initiative, Portraitleiste, Zugrecht für Bewegung und Kampfende sind umgesetzt. Offen: Gegner als Figuren auf der Karte mit GM-Zügen; Aktionen/Angriffe im Zug. *Abnahme:* Ein Spieler kann außerhalb seines Zuges nicht angreifen.
-5. **Angriffe und Schaden.** Ziel-Kontextmenü (auch per Tastatur/Touch), Reichweiten- und Sichtlinienprüfung, Trefferwurf mit Advantage/Disadvantage, kritische Treffer, Rettungswürfe, atomare HP-Änderung mit Request-ID (keine Doppelschäden), nachvollziehbares Kampfprotokoll. *Abnahme:* Ein wiederholter Request erzeugt keinen zweiten Schaden; das Protokoll zeigt Würfe und Modifikatoren.
+2. ~~Sichtweite, Dunkelsicht, Lichtquellen~~ – umgesetzt inklusive Gegner und Verbündete nur in Sicht sowie getragener Fackeln.
+3. ~~4 × 4-Einstiegsbereich~~ – umgesetzt (16 freie Felder um den Spawn, keine Stapelung, Überfüllung wird gemeldet).
+4. ~~Encounter-Ablauf~~ – umgesetzt (Initiative, Zugrecht, Gegnerfiguren mit GM-Zügen, ein Angriff pro Zug). Offen: Bewegungsbudget für Gegner (der GM setzt sie frei), Bonusaktionen/Reaktionen.
+5. **Angriffe und Schaden – teilweise.** Umgesetzt: Waffenangriffe aus dem Bogen gegen Gegner, Gegnerangriffe gegen Charaktere, Reichweite/Sichtlinie, Krit/natürliche 1, Kampfprotokoll. Offen: Request-ID gegen doppelte Würfe bei Netzwerk-Wiederholung (Spieler sind durch „ein Angriff pro Zug“ geschützt, GM-Gegnerangriffe noch nicht), Advantage/Disadvantage, Rettungswürfe, Zauberangriffe, Widerstände, Kontextmenü per Rechtsklick. Ursprünglich geplant: Ziel-Kontextmenü (auch per Tastatur/Touch), Reichweiten- und Sichtlinienprüfung, Trefferwurf mit Advantage/Disadvantage, kritische Treffer, Rettungswürfe, atomare HP-Änderung mit Request-ID (keine Doppelschäden), nachvollziehbares Kampfprotokoll. *Abnahme:* Ein wiederholter Request erzeugt keinen zweiten Schaden; das Protokoll zeigt Würfe und Modifikatoren.
 6. **AoE-Vorschau.** Kegel/Würfel/Kugel/Linie mit betroffenen Zielen; die Vorschau ersetzt keine Serverprüfung. Nicht unterstützte Zauber werden als „manuell abwickeln“ markiert. *Abnahme:* Thunderwave (15-ft-Würfel) markiert die richtigen Felder.
 7. **Manuelle Hausregeln.** Jede nicht automatisierte Wirkung lässt sich vom GM manuell abwickeln (HP, Zustände, Ressourcen), protokolliert.
 

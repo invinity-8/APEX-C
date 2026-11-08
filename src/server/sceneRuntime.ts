@@ -1,9 +1,10 @@
 import { parseMap, type SceneMap } from '../campaign/maps.js';
 import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
-import { clockFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
+import { carriedLights, clockFor, figuresFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, withArrivalSlots, type SceneFigure, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
+import { enemiesOf, torchesOf, type CombatLogEntry } from '../game/sceneCombat.js';
 import type { SceneClockState } from '../game/types.js';
-import { initiativeForArrivals, rememberCurrentVision } from './sceneTurns.js';
+import { initiativeForArrivals, placeArrivals, rememberCurrentVision } from './sceneTurns.js';
 
 export interface SceneSnapshot {
   viewer?: { tokenId: string; name: string; color: string };
@@ -18,6 +19,12 @@ export interface SceneSnapshot {
   fog?: string;
   /** The viewer's movement budget (turn / free / day). */
   movement?: ViewerMovement;
+  /** Other characters and enemies the viewer can see (players: only visible hexes). */
+  figures?: SceneFigure[];
+  /** Recent attacks on this scene. */
+  combatLog?: CombatLogEntry[];
+  /** The viewer carries a light. */
+  torch?: boolean;
 }
 export interface SceneAssignment { user_id: string; scene_id: string | null; revision: number; spawn_x: number | null; spawn_y: number | null }
 export interface RuntimeScene { id: string; name: string; category: SceneCategory; revision: number; is_legacy_arena: boolean; is_draft: boolean; archived: boolean; published_metadata: unknown }
@@ -48,16 +55,22 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
   const full = parseMap(s.published_metadata)!;
   const local = ctx && motionStore && (s.category === 'battle' || s.category === 'region') ? await motionStore.localSnapshot(user.campaignId, s.id, user.id, user.tokenIds) : null;
   const motion = local ? motionShape(local, ctx!.state, s.id) : await motionStore?.snapshot(user.campaignId, s.id, user.id, user.tokenIds);
-  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement'> = {};
+  let extra: Pick<SceneSnapshot, 'clock' | 'fog' | 'movement' | 'figures' | 'combatLog' | 'torch'> = {};
   if (local && ctx?.state) {
     const clock = clockFor(ctx.state, s.id);
-    const positions = user.tokenIds.map(id => local.tokens.find(t => t.tokenId === id) ?? (a.spawn_x !== null && a.spawn_y !== null ? { tokenId: id, x: a.spawn_x, y: a.spawn_y } : null)).filter((p): p is { tokenId: string; x: number; y: number } => !!p);
-    extra = { clock };
+    const pcs = ctx.pcs ? await ctx.pcs(s.id, full) : [];
+    const positions = user.tokenIds.map(id => pcs.find(p => p.tokenId === id) ?? local.tokens.find(t => t.tokenId === id) ?? (a.spawn_x !== null && a.spawn_y !== null ? { tokenId: id, x: a.spawn_x, y: a.spawn_y } : null)).filter((p): p is { tokenId: string; x: number; y: number } => !!p);
+    if (motion) for (const p of positions) if (!motion.tokens.some(t => t.tokenId === p.tokenId)) motion.tokens.push({ tokenId: p.tokenId, x: p.x, y: p.y, version: 0, tacticalSpent: 0, regionSpent: 0 });
+    extra = { clock, combatLog: (ctx.state.sceneCombatLog?.[s.id] ?? []).slice(-8), torch: user.tokenIds.some(id => torchesOf(ctx.state!, s.id).includes(id)) };
+    let visible: Set<string> | null = null;
     if (full.hex) {
       // Server-side fog: unknown hexes are removed from the map before it leaves the server.
-      const fogged = fogMap(full, await visionFor(ctx, full, clock, positions), local.seen);
+      visible = await visionFor(ctx, full, clock, positions, carriedLights(ctx.state, s.id, pcs));
+      const fogged = fogMap(full, visible, local.seen);
       if (fogged) { map.hex = fogged.hex; extra.fog = fogged.fog; }
     }
+    // Allies and enemies only where the player can see them.
+    extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false);
     const tokenId = user.tokenIds.find(id => ctx.state!.tokens[id]);
     if (tokenId) extra.movement = movementFor(ctx.state, s.id, s.category as 'battle' | 'region', tokenId, user.role === 'gm', await sheetOf(ctx, tokenId), local);
   }
@@ -75,7 +88,22 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
 /** Game state + sheet loader for scene-local rules (vision, darkvision, speed, initiative). */
 export async function sceneContext(repo: Repo, campaignId: string, state?: import('../game/types.js').GameState | null): Promise<SceneViewContext> {
   const s = state === undefined ? (await repo.loadState(campaignId))?.state ?? null : state;
-  return { state: s, loadSheet: async (tokenId) => { const row = await repo.loadSheet(campaignId, tokenId); return row ? parseStoredSheet(row.data) : null; } };
+  return {
+    state: s,
+    loadSheet: async (tokenId) => { const row = await repo.loadSheet(campaignId, tokenId); return row ? parseStoredSheet(row.data) : null; },
+    pcs: async (sceneId, map) => {
+      if (!repo.sceneRuntime) return [];
+      const [assignments, profiles] = await Promise.all([repo.sceneRuntime.assignments(campaignId), repo.profiles(campaignId)]);
+      const rows = assignments.filter(a => a.scene_id === sceneId).flatMap(a => {
+        const p = profiles.find(x => x.userId === a.user_id && x.active && x.role === 'player');
+        return p ? p.tokenIds.filter(id => !!s?.tokens[id]).map(id => ({ tokenId: id, userId: p.userId })) : [];
+      });
+      const local = rows.length && repo.sceneMotion ? await repo.sceneMotion.localSnapshot(campaignId, sceneId, rows[0].userId, rows.map(r => r.tokenId)) : { tokens: [] as Array<{ tokenId: string; x: number; y: number }> };
+      const spawn = map.nodes.find(n => n.kind === 'spawn') ?? null;
+      const stored = (id: string) => { const t = local.tokens.find(x => x.tokenId === id); return t ? { x: t.x, y: t.y } : undefined; };
+      return withArrivalSlots(map, spawn, rows.map(r => ({ ...r, stored: stored(r.tokenId) })), s ? enemiesOf(s, sceneId).filter(e => !e.defeated) : []);
+    },
+  };
 }
 
 export async function runtimeRequest(user: AuthUser, method: string, query: Record<string, string | undefined>, body: unknown, repo: Repo): Promise<SceneResult> {
@@ -109,6 +137,11 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
         scene: { id: focus.id, name: focus.name, category: focus.category, revision: focus.revision, map: focusMap },
         ...(motion ? { motion } : {}),
         clock: clockFor(stored?.state ?? null, focus.id),
+        ...(stored && (focus.category === 'battle' || focus.category === 'region') ? await (async () => {
+          const ctx = await sceneContext(repo, user.campaignId, stored.state);
+          const pcs = await ctx.pcs!(focus.id, map);
+          return { figures: figuresFor(stored.state, focus.id, map, pcs, [], null, true), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12) };
+        })() : {}),
       } };
     }
     if (query.player) {
@@ -141,7 +174,9 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
   let initiative: string | undefined;
   if (result.ok && typeof v.sceneId === 'string') {
     const destination = await repo.sceneRuntime.scene(user.campaignId, v.sceneId);
+    const crowded = destination && (destination.category === 'battle' || destination.category === 'region') ? await placeArrivals(user, repo, destination.id).catch(() => undefined) : undefined;
     if (destination?.category === 'battle' && !destination.is_legacy_arena) initiative = await initiativeForArrivals(user, repo, destination.id, targets.map(t => t.userId)).catch(() => 'Initiative could not be rolled – start it in Scene tools.');
+    if (crowded) initiative = [initiative, crowded].filter(Boolean).join(' ');
     if (destination && (destination.category === 'battle' || destination.category === 'region')) await rememberCurrentVision(user, repo, destination.id).catch(() => undefined);
   }
   return { status: result.ok ? 200 : 409, body: { ...result, ...(initiative ? { initiative } : {}) } };

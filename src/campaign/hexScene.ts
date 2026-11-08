@@ -31,7 +31,17 @@ const SQRT3 = Math.sqrt(3);
 
 export type TileSet = 'region' | 'battle';
 export type BattleTile = 'grass' | 'dirt' | 'stone' | 'wood' | 'undergrowth' | 'rubble' | 'shallow' | 'deep' | 'tree' | 'boulder' | 'wall';
-export type TileId = TerrainType | BattleTile;
+/** Tile ids are open strings: Arena terrain types, the original battle tiles and the library below. */
+export type TileId = string;
+
+/** How the generic painter draws a tile (src/components/map/tilePainter.ts). */
+export type TileStyle =
+  | 'flat' | 'grass' | 'tallgrass' | 'dots' | 'dunes' | 'waves' | 'cracks' | 'layers' | 'fields' | 'heath' | 'snow' | 'ice' | 'lava' | 'mud'
+  | 'trees' | 'conifers' | 'palms' | 'deadwood' | 'savanna' | 'reeds' | 'bush' | 'hedge' | 'stump' | 'mushrooms'
+  | 'peaks' | 'cliffs' | 'volcano' | 'crystals' | 'blight' | 'oasis'
+  | 'houses' | 'city' | 'castle' | 'tents' | 'tower' | 'cave' | 'shrine' | 'bridge'
+  | 'cobbles' | 'marble' | 'carpet' | 'planks' | 'palisade' | 'fence' | 'door' | 'pillar' | 'stairs' | 'statue' | 'pit' | 'stalagmite' | 'rockwall'
+  | 'table' | 'crates' | 'barrels' | 'bed' | 'altar' | 'fire' | 'brazier' | 'web' | 'trap' | 'circle' | 'pine';
 
 export interface TileDef {
   id: TileId;
@@ -43,23 +53,113 @@ export interface TileDef {
   blocksSight: boolean;
   fill: string;
   description: string;
+  /** Library group in the editor palette. */
+  group: string;
+  /** Generic painter style (absent: Arena painter or the original battle painter). */
+  style?: TileStyle;
+  /** Accent colour for details. */
+  accent?: string;
+  /** Emits light (feet) – campfires, braziers, lava, glowing fungi. */
+  light?: number;
 }
 
 const REGION_CODES: Record<TerrainType, string> = { plains: 'p', road: 'd', forest: 'f', hills: 'h', mountain: 'm', river: 'r', water: 'w', ruins: 'u', magic: 'x' };
 export const TERRAIN_CODE = REGION_CODES;
-const REGION_TILES: TileDef[] = TERRAIN_ORDER.map((t) => ({ id: t, code: REGION_CODES[t], label: TERRAIN[t].label, cost: TERRAIN[t].cost, blocksSight: t === 'mountain', fill: TERRAIN[t].fill, description: TERRAIN[t].description }));
+const ARENA_GROUP: Record<TerrainType, string> = { plains: 'Open land', road: 'Open land', forest: 'Forests', hills: 'Hills & mountains', mountain: 'Hills & mountains', river: 'Water & coast', water: 'Water & coast', ruins: 'Settlements', magic: 'Volcanic & arcane' };
+type Def = [id: string, code: string, label: string, cost: number | null, sight: boolean, fill: string, group: string, style: TileStyle, accent?: string, light?: number, description?: string];
+const make = (d: Def): TileDef => ({ id: d[0], code: d[1], label: d[2], cost: d[3], blocksSight: d[4], fill: d[5], group: d[6], style: d[7], accent: d[8], light: d[9], description: d[10] ?? '' });
+
+/** Region scale (3 mi per hex): the Arena terrain plus a wider overview library. Costs are Arena MP. */
+const REGION_TILES: TileDef[] = [
+  ...TERRAIN_ORDER.map((t) => ({ id: t, code: REGION_CODES[t], label: TERRAIN[t].label, cost: TERRAIN[t].cost, blocksSight: t === 'mountain', fill: TERRAIN[t].fill, description: TERRAIN[t].description, group: ARENA_GROUP[t] })),
+  ...([
+    ['steppe', 'e', 'Steppe', 1, false, '#a9a560', 'Open land', 'grass', '#c9c47a'],
+    ['farmland', 'a', 'Farmland', 1, false, '#b8a85a', 'Open land', 'fields', '#8c7a3a'],
+    ['savanna', 'v', 'Savanna', 1, false, '#bfa962', 'Open land', 'savanna', '#6f7a3a'],
+    ['moor', 'o', 'Moor', 2, false, '#6f6a4a', 'Open land', 'heath', '#8a5a7a'],
+    ['taiga', 'T', 'Pine forest', 2, false, '#2c4f3a', 'Forests', 'conifers', '#1c3a28'],
+    ['jungle', 'J', 'Jungle', 3, false, '#2a6b35', 'Forests', 'palms', '#1d4f26'],
+    ['deadwood', 'D', 'Dead forest', 2, false, '#5b5446', 'Forests', 'deadwood', '#3a332a'],
+    ['cliffs', 'C', 'Cliffs', null, true, '#7a6f63', 'Hills & mountains', 'cliffs', '#4a4038'],
+    ['canyon', 'K', 'Canyon', 3, false, '#a85d3a', 'Hills & mountains', 'layers', '#6e3520'],
+    ['sea', 'Z', 'Open sea', null, false, '#173a5c', 'Water & coast', 'waves', '#5a8ab0'],
+    ['coast', 'B', 'Beach & coast', 1, false, '#d6c48f', 'Water & coast', 'dots', '#b09a60'],
+    ['swamp', 'M', 'Swamp', 3, false, '#4d5a3a', 'Water & coast', 'reeds', '#3a5a5a'],
+    ['desert', 'Y', 'Desert', 2, false, '#d8b878', 'Desert & badlands', 'dots', '#b8955a'],
+    ['dunes', 'N', 'Dunes', 3, false, '#e0be7a', 'Desert & badlands', 'dunes', '#b8904e'],
+    ['badlands', 'L', 'Badlands / mesa', 2, false, '#b4643c', 'Desert & badlands', 'layers', '#7a3a20'],
+    ['saltflat', 'F', 'Salt flat', 1, false, '#e6e0d2', 'Desert & badlands', 'cracks', '#b8b0a0'],
+    ['oasis', 'O', 'Oasis', 1, false, '#4f9a6a', 'Desert & badlands', 'oasis', '#2f6f8f'],
+    ['tundra', 'U', 'Tundra', 2, false, '#9fa79a', 'Cold lands', 'heath', '#c8d0c8'],
+    ['snowfield', 'W', 'Snowfield', 2, false, '#e6edf2', 'Cold lands', 'snow', '#b8c8d8'],
+    ['glacier', 'G', 'Glacier', 3, false, '#bcd6e6', 'Cold lands', 'ice', '#8ab0c8'],
+    ['volcano', 'V', 'Volcano', null, true, '#4a3a34', 'Volcanic & arcane', 'volcano', '#e0602a', 40],
+    ['lavafield', 'X', 'Lava field', null, false, '#5a2a1a', 'Volcanic & arcane', 'lava', '#ff8a2a', 20],
+    ['ashlands', 'A', 'Ashlands', 2, false, '#5e5a56', 'Volcanic & arcane', 'dots', '#3a3836'],
+    ['crystals', 'Q', 'Crystal field', 2, false, '#7fb6c9', 'Volcanic & arcane', 'crystals', '#d0f0ff', 10],
+    ['blight', 'H', 'Blighted land', 2, false, '#5a4a5e', 'Volcanic & arcane', 'blight', '#9a6aa8'],
+    ['village', 'i', 'Village', 1, false, '#9a8a5a', 'Settlements', 'houses', '#a0402a'],
+    ['town', 'c', 'Town / city', 1, false, '#8c7c66', 'Settlements', 'city', '#8a3a2a'],
+    ['castle', 'k', 'Castle', 1, true, '#8a8580', 'Settlements', 'castle', '#5a5550'],
+    ['bridge', 'b', 'Bridge', 0.5, false, '#2f6f8f', 'Settlements', 'bridge', '#9a7a4a'],
+    ['camp', 'q', 'Camp', 1, false, '#8a9a55', 'Settlements', 'tents', '#c8b890'],
+    ['tower', 't', 'Watchtower', 1, true, '#7b8a45', 'Settlements', 'tower', '#6a6058'],
+    ['cave', 'n', 'Cave entrance', 2, false, '#77706a', 'Settlements', 'cave', '#1a1816'],
+    ['shrine', 's', 'Shrine', 1, false, '#7b8a45', 'Settlements', 'shrine', '#e8d4a6'],
+  ] as Def[]).map(make),
+];
+
+/** Battle scale (5 ft per hex). Cost ×2 = difficult terrain; null = blocks movement. */
 const BATTLE_TILES: TileDef[] = [
-  { id: 'grass', code: 'G', label: 'Grass', cost: 1, blocksSight: false, fill: '#6f8a45', description: 'Open ground.' },
-  { id: 'dirt', code: 'D', label: 'Dirt path', cost: 1, blocksSight: false, fill: '#8a6f4a', description: 'Trodden earth.' },
-  { id: 'stone', code: 'S', label: 'Stone floor', cost: 1, blocksSight: false, fill: '#8d8a83', description: 'Flagstones.' },
-  { id: 'wood', code: 'W', label: 'Wooden floor', cost: 1, blocksSight: false, fill: '#8a5f36', description: 'Planks.' },
-  { id: 'undergrowth', code: 'U', label: 'Undergrowth', cost: 2, blocksSight: false, fill: '#4f6e35', description: 'Difficult terrain.' },
-  { id: 'rubble', code: 'R', label: 'Rubble', cost: 2, blocksSight: false, fill: '#7c7166', description: 'Difficult terrain.' },
-  { id: 'shallow', code: 'A', label: 'Shallow water', cost: 2, blocksSight: false, fill: '#4f8fae', description: 'Difficult terrain.' },
-  { id: 'deep', code: 'X', label: 'Deep water', cost: null, blocksSight: false, fill: '#24577a', description: 'Too deep to wade.' },
-  { id: 'tree', code: 'T', label: 'Tree', cost: null, blocksSight: true, fill: '#2d5a2e', description: 'A trunk: blocks movement and sight.' },
-  { id: 'boulder', code: 'B', label: 'Boulder', cost: null, blocksSight: false, fill: '#77736c', description: 'Blocks movement; you can see past it.' },
-  { id: 'wall', code: 'H', label: 'Wall', cost: null, blocksSight: true, fill: '#4a4540', description: 'Blocks movement and sight.' },
+  { id: 'grass', code: 'G', label: 'Grass', cost: 1, blocksSight: false, fill: '#6f8a45', description: 'Open ground.', group: 'Ground' },
+  { id: 'dirt', code: 'D', label: 'Dirt path', cost: 1, blocksSight: false, fill: '#8a6f4a', description: 'Trodden earth.', group: 'Ground' },
+  { id: 'stone', code: 'S', label: 'Stone floor', cost: 1, blocksSight: false, fill: '#8d8a83', description: 'Flagstones.', group: 'Floors' },
+  { id: 'wood', code: 'W', label: 'Wooden floor', cost: 1, blocksSight: false, fill: '#8a5f36', description: 'Planks.', group: 'Floors' },
+  { id: 'undergrowth', code: 'U', label: 'Undergrowth', cost: 2, blocksSight: false, fill: '#4f6e35', description: 'Difficult terrain.', group: 'Nature' },
+  { id: 'rubble', code: 'R', label: 'Rubble', cost: 2, blocksSight: false, fill: '#7c7166', description: 'Difficult terrain.', group: 'Rock & cave' },
+  { id: 'shallow', code: 'A', label: 'Shallow water', cost: 2, blocksSight: false, fill: '#4f8fae', description: 'Difficult terrain.', group: 'Water' },
+  { id: 'deep', code: 'X', label: 'Deep water', cost: null, blocksSight: false, fill: '#24577a', description: 'Too deep to wade.', group: 'Water' },
+  { id: 'tree', code: 'T', label: 'Tree', cost: null, blocksSight: true, fill: '#2d5a2e', description: 'A trunk: blocks movement and sight.', group: 'Nature' },
+  { id: 'boulder', code: 'B', label: 'Boulder', cost: null, blocksSight: false, fill: '#77736c', description: 'Blocks movement; you can see past it.', group: 'Rock & cave' },
+  { id: 'wall', code: 'H', label: 'Stone wall', cost: null, blocksSight: true, fill: '#4a4540', description: 'Blocks movement and sight.', group: 'Structures' },
+  ...([
+    ['sand', 'Y', 'Sand', 1, false, '#d6bd85', 'Ground', 'dots', '#b09a60'],
+    ['mud', 'M', 'Mud', 2, false, '#5e4a33', 'Ground', 'mud', '#4a3a26'],
+    ['snow', 'N', 'Deep snow', 2, false, '#e8eef2', 'Ground', 'snow', '#b8c8d8'],
+    ['ice', 'I', 'Ice', 2, false, '#bcd6e6', 'Ground', 'ice', '#8ab0c8'],
+    ['cavefloor', 'C', 'Cave floor', 1, false, '#5a544c', 'Rock & cave', 'dots', '#3a3630'],
+    ['cobbles', 'K', 'Cobblestones', 1, false, '#8a8580', 'Floors', 'cobbles', '#5a5550'],
+    ['marble', 'Q', 'Marble tiles', 1, false, '#d8d2c6', 'Floors', 'marble', '#a8a090'],
+    ['carpet', 'P', 'Carpet', 1, false, '#7a2a2a', 'Floors', 'carpet', '#c8a050'],
+    ['tallgrass', 'L', 'Tall grass', 1, false, '#8a9a4f', 'Nature', 'tallgrass', '#b0b860'],
+    ['bush', 'J', 'Thick bush', 2, true, '#3f6a32', 'Nature', 'bush', '#2a4f22'],
+    ['hedge', 'E', 'Hedge', null, true, '#355a2c', 'Nature', 'hedge', '#244020'],
+    ['pine', 'F', 'Pine tree', null, true, '#2a4f38', 'Nature', 'pine', '#1a3a26'],
+    ['stump', 'O', 'Tree stump', 2, false, '#6f8a45', 'Nature', 'stump', '#7a5a36'],
+    ['mushrooms', 'Z', 'Glowing fungi', 1, false, '#4a4a5a', 'Nature', 'mushrooms', '#7ae0d0', 10],
+    ['swampwater', 'V', 'Swamp water', 2, false, '#4a5a3a', 'Water', 'reeds', '#3a5a5a'],
+    ['bridge', 'b', 'Wooden bridge', 1, false, '#24577a', 'Water', 'bridge', '#9a6a3c'],
+    ['cavewall', 'c', 'Cave wall', null, true, '#3a3632', 'Rock & cave', 'rockwall', '#5a544c'],
+    ['pit', 'p', 'Pit / chasm', null, false, '#141210', 'Rock & cave', 'pit', '#3a3430'],
+    ['stalagmite', 'g', 'Stalagmite', null, false, '#5a544c', 'Rock & cave', 'stalagmite', '#8a8478'],
+    ['palisade', 'w', 'Wooden wall', null, true, '#6a4a2a', 'Structures', 'palisade', '#4a321c'],
+    ['fence', 'f', 'Fence', null, false, '#6f8a45', 'Structures', 'fence', '#7a5a36'],
+    ['door', 'd', 'Door', 1, true, '#7a5230', 'Structures', 'door', '#3a2814', undefined, 'Closed door: you can pass, but not see through.'],
+    ['pillar', 'i', 'Pillar', null, true, '#8d8a83', 'Structures', 'pillar', '#c8c2b6'],
+    ['stairs', 's', 'Stairs', 2, false, '#8d8a83', 'Structures', 'stairs', '#5a5650'],
+    ['statue', 't', 'Statue', null, false, '#8d8a83', 'Structures', 'statue', '#b8b2a6'],
+    ['table', 'e', 'Table', 2, false, '#8a5f36', 'Furniture & props', 'table', '#6a4422'],
+    ['crates', 'k', 'Crates', null, false, '#8a5f36', 'Furniture & props', 'crates', '#a87a46'],
+    ['barrels', 'r', 'Barrels', null, false, '#8a5f36', 'Furniture & props', 'barrels', '#6a4a2a'],
+    ['bed', 'a', 'Bed', 2, false, '#8a5f36', 'Furniture & props', 'bed', '#c8c0a8'],
+    ['altar', 'l', 'Altar', null, false, '#8d8a83', 'Furniture & props', 'altar', '#e8d4a6'],
+    ['campfire', 'h', 'Campfire', null, false, '#6f8a45', 'Furniture & props', 'fire', '#ff9a3a', 20],
+    ['brazier', 'z', 'Brazier', null, false, '#8d8a83', 'Furniture & props', 'brazier', '#ff9a3a', 20],
+    ['lava', 'v', 'Lava', null, false, '#5a2a1a', 'Hazards', 'lava', '#ff8a2a', 15],
+    ['web', 'q', 'Spider web', 2, false, '#5a544c', 'Hazards', 'web', '#e8e8e8'],
+    ['trap', 'x', 'Trap / spikes', 2, false, '#8d8a83', 'Hazards', 'trap', '#6a6660'],
+    ['circle', 'm', 'Magic circle', 1, false, '#4a3a5e', 'Hazards', 'circle', '#c8a0ff', 10],
+  ] as Def[]).map(make),
 ];
 export const TILESETS: Record<TileSet, TileDef[]> = { region: REGION_TILES, battle: BATTLE_TILES };
 const BY_CODE: Record<TileSet, Map<string, TileDef>> = { region: new Map(REGION_TILES.map((t) => [t.code, t])), battle: new Map(BATTLE_TILES.map((t) => [t.code, t])) };
@@ -481,4 +581,25 @@ export function replaceTerrain(map: SceneMap, data: HexSceneData): SceneMap {
   const next = hexSceneMap(map, data, []);
   next.nodes = map.nodes.map((n) => ({ ...n, ...hexCentre(next, clampHex(hexAt(map, n), data.radius)) }));
   return withPassableMarkers(next);
+}
+
+/**
+ * Arrival area: the 16 passable hexes closest to the spawn (≈ a 4 × 4 area), in a stable order
+ * (breadth-first from the spawn, then by key). Arriving characters take the first free slots.
+ */
+export const SPAWN_SLOTS = 16;
+export function spawnSlots(map: HexMapLike, spawn: { x: number; y: number }, count = SPAWN_SLOTS): Axial[] {
+  const lookup = tileLookup(map);
+  const start = hexAt(map, spawn);
+  const ok = (k: HexKey) => { const t = lookup(k); return !!t && t.cost !== null; };
+  const out: Axial[] = [];
+  const seen = new Set<HexKey>([hexKey(start)]);
+  let frontier = [start];
+  while (frontier.length && out.length < count) {
+    for (const h of frontier) if (ok(hexKey(h)) && out.length < count) out.push(h);
+    const next: Axial[] = [];
+    for (const h of frontier) for (const n of neighbors(h)) { const k = hexKey(n); if (!seen.has(k) && lookup(k)) { seen.add(k); next.push(n); } }
+    frontier = next.sort((a, b) => a.r - b.r || a.q - b.q);
+  }
+  return out;
 }

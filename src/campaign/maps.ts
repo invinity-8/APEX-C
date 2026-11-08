@@ -1,4 +1,5 @@
 import { validHexData, type HexSceneData } from './hexScene.js';
+import { validPalette, type ScenePalette } from './palette.js';
 export type ProceduralFeature = 'tree' | 'rock' | 'obstacle' | 'water';
 export interface MapNode { id: string; x: number; y: number; label: string; description: string; kind: 'location' | 'spawn' | 'label' | 'wall' | 'area' | 'light'; visible: boolean; width: number; height: number; targetScene: string | null; terrainCost?: number; discoverable?: boolean; proceduralFeature?: ProceduralFeature; generatedBy?: 'forest-v1'; /** Light markers (battle maps): radius in feet. */ lightFt?: number }
 export interface MapRoute { id: string; from: string; to: string; hours: number; distance: number; visible: boolean }
@@ -9,6 +10,8 @@ export interface SceneMap {
   backgroundAsset: string | null; playerBackgroundAsset: string | null; revealBackground: boolean;
   /** Battle and region maps: Arena hex terrain (src/campaign/hexScene.ts). Absent on older maps. */
   hex?: HexSceneData;
+  /** Optional colour scheme that recolours the tiles (palette.ts). */
+  palette?: ScenePalette;
 }
 export function emptyMap(category: string): SceneMap {
   return { width: 1200, height: 800, grid: category === 'battle' ? 'square' : category === 'region' ? 'hex' : 'none', cell: 50,
@@ -25,6 +28,7 @@ export function parseMap(value: unknown): SceneMap | null {
   for (const id of [v.backgroundAsset, v.playerBackgroundAsset]) if (id != null && (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id))) return null;
   if (v.revealBackground !== undefined && typeof v.revealBackground !== 'boolean') return null;
   if (v.hex !== undefined && !validHexData(v.hex)) return null;
+  if (v.palette !== undefined && !validPalette(v.palette)) return null;
   const nodes: MapNode[] = [];
   for (const n of v.nodes) {
     if (!n || !text(n.id, 64) || !/^[\w-]{1,64}$/.test(n.id) || ids.has(n.id) || !num(n.x, 0, v.width) || !num(n.y, 0, v.height) || !text(n.label, 120) || !text(n.description, 2000) || !['location', 'spawn', 'label', 'wall', 'area', 'light'].includes(n.kind) || typeof n.visible !== 'boolean' || !num(n.width, 1, v.width) || !num(n.height, 1, v.height) || (n.targetScene !== null && (typeof n.targetScene !== 'string' || !/^[0-9a-f-]{36}$/i.test(n.targetScene)))) return null;
@@ -41,7 +45,7 @@ export function parseMap(value: unknown): SceneMap | null {
     if (!r || !text(r.id, 64) || !/^[\w-]{1,64}$/.test(r.id) || routeIds.has(r.id) || !ids.has(r.from) || !ids.has(r.to) || r.from === r.to || !num(r.hours, 0, 1e6) || !num(r.distance, 0, 1e6) || typeof r.visible !== 'boolean') return null;
     routeIds.add(r.id); routes.push({ id: r.id, from: r.from, to: r.to, hours: r.hours, distance: r.distance, visible: r.visible });
   }
-  return { width: v.width, height: v.height, grid: v.grid, cell: v.cell, unitsPerCell: v.unitsPerCell, unit: v.unit, interval: v.interval, gmNotes: v.gmNotes, nodes, routes, backgroundAsset: v.backgroundAsset ?? null, playerBackgroundAsset: v.playerBackgroundAsset ?? null, revealBackground: v.revealBackground ?? false, ...(v.hex ? { hex: { radius: v.hex.radius, terrain: v.hex.terrain, ...(v.hex.set === 'battle' ? { set: 'battle' as const } : {}) } } : {}) };
+  return { width: v.width, height: v.height, grid: v.grid, cell: v.cell, unitsPerCell: v.unitsPerCell, unit: v.unit, interval: v.interval, gmNotes: v.gmNotes, nodes, routes, backgroundAsset: v.backgroundAsset ?? null, playerBackgroundAsset: v.playerBackgroundAsset ?? null, revealBackground: v.revealBackground ?? false, ...(v.palette ? { palette: { colors: [...v.palette.colors], strength: v.palette.strength } } : {}), ...(v.hex ? { hex: { radius: v.hex.radius, terrain: v.hex.terrain, ...(v.hex.set === 'battle' ? { set: 'battle' as const } : {}) } } : {}) };
 }
 
 /** Explicit time conversion: 600 six-second rounds in one hour; no conversion to legacy daily MP. */

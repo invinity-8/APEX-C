@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { HexView } from '../../game/visibility';
 import { center } from './geometry';
-import { paintDetails, paintEdges, paintGround, paintOverlays, paintSprites, type PaintEnv } from './painter';
+import { paintDetails, paintEdges, paintGround, paintOverlays, paintSprites, withRecolor, type PaintEnv } from './painter';
 
 export interface Transform {
   x: number;
@@ -64,7 +64,10 @@ export function TerrainCanvas({
   tf,
   size,
   paintChunk,
+  recolor,
 }: {
+  /** Scene colour scheme: key (cache invalidation) and colour transform. */
+  recolor?: { key: string; fn: (rgb: [number, number, number]) => [number, number, number] } | null;
   /** Alternative painter for a whole chunk (battle scenes); default: the Arena painter. */
   paintChunk?: (ctx: CanvasRenderingContext2D, hexes: HexView[], env: PaintEnv) => void;
   hexes: HexView[];
@@ -82,8 +85,12 @@ export function TerrainCanvas({
   const index = useMemo(() => buildIndex(hexes, overlayFog), [hexes, overlayFog]);
   const env: PaintEnv = useMemo(() => ({ get: (k) => byKey[k], fogUnknown, overlayFog }), [byKey, fogUnknown, overlayFog]);
 
-  const state = useRef({ index, env, tf, size, paintChunk });
-  state.current = { index, env, tf, size, paintChunk };
+  const state = useRef({ index, env, tf, size, paintChunk, recolor });
+  state.current = { index, env, tf, size, paintChunk, recolor };
+  // A different colour scheme repaints every chunk.
+  const recolorKey = recolor?.key ?? '';
+  const lastRecolor = useRef(recolorKey);
+  if (lastRecolor.current !== recolorKey) { lastRecolor.current = recolorKey; cache.current.clear(); pixels.current = 0; }
 
   useEffect(() => {
     const render = (lod: number, key: string, ch: Chunk): Cached => {
@@ -97,6 +104,7 @@ export function TerrainCanvas({
       ctx.setTransform(lod, 0, 0, lod, -i * CHUNK * lod, -j * CHUNK * lod);
       ctx.clearRect(i * CHUNK, j * CHUNK, CHUNK, CHUNK);
       const e = state.current.env;
+      withRecolor(state.current.recolor?.fn ?? null, () => {
       if (state.current.paintChunk) state.current.paintChunk(ctx, ch.hexes, e);
       else {
       for (const h of ch.hexes) paintGround(ctx, h, e);
@@ -105,6 +113,7 @@ export function TerrainCanvas({
       for (const h of ch.hexes) paintSprites(ctx, h, e);
       for (const h of ch.hexes) paintOverlays(ctx, h, e);
       }
+      });
       const entry: Cached = { canvas, sig: ch.sig, px: px * px };
       if (!old) pixels.current += entry.px;
       cache.current.delete(`${lod}:${key}`);
@@ -171,7 +180,7 @@ export function TerrainCanvas({
       if (raf.current) cancelAnimationFrame(raf.current);
       raf.current = 0;
     };
-  }, [index, env, tf, size]);
+  }, [index, env, tf, size, recolorKey]);
 
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" style={{ width: size.w, height: size.h }} aria-hidden="true" />;
 }

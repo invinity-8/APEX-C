@@ -158,22 +158,32 @@ describe('API: battle map turns, region days, fog of war', () => {
     // Arena sneaking does not halve scene movement.
     repo.states.get(cid)!.state.tokens[first].sneaking = true;
     const step = Math.sqrt(3) * 30;
-    expect((await move(who(second), scene, spawn.x + step, spawn.y)).status).toBe(409);
-    const ok = await move(who(first), scene, spawn.x + step * 6, spawn.y);
+    // 4×4 arrival area: both characters stand on different hexes.
+    const pos = async (token: string) => (await state(who(token))).scene!.motion!.tokens.find((t) => t.tokenId === token)!;
+    const a = await pos(first), b = await pos(second);
+    expect(`${a.x},${a.y}`).not.toBe(`${b.x},${b.y}`);
+    void spawn;
+    const dir = a.x >= b.x ? 1 : -1; // move away from the other character
+    expect((await move(who(second), scene, b.x - dir * step, b.y)).status).toBe(409); // not their turn
+    const ok = await move(who(first), scene, a.x + dir * step * 6, a.y);
     expect(ok.status).toBe(200);
     expect((ok.body as { spent: number }).spent).toBe(30);
-    expect((await move(who(first), scene, spawn.x + step * 7, spawn.y)).status).toBe(422);
+    expect((await move(who(first), scene, a.x + dir * step * 7, a.y)).status).toBe(422);
     const p1 = await state(who(first));
     expect(p1.scene?.movement).toMatchObject({ mode: 'turn', spent: 30, allowance: 30 });
     // Ending someone else's turn is refused; ending your own passes the turn.
     expect((await request(who(second), 'scene-turn', { action: 'endTurn', sceneId: scene.id, encounterId: enc.id, turnSerial: 1 })).status).toBe(409);
     expect((await request(who(first), 'scene-turn', { action: 'endTurn', sceneId: scene.id, encounterId: enc.id, turnSerial: 1 })).status).toBe(200);
-    expect((await move(who(second), scene, spawn.x + step, spawn.y)).status).toBe(200);
+    expect((await move(who(second), scene, b.x - dir * step, b.y)).status).toBe(200);
+    // Nobody can end on an occupied hex.
+    const c = await pos(second);
+    expect((await move(who(second), scene, a.x + dir * step * 6, a.y)).status).not.toBe(200);
+    void c;
     expect((await state(who(first))).view?.sceneEncounter?.turnIndex).toBe(1);
     // Players cannot control initiative; the GM ends it → unlimited free movement.
     expect((await request(who(first), 'scene-turn', { action: 'endInitiative', sceneId: scene.id })).status).toBe(403);
     expect((await request('gm', 'scene-turn', { action: 'endInitiative', sceneId: scene.id })).status).toBe(200);
-    expect((await move(who(first), scene, spawn.x - step * 6, spawn.y)).status).toBe(200); // 12 hexes = 60 ft, free
+    expect((await move(who(first), scene, a.x - dir * step, a.y)).status).toBe(200); // 7 hexes back = 35 ft, free
     expect((await state(who(first))).scene?.movement?.mode).toBe('free');
     // Start again: everyone on the map rolls.
     expect((await request('gm', 'scene-turn', { action: 'startInitiative', sceneId: scene.id })).status).toBe(200);
@@ -215,13 +225,19 @@ describe('API: battle map turns, region days, fog of war', () => {
     const spawn = map.nodes.find((n) => n.kind === 'spawn')!;
     const step = Math.sqrt(3) * 30;
     expect(repo.states.get(cid)!.state.sceneEncounters?.[scene.id]).toBeUndefined(); // no initiative on regions
-    expect((await move('hannah', scene, spawn.x + step * 8, spawn.y)).status).toBe(200);
-    expect((await move('hannah', scene, spawn.x + step * 9, spawn.y)).status).toBe(422);
+    // Arrival area: both characters stand on different hexes next to the spawn.
+    const me = (await state('hannah')).scene!.motion!.tokens.find((t) => t.tokenId === user('hannah').tokenIds[0])!;
+    const other = (await state('jean')).scene!.motion!.tokens.find((t) => t.tokenId === user('jean').tokenIds[0])!;
+    expect(`${me.x},${me.y}`).not.toBe(`${other.x},${other.y}`);
+    void spawn;
+    const dir = me.x >= other.x ? 1 : -1;
+    expect((await move('hannah', scene, me.x + dir * step * 8, me.y)).status).toBe(200);
+    expect((await move('hannah', scene, me.x + dir * step * 9, me.y)).status).toBe(422);
     expect((await request('hannah', 'scene-turn', { action: 'clock', sceneId: scene.id, expectedVersion: 0, nextDay: true })).status).toBe(403);
     expect((await request('gm', 'scene-turn', { action: 'clock', sceneId: scene.id, expectedVersion: 0, phase: 'night' })).status).toBe(200);
     expect((await state('hannah')).scene?.clock?.phase).toBe('night');
     expect((await request('gm', 'scene-turn', { action: 'clock', sceneId: scene.id, expectedVersion: 1, nextDay: true })).status).toBe(200);
-    const next = await move('hannah', scene, spawn.x + step * 9, spawn.y);
+    const next = await move('hannah', scene, me.x + dir * step * 9, me.y);
     expect(next.status, JSON.stringify(next.body)).toBe(200);
     expect(repo.states.get(cid)!.state.phase).toBe(createDemoState({ radius: 12, seed: 5 }).phase); // Arena untouched
   });
