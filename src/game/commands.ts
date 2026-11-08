@@ -34,6 +34,7 @@ import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
 import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility, Token, BodyType, NarrativeItemRequest } from './types.js';
+import { parseStatBlock } from './bestiary.js';
 import { INVENTORY_LIMITS, canMerge, containerOfItem, isStackable, materializeInventory } from './inventory.js';
 
 export { fmt };
@@ -43,6 +44,9 @@ export type Command =
   | { type: 'place'; tokenId: string; to: Axial }
   | { type: 'endDay' }
   | { type: 'setItemRules'; rules: Partial<ItemRules> | null }
+  /** APEX 1.2: the GM's enemy library (own creatures and elites). */
+  | { type: 'enemyLibrarySave'; block: import('./bestiary.js').StatBlock }
+  | { type: 'enemyLibraryRemove'; id: string }
   | LootCommand
   | PartyLootCommand
   | MerchantCommand
@@ -418,6 +422,17 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
     case 'announce':
       addAnnouncement(state, { category: cmd.category, title: cmd.title, text: cmd.text });
       addLog(state, 'event', `📣 ${cmd.title.trim().slice(0, 80)}${cmd.text.trim() ? ` – ${cmd.text.trim().slice(0, 200)}` : ''}`);
+      return { ok: true, state };
+    case 'enemyLibrarySave': {
+      const parsed = parseStatBlock(cmd.block);
+      if (!parsed.ok) return fail(prev, parsed.error);
+      const list = (state.enemyLibrary ?? []).filter((b) => b.id !== parsed.block.id);
+      if (list.length >= 200) return fail(prev, 'The enemy library is full (200 creatures).');
+      state.enemyLibrary = [...list, parsed.block].sort((a, b) => a.name.localeCompare(b.name));
+      return { ok: true, state };
+    }
+    case 'enemyLibraryRemove':
+      state.enemyLibrary = (state.enemyLibrary ?? []).filter((b) => b.id !== cmd.id);
       return { ok: true, state };
     case 'setItemRules': {
       if (cmd.rules === null) {

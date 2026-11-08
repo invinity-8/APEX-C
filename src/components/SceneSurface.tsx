@@ -45,7 +45,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const tokens: SceneToken[] = [...own, ...figures.map(f => ({
       tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
       view: f.tokenId ? view(f.tokenId) : undefined,
-      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
+      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
     }))];
     const reachArea = point && reachBudget !== null && reachBudget > 0 ? hexReach(map, point, reachBudget) : null;

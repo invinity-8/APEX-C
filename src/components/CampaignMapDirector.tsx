@@ -38,7 +38,8 @@ import { HexThumbnail } from './HexThumbnail';
 import { GmLootRolls } from './LootRolls';
 import { SceneLiveControls } from './SceneLiveControls';
 import { WorldTravel } from './WorldTravel';
-import { ENEMY_TEMPLATES } from '../game/sceneCombat';
+import { ENEMY_TEMPLATES, npcAttacks } from '../game/sceneCombat';
+import { bestiary, displayName } from '../game/bestiary';
 
 /** Kept for existing callers/tests: a short location label relative to a focused scene. */
 export function assignmentLocation(player: { sceneId: string | null }, focusId: string | null, scenes: Pick<SceneSummary, 'id' | 'name'>[]): string {
@@ -603,9 +604,9 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               <h3 className="font-bold text-marble-300">Enemies & allies · {enemies.filter((e) => !e.defeated && e.side !== 'ally').length} enemies, {enemies.filter((e) => !e.defeated && e.side === 'ally').length} allies</h3>
               <div className="flex flex-wrap items-center gap-2">
                 <select aria-label="Enemy type" className="rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs" value={enemyTemplate} onChange={(e) => setEnemyTemplate(e.target.value)}>
-                  {ENEMY_TEMPLATES.map((t) => (
+                  {bestiary(game.gmState ?? {}).map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} · AC {t.ac} · HP {t.hp}
+                      {t.elite ? '🐉 ' : ''}{displayName(t)} · CR {t.cr} · AC {t.ac} · HP {t.hp}
                     </option>
                   ))}
                 </select>
@@ -626,7 +627,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
                     </button>{' '}
                     <span className="text-marble-400">
                       AC {e.ac} · HP {e.hp}/{e.maxHp}
-                      {e.defeated ? ' · defeated' : ''} · {e.attack.name} +{e.attack.bonus} ({e.attack.damage})
+                      {e.defeated ? ' · defeated' : ''} · {npcAttacks(e).map((a) => `${a.name} +${a.bonus}`).join(', ')}
                     </span>
                     {selectedEnemy === e.id && (
                       <div className="mt-1 flex flex-wrap items-center gap-1">
