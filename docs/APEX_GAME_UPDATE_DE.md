@@ -130,8 +130,7 @@ Grundlage ab jetzt: Alle Battle- und Region-Szenen laufen auf Hex-Kacheln mit Ar
 
 1. ~~Szenenzeit und Licht~~ – umgesetzt (siehe oben).
 2. ~~Sichtweite, Dunkelsicht, Lichtquellen~~ – umgesetzt für Gelände. Offen: Gegnerfiguren und Verbündete nur bei Sicht übertragen (Gegner-Tokens gibt es noch nicht), getragene Fackeln der Spieler.
-3. ~~4 × 4-Einstiegsbereich~~ – umgesetzt.
-3a. **(alt) 4 × 4-Einstiegsbereich.** Spawn als Fläche, deterministische Verteilung auf freie, begehbare Zellen; Überfüllung wird gemeldet. *Abnahme:* Vier Spieler landen auf vier verschiedenen freien Feldern, nie auf Wänden.
+3. ~~4 × 4-Einstiegsbereich~~ – umgesetzt (16 freie Felder um den Spawn, keine Stapelung, Überfüllung wird gemeldet).
 4. **Encounter-Ablauf.** Initiative, Portraitleiste, Zugrecht für Bewegung und Kampfende sind umgesetzt. Offen: Gegner als Figuren auf der Karte mit GM-Zügen; Aktionen/Angriffe im Zug. *Abnahme:* Ein Spieler kann außerhalb seines Zuges nicht angreifen.
 5. **Angriffe und Schaden.** Ziel-Kontextmenü (auch per Tastatur/Touch), Reichweiten- und Sichtlinienprüfung, Trefferwurf mit Advantage/Disadvantage, kritische Treffer, Rettungswürfe, atomare HP-Änderung mit Request-ID (keine Doppelschäden), nachvollziehbares Kampfprotokoll. *Abnahme:* Ein wiederholter Request erzeugt keinen zweiten Schaden; das Protokoll zeigt Würfe und Modifikatoren.
 6. **AoE-Vorschau.** Kegel/Würfel/Kugel/Linie mit betroffenen Zielen; die Vorschau ersetzt keine Serverprüfung. Nicht unterstützte Zauber werden als „manuell abwickeln“ markiert. *Abnahme:* Thunderwave (15-ft-Würfel) markiert die richtigen Felder.
