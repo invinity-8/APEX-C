@@ -24,7 +24,7 @@ import { activate, seedProfiles } from './seed';
 describe('areas of effect', () => {
   const map = (): SceneMap => hexSceneMap(emptyMap('battle'), encodeTiles(8, 'battle', () => 'stone'));
   it('reads spell areas and covers the right hexes; walls stop the effect', () => {
-    expect(parseArea('Self (15-foot cone)')).toEqual({ shape: 'cone', sizeFt: 15 });
+    expect(parseArea('Self (15-foot cone)')).toEqual({ shape: 'cone', sizeFt: 15, fromSelf: true });
     expect(parseArea('each creature in a 20-foot-radius sphere centered on that point')).toEqual({ shape: 'sphere', sizeFt: 20 });
     expect(parseArea('a line 100 feet long and 5 feet wide')).toEqual({ shape: 'line', sizeFt: 100 });
     expect(parseArea('Make a ranged spell attack')).toBeNull();

@@ -6,7 +6,7 @@
 import { EliteFrame } from '../EnemyBadge';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ORIGIN, distance, hexCorners, hexKey, hexesInRange, parseKey, type Axial, type HexKey } from '../../game/hex';
-import { lineOfSight } from '../../campaign/hexVision';
+import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { HexView, TokenView, ViewModel } from '../../game/visibility';
 import { fmt } from '../../game/text';
 import type { MapNode, SceneMap } from '../../campaign/maps';
@@ -21,6 +21,7 @@ import { MapDefs } from './MapDefs';
 import { TokenStack } from './Markers';
 import { TerrainCanvas } from './TerrainCanvas';
 import { CombatFx } from './CombatFx';
+import { beastIcon } from './effectIcons';
 import type { SceneFx } from '../../game/sceneFx';
 import { useHexViewport } from './useHexViewport';
 
@@ -43,7 +44,7 @@ export interface SceneToken {
   /** APEX 1.6 – the same as icons above the figure (concentration, conditions, buffs). */
   icons?: Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }>;
   /** APEX 1.6 – hit points of a character (life bar under the figure). */
-  vitals?: { hp: number; maxHp: number; temp: number };
+  vitals?: { hp: number; maxHp: number; temp: number; form?: string };
 }
 
 interface Props {
@@ -167,12 +168,13 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
     return { d: `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`, cost: r.cost, end: pts[pts.length - 1], ok: pathBudget === null || r.cost <= pathBudget + 1e-9 };
   }, [pathFrom?.x, pathFrom?.y, hover, pathBudget, map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
   const blocksSight = useMemo(() => { const look = tileLookup(map); return (k: HexKey) => !!look(k)?.blocksSight; }, [map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groundHeight = useMemo(() => sightRules(map).height, [map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
   const rangeArea = useMemo(() => {
     if (!lineFrom || !lineRangeFt || !map.hex) return null;
     const from = hexAt(map, lineFrom);
     const cells = Math.round(lineRangeFt / (map.unitsPerCell || 5));
     if (cells > 40) return null;
-    const keys = hexesInRange(from, cells).map(hexKey).filter((k) => known(k) && lineOfSight(from, parseKey(k), blocksSight));
+    const keys = hexesInRange(from, cells).map(hexKey).filter((k) => known(k) && lineOfSight(from, parseKey(k), blocksSight, groundHeight));
     return { keys: new Set(keys), d: keys.map((k) => { const c = center(parseKey(k)); return `M${hexCorners(c.x, c.y, HEX_SIZE * 0.9).replace(/ /g, 'L')}Z`; }).join('') };
   }, [lineFrom?.x, lineFrom?.y, lineRangeFt, map.hex, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Sight preview: from the hovered hex (where the figure could stand) to every opponent – white within the readied
@@ -188,18 +190,40 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
     if (onOpponent || hexKey(self) === hover) {
       if (!onOpponent || !lineRangeFt) return null;
       const ft = distance(self, h) * unitFt;
-      const ok = ft <= lineRangeFt && lineOfSight(self, h, blocksSight);
+      const ok = ft <= lineRangeFt && lineOfSight(self, h, blocksSight, groundHeight);
       return { kind: 'target' as const, a: center(self), lines: [{ b: center(h), ok, ft, label: `${ft} ft${ok ? '' : ' – no line of sight or out of range'}` }] };
     }
     const lines = opponents.flatMap((t) => {
       const to = hexAt(map, t);
       const ft = distance(h, to) * unitFt;
-      if (ft > 40 * unitFt || !lineOfSight(h, to, blocksSight)) return [];
+      if (ft > 40 * unitFt || !lineOfSight(h, to, blocksSight, groundHeight)) return [];
       return [{ b: center(to), ok: !lineRangeFt || ft <= lineRangeFt, ft, label: `${ft} ft` }];
     });
     return { kind: 'from' as const, a: center(h), lines, hidden: opponents.length - lines.length };
   }, [sightFrom?.x, sightFrom?.y, lineFrom?.x, lineFrom?.y, hover, opponents, lineRangeFt, map.hex, byKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const areaKeys = useMemo(() => (areaAt && hoverPoint ? areaAt(hoverPoint) : null), [areaAt, hover]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // APEX 1.8 – relief: higher ground lighter, steps (one level) as light edges, cliffs (two or more) as dark edges
+  const relief = useMemo(() => {
+    if (!map.hex?.heights || !groundHeight) return null;
+    const shade: string[] = [], steps: string[] = [], cliffs: string[] = [];
+    const labels: Array<{ x: number; y: number; ft: number }> = [];
+    for (const k of Object.keys(byKey)) {
+      const h = parseKey(k), lv = groundHeight(k), c = center(h);
+      if (lv > 0) { shade.push(`M${hexCorners(c.x, c.y, HEX_SIZE * 0.98).replace(/ /g, 'L')}Z`); labels.push({ x: c.x, y: c.y, ft: lv * (map.unitsPerCell || 5) }); }
+      for (const d of [{ q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 }]) {
+        const n = { q: h.q + d.q, r: h.r + d.r }, nk = hexKey(n);
+        if (!byKey[nk]) continue;
+        const dh = Math.abs(groundHeight(nk) - lv);
+        if (!dh) continue;
+        const cn = center(n), mx = (c.x + cn.x) / 2, my = (c.y + cn.y) / 2;
+        const len = Math.hypot(cn.x - c.x, cn.y - c.y) || 1, px = -(cn.y - c.y) / len, py = (cn.x - c.x) / len, half = HEX_SIZE * 0.5;
+        (dh >= 2 ? cliffs : steps).push(`M${mx + px * half},${my + py * half}L${mx - px * half},${my - py * half}`);
+      }
+    }
+    const maxLv = Math.max(1, ...Object.keys(byKey).map((k) => groundHeight(k)));
+    return { shade: Object.keys(byKey).filter((k) => groundHeight(k) > 0).map((k) => ({ k, a: 0.05 + 0.22 * (groundHeight(k) / maxLv) })), steps: steps.join(''), cliffs: cliffs.join(''), labels };
+  }, [map.hex, byKey, groundHeight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arena-style light layer (water glints, motes) without Arena sites or party torches.
   const pKey = paletteKey(map.palette);
@@ -332,6 +356,15 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                 <path d={reachShape.edge} stroke="#e8d4a6" strokeWidth={2.2} fill="none" />
               </g>
             )}
+            {relief && (
+              <g pointerEvents="none" data-testid="relief">
+                {relief.shade.map(({ k, a }) => { const c = center(parseKey(k)); return <polygon key={`rl-${k}`} points={hexCorners(c.x, c.y, HEX_SIZE * 0.98)} fill={`rgba(255,244,214,${a.toFixed(3)})`} />; })}
+                <path d={relief.steps} stroke="#f3e4bd" strokeOpacity={0.75} strokeWidth={1.6} strokeDasharray="3 3" fill="none" />
+                <path d={relief.cliffs} stroke="#000" strokeOpacity={0.55} strokeWidth={6} strokeLinecap="round" fill="none" />
+                <path d={relief.cliffs} stroke="#5b4630" strokeWidth={3} strokeLinecap="round" fill="none" />
+                {gm && relief.labels.map((l) => <text key={`rlt-${l.x}-${l.y}`} x={l.x} y={l.y + HEX_SIZE * 0.55} textAnchor="middle" fontSize={8} fill="#f3e4bd" stroke="#000" strokeWidth={2} paintOrder="stroke">▲{l.ft}</text>)}
+              </g>
+            )}
             {rangeArea && <path d={rangeArea.d} fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.18)" strokeWidth={0.8} pointerEvents="none" />}
             {areaKeys && areaKeys.map((k) => { const c = center(parseKey(k)); return <polygon key={`area-${k}`} points={hexCorners(c.x, c.y, HEX_SIZE * 0.92)} fill="rgba(255,120,40,0.35)" stroke="#ffb066" strokeWidth={1.2} pointerEvents="none" />; })}
             {pathPreview && (
@@ -415,6 +448,14 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                   <g key={k}>
                     <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} portraits />
                     <g transform={`translate(${c0.x},${c0.y})`} pointerEvents="none">
+                      {v?.form && (
+                        <g data-testid="beast-form">
+                          <title>{`Wild Shape: ${v.form}`}</title>
+                          <circle r={HEX_SIZE * 0.52} fill="#1d2b20" stroke="#6fe39b" strokeWidth={2.5} />
+                          <text y={HEX_SIZE * 0.2} textAnchor="middle" fontSize={HEX_SIZE * 0.62}>{beastIcon(v.form)}</text>
+                          <circle cx={HEX_SIZE * 0.4} cy={-HEX_SIZE * 0.4} r={HEX_SIZE * 0.2} fill={group[0].color} stroke="#14110d" strokeWidth={1.2} />
+                        </g>
+                      )}
                       {v && v.maxHp > 0 && <LifeBar hp={v.hp} maxHp={v.maxHp} temp={v.temp} y={HEX_SIZE * 0.66} party />}
                       {icons.length > 0 && <FigureIcons icons={icons} />}
                     </g>
@@ -457,6 +498,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
           <div className="text-marble-300">
             {hoverTile.cost === null ? 'Impassable' : `Cost: ${fmt(hoverTile.cost * map.unitsPerCell)} ${unit}`}
             {hoverTile.blocksSight ? ' · blocks sight' : ''}
+            {groundHeight && hover && groundHeight(hover) > 0 ? ` · height ${groundHeight(hover) * (map.unitsPerCell || 5)} ft` : ''}
             {hoverHex.fog === 'explored' ? <span className="text-marble-500"> · remembered</span> : null}
           </div>
           {reach?.has(hover!) && <div className="text-gold-200">→ reachable · {fmt(reach.get(hover!)!.cost * map.unitsPerCell)} {unit}</div>}

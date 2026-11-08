@@ -12,7 +12,7 @@
  * Light itself is blocked by walls.
  */
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type Axial, type HexKey } from '../game/hex.js';
-import { decodeTiles, hexAt, hexLine, tileLookup, tileSetOf } from './hexScene.js';
+import { decodeTiles, heightLookup, hexAt, hexLine, tileLookup, tileSetOf } from './hexScene.js';
 import type { SceneMap } from './maps.js';
 
 export type Lighting = 'bright' | 'dim' | 'dark';
@@ -38,9 +38,21 @@ export interface Viewer {
 type Blocks = (k: HexKey) => boolean;
 
 /** True if nothing between a and b blocks sight (two slightly offset lines: grazing a corner is allowed). */
-export function lineOfSight(a: Axial, b: Axial, blocks: Blocks): boolean {
-  const clear = (nudge: number) => hexLine(a, b, nudge).slice(1, -1).every((h) => !blocks(hexKey(h)));
+export function lineOfSight(a: Axial, b: Axial, blocks: Blocks, height?: (k: HexKey) => number, eye = { a: 0, b: 0 }): boolean {
+  // APEX 1.8 – heights: eyes one level (5 ft) above the ground (+ flying altitude); ground higher than the line between
+  // them blocks (a step of one level doesn't, a cliff or a hill top does)
+  const ha = height ? height(hexKey(a)) + 1 + eye.a : 0, hb = height ? height(hexKey(b)) + 1 + eye.b : 0;
+  const clear = (nudge: number) => {
+    const line = hexLine(a, b, nudge);
+    const n = line.length - 1;
+    return line.slice(1, -1).every((h, i) => !blocks(hexKey(h)) && (!height || height(hexKey(h)) <= ha + ((hb - ha) * (i + 1)) / n));
+  };
   return clear(1e-6) || clear(-1e-6);
+}
+/** Sight rules of a map: blocking tiles and (when the map has them) ground heights. */
+export function sightRules(map: Pick<SceneMap, 'hex'>): { blocks: Blocks; height?: (k: HexKey) => number } {
+  const tiles = tileLookup(map);
+  return { blocks: (k) => !!tiles(k)?.blocksSight, ...(map.hex?.heights ? { height: heightLookup(map) } : {}) };
 }
 
 /** Darkvision in feet from a sheet text such as "Darkvision 60 ft." (0 if absent). */
@@ -60,6 +72,7 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
   const battle = tileSetOf(map.hex) === 'battle';
   const inMap = (k: HexKey) => !!tiles(k);
   const blocks: Blocks = (k) => !!tiles(k)?.blocksSight;
+  const heights = map.hex.heights ? heightLookup(map) : undefined;
 
   // Battle: hexes lit by light markers (each light is blocked by walls, too).
   const lit = new Set<HexKey>();
@@ -71,7 +84,7 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
     ];
     for (const { at, ft } of sources) {
       const r = Math.round(ft / 5);
-      for (const h of hexesInRange(at, r)) if (inMap(hexKey(h)) && lineOfSight(at, h, blocks)) lit.add(hexKey(h));
+      for (const h of hexesInRange(at, r)) if (inMap(hexKey(h)) && lineOfSight(at, h, blocks, heights)) lit.add(hexKey(h));
     }
   }
 
@@ -94,7 +107,7 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
       if (!inMap(k) || seen.has(k)) continue;
       const d = distance(at, h);
       if (d > radius && !lit.has(k)) continue;
-      if (d <= 1 || lineOfSight(at, h, viewBlocks)) seen.add(k);
+      if (d <= 1 || lineOfSight(at, h, viewBlocks, battle ? heights : undefined)) seen.add(k);
     }
   }
   return seen;

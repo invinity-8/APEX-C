@@ -175,6 +175,33 @@ export interface HexSceneData {
   terrain: string;
   /** Tile set; absent = region (Arena terrain). */
   set?: 'battle';
+  /**
+   * APEX 1.8 – ground height per hex in 5-ft levels, one code per hex like `terrain` ('0'–'9', 'a'–'z' = 0–35).
+   * Absent = flat (every older map). Steps of one level are stairs (climbing up costs extra), two or more are cliffs.
+   */
+  heights?: string;
+}
+export const MAX_LEVEL = 35;
+const LEVEL_CODES = '0123456789abcdefghijklmnopqrstuvwxyz';
+export const levelCode = (n: number) => LEVEL_CODES[Math.max(0, Math.min(MAX_LEVEL, Math.round(n)))];
+export const levelOf = (c: string | undefined) => Math.max(0, LEVEL_CODES.indexOf(c ?? '0'));
+/** Ground height (levels of 5 ft) per hex; 0 everywhere on flat maps. */
+export function heightLookup(map: Pick<SceneMap, 'hex'>): (k: HexKey) => number {
+  const data = map.hex;
+  if (!data?.heights) return () => 0;
+  const index = new Map(hexesInRange(ORIGIN, data.radius).map((h, i) => [hexKey(h), i]));
+  const hs = data.heights;
+  return (k) => { const i = index.get(k); return i === undefined ? 0 : levelOf(hs[i]); };
+}
+/** Raises / lowers / sets the ground of single hexes (editor height brush). */
+export function setHeights(data: HexSceneData, keys: HexKey[], level: (current: number) => number): HexSceneData {
+  const n = data.terrain.length;
+  const chars = (data.heights ?? '0'.repeat(n)).split('');
+  const index = new Map(hexesInRange(ORIGIN, data.radius).map((h, i) => [hexKey(h), i]));
+  for (const k of keys) { const i = index.get(k); if (i !== undefined) chars[i] = levelCode(level(levelOf(chars[i]))); }
+  const heights = chars.join('');
+  if (/^0+$/.test(heights)) { const { heights: _drop, ...flat } = data; void _drop; return flat; }
+  return { ...data, heights };
 }
 export const tileSetOf = (data: Pick<HexSceneData, 'set'> | undefined): TileSet => (data?.set === 'battle' ? 'battle' : 'region');
 
@@ -183,6 +210,7 @@ export function validHexData(v: unknown): v is HexSceneData {
   const h = v as HexSceneData;
   if (h.set !== undefined && h.set !== 'battle') return false;
   const codes = [...BY_CODE[tileSetOf(h)].keys()].join('');
+  if (h.heights !== undefined && (typeof h.heights !== 'string' || h.heights.length !== h.terrain.length || !/^[0-9a-z]+$/.test(h.heights))) return false;
   return Number.isInteger(h.radius) && h.radius >= MIN_HEX_RADIUS && h.radius <= MAX_HEX_RADIUS && typeof h.terrain === 'string' && h.terrain.length === hexCount(h.radius) && new RegExp(`^[${codes}.]+$`).test(h.terrain);
 }
 
@@ -474,6 +502,21 @@ export function passable(map: Pick<SceneMap, 'hex'>, h: Axial): boolean {
   return !!t && t.cost !== null;
 }
 
+/**
+ * Cost of one step (in hexes): the tile cost, +1 for climbing one level up (a 5-ft step counts double); two or more
+ * levels up or down are a cliff that walkers can't take. Flat maps: the tile cost only.
+ */
+export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map)): (k: HexKey, from?: HexKey) => number | null {
+  const height = map.hex?.heights ? heightLookup(map) : null;
+  return (k, from) => {
+    const c = lookup(k)?.cost ?? null;
+    if (c === null || !height || from === undefined) return c;
+    const dh = height(k) - height(from);
+    if (Math.abs(dh) > 1) return null;
+    return dh === 1 ? c + 1 : c;
+  };
+}
+
 /** Movement on a hex scene: cheapest path by tile costs × units per hex (5 ft or 3 mi). */
 export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
   const lookup = tileLookup(map);
@@ -482,7 +525,7 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
   if (!goalTile) return { ok: false, error: 'Destination is outside the map.' };
   if (goalTile.cost === null) return { ok: false, error: `${goalTile.label} cannot be entered.` };
   const from = hexAt(map, start);
-  const reach = dijkstra(hexKey(from), (k) => lookup(k)?.cost ?? null, Infinity, hexKey(goal));
+  const reach = dijkstra(hexKey(from), stepCost(map, lookup), Infinity, hexKey(goal));
   const info = reach.get(hexKey(goal));
   if (!info) return { ok: false, error: 'No passable path to that hex.' };
   const path = pathTo(reach, hexKey(goal)) ?? [];
@@ -494,7 +537,7 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
 /** Hexes reachable with a remaining budget (in feet or miles) – the gold movement area. */
 export function hexReach(map: HexMapLike, start: { x: number; y: number }, budgetUnits: number): Map<HexKey, { cost: number; prev: HexKey | null }> {
   const lookup = tileLookup(map);
-  return dijkstra(hexKey(hexAt(map, start)), (k) => lookup(k)?.cost ?? null, Math.max(0, budgetUnits / map.unitsPerCell));
+  return dijkstra(hexKey(hexAt(map, start)), stepCost(map, lookup), Math.max(0, budgetUnits / map.unitsPerCell));
 }
 
 // ---------------------------------------------------------------- image import

@@ -19,7 +19,7 @@ import type { GameState } from '../game/types.js';
 import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, parseStoredSheet, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
-import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, activeActors, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
+import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, activeActors, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, withShillelagh, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
 import { statBlock, type AbilityKey } from '../game/bestiary.js';
 import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, type EffectMods, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
 import type { AttackOptions } from '../game/sceneCombat.js';
@@ -29,9 +29,9 @@ import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
 import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
-import { hexAt, hexCentre, hexMovementCost, passable, tileLookup } from '../campaign/hexScene.js';
+import { hexAt, hexCentre, hexMovementCost, passable } from '../campaign/hexScene.js';
 import { continuePcMove } from './sceneMotion.js';
-import { lineOfSight } from '../campaign/hexVision.js';
+import { lineOfSight, sightRules } from '../campaign/hexVision.js';
 import { distance } from '../game/hex.js';
 import { applyDamage, applyHealing, classLevel, revert, setTempHp, transform } from '../game/abilities.js';
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
@@ -337,8 +337,8 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
 const die = (sides: number) => (crypto.getRandomValues(new Uint32Array(1))[0] % Math.max(1, sides)) + 1;
 const inReach = (map: SceneMap, from: { x: number; y: number }, to: { x: number; y: number }, reachFt: number, rangeFt?: number) => {
   const d = distance(hexAt(map, from), hexAt(map, to)) * 5;
-  const blocks = (k: string) => !!tileLookup(map)(k)?.blocksSight;
-  return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), blocks), distanceFt: d };
+  const sight = sightRules(map);
+  return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), sight.blocks, sight.height), distanceFt: d };
 };
 
 // ---------------------------------------------------------------- combat actions (APEX 1.1)
@@ -383,7 +383,7 @@ async function strikeOf(ctx: Ctx, attacker: Side, attackIndex: number | undefine
     return dmg ? { name: a.name, bonus: a.bonus, damage: dmg, reachFt: a.reachFt, ...(a.kind !== 'melee' && a.rangeFt ? { rangeFt: a.rangeFt, ...(a.longRangeFt ? { longRangeFt: a.longRangeFt } : {}) } : {}), kind: a.kind, damageType: a.damageType } : 'Unreadable damage.';
   }
   const sheet = await sheetOf(ctx, attacker.tokenId);
-  const attack = combatAttacks(sheet, state.tokens[attacker.tokenId], itemRulesOf(state))[attackIndex ?? 0];
+  const attack = withShillelagh(combatAttacks(sheet, state.tokens[attacker.tokenId], itemRulesOf(state)), sheet, !sheet.wildShape && effectsOf(state, ctx.sceneId!, pcActor(attacker.tokenId)).some((e) => e.key === 'shillelagh'))[attackIndex ?? 0];
   if (!attack) return 'Choose an attack from your character sheet.';
   const switchSet = !!(attack as { otherSet?: boolean }).otherSet;
   const bonus = parseBonus(attack.bonus), damage = parseDamage(attack.damage);
@@ -449,6 +449,12 @@ async function lowerMaxHp(user: AuthUser, repo: Repo, tokenId: string, by: numbe
   await repo.saveSheet(user.campaignId, tokenId, sheet, row?.version ?? 0, user.id);
 }
 
+/** Visual: a druid pops back out of the beast form. */
+async function recordFx(user: AuthUser, repo: Repo, ctx: Ctx, tokenId: string, formName: string) {
+  if (!ctx.sceneId) return;
+  await mutate(user, repo, (s) => { const st = structuredClone(s); pushFx(st, ctx.sceneId!, [{ kind: 'debuff', to: pcActor(tokenId), label: `${formName} → normal form`, element: 'force' }]); return { ok: true, state: st }; }).catch(() => undefined);
+}
+
 /** Damage to a character's sheet (temporary HP, Wild Shape and hit points). */
 async function damagePc(user: AuthUser, repo: Repo, ctx: Ctx, tokenId: string, amount: number): Promise<string> {
   if (amount <= 0) return '';
@@ -458,7 +464,9 @@ async function damagePc(user: AuthUser, repo: Repo, ctx: Ctx, tokenId: string, a
   const hurt = applyDamage(sheet, amount);
   if (!hurt.ok) return ' (apply by hand)';
   const saved = await repo.saveSheet(user.campaignId, tokenId, hurt.sheet, row?.version ?? 0, user.id);
-  return saved === null ? ' (the sheet changed meanwhile – apply the damage by hand)' : ` (${hurt.sheet.wildShape ? `${hurt.sheet.wildShape.formName} ${hurt.sheet.wildShape.hp}/${hurt.sheet.wildShape.maxHp}, ` : ''}${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
+  const reverted = sheet.wildShape && !hurt.sheet.wildShape ? ` – the ${sheet.wildShape.formName} drops to 0 hit points and ${ctx.state?.tokens[tokenId]?.name ?? 'the druid'} reverts to normal form` : '';
+  if (saved !== null && reverted) await recordFx(user, repo, ctx, tokenId, sheet.wildShape!.formName);
+  return saved === null ? ' (the sheet changed meanwhile – apply the damage by hand)' : `${reverted} (${hurt.sheet.wildShape ? `${hurt.sheet.wildShape.formName} ${hurt.sheet.wildShape.hp}/${hurt.sheet.wildShape.maxHp}, ` : ''}${hurt.sheet.hitPoints?.current}/${hurt.sheet.hitPoints?.max} HP)`;
 }
 
 /** Can a character cast Shield right now (prepared, a slot left, reaction free, not incapacitated)? */

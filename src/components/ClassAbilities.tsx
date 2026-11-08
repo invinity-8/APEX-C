@@ -7,7 +7,7 @@
  * Every rule is validated by the server (`/api/apex?op=sheet`, version-checked); this component only asks.
  */
 import { useMemo, useState, type FormEvent } from 'react';
-import { classLevel, formAllowed, SLOT_COST, sorceryPointsMax, SORCERY_RESOURCE, WILD_SHAPE_RESOURCE, wildShapeLimits, wildShapeView } from '../game/abilities';
+import { wildShapeLevel, formAllowed, SLOT_COST, sorceryPointsMax, SORCERY_RESOURCE, WILD_SHAPE_RESOURCE, wildShapeLimits, wildShapeView } from '../game/abilities';
 import { beastsFor, findBeast } from '../game/beastCatalog';
 import { crLabel, speedLabel, SRD_BEAST_ATTRIBUTION, type BeastForm } from '../game/beasts';
 import type { Command } from '../game/commands';
@@ -37,7 +37,7 @@ export function ClassAbilities({
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<'wild' | 'sorcery' | null>(null);
   const sheet = data?.sheet;
-  const druid = sheet ? classLevel(sheet, 'druid') : null;
+  const druid = sheet ? wildShapeLevel(sheet) : null;
   const spMax = sheet ? sorceryPointsMax(sheet) : null;
   const ability = async (body: Record<string, unknown>) => {
     if (!data) return false;

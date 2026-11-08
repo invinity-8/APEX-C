@@ -68,7 +68,8 @@ class MinHeap {
  */
 export function dijkstra(
   startKey: HexKey,
-  costOf: (key: HexKey) => number | null,
+  /** Cost of entering `key` (from `from`: height steps between hexes, APEX 1.8). */
+  costOf: (key: HexKey, from?: HexKey) => number | null,
   budget = Infinity,
   goal?: HexKey,
 ): Map<HexKey, ReachInfo> {
@@ -87,7 +88,7 @@ export function dijkstra(
     for (const n of neighbors(parseKey(key))) {
       const nk = hexKey(n);
       if (done.has(nk)) continue;
-      const c = costOf(nk);
+      const c = costOf(nk, key);
       if (c === null) continue;
       const total = base + c;
       if (total > budget + 1e-9) continue;

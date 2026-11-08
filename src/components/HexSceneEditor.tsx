@@ -19,6 +19,8 @@ import {
   hexCentre,
   neighbourKeys,
   paintHexes,
+  setHeights,
+  MAX_LEVEL,
   passable,
   replaceTerrain,
   resizeHexScene,
@@ -26,13 +28,13 @@ import {
   type HexPreset,
 } from '../campaign/hexScene';
 import { loadPictureForSampling } from '../campaign/pictureSampling';
-import { hexKey, parseKey, type HexKey } from '../game/hex';
+import { ORIGIN, hexKey, hexesInRange, parseKey, type HexKey } from '../game/hex';
 import type { SceneDefinition } from '../server/scenes';
 import { HexSceneMap } from './map/HexSceneMap';
 import { PALETTE_PRESETS, paletteKey } from '../campaign/palette';
 
-type Tool = 'brush' | 'select' | 'spawn' | 'location' | 'label' | 'light';
-const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light' };
+type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light';
+const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light' };
 
 export function HexSceneEditor({
   scene,
@@ -53,6 +55,7 @@ export function HexSceneEditor({
   const [terrain, setTerrain] = useState<TileId>(set === 'battle' ? 'wall' : 'forest');
   const palette = TILESETS[set];
   const [brush, setBrush] = useState<0 | 1>(0);
+  const [level, setLevel] = useState(2);
   const [selected, setSelected] = useState<string | null>(null);
   const [preset, setPreset] = useState<HexPreset>('forest');
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 100000));
@@ -66,6 +69,12 @@ export function HexSceneEditor({
   function paint(key: HexKey) {
     if (!map.hex) return;
     const keys = brush ? [key, ...neighbourKeys(key)] : [key];
+    if (tool === 'height') {
+      // APEX 1.8: ground height in 5-ft levels (one level = a step, two or more = a cliff)
+      const next = setHeights(map.hex, keys, () => level);
+      if (next.heights !== map.hex.heights) change({ hex: next });
+      return;
+    }
     const next = paintHexes(map.hex, keys, terrain);
     if (next.terrain !== map.hex.terrain) change({ hex: next });
   }
@@ -75,7 +84,7 @@ export function HexSceneEditor({
   function clickHex(key: HexKey) {
     const at = map.nodes.find((n) => hexKey(hexAt(map, n)) === key);
     if (tool === 'select') return setSelected(at?.id ?? null);
-    if (tool === 'brush') return;
+    if (tool === 'brush' || tool === 'height') return;
     if (!passable(map, parseKey(key)) && tool !== 'label' && tool !== 'light') return setMessage(`Impassable hexes cannot hold a ${tool}. Paint passable terrain first.`);
     const p = hexCentre(map, parseKey(key));
     if (tool === 'spawn') {
@@ -113,7 +122,7 @@ export function HexSceneEditor({
     }
   }
 
-  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => t !== 'light' || set === 'battle');
+  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => (t !== 'light' && t !== 'height') || set === 'battle');
   return (
     <>
     {battleScene && set !== 'battle' && (
@@ -156,9 +165,22 @@ export function HexSceneEditor({
             </label>
           </div>
         )}
-        <p className="text-xs text-marble-400">{tool === 'brush' ? 'Click or drag over hexes to paint. Mouse wheel zooms.' : tool === 'select' ? 'Click a marker to edit it. Drag to pan, mouse wheel zooms.' : `Click a hex to place the ${tool}.`}</p>
+        {tool === 'height' && (
+          <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Height brush" data-testid="height-brush">
+            <span className="text-marble-300">Ground height</span>
+            <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setLevel((l) => Math.max(0, l - 1))} aria-label="Lower">−</button>
+            <input type="range" min={0} max={MAX_LEVEL} value={level} onChange={(e) => setLevel(Number(e.target.value))} aria-label="Level" />
+            <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => setLevel((l) => Math.min(MAX_LEVEL, l + 1))} aria-label="Higher">+</button>
+            <b className="tabular-nums text-gold-200">{level * 5} ft</b>
+            {[0, 1, 2, 4, 6].map((l) => <button key={l} type="button" className="btn btn-ghost px-2 py-0.5" aria-pressed={level === l} onClick={() => setLevel(l)}>{l * 5} ft</button>)}
+            <label className="hex-brush-size"><input type="checkbox" checked={brush === 1} onChange={(e) => setBrush(e.target.checked ? 1 : 0)} /> Large brush</label>
+            {map.hex?.heights && <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => { if (map.hex) change({ hex: setHeights(map.hex, [...hexesInRange(ORIGIN, map.hex.radius)].map(hexKey), () => 0) }); }}>Flatten all</button>}
+            <span className="text-marble-500">One level (5 ft) is a step – climbing up costs 5 ft extra. Two or more levels are a cliff walkers can't take.</span>
+          </div>
+        )}
+        <p className="text-xs text-marble-400">{tool === 'height' ? 'Click or drag over hexes to set their ground height.' : tool === 'brush' ? 'Click or drag over hexes to paint. Mouse wheel zooms.' : tool === 'select' ? 'Click a marker to edit it. Drag to pan, mouse wheel zooms.' : `Click a hex to place the ${tool}.`}</p>
         <div className="scene-editor-hex">
-          <HexSceneMap map={map} label={`${scene.name} editor`} gm selectedHex={current ? hexKey(hexAt(map, current)) : null} onPaint={tool === 'brush' && !busy ? paint : undefined} onHexClick={tool !== 'brush' && !busy ? (k) => clickHex(k) : undefined} />
+          <HexSceneMap map={map} label={`${scene.name} editor`} gm selectedHex={current ? hexKey(hexAt(map, current)) : null} onPaint={(tool === 'brush' || tool === 'height') && !busy ? paint : undefined} onHexClick={tool !== 'brush' && tool !== 'height' && !busy ? (k) => clickHex(k) : undefined} />
         </div>
       </div>
       <aside className="scene-editor-inspector" aria-label="Hex map settings">

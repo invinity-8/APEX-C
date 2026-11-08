@@ -16,10 +16,11 @@ import { spellCount, spellEffectOf, supportive } from '../game/spellEffects';
 import { battleFeatures } from '../game/classFeatures';
 import { CONDITION_TEXT, type ConditionId } from '../game/combatEffects';
 import { beastsFor } from '../game/beastCatalog';
-import { classLevel, formAllowed } from '../game/abilities';
+import { formAllowed, wildShapeLevel } from '../game/abilities';
 
-const beastOptions = (sheet: CharacterSheet | null) => { const lvl = sheet ? classLevel(sheet, 'druid') ?? 0 : 0; return beastsFor(undefined).filter((b) => !formAllowed(b, lvl)); };
+const beastOptions = (sheet: CharacterSheet | null) => { const lvl = sheet ? wildShapeLevel(sheet) ?? 0 : 0; return beastsFor(undefined).filter((b) => !formAllowed(b, lvl)); };
 import { parseArea } from '../campaign/hexArea';
+import { beastIcon } from './map/effectIcons';
 
 /** The attack or spell "in hand": its range is shown on the map, area spells are aimed with a right-click. */
 export type ReadyAction = { kind: 'attack'; index: number } | { kind: 'spell'; spellId: string; slotLevel: number } | null;
@@ -71,7 +72,9 @@ export function PlayerCombat(p: Props) {
   const melee = p.attacks.map((a, i) => ({ a, i })).filter(({ a }) => !parseRangeFt(`${a.range} ${a.notes}`).rangeFt);
   const [reactWith, setReactWith] = useState(0);
   const slots = sheet ? spellSlots(sheet) : [];
-  const spells = (sheet?.spells ?? []).filter((s) => s.level === 0 || s.prepared).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  const beast = sheet?.wildShape;
+  // no spellcasting in Wild Shape (until druid level 18)
+  const spells = (beast ? [] : sheet?.spells ?? []).filter((s) => s.level === 0 || s.prepared).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   const lvl = sheet ? characterLevel(sheet) : 1;
   const slotFor = (id: string, level: number) => slot[id] ?? (level === 0 ? 0 : slots.find((s) => s.level >= level && s.current > 0)?.level ?? level);
   const moveTotal = p.movement ? Math.max(p.movement.allowance, 1) : 0;
@@ -143,6 +146,12 @@ export function PlayerCombat(p: Props) {
         {slots.length > 0 && <SlotTracker slots={slots} />}
       </div>
 
+      {beast && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-900/25 px-2 py-1.5 text-emerald-100" data-testid="wild-shape-banner">
+          <span className="text-lg" aria-hidden>{beastIcon(beast.formName)}</span>
+          <span className="flex-1"><b>Wild Shape: {beast.formName}</b> · {beast.hp}/{beast.maxHp} beast HP · beast attacks, AC and speed · no spellcasting. At 0 beast HP you revert; extra damage carries over.</span>
+        </div>
+      )}
       {(me2?.effects.length || me2?.concentration || me2?.readied) && (
         <div className="flex flex-wrap items-center gap-1" aria-label="Your conditions and effects" data-testid="my-effects">
           {me2?.concentration && <span className="rounded-full border border-arcane-300/70 bg-arcane-500/15 px-2 py-0.5 text-arcane-300" title="A new concentration spell ends it; damage forces a Constitution save">◎ Concentrating: {me2.concentration}</span>}
@@ -155,7 +164,7 @@ export function PlayerCombat(p: Props) {
       {/* action tiles */}
       <div className="flex flex-wrap items-stretch gap-1.5" role="group" aria-label="Standard actions">
         <Tile icon="⚔" label="Attack" cost="action" on={p.ready?.kind === 'attack'} disabled={!p.attacks.length || !canAct} title="Ready your first weapon – right-click an enemy to attack (walking into reach first)" onClick={() => p.setReady(p.ready?.kind === 'attack' ? null : { kind: 'attack', index: defaultAttack })} />
-        <Tile icon="✦" label="Cast spell" cost="action" on={spellOpen} disabled={!(sheet?.spells.length)} title="Open the spellbook" onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
+        <Tile icon="✦" label="Cast spell" cost="action" on={spellOpen} disabled={!(sheet?.spells.length) || !!beast} title={beast ? `No spellcasting in Wild Shape (${beast.formName})` : 'Open the spellbook'} onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
         {encounter && (['dash', 'disengage', 'dodge'] as const).map((id) => {
           const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
           const active = id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge;

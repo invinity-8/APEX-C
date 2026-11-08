@@ -337,13 +337,32 @@ export function spendSlot(sheet: CharacterSheet, slotLevel: number): CharacterSh
 }
 
 /** "Spell attack bonus" / "Spell save DC" from the sheet's spellcasting block (first source). */
-export function spellNumbers(sheet: Pick<CharacterSheet, 'spellcasting'>): { attack: number | null; dc: number | null } {
+export function spellNumbers(sheet: Pick<CharacterSheet, 'spellcasting'> & Partial<Pick<CharacterSheet, 'attributes' | 'details' | 'combat'>>): { attack: number | null; dc: number | null } {
   const val = (re: RegExp) => {
     const e = sheet.spellcasting.find((x) => re.test(x.label));
     const m = e ? /([+-]?\d{1,2})/.exec(e.value) : null;
     return m ? Number(m[1]) : null;
   };
-  return { attack: val(/spell attack/i), dc: val(/save dc/i) };
+  const attack = val(/spell attack/i), dc = val(/save dc/i);
+  if (attack !== null && dc !== null) return { attack, dc };
+  // APEX 1.7 – no numbers on the sheet: proficiency + the class's spellcasting ability (5e: 8 + that for the DC)
+  const derived = derivedSpellNumbers(sheet);
+  return { attack: attack ?? derived?.attack ?? null, dc: dc ?? derived?.dc ?? null };
+}
+
+const CASTER_ABILITY: Array<[RegExp, RegExp]> = [[/druid|cleric|ranger|monk/i, /^wis/i], [/wizard|artificer|eldritch knight|arcane trickster/i, /^int/i], [/sorcerer|warlock|bard|paladin/i, /^cha/i]];
+function derivedSpellNumbers(sheet: Partial<Pick<CharacterSheet, 'attributes' | 'details' | 'combat' | 'spellcasting'>>): { attack: number; dc: number } | null {
+  if (!sheet.attributes || !sheet.details) return null;
+  const named = sheet.spellcasting?.find((x) => /spellcasting ability/i.test(x.label))?.value;
+  const classes = sheet.details.filter((d) => /class/i.test(d.label)).map((d) => d.value).join(' ');
+  const abilityRe = named ? new RegExp(`^${named.trim().slice(0, 3)}`, 'i') : CASTER_ABILITY.find(([cls]) => cls.test(classes))?.[1];
+  if (!abilityRe) return null;
+  const a = sheet.attributes.find((x) => abilityRe.test(x.name.trim()));
+  const score = Number(/\d+/.exec(a?.value ?? '')?.[0]);
+  if (!Number.isFinite(score) || score <= 0) return null;
+  const mod = Math.floor((score - 10) / 2);
+  const prof = Number(/[+-]?\d+/.exec(sheet.combat?.find((c) => /proficiency/i.test(c.label))?.value ?? '')?.[0]) || Math.ceil(characterLevel({ details: sheet.details }) / 4) + 1;
+  return { attack: prof + mod, dc: 8 + prof + mod };
 }
 
 /** Total character level from "Wizard 5 / Cleric 2" style details (for cantrip scaling), default 1. */
@@ -358,3 +377,20 @@ export const ordinal = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n ===
 
 /** The sheet with SRD mechanics filled into spells that have no details (for the battle UI). */
 export const withSrdSpells = <T extends Pick<CharacterSheet, 'spells'>>(sheet: T): T => ({ ...sheet, spells: sheet.spells.map(withSrdMechanics) });
+
+/**
+ * Shillelagh (APEX 1.7): while it lasts, a club or quarterstaff attack uses the spellcasting ability (the spell
+ * attack bonus, else proficiency + Wisdom) and deals 1d8 + Wisdom bludgeoning damage (magical). Beast attacks in
+ * Wild Shape are not touched.
+ */
+export function withShillelagh<T extends { name: string; bonus: string; damage: string }>(attacks: T[], sheet: Pick<CharacterSheet, 'spellcasting' | 'attributes' | 'combat' | 'details'>, active: boolean): T[] {
+  if (!active) return attacks;
+  const wisAttr = sheet.attributes.find((a) => /^wis/i.test(a.name.trim()));
+  const score = Number(/\d+/.exec(wisAttr?.value ?? '')?.[0]);
+  const wis = Number.isFinite(score) && score > 0 ? Math.floor((score - 10) / 2) : Number(/[+-]?\d+/.exec(wisAttr?.modifier ?? '')?.[0] ?? 0);
+  const profText = sheet.combat.find((c) => /proficiency/i.test(c.label))?.value;
+  const prof = Number(/[+-]?\d+/.exec(profText ?? '')?.[0]) || Math.ceil(characterLevel(sheet) / 4) + 1;
+  const attack = spellNumbers(sheet).attack ?? prof + wis;
+  const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+  return attacks.map((a) => (/quarterstaff|\bclub\b/i.test(a.name) && !/shillelagh/i.test(a.name) ? { ...a, name: `${a.name} (Shillelagh)`, bonus: sign(attack), damage: `1d8${wis ? sign(wis) : ''} bludgeoning (magical)` } : a));
+}
