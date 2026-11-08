@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState, type PointerEvent } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import { api } from '../online/api';
 import { hexCorners } from '../game/hex';
@@ -20,7 +20,8 @@ export function SceneGrid({ map, id }: { map: Pick<SceneMap, 'grid' | 'cell' | '
 }
 
 export interface SceneInteraction {
-  onHexContext?: (key: string, point: { x: number; y: number }) => void;
+  /** `point.alt`: the chosen aim height in feet above that hex's ground (Shift + mouse wheel, APEX 1.9). */
+  onHexContext?: (key: string, point: { x: number; y: number; alt?: number }) => void;
   onTokenContext?: (id: string) => void;
   pathFrom?: { x: number; y: number } | null;
   pathBudget?: number | null;
@@ -31,6 +32,8 @@ export interface SceneInteraction {
   sightSide?: 'hostile' | 'party' | null;
   areaAt?: ((point: { x: number; y: number }) => string[]) | null;
   focus?: { key: string; x: number; y: number } | null;
+  /** APEX 1.9 – how the figure moves (flying in the air, climbing speed) for reach and path previews. */
+  moveMode?: { fly?: boolean; climb?: boolean };
   /** Reach area origin (default: the viewer's own token). */
   reachFrom?: { x: number; y: number } | null;
 }
@@ -42,6 +45,21 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   const [info, setInfo] = useState<string | null>(null);
   // APEX 1.8: 2D or 3D battle map (remembered per device)
   const [view3d, setView3dState] = useState(() => { try { return localStorage.getItem('apex.map.view3d') === '1'; } catch { return false; } });
+  // APEX 1.9: aim height (Shift + mouse wheel) – where a flyer moves to, where a sphere's centre lies
+  const [aimAlt, setAimAlt] = useState(0);
+  const frameRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (!e.shiftKey) return;
+      e.preventDefault(); e.stopPropagation();
+      const d = (e.deltaY || e.deltaX) < 0 ? 5 : -5;
+      setAimAlt((a) => Math.max(0, Math.min(120, a + d)));
+    };
+    el.addEventListener('wheel', wheel, { passive: false, capture: true });
+    return () => el.removeEventListener('wheel', wheel, { capture: true } as EventListenerOptions);
+  });
   const setView3d = (on: boolean) => { setView3dState(on); try { localStorage.setItem('apex.map.view3d', on ? '1' : '0'); } catch { /* private mode */ } };
   const id = snapshot.scene?.map.playerBackgroundAsset;
   useEffect(() => { let live = true; setUrl(null); if (id) api.mapImage(id).then(r => { if (live) setUrl(r.url); }).catch(() => undefined); return () => { live = false; }; }, [id]);
@@ -71,27 +89,29 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
       badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
       icons: figureIcons(f.effects, f.concentration),
+      ...(f.alt ? { alt: f.alt } : {}),
       ...(f.kind === 'pc' && snapshot.vitals?.[f.tokenId!] ? { vitals: snapshot.vitals[f.tokenId!] } : {}),
     }))].map((t) => {
       // the viewer's own characters: effects from `self`, hit points from `vitals`
       const mine = snapshot.self?.[t.tokenId];
-      return { ...t, ...(mine && !t.icons?.length ? { icons: figureIcons(mine.effects, mine.concentration) } : {}), ...(!t.enemy && !t.vitals && snapshot.vitals?.[t.tokenId] ? { vitals: snapshot.vitals[t.tokenId] } : {}) };
+      return { ...t, ...(t.tokenId === tokenId && snapshot.movement?.alt ? { alt: snapshot.movement.alt } : {}), ...(mine && !t.icons?.length ? { icons: figureIcons(mine.effects, mine.concentration) } : {}), ...(!t.enemy && !t.vitals && snapshot.vitals?.[t.tokenId] ? { vitals: snapshot.vitals[t.tokenId] } : {}) };
     });
     const reachOrigin = interaction.reachFrom ?? point;
-    const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? hexReach(map, reachOrigin, reachBudget) : null;
+    const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? hexReach(map, reachOrigin, reachBudget, interaction.moveMode) : null;
     // Scene-local light: region night like the Arena; battle lighting dim/dark.
     const clock = snapshot.clock;
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene">{!compact && <><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p></>}
-      <div className="hex-scene-frame">
+      <div className="hex-scene-frame" ref={frameRef}>
+        {category === 'battle' && (aimAlt > 0 || snapshot.movement?.fly) && <div className="aim-level" data-testid="aim-level" title="Shift + mouse wheel: aim height for flying and spell centres">⇕ Aim {aimAlt} ft{aimAlt ? '' : ' (ground)'} <small>Shift+wheel</small>{aimAlt > 0 && <button type="button" onClick={() => setAimAlt(0)} aria-label="Back to the ground">×</button>}</div>}
         {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
         {view3d && category === 'battle' ? (
           <Suspense fallback={<p className="p-4 text-marble-300">Loading 3D view…</p>}>
-            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} areaAt={interaction.areaAt} focus={interaction.focus} />
+            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} fx={snapshot.fx} />
           </Suspense>
         ) : (
-          <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} />
+          <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} aimAlt={aimAlt} />
         )}
       </div>
     </section>;

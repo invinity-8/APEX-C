@@ -506,26 +506,34 @@ export function passable(map: Pick<SceneMap, 'hex'>, h: Axial): boolean {
  * Cost of one step (in hexes): the tile cost, +1 for climbing one level up (a 5-ft step counts double); two or more
  * levels up or down are a cliff that walkers can't take. Flat maps: the tile cost only.
  */
-export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map)): (k: HexKey, from?: HexKey) => number | null {
+export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map), opts: MoveMode = {}): (k: HexKey, from?: HexKey) => number | null {
   const height = map.hex?.heights ? heightLookup(map) : null;
   return (k, from) => {
-    const c = lookup(k)?.cost ?? null;
+    const tile = lookup(k);
+    if (!tile) return null;
+    // APEX 1.9 – flying: over difficult ground, water, trees and boulders, steps and cliffs; walls still block
+    if (opts.fly) return tile.id === 'wall' ? null : 1;
+    const c = tile.cost;
     if (c === null || !height || from === undefined) return c;
     const dh = height(k) - height(from);
+    // climbing speed: cliffs are climbable at normal cost (going up and down)
+    if (opts.climb) return c;
     if (Math.abs(dh) > 1) return null;
     return dh === 1 ? c + 1 : c;
   };
 }
+/** How a creature moves: flying (in the air) or with a climbing speed. */
+export interface MoveMode { fly?: boolean; climb?: boolean }
 
 /** Movement on a hex scene: cheapest path by tile costs × units per hex (5 ft or 3 mi). */
-export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
+export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }, mode: MoveMode = {}): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
   const lookup = tileLookup(map);
   const goal = hexAt(map, end);
   const goalTile = lookup(hexKey(goal));
   if (!goalTile) return { ok: false, error: 'Destination is outside the map.' };
-  if (goalTile.cost === null) return { ok: false, error: `${goalTile.label} cannot be entered.` };
+  if (goalTile.cost === null && !(mode.fly && goalTile.id !== 'wall')) return { ok: false, error: `${goalTile.label} cannot be entered.` };
   const from = hexAt(map, start);
-  const reach = dijkstra(hexKey(from), stepCost(map, lookup), Infinity, hexKey(goal));
+  const reach = dijkstra(hexKey(from), stepCost(map, lookup, mode), Infinity, hexKey(goal));
   const info = reach.get(hexKey(goal));
   if (!info) return { ok: false, error: 'No passable path to that hex.' };
   const path = pathTo(reach, hexKey(goal)) ?? [];
@@ -535,9 +543,9 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
 }
 
 /** Hexes reachable with a remaining budget (in feet or miles) – the gold movement area. */
-export function hexReach(map: HexMapLike, start: { x: number; y: number }, budgetUnits: number): Map<HexKey, { cost: number; prev: HexKey | null }> {
+export function hexReach(map: HexMapLike, start: { x: number; y: number }, budgetUnits: number, mode: MoveMode = {}): Map<HexKey, { cost: number; prev: HexKey | null }> {
   const lookup = tileLookup(map);
-  return dijkstra(hexKey(hexAt(map, start)), stepCost(map, lookup), Math.max(0, budgetUnits / map.unitsPerCell));
+  return dijkstra(hexKey(hexAt(map, start)), stepCost(map, lookup, mode), Math.max(0, budgetUnits / map.unitsPerCell));
 }
 
 // ---------------------------------------------------------------- image import

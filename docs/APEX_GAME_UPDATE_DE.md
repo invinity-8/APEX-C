@@ -426,3 +426,52 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Feuerball als Kugel mit verschiebbarem Mittelpunkt.
 - Animationen auch in 3D.
 - Klettern mit Klettergeschwindigkeit (Sinna hat 30 ft) und Fallschaden.
+
+## APEX 1.9 – Kampf-Layout, Aktionsleiste, 3D Stufe 2 (Fliegen, Klettern, Fallen)
+
+**Layout (Spieler und GM)**
+- **Karte:** Die Battlemap steht groß in der Mitte. Die Initiative-Leiste liegt oben über der Karte.
+- **Aktionsleiste im Stil von Baldur's Gate** unten über der Karte:
+  - Aktion ●, Bonus ◆, Reaktion ↺ (bei Haste zusätzlich ein Haste-Marker), Bewegung und Zauberplätze I/II/III als Rauten.
+  - 14 Schnell-Slots: Angriffe, Zauber (mit Grad ∞/I/II/III …), Standardaktionen und Klassenfähigkeiten.
+  - Slots belegen: per Ziehen aus dem Panel (Aktions-Kacheln, „In hand“, Zauberbuch-Karten, Fähigkeiten). Innerhalb der Leiste durch Ziehen tauschen, Rechtsklick leert einen Slot. Gespeichert pro Charakter und Gerät.
+  - Tasten 1–9 lösen die ersten neun Slots aus.
+  - Großer „End turn“-Knopf rechts.
+  - Reaktions-Abfragen (Gelegenheitsangriff, Shield) und die Anleitung zum Zauber in der Hand erscheinen direkt über der Leiste.
+- **Detail-Panel:** Zielmenü, Zauberbuch, Effekte, Fähigkeiten, Kampflog und GM-Werkzeuge.
+  - Position über die Knöpfe oben links auf der Karte: links ◧, unten ⬓, rechts ◨, oder ausblenden □ für nur Karte. Gespeichert pro Gerät.
+  - Auf schmalen Bildschirmen liegt das Panel unten.
+
+**3D Stufe 2**
+- **Fliegen:**
+  - Wer eine Fluggeschwindigkeit hat, kann in die Luft und dort bleiben. Quellen:
+    - Bogen „Speed (flying)“;
+    - Tierform;
+    - Stat-Block (neu: Riesenfledermaus und Blutfalke mit 60 ft Fliegen);
+    - Zauber **Fly** (60 ft, Konzentration).
+  - **Shift + Mausrad** wählt die Zielhöhe (in 2D und 3D, 0–120 ft). Oben rechts steht „⇕ Aim 20 ft“; mit × geht es zurück auf den Boden.
+  - Rechtsklick bewegt auf diese Höhe. Höhe kostet Bewegung wie Strecke. Im Flug gilt die Fluggeschwindigkeit, schwieriges Gelände und Klippen zählen nicht, Mauern schon.
+  - Zwei Figuren dürfen auf demselben Hex stehen, wenn sie in verschiedener Höhe sind.
+  - **Anzeige:** In 2D tragen Fliegende eine „↑ 20 ft“-Plakette und einen Schatten. In 3D schweben sie mit Schatten und Höhenlinie; die Zielhöhe ist ein leuchtendes Hex in der Luft.
+- **Abstände in 3D:** Es zählt der größere Wert aus waagerechtem und senkrechtem Abstand. Das gilt für Nahkampf-Reichweite, Fernkampf- und Zauberreichweite sowie Gelegenheitsangriffe. Ein Biss erreicht keine Fledermaus in 20 ft Höhe, eine Armbrust schon.
+- **Sichtlinie:** Fliegende schauen aus ihrer Höhe und werden dort gesehen.
+- **Feuerball in der Höhe:**
+  - Mit Shift + Mausrad liegt der Mittelpunkt der Kugel in der Luft. Getroffen wird nur, wer auch senkrecht innerhalb des Radius ist.
+  - Kegel, Würfel und Linien reichen ihre Größe über die Höhe des Ursprungs hinaus.
+- **Klettern:** Mit Klettergeschwindigkeit (z. B. Sinna, 30 ft) sind Klippen begehbar, rauf und runter ohne Aufpreis. Ohne Klettergeschwindigkeit bleiben sie gesperrt.
+- **Fallen:**
+  - Wer fliegt und liegend, kampfunfähig oder auf Tempo 0 gesetzt wird, fällt. Das gilt auch, wenn der Fly-Zauber endet, z. B. durch Konzentrationsverlust.
+  - Schaden: 1W6 pro 10 ft (höchstens 20W6), danach liegt die Figur. Steht im Log, auf dem Bogen und als Animation.
+- **3D-Optik:**
+  - Höhere Auflösung (mindestens 1,5-faches Supersampling), filmisches Tonemapping, schärfere Schatten.
+  - Bodentextur, Felswände mit Schichtung.
+  - Gras mit vielen sich im Wind wiegenden Halmen; Bäume mit schwankenden Kronen; schimmerndes Wasser.
+- **Kampf-Animationen in 3D:**
+  - Schlieren mit leuchtendem Geschoss, Treffer-Blitz, aufsteigende Schadenszahlen.
+  - Bei Flächenzaubern leuchten die Hexes auf, und eine Feuerkugel wächst.
+
+**Offen / nächste Runde**
+- Szenario-Presets: mehr Vorlagen mit Seed.
+- Encounter-Generator: Lager, Hinterhalt, Belagerung; Challenge Rating nach Gruppengröße; danach feintunen.
+- 3D: Klicken auf Figuren in der Luft ist in 3D etwas fummelig; dafür ein Zielmenü in der Leiste.
+- Fallen bei Klippen ohne Flug („hinunterspringen“), Schieben und Stoßen.

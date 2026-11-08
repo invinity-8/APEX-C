@@ -51,6 +51,7 @@ export const SPELL_EFFECTS: Record<string, SpellEffectDef> = {
   'command': T({ targeting: 'enemy', targets: 1, perSlot: 1, save: 'wis', effect: { key: 'prone', name: 'Prone (Command: grovel)', condition: 'prone' } }),
   // APEX 1.5 – buffs and support for allies and yourself (SRD 5.1 numbers)
   'shillelagh': T({ targeting: 'self', effect: { key: 'shillelagh', name: 'Shillelagh (staff: WIS, d8)', turns: 10 } }),
+  'fly': T({ targeting: 'ally', targets: 1, perSlot: 1, effect: { key: 'fly', name: 'Flying (Fly, 60 ft)', mods: { fly: 60 } } }),
   'mage armor': T({ targeting: 'ally', targets: 1, effect: { key: 'mage-armor', name: 'Mage Armor (AC 13 + Dex)', mods: { acBase: 13 } } }),
   'barkskin': T({ targeting: 'ally', targets: 1, effect: { key: 'barkskin', name: 'Barkskin (AC ≥ 16)', mods: { acMin: 16 } } }),
   'longstrider': T({ targeting: 'ally', targets: 1, perSlot: 1, effect: { key: 'longstrider', name: 'Longstrider (+10 ft)', mods: { speed: 10 } } }),

@@ -48,6 +48,9 @@ export interface SceneEnemy {
   /** APEX: 'ally' = a GM-controlled companion fighting with the party (default 'enemy'). */
   side?: 'enemy' | 'ally';
   darkvisionFt?: number;
+  /** APEX 1.9 – flying / climbing speed (from the stat block). */
+  flyFt?: number;
+  climbFt?: number;
   /** APEX 1.6 – temporary hit points (spent before hit points, never stack: the higher value stays). */
   tempHp?: number;
 }
@@ -79,7 +82,7 @@ export function addEnemy(prev: GameState, sceneId: string, id: string, templateI
   const t = templateOf(b);
   const label = b.elite ? displayName(b) : `${b.name} ${count + 1}`;
   const enemy: SceneEnemy = {
-    id, templateId, name: (name?.trim() || label).slice(0, 60), x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, init: t.init, attack: t.attack,
+    id, templateId, name: (name?.trim() || label).slice(0, 60), x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, ...(b.flyFt ? { flyFt: b.flyFt } : {}), ...(b.climbFt ? { climbFt: b.climbFt } : {}), init: t.init, attack: t.attack,
     attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.buffs ? { buffs: structuredClone(b.buffs) } : {}), ...(b.elite ? { elite: true } : {}),
     color: side === 'ally' ? '#3f7fbf' : b.color, icon: b.icon, darkvisionFt: b.darkvisionFt, ...(side === 'ally' ? { side } : {}),
   };

@@ -419,14 +419,14 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     return out;
   }
   /** GM moves a character by the rules; resolves true when it arrived (not paused by an opportunity attack). */
-  async function moveCharacterP(tokenId: string, x: number, y: number): Promise<boolean> {
+  async function moveCharacterP(tokenId: string, x: number, y: number, alt?: number): Promise<boolean> {
     const scene = shownScene;
     if (!scene) return false;
     let arrived = false;
     await guarded(async () => {
       const position = snapshot?.motion?.tokens.find((t) => t.tokenId === tokenId);
       const assignment = shownPlayers.find((p) => p.tokenIds.includes(tokenId));
-      const r = (await api.sceneMove({ action: 'move', requestId: crypto.randomUUID(), sceneId: scene.id, sceneRevision: scene.revision, tokenId, tokenVersion: position?.version ?? 0, assignmentRevision: assignment?.revision ?? 0, epoch: snapshot?.motion?.round ?? 0, x, y })) as { message?: string; paused?: boolean };
+      const r = (await api.sceneMove({ action: 'move', requestId: crypto.randomUUID(), sceneId: scene.id, sceneRevision: scene.revision, tokenId, tokenVersion: position?.version ?? 0, assignmentRevision: assignment?.revision ?? 0, epoch: snapshot?.motion?.round ?? 0, x, y, ...(typeof alt === 'number' && (snapshot?.pcMovement?.[tokenId]?.fly || alt === 0) ? { alt } : {}) })) as { message?: string; paused?: boolean };
       arrived = !r.paused;
       setSnapshot(await api.sceneFocus(scene.id, viewRef.current));
       setNotice(r.message ?? 'Moved.');
@@ -815,10 +815,11 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     setBattleMode(null);
     if (ref.kind === 'npc') setSelectedEnemy(ref.id);
   }
-  function battleMove(x: number, y: number) {
+  function battleMove(x: number, y: number, alt?: number) {
     if (!selected) return;
     setBattleMode(null);
-    if (selected.kind === 'npc') sceneTurn({ action: 'enemyMove', id: selected.id, x, y });
+    const npc = selected.kind === 'npc' ? gmEnemies.find((e) => e.id === selected.id) : undefined;
+    if (selected.kind === 'npc') sceneTurn({ action: 'enemyMove', id: selected.id, x, y, ...(typeof alt === 'number' && (npc?.flyFt || alt === 0) ? { alt } : {}) });
     else moveCharacter(selected.id, x, y, 'move');
   }
 
@@ -839,7 +840,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       const interaction = pcInteraction({
         snapshot, tokenId: selected.id, name: fig.name, sheet: pcSheet, attacks: pcAttacksNow, acting: active, canMove: !!mv?.canMove && (free || (left ?? 0) > 0), remaining: free ? null : left,
         ready: pcReady, setReady: setPcReady, setSpellTargets: setPcTargets,
-        act: async (input) => (await sceneTurnP(input)).ok, move: (x, y) => moveCharacterP(selected.id, x, y),
+        act: async (input) => (await sceneTurnP(input)).ok, move: (x, y, alt) => moveCharacterP(selected.id, x, y, alt),
         openTargetMenu: (id) => setPcMenu(id), notify: setNotice,
         focusKey: gmEncounter && active ? `${turnKey}:${actor}` : null,
       });
@@ -864,7 +865,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       onHexContext: (_k, p) => {
         if (!active) return setNotice(`It is not ${fig.name}'s turn – only the creature whose turn it is acts.`);
         if (area && npc && areaMode !== null) { setAreaMode(null); return sceneTurn({ action: 'npcArea', id: npc.id, area: areaMode, point: p }); }
-        battleMove(p.x, p.y);
+        battleMove(p.x, p.y, (p as { alt?: number }).alt);
       },
       onTokenContext: (id) => {
         const ref = refOf(id);

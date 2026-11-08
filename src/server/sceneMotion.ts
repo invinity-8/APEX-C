@@ -4,8 +4,11 @@ import type { AuthUser, Repo } from './repo.js';
 import { carriedLights, clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
 import { enemiesOf } from '../game/sceneCombat.js';
 import { sceneContext } from './sceneRuntime.js';
-import { pausedMoveOf, planInterruption, registerInterruption } from './sceneTurns.js';
-import { hexMovementCost } from '../campaign/hexScene.js';
+import { pausedMoveOf, planAltitude, planInterruption, registerInterruption } from './sceneTurns.js';
+import { heightLookup, hexMovementCost } from '../campaign/hexScene.js';
+import { findBeast } from '../game/beastCatalog.js';
+import { effectsOf } from '../game/combatEffects.js';
+import { altitudeOf, pcSpeeds, setAltitude } from '../game/altitude.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
 export interface MotionSnapshot { tokens: SceneTokenPosition[]; round: number; hour: number; known: MapNode[]; budgets: Record<string, { tacticalSpent: number; regionSpent: number }> }
@@ -69,17 +72,31 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
   const pcs = ctx.pcs ? await ctx.pcs(scene.id, map) : [];
   const start = old ?? pcs.find(p => p.tokenId === token.id) ?? { x: ownerAssignment?.spawn_x ?? 0, y: ownerAssignment?.spawn_y ?? 0 };
   const to = snappedPoint(map, { x: v.x, y: v.y });
-  // Two figures never share a hex (battle and region hex maps).
+  // APEX 1.9: flying (altitude above the destination's ground) and climbing on battle maps
+  const actor = `pc-${token.id}`;
+  const sheet = await sheetOf(ctx, token.id);
+  const battleHex = scene.category === 'battle' && !!map.hex;
+  const beast = sheet.wildShape ? findBeast(state!.state.customBeasts, sheet.wildShape.formId) : undefined;
+  const speeds = battleHex ? pcSpeeds(sheet, beast ?? null, effectsOf(state!.state, scene.id, actor)) : { fly: 0, climb: 0 };
+  const air = battleHex ? planAltitude(map, start, to, altitudeOf(state!.state, scene.id, actor), typeof v.alt === 'number' ? v.alt : undefined, speeds) : null;
+  if (typeof air === 'string') return { status: 422, body: { error: `${token.name} ${air}` } };
+  const endAltWanted = air?.to ?? 0;
+  // Two figures never share a spot (battle and region hex maps) – flyers may be above or below another creature.
   if (map.hex) {
     const target = hexKeyAt(map, to);
-    const occupied = pcs.some(p => p.tokenId !== token.id && hexKeyAt(map, p) === target) || enemiesOf(state!.state, scene.id).some(e => !e.defeated && hexKeyAt(map, e) === target);
-    if (occupied) return { status: 409, body: { error: 'Another figure stands on that hex.' } };
+    const altOf = (a: string) => altitudeOf(state!.state, scene.id, a);
+    const occupied = pcs.some(p => p.tokenId !== token.id && hexKeyAt(map, p) === target && altOf(`pc-${p.tokenId}`) === endAltWanted) || enemiesOf(state!.state, scene.id).some(e => !e.defeated && hexKeyAt(map, e) === target && altOf(`npc-${e.id}`) === endAltWanted);
+    if (occupied) return { status: 409, body: { error: 'Another figure is at that spot.' } };
   }
-  const checked = movementCost(map, v.action === 'place' ? to : start, to);
+  const checked = battleHex && air
+    ? (() => { const r = hexMovementCost(map, v.action === 'place' ? to : start, to, air.mode); return r.ok ? { ok: true as const, cost: r.cost + (v.action === 'place' ? 0 : air.verticalFt) } : r; })()
+    : movementCost(map, v.action === 'place' ? to : start, to);
   if (!checked.ok) return { status: 422, body: { error: checked.error } };
   if (v.action === 'move' && !internal && pausedMoveOf(state!.state, scene.id, { kind: 'pc', tokenId: token.id })) return { status: 409, body: { error: 'Movement is paused for an opportunity attack – wait for the decision.' } };
   const category = scene.category as 'battle' | 'region';
-  const mv = movementFor(state!.state, scene.id, category, token.id, user.role === 'gm', await sheetOf(ctx, token.id), local);
+  const mv0 = movementFor(state!.state, scene.id, category, token.id, user.role === 'gm', sheet, local);
+  // in the air the flying speed is the budget (feet already spent count against it)
+  const mv = air?.mode.fly && mv0.flyAllowance !== undefined ? { ...mv0, allowance: mv0.flyAllowance } : mv0;
   if (v.action === 'move') {
     if (mv.overloaded) return { status: 422, body: { error: `${token.name} is over carrying capacity; reduce the carried load before moving.` } };
     if (!mv.canMove) return { status: 409, body: { error: mv.reason ?? 'You cannot move right now.' } };
@@ -93,9 +110,11 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
   let cost = v.action === 'place' ? 0 : checked.cost;
   let stop: Awaited<ReturnType<typeof planInterruption>> = null;
   if (v.action === 'move' && category === 'battle' && map.hex) {
-    const path = hexMovementCost(map, start, to);
+    const path = hexMovementCost(map, start, to, air?.mode);
     if (path.ok) {
-      const points = [{ x: start.x, y: start.y }, ...path.steps];
+      const g = heightLookup(map);
+      const z = (p: { x: number; y: number }, alt: number) => g(hexKeyAt(map, p)) * 5 + alt;
+      const points = [{ x: start.x, y: start.y, z: z(start, air?.from ?? 0) }, ...path.steps.map((p) => ({ ...p, z: z(p, endAltWanted) }))];
       stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'pc', tokenId: token.id }, points, declined);
       if (stop) { dest = points[stop.stop]; cost = stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost; }
     }
@@ -107,6 +126,9 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
   const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && (map.hex ? seenSet.has(hexKeyAt(map, n)) : Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell)))).map(n => ({ ...n, targetScene: null, discoverable: false }));
   const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: dest.x, y: dest.y, requestId: v.requestId };
   const result = stop && cost === 0 ? { ok: true } : await repo.sceneMotion.localWrite(user, input, cost, mv.allowance, mv.epoch, observed, seen);
+  // the new altitude (taking off, climbing, landing) – a stop for an opportunity attack keeps the old one at the start
+  const endAlt = stop && cost === 0 ? air?.from ?? 0 : endAltWanted;
+  if (result.ok && battleHex && endAlt !== altitudeOf(state!.state, scene.id, actor)) await mutateState(user, repo, (s) => { const st = structuredClone(s); setAltitude(st, scene.id, actor, endAlt, speeds.fly ? (speeds as { flySource?: 'speed' | 'spell' }).flySource : undefined); return st; });
   if (result.ok && stop) {
     const pause = stop;
     await mutateState(user, repo, (s) => registerInterruption(s, scene.id, { kind: 'pc', tokenId: token.id }, token.name, dest, to, pause.reactors, declined));

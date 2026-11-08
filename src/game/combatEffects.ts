@@ -48,6 +48,8 @@ export interface EffectMods {
   /** Walking speed bonus in feet (Longstrider +10) and a multiplier (Haste ×2). */
   speed?: number;
   speedMult?: number;
+  /** APEX 1.9 – flying speed granted by the effect (Fly spell: 60 ft). */
+  fly?: number;
   /** APEX 1.6 – temporary hit points at the start of each of its turns (Heroism; -1 in a spell table = the caster's spellcasting modifier). */
   tempHpTurn?: number;
   /** Hit point maximum raised by this much while the effect lasts (Aid) – applied to the sheet / NPC once. */

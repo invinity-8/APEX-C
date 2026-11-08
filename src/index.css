@@ -597,3 +597,7 @@
   .map-stage .player-scene > .battle-layout { order: 1; }
 }
 .battle-layout.dock-right > .battle-dock > .journal-toolbar:first-child { padding-right: 9rem; }
+/* APEX 1.9 – aim height (Shift + wheel) */
+.aim-level { position: absolute; top: .5rem; right: 4.2rem; z-index: 15; display: flex; align-items: center; gap: .35rem; padding: .2rem .55rem; border-radius: .45rem; border: 1px solid rgba(127,214,255,.6); background: rgba(11,34,51,.88); color: #bfefff; font: 600 .72rem/1.2 Inter, sans-serif; }
+.aim-level small { color: #7fa9bd; font-weight: 400; }
+.aim-level button { color: #bfefff; padding: 0 .2rem; }

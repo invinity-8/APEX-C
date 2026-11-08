@@ -56,7 +56,8 @@ export interface PcInteractionInput {
   /** POST scene-turn (scene id added by the caller). */
   act: (input: Record<string, unknown>) => Promise<boolean> | void;
   /** Move the character; resolves to true when it arrived (not paused by an opportunity attack). */
-  move: (x: number, y: number) => Promise<boolean>;
+  /** `alt`: altitude in feet above the destination's ground (flying, APEX 1.9). */
+  move: (x: number, y: number, alt?: number) => Promise<boolean>;
   openTargetMenu: (enemyId: string) => void;
   notify: (text: string) => void;
   focusKey?: string | null;
@@ -73,7 +74,11 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
   const readyRange = atkRange ? atkRange.rangeFt ?? atkRange.reachFt : readySpell ? spellRangeFt(readySpell.range) : null;
   const figures = i.snapshot.figures ?? [];
   const figOf = (id: string) => figures.find((x) => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
+  // APEX 1.9: flying while in the air, climbing with a climb speed (the player's own movement or the GM's view of it)
+  const mv = i.snapshot.movement?.tokenId === i.tokenId ? i.snapshot.movement : i.snapshot.pcMovement?.[i.tokenId];
+  const moveMode = { ...(mv?.fly && (mv.alt ?? 0) > 0 ? { fly: true } : {}), ...(mv?.climb ? { climb: true } : {}) };
   return {
+    moveMode,
     reachFrom: pos,
     pathFrom: i.acting && i.canMove && !readyArea ? pos : null,
     pathBudget: i.remaining,
@@ -145,7 +150,7 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
     onHexContext: (_k, p) => {
       if (!i.acting) return;
       if (readyArea && readySpell && i.ready?.kind === 'spell') { void i.act({ action: 'cast', tokenId: i.tokenId, spellId: readySpell.id, slotLevel: i.ready.slotLevel, point: p }); i.setReady(null); return; }
-      if (i.canMove) void i.move(p.x, p.y);
+      if (i.canMove) void i.move(p.x, p.y, (p as { alt?: number }).alt);
     },
   };
 }

@@ -48,10 +48,10 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     catch (e) { setMessage(String(e)); if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) setUncertain(input); else { setUncertain(null); game.online?.refresh(); } return false; }
     finally { pendingRef.current = false; setPending(false); }
   }
-  function move(x: number, y: number, viaRightClick = false): Promise<boolean> {
+  function move(x: number, y: number, viaRightClick = false, alt?: number): Promise<boolean> {
     if (!scene?.scene || !me || (!moveMode && !viaRightClick) || uncertain || pendingRef.current) return Promise.resolve(false);
     const token = scene.motion?.tokens.find(t => t.tokenId === me.id);
-    return send({ action: 'move', requestId: crypto.randomUUID(), tokenId: me.id, tokenVersion: token?.version ?? 0, sceneId: scene.scene.id, sceneRevision: scene.scene.revision, assignmentRevision: scene.assignmentRevision, epoch: scene.scene.category === 'battle' ? scene.motion?.round ?? 0 : scene.motion?.hour ?? 0, x, y });
+    return send({ action: 'move', requestId: crypto.randomUUID(), tokenId: me.id, tokenVersion: token?.version ?? 0, sceneId: scene.scene.id, sceneRevision: scene.scene.revision, assignmentRevision: scene.assignmentRevision, epoch: scene.scene.category === 'battle' ? scene.motion?.round ?? 0 : scene.motion?.hour ?? 0, x, y, ...(typeof alt === 'number' && scene.scene.category === 'battle' && (scene.movement?.fly || alt === 0) ? { alt } : {}) });
   }
   if (!scene || scene.kind === 'arena') return null;
   if (scene.kind === 'sanctuary') return <section className={`sanctuary sanctuary-${preset ? background : settings?.atmosphere ?? 'hall'}`} aria-label="Character Sanctuary">
@@ -105,7 +105,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const acting = category === 'battle' && (myTurn || free);
   const interaction: SceneInteraction = category !== 'battle' || !me ? {} : pcInteraction({
     snapshot: scene, tokenId: me.id, name: me.name, sheet: mySheet, attacks: attacksNow, acting, canMove, remaining: free ? null : remaining,
-    ready, setReady, setSpellTargets, act: (input) => sceneAction(input), move: (x, y) => move(x, y, true),
+    ready, setReady, setSpellTargets, act: (input) => sceneAction(input), move: (x, y, alt) => move(x, y, true, alt),
     openTargetMenu: (id) => setTarget(id), notify: setMessage,
     focusKey: myTurn && liveEncounter ? `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}` : null,
   });
