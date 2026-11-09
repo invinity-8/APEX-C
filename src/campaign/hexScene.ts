@@ -518,9 +518,20 @@ export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map), o
     const dh = height(k) - height(from);
     // climbing speed: cliffs are climbable at normal cost (going up and down)
     if (opts.climb) return c;
-    if (Math.abs(dh) > 1) return null;
+    // APEX 2.0: jumping down a cliff is possible (falling damage from 10 ft); paths prefer stairs (+1 per jump)
+    if (dh <= -2) return c + 1;
+    if (dh > 1) return null;
     return dh === 1 ? c + 1 : c;
   };
+}
+/** Drops of two or more levels along a walked path (jumping down a cliff): the fall in feet per jump. */
+export function pathDrops(map: Pick<SceneMap, 'hex'>, path: Axial[], from?: Axial): number[] {
+  if (!map.hex?.heights) return [];
+  const h = heightLookup(map);
+  const out: number[] = [];
+  const pts = from ? [from, ...path] : path;
+  for (let i = 1; i < pts.length; i++) { const d = h(hexKey(pts[i - 1])) - h(hexKey(pts[i])); if (d >= 2) out.push(d * 5); }
+  return out;
 }
 /** How a creature moves: flying (in the air) or with a climbing speed. */
 export interface MoveMode { fly?: boolean; climb?: boolean }

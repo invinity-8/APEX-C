@@ -14,6 +14,9 @@ const skill = (sheet: Pick<CharacterSheet, 'skills'>, name: string) => signed(sh
 
 /** Ability modifier from the sheet (score, else the printed modifier). */
 export const pcAbilityMod = (sheet: Pick<CharacterSheet, 'attributes'>, re: RegExp) => abilityMod(sheet, re);
+/** APEX 2.0 – Athletics and Acrobatics (shoving): the skill on the sheet, else the ability modifier. */
+export const pcAthletics = (sheet: CharacterSheet) => skill(sheet, 'athletics') ?? abilityMod(sheet, /^str/i);
+export const pcAcrobatics = (sheet: CharacterSheet) => skill(sheet, 'acrobatics') ?? abilityMod(sheet, /^dex/i);
 export const pcStealth = (sheet: CharacterSheet) => skill(sheet, 'stealth') ?? abilityMod(sheet, /^dex/i);
 export const pcPerception = (sheet: CharacterSheet) => skill(sheet, 'perception') ?? abilityMod(sheet, /^wis/i);
 export function pcPassivePerception(sheet: CharacterSheet): number {

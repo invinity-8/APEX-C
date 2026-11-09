@@ -360,6 +360,13 @@ export function PlayerCombat(p: Props) {
             {canSmite && <label title="Spent only on a hit">Divine Smite <select aria-label="Smite slot" className="rounded border border-ink-600 bg-ink-900 px-1" value={smite} onChange={(e) => setSmite(Number(e.target.value))}><option value={0}>no</option>{slots.filter((x) => x.current > 0).map((x) => <option key={x.level} value={x.level}>{ordinal(x.level)} slot</option>)}</select></label>}
             {me2?.readied && <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending} onClick={() => { p.act({ action: 'release', actor: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, ...(adv ? { adv } : {}) }); p.setTarget(null); }} data-testid="release">⏳ Release readied attack (reaction)</button>}
           </div>
+          {(feetTo(enemy) ?? 99) <= 5 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-marble-300" data-testid="shove">
+              <span>Shove (replaces one attack):</span>
+              <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending || !canAct} title="Athletics vs Athletics/Acrobatics – push 5 ft away (off a cliff: it falls)" onClick={() => { p.act({ action: 'shove', attacker: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, mode: 'push' }); p.setTarget(null); }}>✋ Push 5 ft</button>
+              <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.pending || !canAct} title="Athletics vs Athletics/Acrobatics – knock prone (in the air: it falls)" onClick={() => { p.act({ action: 'shove', attacker: { kind: 'pc', tokenId }, target: { kind: 'npc', id: enemy.id }, mode: 'prone' }); p.setTarget(null); }}>⤓ Knock prone</button>
+            </div>
+          )}
           <ul className="space-y-1" aria-label="Attacks">
             {p.attacks.map((a, i) => {
               const r = parseRangeFt(`${a.range} ${a.notes}`);

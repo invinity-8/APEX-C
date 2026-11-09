@@ -4,8 +4,8 @@ import type { AuthUser, Repo } from './repo.js';
 import { carriedLights, clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
 import { enemiesOf } from '../game/sceneCombat.js';
 import { sceneContext } from './sceneRuntime.js';
-import { pausedMoveOf, planAltitude, planInterruption, registerInterruption } from './sceneTurns.js';
-import { heightLookup, hexMovementCost } from '../campaign/hexScene.js';
+import { fallDamage, pausedMoveOf, planAltitude, planInterruption, registerInterruption } from './sceneTurns.js';
+import { heightLookup, hexAt, hexMovementCost, pathDrops } from '../campaign/hexScene.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { effectsOf } from '../game/combatEffects.js';
 import { altitudeOf, pcSpeeds, setAltitude } from '../game/altitude.js';
@@ -133,8 +133,14 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
     const pause = stop;
     await mutateState(user, repo, (s) => registerInterruption(s, scene.id, { kind: 'pc', tokenId: token.id }, token.name, dest, to, pause.reactors, declined));
   }
-  const message = stop ? `${token.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack. The move continues after the decision.` : undefined;
-  return { status: result.ok ? 200 : 409, body: { ...result, ...(message ? { message, paused: true } : {}), ...(result.ok ? { position: dest, spent: mv.spent + cost, allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
+  // APEX 2.0: jumping down cliffs on the walked part of the path (falling damage from 10 ft, prone)
+  let jumped = '';
+  if (result.ok && battleHex && v.action === 'move' && air && !air.mode.fly && !air.mode.climb) {
+    const walked = hexMovementCost(map, start, to, air.mode);
+    if (walked.ok) for (const ft of pathDrops(map, stop ? walked.path.slice(0, stop.stop) : walked.path, hexAt(map, start))) jumped += ' ' + await fallDamage(user, repo, scene.id, { kind: 'pc', tokenId: token.id }, ft, 'jumps down a cliff');
+  }
+  const message = stop ? `${token.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack. The move continues after the decision.` : jumped ? `Movement saved.${jumped}` : undefined;
+  return { status: result.ok ? 200 : 409, body: { ...result, ...(message ? { message, ...(stop ? { paused: true } : {}) } : {}), ...(result.ok ? { position: dest, spent: mv.spent + cost, allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
 }
 
 async function ownerAssignmentOf(repo: Repo, campaignId: string, tokenId: string) {
@@ -161,4 +167,16 @@ async function mutateState(user: AuthUser, repo: Repo, fn: (s: import('../game/t
     if (!stored) return;
     if ((await repo.saveState(user.campaignId, fn(stored.state), stored.version, user.id)) !== null) return;
   }
+}
+
+/** Places a character on a hex without spending movement (pushed by a shove – server-initiated, APEX 2.0). */
+export async function placePc(user: AuthUser, repo: Repo, sceneId: string, tokenId: string, to: { x: number; y: number }): Promise<SceneResult> {
+  if (!repo.sceneMotion || !repo.sceneRuntime) return { status: 503, body: { error: 'Scene movement unavailable.' } };
+  const scene = await repo.sceneRuntime.scene(user.campaignId, sceneId);
+  if (!scene) return { status: 404, body: { error: 'Scene unavailable.' } };
+  const owner = await ownerAssignmentOf(repo, user.campaignId, tokenId);
+  const local = await repo.sceneMotion.localSnapshot(user.campaignId, sceneId, user.id, [tokenId]);
+  const row = local.tokens.find((t) => t.tokenId === tokenId);
+  const gm: AuthUser = { ...user, role: 'gm' };
+  return performMove(gm, repo, { action: 'place', requestId: crypto.randomUUID(), sceneId, tokenId, x: to.x, y: to.y, sceneRevision: scene.revision, assignmentRevision: owner?.revision ?? 0, tokenVersion: row?.version ?? 0, epoch: 0 }, [], true);
 }
