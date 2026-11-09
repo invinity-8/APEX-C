@@ -426,3 +426,131 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Feuerball als Kugel mit verschiebbarem Mittelpunkt.
 - Animationen auch in 3D.
 - Klettern mit Klettergeschwindigkeit (Sinna hat 30 ft) und Fallschaden.
+
+## APEX 1.9 – Kampf-Layout, Aktionsleiste, 3D Stufe 2 (Fliegen, Klettern, Fallen)
+
+**Layout (Spieler und GM)**
+- **Karte:** Die Battlemap steht groß in der Mitte. Die Initiative-Leiste liegt oben über der Karte.
+- **Aktionsleiste im Stil von Baldur's Gate** unten über der Karte:
+  - Aktion ●, Bonus ◆, Reaktion ↺ (bei Haste zusätzlich ein Haste-Marker), Bewegung und Zauberplätze I/II/III als Rauten.
+  - 14 Schnell-Slots: Angriffe, Zauber (mit Grad ∞/I/II/III …), Standardaktionen und Klassenfähigkeiten.
+  - Slots belegen: per Ziehen aus dem Panel (Aktions-Kacheln, „In hand“, Zauberbuch-Karten, Fähigkeiten). Innerhalb der Leiste durch Ziehen tauschen, Rechtsklick leert einen Slot. Gespeichert pro Charakter und Gerät.
+  - Tasten 1–9 lösen die ersten neun Slots aus.
+  - Großer „End turn“-Knopf rechts.
+  - Reaktions-Abfragen (Gelegenheitsangriff, Shield) und die Anleitung zum Zauber in der Hand erscheinen direkt über der Leiste.
+- **Detail-Panel:** Zielmenü, Zauberbuch, Effekte, Fähigkeiten, Kampflog und GM-Werkzeuge.
+  - Position über die Knöpfe oben links auf der Karte: links ◧, unten ⬓, rechts ◨, oder ausblenden □ für nur Karte. Gespeichert pro Gerät.
+  - Auf schmalen Bildschirmen liegt das Panel unten.
+
+**3D Stufe 2**
+- **Fliegen:**
+  - Wer eine Fluggeschwindigkeit hat, kann in die Luft und dort bleiben. Quellen:
+    - Bogen „Speed (flying)“;
+    - Tierform;
+    - Stat-Block (neu: Riesenfledermaus und Blutfalke mit 60 ft Fliegen);
+    - Zauber **Fly** (60 ft, Konzentration).
+  - **Shift + Mausrad** wählt die Zielhöhe (in 2D und 3D, 0–120 ft). Oben rechts steht „⇕ Aim 20 ft“; mit × geht es zurück auf den Boden.
+  - Rechtsklick bewegt auf diese Höhe. Höhe kostet Bewegung wie Strecke. Im Flug gilt die Fluggeschwindigkeit, schwieriges Gelände und Klippen zählen nicht, Mauern schon.
+  - Zwei Figuren dürfen auf demselben Hex stehen, wenn sie in verschiedener Höhe sind.
+  - **Anzeige:** In 2D tragen Fliegende eine „↑ 20 ft“-Plakette und einen Schatten. In 3D schweben sie mit Schatten und Höhenlinie; die Zielhöhe ist ein leuchtendes Hex in der Luft.
+- **Abstände in 3D:** Es zählt der größere Wert aus waagerechtem und senkrechtem Abstand. Das gilt für Nahkampf-Reichweite, Fernkampf- und Zauberreichweite sowie Gelegenheitsangriffe. Ein Biss erreicht keine Fledermaus in 20 ft Höhe, eine Armbrust schon.
+- **Sichtlinie:** Fliegende schauen aus ihrer Höhe und werden dort gesehen.
+- **Feuerball in der Höhe:**
+  - Mit Shift + Mausrad liegt der Mittelpunkt der Kugel in der Luft. Getroffen wird nur, wer auch senkrecht innerhalb des Radius ist.
+  - Kegel, Würfel und Linien reichen ihre Größe über die Höhe des Ursprungs hinaus.
+- **Klettern:** Mit Klettergeschwindigkeit (z. B. Sinna, 30 ft) sind Klippen begehbar, rauf und runter ohne Aufpreis. Ohne Klettergeschwindigkeit bleiben sie gesperrt.
+- **Fallen:**
+  - Wer fliegt und liegend, kampfunfähig oder auf Tempo 0 gesetzt wird, fällt. Das gilt auch, wenn der Fly-Zauber endet, z. B. durch Konzentrationsverlust.
+  - Schaden: 1W6 pro 10 ft (höchstens 20W6), danach liegt die Figur. Steht im Log, auf dem Bogen und als Animation.
+- **3D-Optik:**
+  - Höhere Auflösung (mindestens 1,5-faches Supersampling), filmisches Tonemapping, schärfere Schatten.
+  - Bodentextur, Felswände mit Schichtung.
+  - Gras mit vielen sich im Wind wiegenden Halmen; Bäume mit schwankenden Kronen; schimmerndes Wasser.
+- **Kampf-Animationen in 3D:**
+  - Schlieren mit leuchtendem Geschoss, Treffer-Blitz, aufsteigende Schadenszahlen.
+  - Bei Flächenzaubern leuchten die Hexes auf, und eine Feuerkugel wächst.
+
+**Offen / nächste Runde**
+- Szenario-Presets: mehr Vorlagen mit Seed.
+- Encounter-Generator: Lager, Hinterhalt, Belagerung; Challenge Rating nach Gruppengröße; danach feintunen.
+- 3D: Klicken auf Figuren in der Luft ist in 3D etwas fummelig; dafür ein Zielmenü in der Leiste.
+- Fallen bei Klippen ohne Flug („hinunterspringen“), Schieben und Stoßen.
+
+## APEX 2.0 – 3D-Figuren, echter Maßstab, Kachel-Strukturen, Zielliste, Stoßen, Szenarien, Encounter-Generator
+
+**Figuren in 3D**
+- **Aufsteller:** Charaktere mit Porträt stehen als Aufsteller wie beim Tabletop: das Porträt in einer goldgerahmten Karte auf einem runden Sockel. Die Karte dreht sich zur Kamera.
+- **Miniaturen:** Alle anderen (vor allem Gegner) bekommen eine kleine Miniatur nach Bauart und Größe aus dem Stat-Block:
+  - Bauart: Humanoid (Gegner mit Klinge), Untoter (bleich), Vierbeiner, Flieger (schlagende Flügel), Spinne;
+  - Größe: Tiny bis Gargantuan;
+  - Elite mit Goldkranz, Druiden in Tierform als Tier.
+- **Name und Lebensleiste** sitzen kompakt über der Figur. Gefallene liegen.
+- **Ausbau später:** hochgeladene 3D-Modelle (GLB) wären möglich, als eigene Ausbaustufe.
+
+**Echter Maßstab**
+- Eine 5-ft-Stufe ist so hoch wie ein Hex breit. Figuren sind etwa 6 ft groß.
+- Bäume sind etwa 22 ft hoch, Kiefern noch höher; Mauern 10 ft; Gras knöchel- bis kniehoch.
+- Fliegende schweben in echter Höhe.
+
+**3D-Strukturen für alle Kacheln**
+- **Natur:** Bäume, Kiefern, Büsche, Hecken, Baumstümpfe, Felsen, Geröll, Stalagmiten.
+- **Bauten:** Palisaden, Zäune, Türen, Säulen, Statuen, Treppen.
+- **Einrichtung:** Tische, Kisten, Fässer, Betten, Altar.
+- **Licht und Gefahren:** Lagerfeuer und Kohlebecken mit flackernder Flamme, leuchtende Pilze, Spinnennetze, Fallen mit Stacheln, Magiekreis.
+- **Boden und Wasser:** Schilf im Sumpf, Brücke, Sanddünen, Schneehügel.
+- **Bodentexturen je Familie:** Gras, Erde, Steinplatten, Dielen, Kopfsteinpflaster, Marmor, Teppich, Sand/Schnee/Eis.
+- Die Klippenwände behalten ihre Felsfarbe.
+
+**Sichtlinie in 3D**
+- Wie in 2D: Über einem Hex zeigen Linien zu allen Gegnern, die man von dort sehen würde, mit Entfernung und „👁 n in sight“.
+- Weiß heißt in Reichweite, gold gestrichelt zu weit.
+- Über einem Gegner erscheint die Linie von der eigenen Figur zu ihm.
+
+**Zielliste in der Aktionsleiste**
+- Über der Leiste stehen die sichtbaren Gegner (bei Unterstützungszaubern die Verbündeten), nächster zuerst, mit Entfernung in 3D, ↑ für Fliegende und einem Punkt für „in Reichweite“.
+- Ein Klick wirkt wie ein Rechtsklick auf die Figur: angreifen (inklusive Hinlaufen) oder zaubern. So trifft man auch Fliegende in 3D bequem.
+
+**GM-Leiste für Gegner**
+- Wählt der GM einen Gegner oder Verbündeten, erscheint dessen Leiste über der Karte:
+  - Aktionspunkte und Werte;
+  - Angriffe (der gewählte ist der Standard für Rechtsklick und Zielliste);
+  - Flächenfähigkeiten, Kriegsrufe, Dash, Disengage, Dodge, Hide;
+  - Stoßen (Wegstoßen/Umwerfen), dann Ziel in der Liste wählen;
+  - End turn.
+
+**Herunterspringen und Stoßen**
+- **Herunterspringen:** Gehende dürfen Klippen hinunterspringen; die Wegberechnung nimmt eine Treppe, wenn möglich. Ab 10 ft gibt es Fallschaden (1W6 pro 10 ft), danach liegt die Figur.
+- **Stoßen (5e-Shove):**
+  - Ersetzt einen Angriff.
+  - Stärke (Athletik) gegen Athletik oder Akrobatik des Ziels.
+  - Das Ziel darf höchstens eine Größe größer sein und muss in 5 ft sein (in 3D).
+  - Bei Erfolg wird es 5 ft weggestoßen oder umgeworfen:
+    - über eine Klippe oder in eine Grube: Fallschaden;
+    - in der Luft umgeworfen: Absturz.
+  - Für Spieler im Zielmenü („✋ Push 5 ft“, „⤓ Knock prone“), für den GM in der Gegnerleiste.
+
+**Szenario-Vorlagen (Editor, mit Seed neu würfelbar)**
+- **Neu:** Banditenlager, Höhle, Hochlandpass, Dorfplatz, Sumpf, Tempelruine, Schlucht mit Brücke, Wüstenoase, Winterwald mit gefrorenem See.
+  - **Banditenlager:** Palisade, Tore mit Kohlebecken, Lagerfeuer, Zelte.
+  - **Höhle:** Stalagmiten, Pilze, Gruben, unebener Boden.
+  - **Hochlandpass:** zwei Plateaus (15 und 25 ft) mit Treppen und Klippen.
+  - **Dorfplatz:** Häuser mit Türen, Brunnen, Zäune.
+  - **Sumpf:** Moor, Schilf, Baumstümpfe.
+  - **Tempelruine:** Säulenreihen, erhöhte Altar-Empore mit Statuen.
+  - **Schlucht mit Brücke:** tiefe Schlucht, Holzbrücke, hohe Ufer.
+- **Bisher:** Waldlichtung, Bach mit Furt, Ruine, Dungeon, offenes Feld.
+
+**Encounter-Generator (GM, im Seitenpanel)**
+- Eingaben:
+  - **Thema:** Kultisten, Ork-Kriegsbande, Banditen, Goblin-Plünderer, ruhelose Tote, wilde Tiere. Eigene Bibliotheks-Gegner, die zum Thema passen, kommen dazu.
+  - **Situation:** Lager, Hinterhalt, Belagerung, Patrouille, Bau.
+  - **Schwierigkeit:** easy bis deadly.
+  - **Gruppe:** Größe und Stufe.
+- **Generate:** Füllt das XP-Budget nach den DMG-Schwellen inklusive Gruppen-Multiplikator; ab „medium“ mit Anführer. „🎲 Reroll“ würfelt neu.
+- **Vorschau:** zeigt XP, angepasste XP und die tatsächliche Schwierigkeit. Einträge lassen sich entfernen oder aus der Bibliothek hinzufügen, die Bewertung rechnet mit.
+- **Platzieren nach Situation:**
+  - **Lager:** um das Lagerfeuer bzw. die Mitte.
+  - **Hinterhalt:** 20–35 ft um die Gruppe, bevorzugt in Deckung, alle versteckt mit gewürfeltem Stealth.
+  - **Belagerung:** vom gegenüberliegenden Rand, Fernkämpfer auf der höchsten Stelle.
+  - **Patrouille:** als Trupp in etwa 40 ft.
+  - **Bau:** auf der fernen Kartenseite.

@@ -62,6 +62,7 @@ export const SRD_SPELL_MECHANICS: Record<string, M> = {
   // 3rd level and up
   'fireball': m({ level: 3, range: '150 feet', save: 'Dexterity', damage: '8d6 fire', up: '1d6', area: '20-foot-radius sphere' }),
   'lightning bolt': m({ level: 3, range: 'Self (100-foot line)', save: 'Dexterity', damage: '8d6 lightning', up: '1d6', area: '100-foot line' }),
+  'fly': m({ level: 3, range: 'Touch', conc: true }),
   'haste': m({ level: 3, range: '30 feet', conc: true }),
   'mass healing word': m({ level: 3, range: '60 feet', time: '1 bonus action', heal: '1d4', up: '1d4' }),
   'stoneskin': m({ level: 4, range: 'Touch', conc: true }),

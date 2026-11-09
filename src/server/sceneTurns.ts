@@ -20,24 +20,26 @@ import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, parseStoredSheet, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
 import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, activeActors, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, withShillelagh, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
-import { statBlock, type AbilityKey } from '../game/bestiary.js';
+import { bestiary, statBlock, type AbilityKey } from '../game/bestiary.js';
 import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, type EffectMods, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
 import type { AttackOptions } from '../game/sceneCombat.js';
 import { attackExtras } from './combatFeatures.js';
-import { areaHexes, feetApart, parseArea, type AreaSpec } from '../campaign/hexArea.js';
+import { areaHexes, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
 import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
-import { hexAt, hexCentre, hexMovementCost, passable } from '../campaign/hexScene.js';
-import { continuePcMove } from './sceneMotion.js';
+import { heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathDrops, tileLookup } from '../campaign/hexScene.js';
+import { continuePcMove, placePc } from './sceneMotion.js';
 import { lineOfSight, sightRules } from '../campaign/hexVision.js';
-import { distance } from '../game/hex.js';
+import { distance, hexKey } from '../game/hex.js';
 import { applyDamage, applyHealing, classLevel, revert, setTempHp, transform } from '../game/abilities.js';
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
-import { npcPerception, npcStealth, pcAbilityMod, pcPerception, pcStealth } from '../game/perception.js';
+import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
+import { altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
+import { npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { parseMap } from '../campaign/maps.js';
@@ -55,10 +57,182 @@ async function mutate(user: AuthUser, repo: Repo, fn: Mutation): Promise<SceneRe
     const r = fn(stored.state);
     if (!r.ok) return { status: 409, body: { error: r.error } };
     if (r.state === stored.state) return { status: 200, body: { ok: true, message: r.message, version: stored.version } };
+    // APEX 1.9: whoever can't stay in the air any more falls (prone, 1d6 per 10 ft)
+    const falls = applyFalls(r.state);
     const version = await repo.saveState(user.campaignId, r.state, stored.version, user.id);
-    if (version !== null) return { status: 200, body: { ok: true, message: r.message, version } };
+    if (version !== null) {
+      let extra = falls.map((f) => f.text).join(' ');
+      for (const f of falls) if (f.tokenId && f.damage) {
+        const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: f.sceneId };
+        extra += await damagePc(user, repo, ctx, f.tokenId, f.damage);
+      }
+      return { status: 200, body: { ok: true, message: [r.message, extra].filter(Boolean).join(' '), version } };
+    }
   }
   return { status: 409, body: { error: 'The scene changed at the same time. Please try again.' } };
+}
+
+/**
+ * A creature falls `ft` feet onto the ground (jumping down a cliff, pushed over an edge): 1d6 per 10 ft (max 20d6),
+ * prone if it took damage. Characters lose hit points on their sheet. Returns the log text.
+ */
+export async function fallDamage(user: AuthUser, repo: Repo, sceneId: string, who: Side, ft: number, why: string): Promise<string> {
+  const dice = fallDice(ft);
+  if (!dice) return '';
+  const r = rollDice(parseDamage(dice)!);
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
+  const name = ctx.state ? nameOf(ctx.state, sceneId, who) : 'A creature';
+  let text = `${name} falls ${ft} ft (${why}): ${r.total} bludgeoning damage (${dice})${r.total ? ' and lands prone' : ''}.`;
+  if (who.kind === 'pc') text += await damagePc(user, repo, ctx, who.tokenId, r.total);
+  await mutate(user, repo, (s) => {
+    let st = structuredClone(s);
+    if (who.kind === 'npc' && r.total) { const u = updateEnemy(st, sceneId, who.id, { hpDelta: -r.total }); if (u.ok) st = u.state; }
+    if (r.total && !effectsOf(st, sceneId, actorOf(who)).some((e) => e.key === 'prone')) addEffect(st, sceneId, actorOf(who), conditionEffect('prone', undefined, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+    pushFx(st, sceneId, [{ kind: 'hit', to: actorOf(who), amount: r.total, label: 'Fall', element: 'physical' }]);
+    logCombat(st, sceneId, text);
+    return { ok: true, state: st, message: text };
+  });
+  return text;
+}
+
+/**
+ * Encounter generator (GM, APEX 2.0): `op: 'plan'` returns monsters for a theme, difficulty and party (nothing is
+ * stored); `op: 'apply'` places the (possibly edited) list on the map for the situation – an ambush rolls Stealth and
+ * hides each creature.
+ */
+async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  const map = parseMap(scene.published_metadata);
+  if (!map?.hex) return { status: 400, body: { error: 'Encounters are placed on hex battle maps.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
+  const situation = (SITUATIONS.find((x) => x.id === v.situation)?.id ?? 'camp') as Situation;
+  const difficulty = (['easy', 'medium', 'hard', 'deadly'].includes(v.difficulty as string) ? v.difficulty : 'medium') as Difficulty;
+  const partySize = Number.isSafeInteger(v.partySize) ? Math.max(1, Math.min(10, v.partySize as number)) : 4;
+  const partyLevel = Number.isSafeInteger(v.partyLevel) ? Math.max(1, Math.min(20, v.partyLevel as number)) : 1;
+  const seed = Number.isSafeInteger(v.seed) ? (v.seed as number) : 1;
+  const blocks = bestiary(ctx.state);
+  if (v.op === 'plan') {
+    const plan = planEncounter({ theme: typeof v.theme === 'string' ? v.theme : 'bandits', situation, difficulty, partySize, partyLevel, seed, blocks });
+    return { status: 200, body: { ok: true, plan } };
+  }
+  if (v.op !== 'apply' || !Array.isArray(v.entries)) return { status: 400, body: { error: 'Invalid encounter.' } };
+  const ids = (v.entries as unknown[]).map((e) => (e as { templateId?: unknown })?.templateId).filter((id): id is string => typeof id === 'string' && !!statBlock(ctx.state!, id)).slice(0, 20);
+  if (!ids.length) return { status: 422, body: { error: 'Nothing to place.' } };
+  const pcs = await ctx.pcs!(scene.id, map);
+  const spawn = map.nodes.find((n) => n.kind === 'spawn');
+  const party = pcs.length ? { x: pcs.reduce((a, p) => a + p.x, 0) / pcs.length, y: pcs.reduce((a, p) => a + p.y, 0) / pcs.length } : spawn ?? hexCentre(map, { q: 0, r: 0 });
+  const occupied = new Set([...pcs.map((p) => hexKeyAt(map, p)), ...enemiesOf(ctx.state, scene.id).filter((e) => !e.defeated).map((e) => hexKeyAt(map, e))]);
+  const ranged = ids.map((id) => { const b = statBlock(ctx.state!, id)!; return b.attacks[0]?.kind === 'ranged'; });
+  const spots = placeEncounter(map, situation, ids.length, party, seed, occupied, ranged);
+  if (spots.length < ids.length) return { status: 422, body: { error: `Only ${spots.length} free spots for ${ids.length} creatures on this map.` } };
+  return mutate(user, repo, (s) => {
+    let st = structuredClone(s);
+    const names: string[] = [];
+    for (const [i, id] of ids.entries()) {
+      const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
+      const r = addEnemy(st, scene.id, newId, id, spots[i], undefined, d20());
+      if (!r.ok) return r;
+      st = r.state;
+      const e = enemiesOf(st, scene.id).find((x) => x.id === newId)!;
+      names.push(e.name);
+      if (spots[i].hidden) addEffect(st, scene.id, npcActor(newId), hiddenEffect(die(20) + npcStealth(e), () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+    }
+    const text = `Encounter (${SITUATIONS.find((x) => x.id === situation)!.label.toLowerCase()}): ${names.join(', ')}.`;
+    logCombat(st, scene.id, text);
+    return { ok: true, state: st, message: text };
+  });
+}
+
+const SIZES = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
+/**
+ * Shove (5e, APEX 2.0): replaces one attack of the Attack action. Athletics against the target's Athletics or
+ * Acrobatics (its choice: the higher); the target may be at most one size larger. On a success it is pushed 5 ft
+ * straight away (off a cliff or into a pit: it falls) or knocked prone (in the air: it falls).
+ */
+async function shoveRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  const attacker = sideOf(v.attacker), target = sideOf(v.target);
+  const mode = v.mode === 'prone' ? 'prone' : 'push';
+  if (!attacker || !target) return { status: 400, body: { error: 'Invalid shove.' } };
+  if (!controls(user, attacker)) return { status: 403, body: { error: 'This is not your creature.' } };
+  if (!(await playerInScene(user, repo, scene.id))) return { status: 409, body: { error: 'You are not in this scene.' } };
+  const map = parseMap(scene.published_metadata);
+  if (!map?.hex) return { status: 400, body: { error: 'Shoving works on hex battle maps.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
+  const state = ctx.state;
+  const figures = await battleFigures(ctx, scene.id, map);
+  const a = positionOf(figures, attacker), t = positionOf(figures, target);
+  if (!a || !t || t.down) return { status: 404, body: { error: 'Target or attacker not on the map.' } };
+  if (feetBetween(map)(a, t) > 5) return { status: 422, body: { error: `${t.name} is not within 5 ft.` } };
+  const sizeOf = (s: Side) => s.kind === 'pc' ? 2 : SIZES.indexOf((statBlock(state, enemiesOf(state, scene.id).find((e) => e.id === s.id)?.templateId ?? '')?.size ?? 'medium').toLowerCase());
+  if (sizeOf(target) > sizeOf(attacker) + 1) return { status: 422, body: { error: `${t.name} is too big to shove.` } };
+  const pre = useEconomy(activeEncounter(structuredClone(state), scene.id), actorOf(attacker), 'attack', { gm: user.role === 'gm', attacksAllowed: attacker.kind === 'npc' ? enemiesOf(state, scene.id).find((x) => x.id === attacker.id)?.multiattack ?? 1 : attacksPerAction(await sheetOf(ctx, attacker.tokenId)) });
+  if (pre) return { status: 409, body: { error: pre } };
+  const mod = (n: number) => Math.floor((n - 10) / 2);
+  const athletics = async (s: Side) => s.kind === 'pc' ? pcAthletics(await sheetOf(ctx, s.tokenId)) : (() => { const e = enemiesOf(state, scene.id).find((x) => x.id === s.id); return e?.abilities ? mod(e.abilities.str) : 0; })();
+  const defence = async (s: Side) => s.kind === 'pc' ? Math.max(pcAthletics(await sheetOf(ctx, s.tokenId)), pcAcrobatics(await sheetOf(ctx, s.tokenId))) : (() => { const e = enemiesOf(state, scene.id).find((x) => x.id === s.id); return e?.abilities ? Math.max(mod(e.abilities.str), mod(e.abilities.dex)) : 0; })();
+  const ab = await athletics(attacker), db = await defence(target);
+  // an incapacitated creature can't resist: the shove succeeds
+  const ra = die(20), rd = incapacitated(state, scene.id, actorOf(target)) ? 0 : die(20);
+  const won = ra + ab >= rd + db || rd === 0;
+  let text = `${a.name} shoves ${t.name} (${mode === 'prone' ? 'knock prone' : 'push 5 ft'}): Athletics d20 ${ra} ${ab >= 0 ? '+' : '−'} ${Math.abs(ab)} = ${ra + ab} vs ${rd === 0 ? 'incapacitated' : `d20 ${rd} ${db >= 0 ? '+' : '−'} ${Math.abs(db)} = ${rd + db}`} → ${won ? 'success' : 'fails'}.`;
+  // where a push goes: one hex straight away from the attacker
+  let dest: { x: number; y: number } | null = null, fallFt = 0;
+  if (won && mode === 'push') {
+    const ha = hexAt(map, a), ht = hexAt(map, t);
+    const to = { q: 2 * ht.q - ha.q, r: 2 * ht.r - ha.r };
+    const tile = tileLookup(map)(hexKey(to));
+    const altT = altitudeOf(state, scene.id, actorOf(target));
+    const occupied = figures.some((f) => !f.down && hexKeyAt(map, f) === hexKey(to) && (f.z ?? 0) - groundFt(map)(f) === altT);
+    if (!tile || tile.id === 'wall' || tile.id === 'cavewall' || occupied || (distance(ha, to) !== 2)) text += ` ${t.name} can't be pushed there (blocked) – it stays put.`;
+    else {
+      dest = hexCentre(map, to);
+      const h = heightLookup(map);
+      const drop = (h(hexKey(ht)) - h(hexKey(to))) * 5 + (tile.id === 'pit' ? 20 : 0);
+      if (altT === 0 && drop >= 10) fallFt = drop;
+      text += ` ${t.name} is pushed 5 ft${fallFt ? ` – over the edge!` : '.'}`;
+    }
+  }
+  const res = await mutate(user, repo, (s) => {
+    let st = structuredClone(s);
+    const e = st.sceneEncounters?.[scene.id];
+    const err = useEconomy(e?.status === 'active' ? e : null, actorOf(attacker), 'attack', { gm: user.role === 'gm', attacksAllowed: 99 });
+    if (err) return { ok: false, error: err };
+    if (won && mode === 'prone' && !effectsOf(st, scene.id, actorOf(target)).some((x) => x.key === 'prone')) addEffect(st, scene.id, actorOf(target), conditionEffect('prone', { actor: actorOf(attacker), name: a.name }, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+    if (dest && target.kind === 'npc') { const u = updateEnemy(st, scene.id, target.id, dest); if (u.ok) st = u.state; }
+    reveal(st, scene.id, actorOf(attacker));
+    pushFx(st, scene.id, [{ kind: won ? 'debuff' : 'miss', from: actorOf(attacker), to: actorOf(target), label: won ? (mode === 'prone' ? 'Prone' : 'Shoved') : 'Shove', element: 'physical' }]);
+    if (e?.status === 'active') e.version++;
+    logCombat(st, scene.id, text);
+    return { ok: true, state: st, message: text };
+  });
+  if (res.status !== 200) return res;
+  if (dest && target.kind === 'pc') await placePc(user, repo, scene.id, target.tokenId, dest);
+  if (fallFt) { const f = await fallDamage(user, repo, scene.id, target, fallFt, 'pushed over the edge'); (res.body as { message?: string }).message = `${text} ${f}`; }
+  return res;
+}
+
+/** Falls of creatures that can't stay in the air (state step inside a write; characters' damage is applied after). */
+function applyFalls(state: GameState): Array<{ sceneId: string; tokenId?: string; damage: number; text: string }> {
+  const out: Array<{ sceneId: string; tokenId?: string; damage: number; text: string }> = [];
+  for (const sceneId of Object.keys(state.sceneAltitude ?? {})) {
+    for (const f of pendingFalls(state, sceneId)) {
+      const dice = fallDice(f.ft);
+      const rolled = dice ? rollDice(parseDamage(dice)!) : { rolls: [], total: 0 };
+      setAltitude(state, sceneId, f.actor, 0);
+      if (!effectsOf(state, sceneId, f.actor).some((e) => e.key === 'prone')) addEffect(state, sceneId, f.actor, conditionEffect('prone', undefined, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+      const name = f.actor.startsWith('pc-') ? state.tokens[f.actor.slice(3)]?.name ?? 'A character' : enemiesOf(state, sceneId).find((e) => `npc-${e.id}` === f.actor)?.name ?? 'A creature';
+      const text = `${name} falls ${f.ft} ft (${f.why})${rolled.total ? `: ${rolled.total} bludgeoning damage (${dice})` : ''} and lands prone.`;
+      if (f.actor.startsWith('npc-') && rolled.total) {
+        const u = updateEnemy(state, sceneId, f.actor.slice(4), { hpDelta: -rolled.total });
+        if (u.ok) Object.assign(state, u.state);
+      }
+      pushFx(state, sceneId, [{ kind: rolled.total ? 'hit' : 'debuff', to: f.actor, ...(rolled.total ? { amount: rolled.total } : {}), label: 'Fall', element: 'physical' }]);
+      logCombat(state, sceneId, text);
+      out.push({ sceneId, ...(f.actor.startsWith('pc-') ? { tokenId: f.actor.slice(3) } : {}), damage: rolled.total, text });
+    }
+  }
+  return out;
 }
 
 /** Characters of the given players that are assigned to the scene, with server-rolled initiative. */
@@ -165,6 +339,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     return mutate(user, repo, (s) => setCarriedLight(s, sceneId, v.tokenId as string, v.on as boolean));
   }
   if (v.action === 'attack') return attackRequest(user, repo, scene, v);
+  if (v.action === 'shove') return shoveRequest(user, repo, scene, v);
   if (v.action === 'strike') {
     const attacker = sideOf(v.attacker), target = sideOf(v.target);
     if (!attacker || !target || (v.attackIndex !== undefined && !Number.isSafeInteger(v.attackIndex))) return { status: 400, body: { error: 'Invalid attack.' } };
@@ -243,23 +418,27 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     return res;
   }
   if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM can do that.' } };
+  if (v.action === 'encounter') return encounterRequest(user, repo, scene, v);
   if (v.action === 'enemyAdd' || v.action === 'enemyMove') {
     const map = parseMap(scene.published_metadata);
     if (!map?.hex || typeof v.x !== 'number' || typeof v.y !== 'number') return { status: 400, body: { error: 'Choose a hex on a published hex map.' } };
     const h = hexAt(map, { x: v.x, y: v.y });
-    if (!passable(map, h)) return { status: 422, body: { error: 'That hex cannot hold a figure.' } };
-    const at = hexCentre(map, h);
     const ctx = await sceneContext(repo, user.campaignId);
+    // APEX 1.9: a flyer may hover over water, trees or a creature – figures only share a hex at different altitudes
+    const moverAlt = v.action === 'enemyMove' && typeof v.id === 'string' && ctx.state ? (typeof v.alt === 'number' ? Math.max(0, Math.round(v.alt / 5) * 5) : altitudeOf(ctx.state, sceneId, npcActor(v.id))) : 0;
+    if (!passable(map, h) && !(moverAlt > 0 && tileLookup(map)(hexKey(h))?.id !== 'wall')) return { status: 422, body: { error: 'That hex cannot hold a figure.' } };
+    const at = hexCentre(map, h);
     const pcs = await ctx.pcs!(sceneId, map);
     const key = hexKeyAt(map, at);
-    if (pcs.some((p) => hexKeyAt(map, p) === key) || (ctx.state ? enemiesOf(ctx.state, sceneId) : []).some((e) => !e.defeated && e.id !== v.id && hexKeyAt(map, e) === key)) return { status: 409, body: { error: 'Another figure stands on that hex.' } };
+    const altOf = (actor: string) => (ctx.state ? altitudeOf(ctx.state, sceneId, actor) : 0);
+    if (pcs.some((p) => hexKeyAt(map, p) === key && altOf(pcActor(p.tokenId)) === moverAlt) || (ctx.state ? enemiesOf(ctx.state, sceneId) : []).some((e) => !e.defeated && e.id !== v.id && hexKeyAt(map, e) === key && altOf(npcActor(e.id)) === moverAlt)) return { status: 409, body: { error: 'Another figure is at that spot.' } };
     if (v.action === 'enemyAdd') {
       if (typeof v.templateId !== 'string' || !statBlock(ctx.state ?? {}, v.templateId)) return { status: 400, body: { error: 'Unknown enemy.' } };
       const id = `en-${crypto.randomUUID().slice(0, 8)}`, roll = d20();
       return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy'));
     }
     if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid enemy.' } };
-    return moveNpc(user, repo, scene, map, v.id, at);
+    return moveNpc(user, repo, scene, map, v.id, at, [], typeof v.alt === 'number' ? v.alt : undefined);
   }
   if (v.action === 'enemyRemove' || v.action === 'enemyHp') {
     if (typeof v.id !== 'string' || (v.action === 'enemyHp' && (!Number.isSafeInteger(v.delta) || Math.abs(v.delta as number) > 1000))) return { status: 400, body: { error: 'Invalid enemy change.' } };
@@ -335,10 +514,13 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
 }
 
 const die = (sides: number) => (crypto.getRandomValues(new Uint32Array(1))[0] % Math.max(1, sides)) + 1;
-const inReach = (map: SceneMap, from: { x: number; y: number }, to: { x: number; y: number }, reachFt: number, rangeFt?: number) => {
-  const d = distance(hexAt(map, from), hexAt(map, to)) * 5;
+const inReach = (map: SceneMap, from: { x: number; y: number; z?: number }, to: { x: number; y: number; z?: number }, reachFt: number, rangeFt?: number) => {
+  const d = feetBetween(map)(from, to);
   const sight = sightRules(map);
-  return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), sight.blocks, sight.height), distanceFt: d };
+  const ground = groundFt(map);
+  // flying creatures look from (and are seen at) their altitude
+  const eye = { a: ((from.z ?? ground(from)) - ground(from)) / 5, b: ((to.z ?? ground(to)) - ground(to)) / 5 };
+  return { ok: d <= (rangeFt ?? reachFt) && lineOfSight(hexAt(map, from), hexAt(map, to), sight.blocks, sight.height, eye), distanceFt: d };
 };
 
 // ---------------------------------------------------------------- combat actions (APEX 1.1)
@@ -357,11 +539,28 @@ const sideOf = (x: unknown): Side | null => {
 async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<Figure[]> {
   const state = ctx.state!;
   const pcs = await ctx.pcs!(sceneId, map);
-  const out: Figure[] = pcs.map((p) => ({ kind: 'pc', id: p.tokenId, name: state.tokens[p.tokenId]?.name ?? 'Character', side: 'party', x: p.x, y: p.y, reachFt: 5 }));
-  for (const e of enemiesOf(state, sceneId)) out.push({ kind: 'npc', id: e.id, name: e.name, side: e.side === 'ally' ? 'party' : 'enemy', x: e.x, y: e.y, reachFt: npcReach(e), down: e.defeated });
+  const ground = groundFt(map);
+  const out: Figure[] = pcs.map((p) => ({ kind: 'pc', id: p.tokenId, name: state.tokens[p.tokenId]?.name ?? 'Character', side: 'party', x: p.x, y: p.y, z: ground(p) + altitudeOf(state, sceneId, pcActor(p.tokenId)), reachFt: 5 }));
+  for (const e of enemiesOf(state, sceneId)) out.push({ kind: 'npc', id: e.id, name: e.name, side: e.side === 'ally' ? 'party' : 'enemy', x: e.x, y: e.y, z: ground(e) + altitudeOf(state, sceneId, npcActor(e.id)), reachFt: npcReach(e), down: e.defeated });
   return out;
 }
-const feetBetween = (map: SceneMap) => (a: { x: number; y: number }, b: { x: number; y: number }) => distance(hexAt(map, a), hexAt(map, b)) * 5;
+/**
+ * Altitude for a move (APEX 1.9): the requested altitude above the destination's ground (or the current one), the
+ * movement mode (flying while in the air or taking off, climbing with a climb speed) and the vertical feet it costs.
+ */
+export function planAltitude(map: SceneMap, from: { x: number; y: number }, to: { x: number; y: number }, current: number, wanted: number | undefined, speeds: { fly: number; climb: number }): { from: number; to: number; verticalFt: number; mode: { fly?: boolean; climb?: boolean }; verb: string } | string {
+  const target = Math.max(0, Math.min(MAX_ALTITUDE_FT, Math.round((typeof wanted === 'number' && Number.isFinite(wanted) ? wanted : speeds.fly ? current : 0) / 5) * 5));
+  if (target > 0 && !speeds.fly) return 'cannot fly (no flying speed).';
+  const flying = speeds.fly > 0 && (current > 0 || target > 0);
+  const ground = groundFt(map);
+  const verticalFt = flying ? Math.abs(ground(to) + target - (ground(from) + current)) : 0;
+  return { from: current, to: flying ? target : 0, verticalFt, mode: { ...(flying ? { fly: true } : {}), ...(speeds.climb ? { climb: true } : {}) }, verb: flying ? (target === 0 ? 'lands after flying' : 'flies') : 'moves' };
+}
+
+/** Ground height in feet under a point (5-ft levels). */
+const groundFt = (map: SceneMap) => { const h = heightLookup(map); return (p: { x: number; y: number }) => h(hexKeyAt(map, p)) * 5; };
+/** Feet between two points – 3D when they carry a height `z` (the larger of horizontal and vertical, APEX 1.9). */
+const feetBetween = (map: SceneMap) => { const ground = groundFt(map); return (a: { x: number; y: number; z?: number }, b: { x: number; y: number; z?: number }) => distance3d(distance(hexAt(map, a), hexAt(map, b)) * 5, a.z ?? ground(a), b.z ?? ground(b)); };
 
 /** Visual feedback of one attack roll (APEX 1.6). */
 const strikeFx = (strike: Pick<Strike, 'name' | 'kind' | 'damageType' | 'reachFt'>, attacker: Side | undefined, target: string, roll: { hit: boolean; crit?: boolean; damage: number }): Omit<SceneFx, 'id' | 'at'> => ({
@@ -665,7 +864,7 @@ async function standardRequest(user: AuthUser, repo: Repo, scene: Scene, v: Reco
 /** Hasted: one extra limited action per turn (APEX 1.6). */
 const hasted = (state: GameState, sceneId: string, actor: string) => effectsOf(state, sceneId, actor).some((e) => e.key === 'haste');
 
-const CONCENTRATION_SPELLS = new Set(['bless', 'bane', 'shield of faith', "hunter's mark", 'hex', 'hold person', 'hold monster', 'faerie fire', 'web', 'entangle', 'invisibility', 'blur', 'tasha’s hideous laughter', 'barkskin', 'haste', 'stoneskin', 'greater invisibility', 'heroism', 'divine favor']);
+const CONCENTRATION_SPELLS = new Set(['bless', 'bane', 'shield of faith', "hunter's mark", 'hex', 'hold person', 'hold monster', 'faerie fire', 'web', 'entangle', 'invisibility', 'blur', 'tasha’s hideous laughter', 'barkskin', 'haste', 'stoneskin', 'greater invisibility', 'heroism', 'divine favor', 'fly']);
 
 /** Saving throw bonus of any creature on the scene. */
 async function saveOf(ctx: Ctx, who: Side, ability: AbilityKey): Promise<number> {
@@ -708,9 +907,11 @@ async function castRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<s
   if (def && targets.length > count) return { status: 422, body: { error: `${plan.spell.name} affects at most ${count} target${count > 1 ? 's' : ''} at this level.` } };
   const there = targets.map((t) => positionOf(figures, t));
   if (there.some((f) => !f || f.down)) return { status: 404, body: { error: 'Target not on the map.' } };
-  const aim = v.point as { x?: unknown; y?: unknown } | undefined;
-  const point = aim && typeof aim.x === 'number' && typeof aim.y === 'number' ? { x: aim.x, y: aim.y } : null;
-  if (me && point && plan.rangeFt !== null && !/^self/i.test(plan.spell.range.trim()) && feetApart(map, me, point) > plan.rangeFt) return { status: 422, body: { error: `That point is out of range (${plan.spell.name}: ${plan.rangeFt} ft).` } };
+  const aim = v.point as { x?: unknown; y?: unknown; alt?: unknown } | undefined;
+  // APEX 1.9: the point may lie in the air (a Fireball's centre `alt` feet above the ground there)
+  const pointAlt = aim && typeof aim.alt === 'number' && Number.isFinite(aim.alt) ? Math.max(0, Math.min(MAX_ALTITUDE_FT, Math.round(aim.alt / 5) * 5)) : 0;
+  const point = aim && typeof aim.x === 'number' && typeof aim.y === 'number' ? { x: aim.x, y: aim.y, z: groundFt(map)({ x: aim.x, y: aim.y }) + pointAlt } : null;
+  if (me && point && plan.rangeFt !== null && !/^self/i.test(plan.spell.range.trim()) && feetBetween(map)(me, point) > plan.rangeFt) return { status: 422, body: { error: `That point is out of range (${plan.spell.name}: ${plan.rangeFt} ft).` } };
   if (me && plan.rangeFt !== null) for (const f of there) {
     const reach = inReach(map, me, f!, Math.max(5, plan.rangeFt));
     if (!reach.ok) return { status: 422, body: { error: `${f!.name} is out of range or not in line of sight (${reach.distanceFt} ft, ${plan.spell.name}: ${plan.rangeFt} ft).` } };
@@ -922,7 +1123,7 @@ export const pausedMoveOf = (state: GameState, sceneId: string, mover: Side) => 
  * The GM moves an NPC along the cheapest path. In initiative only on its own turn and within its speed (Dash
  * doubles it); leaving a hostile's reach pauses the move for an opportunity attack.
  */
-export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: SceneMap, npcId: string, at: { x: number; y: number }, declined: string[] = []): Promise<SceneResult> {
+export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: SceneMap, npcId: string, at: { x: number; y: number }, declined: string[] = [], alt?: number): Promise<SceneResult> {
   const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
   const state = ctx.state;
   const npc = state ? enemiesOf(state, scene.id).find((e) => e.id === npcId) : undefined;
@@ -931,17 +1132,26 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
   const actor = npcActor(npc.id);
   if (e && !isActiveActor(e, actor)) return { status: 409, body: { error: `Wait for ${npc.name}'s turn – only the creature whose turn it is can move.` } };
   if (pausedMoveOf(state, scene.id, { kind: 'npc', id: npc.id }) && !declined.length) return { status: 409, body: { error: 'Decide the opportunity attack first.' } };
-  const path = hexMovementCost(map, npc, at);
+  // APEX 1.9: flying (altitude) and climbing
+  const speeds = npcSpeeds(npc, effectsOf(state, scene.id, actor));
+  const air = planAltitude(map, npc, at, altitudeOf(state, scene.id, actor), alt, speeds);
+  if (typeof air === 'string') return { status: 422, body: { error: `${npc.name} ${air}` } };
+  const path = hexMovementCost(map, npc, at, air.mode);
   if (!path.ok) return { status: 422, body: { error: path.error } };
   const b = budgetOf(e, actor);
   if (speedZero(state, scene.id, actor)) return { status: 422, body: { error: `${npc.name} cannot move (speed 0: ${effectsOf(state, scene.id, actor).filter((x) => x.mods.speedZero).map((x) => x.name).join(', ')}).` } };
-  const allowance = effectiveSpeed(state, scene.id, actor, npc.speedFt) * (b.dash ? 2 : 1);
-  if (e && (b.moved ?? 0) + path.cost > allowance + 1e-9) return { status: 422, body: { error: `${npc.name} has only ${Math.max(0, allowance - (b.moved ?? 0))} ft of movement left this turn.` } };
-  const points = [{ x: npc.x, y: npc.y }, ...path.steps];
+  const allowance = effectiveSpeed(state, scene.id, actor, air.mode.fly ? speeds.fly : npc.speedFt) * (b.dash ? 2 : 1);
+  const total = path.cost + air.verticalFt;
+  if (e && (b.moved ?? 0) + total > allowance + 1e-9) return { status: 422, body: { error: `${npc.name} has only ${Math.max(0, allowance - (b.moved ?? 0))} ft of movement left this turn${air.verticalFt ? ` (this move: ${path.cost} ft + ${air.verticalFt} ft up/down)` : ''}.` } };
+  const ground = groundFt(map);
+  const points = [{ x: npc.x, y: npc.y, z: ground(npc) + air.from }, ...path.steps.map((p) => ({ ...p, z: ground(p) + air.to }))];
   const stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'npc', id: npc.id }, points, declined);
   const dest = stop ? points[stop.stop] : path.to;
-  const cost = stop ? (stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost) : path.cost;
-  return mutate(user, repo, (s) => {
+  const cost = stop ? (stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost) : total;
+  const endAlt = stop && stop.stop === 0 ? air.from : air.to;
+  // APEX 2.0: jumping down cliffs on the way (walking only)
+  const drops = air.mode.fly || air.mode.climb ? [] : pathDrops(map, stop ? path.path.slice(0, stop.stop) : path.path, hexAt(map, npc));
+  const moved = await mutate(user, repo, (s) => {
     let st = structuredClone(s);
     if (cost > 0 || !stop) {
       const r = updateEnemy(st, scene.id, npc.id, dest);
@@ -950,9 +1160,12 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
     }
     const enc = st.sceneEncounters?.[scene.id];
     if (enc?.status === 'active') spend(enc, actor, { moved: (budgetOf(enc, actor).moved ?? 0) + cost });
+    setAltitude(st, scene.id, actor, endAlt, speeds.flySource);
     if (stop) st = registerInterruption(st, scene.id, { kind: 'npc', id: npc.id }, npc.name, dest, path.to, stop.reactors, declined);
-    return { ok: true, state: st, message: stop ? `${npc.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack.` : `${npc.name} moves ${cost} ft.` };
+    return { ok: true, state: st, message: stop ? `${npc.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack.` : `${npc.name} ${air.verb} ${cost} ft${endAlt ? ` (${endAlt} ft above the ground)` : ''}.` };
   });
+  if (moved.status === 200) for (const ft of drops) { const t = await fallDamage(user, repo, scene.id, { kind: 'npc', id: npc.id }, ft, 'jumps down a cliff'); if (t) (moved.body as { message?: string }).message = `${(moved.body as { message?: string }).message ?? ''} ${t}`; }
+  return moved;
 }
 
 /** Take or skip an offered reaction (opportunity attack); a paused move continues once all its offers are decided. */
@@ -1029,11 +1242,16 @@ interface AreaEffect { name: string; area: AreaSpec; save: AbilityKey; dc: numbe
  * Resolves an area: one damage roll, every creature in the area saves (d20 + its save bonus vs DC): full damage on
  * a failure, half on a success. NPC hit points change on the scene, characters' on their sheets.
  */
-async function resolveArea(user: AuthUser, repo: Repo, ctx: Ctx, map: SceneMap, origin: { x: number; y: number }, point: { x: number; y: number }, fx: AreaEffect): Promise<{ lines: string[]; apply: (s: GameState, quiet?: boolean) => GameState }> {
+async function resolveArea(user: AuthUser, repo: Repo, ctx: Ctx, map: SceneMap, origin: { x: number; y: number; z?: number }, point: { x: number; y: number; z?: number }, fx: AreaEffect): Promise<{ lines: string[]; apply: (s: GameState, quiet?: boolean) => GameState }> {
   const sceneId = ctx.sceneId!;
   const state = ctx.state!;
   const keys = new Set(areaHexes(map, origin, point, fx.area));
-  const figures = (await battleFigures(ctx, sceneId, map)).filter((f) => !f.down && keys.has(hexKeyAt(map, f)));
+  // APEX 1.9 – 3D: a sphere reaches as far up and down as sideways (from its centre's height); cones, cubes and lines
+  // cover the area's size above their origin's height (a ground-level fire doesn't reach a creature 60 ft up)
+  const ground = groundFt(map);
+  const centreZ = fx.area.shape === 'sphere' && !fx.area.fromSelf ? point.z ?? ground(point) : origin.z ?? ground(origin);
+  const reachUp = fx.area.sizeFt;
+  const figures = (await battleFigures(ctx, sceneId, map)).filter((f) => !f.down && keys.has(hexKeyAt(map, f)) && Math.abs((f.z ?? ground(f)) - centreZ) <= reachUp);
   const dice = parseDamage(fx.damage);
   const rolled = dice ? rollDice(dice) : { rolls: [], total: 0 };
   const lines = [`${fx.source}: ${fx.name} – ${fx.area.sizeFt}-ft ${fx.area.shape}, DC ${fx.dc} ${ABILITY_NAME[fx.save]} save${rolled.total ? `, ${rolled.total} ${fx.damageType} damage (${rolled.rolls.join('+')}${dice?.mod ? `+${dice.mod}` : ''})` : ''}${fx.condition ? `, ${fx.condition} on a failure` : ''}.${figures.length ? '' : ' Nobody is in the area.'}`];
@@ -1097,11 +1315,13 @@ async function npcAreaRequest(user: AuthUser, repo: Repo, scene: Scene, v: Recor
   const area = npc?.areas?.[v.area as number];
   if (!npc || !area) return { status: 404, body: { error: 'Unknown area ability.' } };
   if (area.uses && (npc.areaUsed?.[area.name] ?? 0) >= area.uses) return { status: 409, body: { error: `${area.name} is used up for this encounter.` } };
-  const point = v.point as { x: number; y: number };
-  if (area.rangeFt && feetApart(map, npc, point) > area.rangeFt) return { status: 422, body: { error: `Out of range (${area.rangeFt} ft).` } };
+  const raw = v.point as { x: number; y: number; alt?: unknown };
+  const point = { x: raw.x, y: raw.y, z: groundFt(map)(raw) + (typeof raw.alt === 'number' && Number.isFinite(raw.alt) ? Math.max(0, Math.min(MAX_ALTITUDE_FT, Math.round(raw.alt / 5) * 5)) : 0) };
+  const npcAt = { x: npc.x, y: npc.y, z: groundFt(map)(npc) + altitudeOf(ctx.state!, scene.id, npcActor(npc.id)) };
+  if (area.rangeFt && feetBetween(map)(npcAt, point) > area.rangeFt) return { status: 422, body: { error: `Out of range (${area.rangeFt} ft).` } };
   const pre = useEconomy(activeEncounter(structuredClone(ctx.state!), scene.id), npcActor(npc.id), 'action', { gm: true });
   if (pre) return { status: 409, body: { error: pre } };
-  const r = await resolveArea(user, repo, ctx, map, npc, area.rangeFt ? point : point, { name: area.name, area: { shape: area.shape, sizeFt: area.sizeFt }, save: area.save, dc: area.dc, damage: area.damage, damageType: area.damageType, source: npc.name, condition: area.condition, sourceActor: npcActor(npc.id) });
+  const r = await resolveArea(user, repo, ctx, map, npcAt, point, { name: area.name, area: { shape: area.shape, sizeFt: area.sizeFt }, save: area.save, dc: area.dc, damage: area.damage, damageType: area.damageType, source: npc.name, condition: area.condition, sourceActor: npcActor(npc.id) });
   return mutate(user, repo, (s) => {
     const st = r.apply(s);
     const e = st.sceneEncounters?.[scene.id];

@@ -273,7 +273,7 @@ export function sceneElevation(h: Axial, terrain: TerrainType): number {
 
 // ---------------------------------------------------------------- creation
 
-export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins' | 'dungeon';
+export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins' | 'dungeon' | 'camp' | 'cave' | 'highlands' | 'village' | 'swamp' | 'temple' | 'chasm' | 'desert' | 'winter';
 export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> = {
   region: [
     { id: 'wilderness', label: 'Wilderness (Arena generator)' },
@@ -287,6 +287,15 @@ export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> =
     { id: 'river', label: 'Stream with ford' },
     { id: 'ruins', label: 'Ruined building' },
     { id: 'dungeon', label: 'Dungeon rooms & corridors' },
+    { id: 'camp', label: 'Bandit camp (palisade, campfire, tents)' },
+    { id: 'cave', label: 'Cave with stalagmites, fungi and pits' },
+    { id: 'highlands', label: 'Highland pass (plateaus, stairs, cliffs)' },
+    { id: 'village', label: 'Village square (houses, fences, well)' },
+    { id: 'swamp', label: 'Swamp (bog, reeds, dead trees)' },
+    { id: 'temple', label: 'Temple ruin (pillars, raised altar)' },
+    { id: 'chasm', label: 'Chasm with a bridge' },
+    { id: 'desert', label: 'Desert oasis (dunes, palms, water)' },
+    { id: 'winter', label: 'Winter forest with a frozen lake' },
     { id: 'blank', label: 'Open field' },
   ],
 };
@@ -315,6 +324,8 @@ export function generateHexScene(preset: HexPreset, radius: number, seed: number
       case 'ruins':
         if (d <= Math.max(2, Math.round(r / 3))) return n > 0.42 ? 'ruins' : n > 0.3 ? 'road' : 'plains';
         return n > 0.66 ? 'forest' : n > 0.55 ? 'hills' : 'plains';
+      default:
+        return base(h);
     }
   });
 }
@@ -370,7 +381,154 @@ export function generateBattleScene(preset: HexPreset, radius: number, seed: num
       return ground(h);
     });
   }
+  const themed = themedBattleScene(preset, r, seed, rnd, ground);
+  if (themed) return themed;
   return encodeTiles(r, 'battle', (h) => (rnd(h, 11) > 0.97 ? 'boulder' : rnd(h, 12) > 0.93 ? 'undergrowth' : ground(h)));
+}
+
+/** Ground heights (5-ft levels) for a generated map. */
+function withLevels(data: HexSceneData, level: (h: Axial) => number): HexSceneData {
+  const heights = hexesInRange(ORIGIN, data.radius).map((h) => levelCode(level(h))).join('');
+  return /^0+$/.test(heights) ? data : { ...data, heights };
+}
+
+/**
+ * APEX 2.0 scenario presets – themed battle maps with ground heights (same seed → same map).
+ */
+function themedBattleScene(preset: HexPreset, r: number, seed: number, rnd: (h: Axial, salt: number) => number, ground: (h: Axial) => BattleTile): HexSceneData | null {
+  const noise = (h: Axial, sx: number, salt = 0) => valueNoise(h.q / sx + salt, h.r / sx - salt, seed);
+  const d0 = (h: Axial) => distance(h, ORIGIN);
+  switch (preset) {
+    case 'camp': {
+      // a palisade ring with two gates, a campfire in the middle, tents (crates, beds), barrels, braziers at the gates
+      const ring = Math.max(3, Math.round(r * 0.55));
+      return encodeTiles(r, 'battle', (h) => {
+        const d = d0(h);
+        if (d === 0) return 'campfire';
+        if (d === ring) return Math.abs(h.r) <= 0 || (h.q === 0 && h.r !== 0 && Math.abs(h.r) === ring) ? 'dirt' : rnd(h, 1) > 0.94 ? 'rubble' : 'palisade';
+        if (d === ring + 1 && (h.r === 0 || (h.q === 0 && Math.abs(h.r) === ring + 1))) return 'brazier';
+        if (d < ring) {
+          const roll = rnd(h, 2);
+          if (d === 2 && roll > 0.55) return roll > 0.8 ? 'bed' : 'crates';
+          if (d === ring - 1 && roll > 0.82) return roll > 0.92 ? 'barrels' : 'table';
+          return roll > 0.7 ? 'dirt' : 'grass';
+        }
+        return rnd(h, 3) > 0.88 ? 'tree' : rnd(h, 4) > 0.85 ? 'undergrowth' : ground(h);
+      });
+    }
+    case 'cave': {
+      const data = encodeTiles(r, 'battle', (h) => {
+        const n = noise(h, 3.2, 7), d = d0(h);
+        if (d >= r - 1 || n < 0.32) return 'cavewall';
+        const roll = rnd(h, 5);
+        if (n > 0.8 && roll > 0.6) return 'pit';
+        if (roll > 0.93) return 'stalagmite';
+        if (roll > 0.88) return 'mushrooms';
+        if (roll > 0.8) return 'rubble';
+        return roll > 0.97 ? 'web' : 'cavefloor';
+      });
+      return withLevels(data, (h) => Math.round(noise(h, 5, 3) * 3));
+    }
+    case 'highlands': {
+      // two plateaus (15 and 25 ft) linked by stairs, a path through the valley
+      const a = { q: -Math.round(r / 2), r: Math.round(r / 4) }, b = { q: Math.round(r / 2), r: -Math.round(r / 3) };
+      const level = (h: Axial) => { const da = distance(h, a), db = distance(h, b); return da <= 3 ? 3 : db <= 3 ? 5 : db === 4 ? 3 : 0; };
+      const data = encodeTiles(r, 'battle', (h) => {
+        const lv = level(h), roll = rnd(h, 6);
+        if (Math.abs(h.r + Math.round(h.q / 3)) <= 0 && lv === 0) return 'dirt';
+        if (lv > 0 && roll > 0.9) return 'boulder';
+        if (lv === 0 && roll > 0.9) return 'pine';
+        return roll > 0.75 ? 'tallgrass' : 'grass';
+      });
+      return withLevels(data, (h) => {
+        const lv = level(h), da = distance(h, a), db = distance(h, b);
+        // stairs: one hex of each plateau steps down
+        if (da === 4 && h.q === a.q + 4 - Math.abs(h.r - a.r)) return 1;
+        if (db === 5 && h.r === b.r) return 1;
+        if (da === 3 && h.r === a.r && h.q > a.q) return 2;
+        return lv;
+      });
+    }
+    case 'village': {
+      const houses: Axial[] = [];
+      for (let i = 0; i < 6; i++) { const ang = (i / 6) * Math.PI * 2 + hash2(i, 7, seed); const dist = Math.round(r * 0.6); houses.push({ q: Math.round(Math.cos(ang) * dist), r: Math.round(Math.sin(ang) * dist - Math.cos(ang) * dist / 2) }); }
+      return encodeTiles(r, 'battle', (h) => {
+        const d = d0(h);
+        if (d === 0) return 'pillar'; // the well
+        if (d <= 2) return 'cobbles';
+        for (const [i, c] of houses.entries()) {
+          const dh = distance(h, c);
+          if (dh === 0) return 'table';
+          if (dh === 1) return h.q === c.q && h.r === c.r + 1 ? 'door' : i % 2 ? 'wall' : 'palisade';
+        }
+        const roll = rnd(h, 8);
+        if (roll > 0.94) return 'barrels';
+        if (roll > 0.9) return 'fence';
+        if (roll > 0.86) return 'tree';
+        return d <= 4 && roll > 0.4 ? 'dirt' : 'grass';
+      });
+    }
+    case 'swamp': {
+      return encodeTiles(r, 'battle', (h) => {
+        const n = noise(h, 3, 11), roll = rnd(h, 9);
+        if (n > 0.66) return roll > 0.85 ? 'deep' : 'swampwater';
+        if (n > 0.55) return 'mud';
+        if (roll > 0.9) return 'stump';
+        if (roll > 0.84) return 'tree';
+        if (roll > 0.7) return 'bush';
+        return roll > 0.45 ? 'undergrowth' : 'grass';
+      });
+    }
+    case 'temple': {
+      // a marble hall with two rows of pillars, a raised dais (10 ft) with the altar and statues, stairs up
+      const hall = Math.max(4, Math.round(r * 0.65));
+      const data = encodeTiles(r, 'battle', (h) => {
+        const d = d0(h);
+        if (d > hall) return rnd(h, 10) > 0.8 ? 'rubble' : rnd(h, 11) > 0.85 ? 'tree' : ground(h);
+        if (d === hall) return h.q === 0 && h.r > 0 ? 'stairs' : rnd(h, 12) > 0.72 ? 'rubble' : 'wall';
+        if (h.r === -hall + 1 && h.q === 0) return 'altar';
+        if (h.r === -hall + 1 && Math.abs(h.q) === 2) return 'statue';
+        if (Math.abs(h.q) === 2 && h.r % 2 === 0 && h.r > -hall + 2) return 'pillar';
+        if (h.q === 0 && h.r === -hall + 3) return 'stairs';
+        return rnd(h, 13) > 0.92 ? 'rubble' : h.q === 0 ? 'carpet' : 'marble';
+      });
+      return withLevels(data, (h) => (d0(h) < hall && h.r <= -hall + 2 ? 2 : d0(h) < hall && h.r === -hall + 3 && h.q === 0 ? 1 : 0));
+    }
+    case 'chasm': {
+      // a deep chasm across the map (pits), a wooden bridge in the middle, rocky high banks
+      const data = encodeTiles(r, 'battle', (h) => {
+        const row = Math.abs(h.r + Math.round(h.q / 2));
+        if (row <= 1) return Math.abs(h.q) <= 0 ? 'bridge' : 'pit';
+        const roll = rnd(h, 14);
+        if (roll > 0.9) return 'boulder';
+        if (roll > 0.82) return 'rubble';
+        return roll > 0.5 ? 'dirt' : 'grass';
+      });
+      return withLevels(data, (h) => (Math.abs(h.r + Math.round(h.q / 2)) <= 1 && h.q !== 0 ? 0 : 4));
+    }
+    case 'desert': {
+      const data = encodeTiles(r, 'battle', (h) => {
+        const d = d0(h), roll = rnd(h, 15);
+        if (d <= 1) return 'shallow';
+        if (d === 2) return roll > 0.6 ? 'tree' : 'grass';
+        if (roll > 0.95) return 'boulder';
+        return roll > 0.9 ? 'rubble' : 'sand';
+      });
+      return withLevels(data, (h) => (d0(h) <= 2 ? 0 : Math.round(noise(h, 2.5, 5) * 2)));
+    }
+    case 'winter': {
+      const data = encodeTiles(r, 'battle', (h) => {
+        const n = noise(h, 3.5, 13), roll = rnd(h, 16);
+        if (d0(h) <= Math.max(2, Math.round(r / 3))) return 'ice';
+        if (roll > 0.8 - n * 0.25) return 'pine';
+        if (roll > 0.94) return 'boulder';
+        return 'snow';
+      });
+      return withLevels(data, (h) => (d0(h) <= Math.max(2, Math.round(r / 3)) ? 0 : Math.round(noise(h, 4, 9) * 2)));
+    }
+    default:
+      return null;
+  }
 }
 
 function clampRadius(radius: number) {
@@ -506,26 +664,45 @@ export function passable(map: Pick<SceneMap, 'hex'>, h: Axial): boolean {
  * Cost of one step (in hexes): the tile cost, +1 for climbing one level up (a 5-ft step counts double); two or more
  * levels up or down are a cliff that walkers can't take. Flat maps: the tile cost only.
  */
-export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map)): (k: HexKey, from?: HexKey) => number | null {
+export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map), opts: MoveMode = {}): (k: HexKey, from?: HexKey) => number | null {
   const height = map.hex?.heights ? heightLookup(map) : null;
   return (k, from) => {
-    const c = lookup(k)?.cost ?? null;
+    const tile = lookup(k);
+    if (!tile) return null;
+    // APEX 1.9 – flying: over difficult ground, water, trees and boulders, steps and cliffs; walls still block
+    if (opts.fly) return tile.id === 'wall' ? null : 1;
+    const c = tile.cost;
     if (c === null || !height || from === undefined) return c;
     const dh = height(k) - height(from);
-    if (Math.abs(dh) > 1) return null;
+    // climbing speed: cliffs are climbable at normal cost (going up and down)
+    if (opts.climb) return c;
+    // APEX 2.0: jumping down a cliff is possible (falling damage from 10 ft); paths prefer stairs (+1 per jump)
+    if (dh <= -2) return c + 1;
+    if (dh > 1) return null;
     return dh === 1 ? c + 1 : c;
   };
 }
+/** Drops of two or more levels along a walked path (jumping down a cliff): the fall in feet per jump. */
+export function pathDrops(map: Pick<SceneMap, 'hex'>, path: Axial[], from?: Axial): number[] {
+  if (!map.hex?.heights) return [];
+  const h = heightLookup(map);
+  const out: number[] = [];
+  const pts = from ? [from, ...path] : path;
+  for (let i = 1; i < pts.length; i++) { const d = h(hexKey(pts[i - 1])) - h(hexKey(pts[i])); if (d >= 2) out.push(d * 5); }
+  return out;
+}
+/** How a creature moves: flying (in the air) or with a climbing speed. */
+export interface MoveMode { fly?: boolean; climb?: boolean }
 
 /** Movement on a hex scene: cheapest path by tile costs × units per hex (5 ft or 3 mi). */
-export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
+export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }, mode: MoveMode = {}): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
   const lookup = tileLookup(map);
   const goal = hexAt(map, end);
   const goalTile = lookup(hexKey(goal));
   if (!goalTile) return { ok: false, error: 'Destination is outside the map.' };
-  if (goalTile.cost === null) return { ok: false, error: `${goalTile.label} cannot be entered.` };
+  if (goalTile.cost === null && !(mode.fly && goalTile.id !== 'wall')) return { ok: false, error: `${goalTile.label} cannot be entered.` };
   const from = hexAt(map, start);
-  const reach = dijkstra(hexKey(from), stepCost(map, lookup), Infinity, hexKey(goal));
+  const reach = dijkstra(hexKey(from), stepCost(map, lookup, mode), Infinity, hexKey(goal));
   const info = reach.get(hexKey(goal));
   if (!info) return { ok: false, error: 'No passable path to that hex.' };
   const path = pathTo(reach, hexKey(goal)) ?? [];
@@ -535,9 +712,9 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
 }
 
 /** Hexes reachable with a remaining budget (in feet or miles) – the gold movement area. */
-export function hexReach(map: HexMapLike, start: { x: number; y: number }, budgetUnits: number): Map<HexKey, { cost: number; prev: HexKey | null }> {
+export function hexReach(map: HexMapLike, start: { x: number; y: number }, budgetUnits: number, mode: MoveMode = {}): Map<HexKey, { cost: number; prev: HexKey | null }> {
   const lookup = tileLookup(map);
-  return dijkstra(hexKey(hexAt(map, start)), stepCost(map, lookup), Math.max(0, budgetUnits / map.unitsPerCell));
+  return dijkstra(hexKey(hexAt(map, start)), stepCost(map, lookup, mode), Math.max(0, budgetUnits / map.unitsPerCell));
 }
 
 // ---------------------------------------------------------------- image import

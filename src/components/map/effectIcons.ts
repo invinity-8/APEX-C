@@ -4,7 +4,7 @@ const ICONS: Record<string, string> = {
   paralyzed: '⚡', petrified: '🗿', poisoned: '☠', prone: '⤓', restrained: '⛓', stunned: '💫', unconscious: '💤',
   hidden: '🥷', dodge: '🌀', bless: '✨', bane: '🌑', shield: '🛡', 'shield-of-faith': '🔰', 'mage-armor': '🔷', barkskin: '🌳',
   longstrider: '👣', haste: '⏩', stoneskin: '🪨', 'divine-favor': '☀', 'armor-of-agathys': '❄', heroism: '🦁', aid: '➕',
-  rage: '😤', inspired: '🎵', 'hunters-mark': '🎯', hex: '🔮', 'faerie-fire': '🧚', blur: '〰', 'wild-shape': '🐾', shillelagh: '🪵',
+  rage: '😤', inspired: '🎵', 'hunters-mark': '🎯', hex: '🔮', 'faerie-fire': '🧚', blur: '〰', 'wild-shape': '🐾', shillelagh: '🪵', fly: '🪽',
 };
 export const CONCENTRATION_ICON = '◎';
 export const effectIcon = (key: string) => ICONS[key] ?? (key.startsWith('buff-') ? '⬆' : '•');

@@ -535,3 +535,81 @@
 .map-view-toggle { position: absolute; top: .5rem; right: .5rem; z-index: 15; padding: .25rem .6rem; border-radius: .45rem; border: 1px solid rgba(192,155,88,.6); background: rgba(14,17,22,.88); color: #e8d4a6; font: 600 .75rem/1.2 Inter, sans-serif; }
 .map-view-toggle:hover { border-color: #e8d4a6; }
 .map-view-toggle[aria-pressed="true"] { background: rgba(192,155,88,.25); }
+
+/* APEX 1.9 – battle layout: map in the centre, turn order over its top edge, action bar over its bottom edge,
+   the detail panel docked right / left / below (components/BattleLayout.tsx) */
+.battle-layout { display: grid; gap: .5rem; min-height: 0; height: 100%; }
+.battle-layout.dock-right { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.battle-layout.dock-left { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+.battle-layout.dock-left > .battle-dock { order: -1; }
+.battle-layout.dock-below { grid-template-rows: minmax(520px, 78vh) auto; height: auto; }
+.battle-layout.dock-collapsed { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(520px, 1fr); }
+.battle-stage { position: relative; min-height: 520px; min-width: 0; border-radius: .6rem; overflow: hidden; border: 1px solid rgba(192,155,88,.35); background: #0f1113; }
+.battle-stage > .hex-scene { position: absolute; inset: 0; padding: 0 !important; margin: 0; display: flex; flex-direction: column; }
+.battle-stage > .hex-scene > .hex-scene-frame { flex: 1; min-height: 0; border: 0; border-radius: 0; }
+.battle-dock { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: .5rem; padding-right: .15rem; }
+.battle-layout.dock-right .battle-dock, .battle-layout.dock-left .battle-dock { max-height: 100%; }
+.battle-overlay-top { position: absolute; top: .4rem; left: 50%; transform: translateX(-50%); z-index: 20; max-width: calc(100% - 13rem); pointer-events: none; }
+.battle-overlay-top > * { pointer-events: auto; }
+.battle-overlay-top .initiative-bar { margin: 0; background: rgba(14,17,22,.82); backdrop-filter: blur(4px); border-radius: .6rem; }
+.battle-dock-switch { position: absolute; top: .5rem; left: .5rem; z-index: 21; display: flex; gap: 2px; padding: 2px; border-radius: .45rem; border: 1px solid rgba(192,155,88,.45); background: rgba(14,17,22,.85); }
+.battle-dock-switch button { width: 1.7rem; height: 1.5rem; border-radius: .3rem; color: #bcb29e; font-size: .85rem; }
+.battle-dock-switch button[aria-pressed="true"] { background: rgba(192,155,88,.3); color: #f3e4bd; }
+.battle-overlay-bottom { position: absolute; left: 50%; bottom: .5rem; transform: translateX(-50%); z-index: 20; width: min(calc(100% - 1rem), 1040px); pointer-events: none; }
+.battle-overlay-bottom > * { pointer-events: auto; }
+.battle-hotbar { display: flex; flex-direction: column; align-items: center; }
+.battle-hotbar > * { width: 100%; }
+.hotbar-frame { display: flex; flex-direction: column; gap: .35rem; padding: .45rem .6rem .5rem; border-radius: .9rem; border: 1px solid rgba(192,155,88,.7); background: linear-gradient(180deg, rgba(27,31,34,.94), rgba(15,17,19,.96)); box-shadow: 0 8px 28px rgba(0,0,0,.6), inset 0 1px 0 rgba(232,212,166,.12); }
+.hotbar-economy { display: flex; flex-direction: column; gap: .3rem; }
+.hotbar-economy > div { gap: .3rem 1rem; }
+.hotbar-slots { display: grid; grid-template-columns: repeat(7, 3.4rem); gap: .3rem; flex: 1; justify-content: center; }
+.hotbar-slot { position: relative; width: 3.4rem; height: 3.4rem; border-radius: .45rem; border: 1px solid #3a4147; background: radial-gradient(circle at 50% 35%, #2c3237, #15181b); color: #f3eee3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; overflow: hidden; transition: border-color .15s, box-shadow .15s, transform .1s; }
+.hotbar-slot:not(:disabled):hover { border-color: #d6b878; transform: translateY(-1px); box-shadow: 0 0 10px rgba(192,155,88,.4); }
+.hotbar-slot:disabled { opacity: .38; cursor: not-allowed; }
+.hotbar-slot[data-testid="quick-empty"] { opacity: .55; border-style: dashed; background: rgba(21,24,27,.6); }
+.hotbar-slot.is-on { border-color: #e8d4a6; box-shadow: 0 0 12px rgba(232,212,166,.65), inset 0 0 10px rgba(192,155,88,.35); }
+.hotbar-slot.is-over { border-color: #b9a8e3; box-shadow: 0 0 12px rgba(185,168,227,.7); }
+.hotbar-slot.tone-spell { background: radial-gradient(circle at 50% 35%, #3b3260, #15181b); }
+.hotbar-slot.tone-support { background: radial-gradient(circle at 50% 35%, #2b4a35, #15181b); }
+.hotbar-slot.tone-feature { background: radial-gradient(circle at 50% 35%, #4a3a20, #15181b); }
+.hotbar-icon { font-size: 1.25rem; line-height: 1; }
+.hotbar-label { font-size: .55rem; line-height: 1.05; max-width: 3.1rem; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.hotbar-cost { position: absolute; left: 4px; top: 4px; width: 7px; height: 7px; }
+.hotbar-cost.action { border-radius: 50%; background: #34d399; box-shadow: 0 0 4px #34d399; }
+.hotbar-cost.bonus { transform: rotate(45deg); background: #fbbf24; }
+.hotbar-level { position: absolute; right: 3px; top: 2px; font: 600 .55rem/1 Cinzel, Georgia, serif; color: #d8ccff; }
+.hotbar-badge { position: absolute; right: 3px; bottom: 2px; font-size: .55rem; color: #e8d4a6; }
+.hotbar-key { position: absolute; left: 3px; bottom: 1px; font: .5rem/1 Inter, sans-serif; color: #8c806a; }
+.hotbar-end { flex: none; width: 4.4rem; height: 4.4rem; border-radius: 50%; border: 2px solid #e8d4a6; background: radial-gradient(circle at 50% 35%, #c09b58, #5f4b26); color: #14110d; font: 700 .72rem/1.05 Cinzel, Georgia, serif; text-transform: uppercase; box-shadow: 0 0 16px rgba(192,155,88,.55); }
+.hotbar-end:hover:not(:disabled) { filter: brightness(1.12); }
+@media (max-width: 1100px) { .hotbar-slots { grid-template-columns: repeat(7, 2.9rem); } .hotbar-slot { width: 2.9rem; height: 2.9rem; } }
+@media (max-width: 900px) {
+  .battle-layout.dock-right, .battle-layout.dock-left { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(440px, 64vh) auto; height: auto; }
+  .battle-layout.dock-left > .battle-dock { order: 0; }
+  .battle-dock-switch { display: none; }
+  .battle-overlay-bottom { width: calc(100% - .5rem); bottom: .25rem; }
+  .hotbar-slots { display: flex; overflow-x: auto; justify-content: flex-start; }
+  .hotbar-slot { flex: none; }
+  .hotbar-economy { font-size: .65rem; }
+  .battle-overlay-top { max-width: calc(100% - 4rem); }
+}
+@media (max-width: 767px) {
+  .map-stage .player-scene > .battle-layout { order: 1; }
+}
+.battle-layout.dock-right > .battle-dock > .journal-toolbar:first-child { padding-right: 9rem; }
+/* APEX 1.9 – aim height (Shift + wheel) */
+.aim-level { position: absolute; top: .5rem; right: 4.2rem; z-index: 15; display: flex; align-items: center; gap: .35rem; padding: .2rem .55rem; border-radius: .45rem; border: 1px solid rgba(127,214,255,.6); background: rgba(11,34,51,.88); color: #bfefff; font: 600 .72rem/1.2 Inter, sans-serif; }
+.aim-level small { color: #7fa9bd; font-weight: 400; }
+.aim-level button { color: #bfefff; padding: 0 .2rem; }
+
+/* APEX 2.0 – target strip in the action bar */
+.target-strip { display: flex; align-items: center; gap: .3rem; overflow-x: auto; padding: .25rem .4rem; border-radius: .6rem; border: 1px solid rgba(192,155,88,.45); background: rgba(14,17,22,.86); }
+.target-strip-label { font: 600 .6rem/1 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8c806a; padding-right: .2rem; }
+.target-chip { flex: none; display: flex; align-items: center; gap: .3rem; padding: .15rem .45rem .15rem .2rem; border-radius: 999px; border: 1px solid #4e565d; background: #1b1f22; color: #f3eee3; font-size: .68rem; }
+.target-chip:hover { border-color: #e8d4a6; box-shadow: 0 0 8px rgba(232,212,166,.4); }
+.target-chip.is-far { opacity: .6; }
+.target-chip-icon { width: 1.3rem; height: 1.3rem; border-radius: 50%; display: grid; place-items: center; font: 700 .55rem/1 Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; border: 1px solid rgba(0,0,0,.5); }
+.target-chip-ft { color: #bcb29e; font-variant-numeric: tabular-nums; }
+.target-chip-dot { width: .45rem; height: .45rem; border-radius: 50%; }
+.target-chip-dot.ok { background: #4ade80; box-shadow: 0 0 5px #4ade80; }
+.target-chip-dot.far { background: #e5484d; }

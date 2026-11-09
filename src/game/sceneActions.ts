@@ -179,7 +179,8 @@ export interface ReactionOffer {
   moveId?: string;
 }
 
-export interface Figure { kind: 'pc' | 'npc'; id: string; name: string; side: 'party' | 'enemy'; x: number; y: number; reachFt: number; down?: boolean }
+/** `z`: absolute height in feet (ground level × 5 + altitude), APEX 1.9. */
+export interface Figure { kind: 'pc' | 'npc'; id: string; name: string; side: 'party' | 'enemy'; x: number; y: number; z?: number; reachFt: number; down?: boolean }
 
 /**
  * Hostiles whose reach the mover leaves: within reach at the start, out of reach at the destination. `dist` returns

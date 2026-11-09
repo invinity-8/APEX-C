@@ -34,7 +34,7 @@ export interface SceneToken {
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
-  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean };
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string };
   /** Carries a light (torch glow). */
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
@@ -43,6 +43,8 @@ export interface SceneToken {
   badges?: string;
   /** APEX 1.6 – the same as icons above the figure (concentration, conditions, buffs). */
   icons?: Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }>;
+  /** APEX 1.9 – altitude above the ground in feet (flying). */
+  alt?: number;
   /** APEX 1.6 – hit points of a character (life bar under the figure). */
   vitals?: { hp: number; maxHp: number; temp: number; form?: string };
 }
@@ -72,6 +74,8 @@ interface Props {
   /** Path preview while hovering: from this figure, gold within the budget (feet), red beyond. */
   pathFrom?: { x: number; y: number } | null;
   pathBudget?: number | null;
+  /** APEX 1.9 – flying / climbing for the path preview. */
+  pathMode?: { fly?: boolean; climb?: boolean };
   /** Line of sight / range while hovering: white line within range and in sight, plus the reachable area. */
   lineFrom?: { x: number; y: number } | null;
   lineRangeFt?: number | null;
@@ -83,6 +87,8 @@ interface Props {
   areaAt?: ((point: { x: number; y: number }) => HexKey[]) | null;
   /** APEX 1.6 – recent combat events to animate (floating numbers, streaks, bursts). */
   fx?: SceneFx[];
+  /** APEX 1.9 – the chosen aim height (Shift + wheel), shown at the hovered hex. */
+  aimAlt?: number;
   /** Centre the camera on a point whenever `key` changes (active turn). */
   focus?: { key: string; x: number; y: number } | null;
 }
@@ -90,7 +96,7 @@ interface Props {
 const MAX_K = 3.5;
 const NO_TEAMS = new Set<string>();
 
-export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [] }: Props) {
+export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, pathMode, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [], aimAlt = 0 }: Props) {
   const { tokens, moving } = useAnimatedTokens(targetTokens, map);
   const reducedMotion = usePrefersReducedMotion();
   const [hover, setHover] = useState<HexKey | null>(null);
@@ -162,11 +168,11 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
   const pathPreview = useMemo(() => {
     if (!pathFrom || !hover || !map.hex || !known(hover)) return null;
     const c = center(parseKey(hover));
-    const r = hexMovementCost(map, pathFrom, { x: c.x + ox, y: c.y + oy });
+    const r = hexMovementCost(map, pathFrom, { x: c.x + ox, y: c.y + oy }, pathMode);
     if (!r.ok || !r.steps.length) return null;
     const pts = [toWorld(pathFrom), ...r.steps.map((p) => toWorld(p))];
     return { d: `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`, cost: r.cost, end: pts[pts.length - 1], ok: pathBudget === null || r.cost <= pathBudget + 1e-9 };
-  }, [pathFrom?.x, pathFrom?.y, hover, pathBudget, map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pathFrom?.x, pathFrom?.y, hover, pathBudget, map.hex, pathMode?.fly, pathMode?.climb]); // eslint-disable-line react-hooks/exhaustive-deps
   const blocksSight = useMemo(() => { const look = tileLookup(map); return (k: HexKey) => !!look(k)?.blocksSight; }, [map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
   const groundHeight = useMemo(() => sightRules(map).height, [map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
   const rangeArea = useMemo(() => {
@@ -472,6 +478,19 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                 </g>
               );
             })}
+            {tokens.filter((t) => t.alt && !moving.has(t.tokenId)).map((t) => {
+              const c = center(hexAt(map, t));
+              return (
+                <g key={`alt-${t.tokenId}`} transform={`translate(${c.x},${c.y})`} pointerEvents="none" data-testid="altitude-badge">
+                  <ellipse cx={0} cy={HEX_SIZE * 0.55} rx={HEX_SIZE * 0.45} ry={HEX_SIZE * 0.14} fill="#000" fillOpacity={0.35} />
+                  <g transform={`translate(${HEX_SIZE * 0.55},${-HEX_SIZE * 0.55})`}>
+                    <rect x={-2} y={-8} width={34} height={13} rx={6} fill="#0b2233" stroke="#7fd6ff" strokeWidth={1} />
+                    <text x={15} y={2} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#bfefff">↑{t.alt} ft</text>
+                  </g>
+                </g>
+              );
+            })}
+            {hover && aimAlt > 0 && (() => { const c = center(parseKey(hover)); return <text x={c.x} y={c.y - HEX_SIZE * 0.85} textAnchor="middle" fontSize={10} fontWeight={700} fill="#bfefff" stroke="#000" strokeWidth={3} paintOrder="stroke" pointerEvents="none">⇕ {aimAlt} ft</text>; })()}
             {fx.length > 0 && <CombatFx fx={fx} posOf={(actor) => { const id = actor.replace(/^(pc|npc)-/, ''); const t = tokens.find((x) => x.tokenId === id); return t ? center(hexAt(map, t)) : null; }} />}
             {tokens.filter((t) => moving.has(t.tokenId)).map((t) => {
               const w = toWorld(t);
