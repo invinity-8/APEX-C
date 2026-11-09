@@ -601,3 +601,15 @@
 .aim-level { position: absolute; top: .5rem; right: 4.2rem; z-index: 15; display: flex; align-items: center; gap: .35rem; padding: .2rem .55rem; border-radius: .45rem; border: 1px solid rgba(127,214,255,.6); background: rgba(11,34,51,.88); color: #bfefff; font: 600 .72rem/1.2 Inter, sans-serif; }
 .aim-level small { color: #7fa9bd; font-weight: 400; }
 .aim-level button { color: #bfefff; padding: 0 .2rem; }
+
+/* APEX 2.0 – target strip in the action bar */
+.target-strip { display: flex; align-items: center; gap: .3rem; overflow-x: auto; padding: .25rem .4rem; border-radius: .6rem; border: 1px solid rgba(192,155,88,.45); background: rgba(14,17,22,.86); }
+.target-strip-label { font: 600 .6rem/1 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8c806a; padding-right: .2rem; }
+.target-chip { flex: none; display: flex; align-items: center; gap: .3rem; padding: .15rem .45rem .15rem .2rem; border-radius: 999px; border: 1px solid #4e565d; background: #1b1f22; color: #f3eee3; font-size: .68rem; }
+.target-chip:hover { border-color: #e8d4a6; box-shadow: 0 0 8px rgba(232,212,166,.4); }
+.target-chip.is-far { opacity: .6; }
+.target-chip-icon { width: 1.3rem; height: 1.3rem; border-radius: 50%; display: grid; place-items: center; font: 700 .55rem/1 Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; border: 1px solid rgba(0,0,0,.5); }
+.target-chip-ft { color: #bcb29e; font-variant-numeric: tabular-nums; }
+.target-chip-dot { width: .45rem; height: .45rem; border-radius: 50%; }
+.target-chip-dot.ok { background: #4ade80; box-shadow: 0 0 5px #4ade80; }
+.target-chip-dot.far { background: #e5484d; }

@@ -22,6 +22,7 @@ import { formAllowed, wildShapeLevel } from '../game/abilities';
 const beastOptions = (sheet: CharacterSheet | null) => { const lvl = sheet ? wildShapeLevel(sheet) ?? 0 : 0; return beastsFor(undefined).filter((b) => !formAllowed(b, lvl)); };
 import { parseArea } from '../campaign/hexArea';
 import { beastIcon } from './map/effectIcons';
+import { TargetStrip } from './TargetStrip';
 
 /** The attack or spell "in hand": its range is shown on the map, area spells are aimed with a right-click. */
 export type ReadyAction = { kind: 'attack'; index: number } | { kind: 'spell'; spellId: string; slotLevel: number } | null;
@@ -48,6 +49,8 @@ interface Props {
   barTarget?: HTMLElement | null;
   /** End this character's turn (shown as the big button in the action bar). */
   onEndTurn?: () => void;
+  /** APEX 2.0: act on a figure from the target strip (same as right-clicking it on the map). */
+  onTargetFigure?: (id: string) => void;
 }
 
 export function PlayerCombat(p: Props) {
@@ -214,6 +217,16 @@ export function PlayerCombat(p: Props) {
             <button type="button" className="ml-auto text-marble-500 hover:text-gold-200" aria-label="Put the spell away" onClick={() => p.setReady(null)}>✕</button>
           </div>
         );
+      })()}
+      {p.onTargetFigure && (() => {
+        // the target strip: what is in reach of the attack or spell in hand (allies for support spells)
+        const atk = p.ready?.kind === 'attack' ? p.attacks[p.ready.index] : undefined;
+        const r = atk ? parseRangeFt(`${atk.range} ${atk.notes}`) : null;
+        const sp = readySpellNow;
+        const plan = sp && sheet && p.ready?.kind === 'spell' ? planSpell(sheet, sp.id, p.ready.slotLevel, lvl) : null;
+        const rangeFt = r ? r.longRangeFt ?? r.rangeFt ?? r.reachFt : plan && !('error' in plan) ? plan.rangeFt : null;
+        const myAlt = snapshot.movement?.tokenId === tokenId ? snapshot.movement.alt ?? 0 : (snapshot.figures ?? []).find((f) => f.kind === 'pc' && f.tokenId === tokenId)?.alt ?? 0;
+        return <TargetStrip snapshot={snapshot} from={me ?? null} fromAlt={myAlt} side={sp && supportive(sp) ? 'party' : 'hostile'} rangeFt={rangeFt} onPick={p.onTargetFigure!} label={sp && supportive(sp) ? 'Allies' : 'Targets'} />;
       })()}
       <div className="hotbar-frame">
         <div className="hotbar-economy">

@@ -16,6 +16,7 @@ import { areaHexes } from '../campaign/hexArea';
 import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
+import { NpcBar } from './NpcBar';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -922,6 +923,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               interaction={battle.interaction}
             />}
               dock={(bar) => <>
+                {selected?.kind === 'npc' && (() => { const npc = gmEnemies.find((e) => e.id === selected.id); return npc ? <NpcBar target={bar} snapshot={snapshot} encounter={gmEncounter} npc={npc} busy={busy} act={sceneTurn} attack={npcAttack} setAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} onTarget={(id) => battle.interaction.onTokenContext?.(id)} /> : null; })()}
                 {shownScene.category === 'battle' && shownScene.map.hex && (
               <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} adv={gmAdv} setAdv={setGmAdv} />
             )}
@@ -932,7 +934,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               return (
                 <div data-testid="gm-pc-panel">
                   <p className="px-1 text-[11px] text-marble-400">Acting for <b className="text-gold-200">{fig?.name ?? 'character'}</b> – same panel as the player; right-click on the map like the player.</p>
-                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacksNow} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} barTarget={bar} onEndTurn={gmEncounter ? () => void sceneTurnP({ action: 'endTurn', encounterId: gmEncounter.id, turnSerial: gmEncounter.turnSerial ?? 0, actor: `pc-${selected.id}` }) : undefined} />
+                  <PlayerCombat snapshot={pcSnapshot} encounter={gmEncounter} tokenId={selected.id} sheet={pcSheet} attacks={pcAttacksNow} myTurn={!!gmEncounter && isActiveActor(gmEncounter, `pc-${selected.id}`)} free={!gmEncounter} pending={busy} act={(input) => void sceneTurnP(input)} target={pcMenu} setTarget={setPcMenu} ready={pcReady} setReady={setPcReady} spellTargets={pcTargets} setSpellTargets={setPcTargets} movement={mv && mv.mode === 'turn' ? { allowance: mv.allowance, spent: mv.spent, dashed: mv.dashed } : null} onTargetFigure={(id) => battle.interaction.onTokenContext?.(id)} barTarget={bar} onEndTurn={gmEncounter ? () => void sceneTurnP({ action: 'endTurn', encounterId: gmEncounter.id, turnSerial: gmEncounter.turnSerial ?? 0, actor: `pc-${selected.id}` }) : undefined} />
                 </div>
               );
             })()}
