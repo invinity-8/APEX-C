@@ -20,7 +20,7 @@ import type { AuthUser, Repo } from './repo.js';
 import { sceneContext } from './sceneRuntime.js';
 import { carriedLights, clockFor, hexKeyAt, parseStoredSheet, sheetOf, visionFor, type SceneViewContext } from './sceneLocal.js';
 import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, activeActors, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, withShillelagh, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
-import { statBlock, type AbilityKey } from '../game/bestiary.js';
+import { bestiary, statBlock, type AbilityKey } from '../game/bestiary.js';
 import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, type EffectMods, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
 import type { AttackOptions } from '../game/sceneCombat.js';
 import { attackExtras } from './combatFeatures.js';
@@ -37,6 +37,7 @@ import { applyDamage, applyHealing, classLevel, revert, setTempHp, transform } f
 import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/classFeatures.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
+import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
 import { altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
 import { npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
@@ -92,6 +93,54 @@ export async function fallDamage(user: AuthUser, repo: Repo, sceneId: string, wh
     return { ok: true, state: st, message: text };
   });
   return text;
+}
+
+/**
+ * Encounter generator (GM, APEX 2.0): `op: 'plan'` returns monsters for a theme, difficulty and party (nothing is
+ * stored); `op: 'apply'` places the (possibly edited) list on the map for the situation – an ambush rolls Stealth and
+ * hides each creature.
+ */
+async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  const map = parseMap(scene.published_metadata);
+  if (!map?.hex) return { status: 400, body: { error: 'Encounters are placed on hex battle maps.' } };
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
+  if (!ctx.state) return { status: 409, body: { error: 'Campaign unavailable.' } };
+  const situation = (SITUATIONS.find((x) => x.id === v.situation)?.id ?? 'camp') as Situation;
+  const difficulty = (['easy', 'medium', 'hard', 'deadly'].includes(v.difficulty as string) ? v.difficulty : 'medium') as Difficulty;
+  const partySize = Number.isSafeInteger(v.partySize) ? Math.max(1, Math.min(10, v.partySize as number)) : 4;
+  const partyLevel = Number.isSafeInteger(v.partyLevel) ? Math.max(1, Math.min(20, v.partyLevel as number)) : 1;
+  const seed = Number.isSafeInteger(v.seed) ? (v.seed as number) : 1;
+  const blocks = bestiary(ctx.state);
+  if (v.op === 'plan') {
+    const plan = planEncounter({ theme: typeof v.theme === 'string' ? v.theme : 'bandits', situation, difficulty, partySize, partyLevel, seed, blocks });
+    return { status: 200, body: { ok: true, plan } };
+  }
+  if (v.op !== 'apply' || !Array.isArray(v.entries)) return { status: 400, body: { error: 'Invalid encounter.' } };
+  const ids = (v.entries as unknown[]).map((e) => (e as { templateId?: unknown })?.templateId).filter((id): id is string => typeof id === 'string' && !!statBlock(ctx.state!, id)).slice(0, 20);
+  if (!ids.length) return { status: 422, body: { error: 'Nothing to place.' } };
+  const pcs = await ctx.pcs!(scene.id, map);
+  const spawn = map.nodes.find((n) => n.kind === 'spawn');
+  const party = pcs.length ? { x: pcs.reduce((a, p) => a + p.x, 0) / pcs.length, y: pcs.reduce((a, p) => a + p.y, 0) / pcs.length } : spawn ?? hexCentre(map, { q: 0, r: 0 });
+  const occupied = new Set([...pcs.map((p) => hexKeyAt(map, p)), ...enemiesOf(ctx.state, scene.id).filter((e) => !e.defeated).map((e) => hexKeyAt(map, e))]);
+  const ranged = ids.map((id) => { const b = statBlock(ctx.state!, id)!; return b.attacks[0]?.kind === 'ranged'; });
+  const spots = placeEncounter(map, situation, ids.length, party, seed, occupied, ranged);
+  if (spots.length < ids.length) return { status: 422, body: { error: `Only ${spots.length} free spots for ${ids.length} creatures on this map.` } };
+  return mutate(user, repo, (s) => {
+    let st = structuredClone(s);
+    const names: string[] = [];
+    for (const [i, id] of ids.entries()) {
+      const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
+      const r = addEnemy(st, scene.id, newId, id, spots[i], undefined, d20());
+      if (!r.ok) return r;
+      st = r.state;
+      const e = enemiesOf(st, scene.id).find((x) => x.id === newId)!;
+      names.push(e.name);
+      if (spots[i].hidden) addEffect(st, scene.id, npcActor(newId), hiddenEffect(die(20) + npcStealth(e), () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+    }
+    const text = `Encounter (${SITUATIONS.find((x) => x.id === situation)!.label.toLowerCase()}): ${names.join(', ')}.`;
+    logCombat(st, scene.id, text);
+    return { ok: true, state: st, message: text };
+  });
 }
 
 const SIZES = ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'];
@@ -369,6 +418,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     return res;
   }
   if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM can do that.' } };
+  if (v.action === 'encounter') return encounterRequest(user, repo, scene, v);
   if (v.action === 'enemyAdd' || v.action === 'enemyMove') {
     const map = parseMap(scene.published_metadata);
     if (!map?.hex || typeof v.x !== 'number' || typeof v.y !== 'number') return { status: 400, body: { error: 'Choose a hex on a published hex map.' } };

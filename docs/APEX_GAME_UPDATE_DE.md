@@ -475,3 +475,82 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Encounter-Generator: Lager, Hinterhalt, Belagerung; Challenge Rating nach Gruppengröße; danach feintunen.
 - 3D: Klicken auf Figuren in der Luft ist in 3D etwas fummelig; dafür ein Zielmenü in der Leiste.
 - Fallen bei Klippen ohne Flug („hinunterspringen“), Schieben und Stoßen.
+
+## APEX 2.0 – 3D-Figuren, echter Maßstab, Kachel-Strukturen, Zielliste, Stoßen, Szenarien, Encounter-Generator
+
+**Figuren in 3D**
+- **Aufsteller:** Charaktere mit Porträt stehen als Aufsteller wie beim Tabletop: das Porträt in einer goldgerahmten Karte auf einem runden Sockel. Die Karte dreht sich zur Kamera.
+- **Miniaturen:** Alle anderen (vor allem Gegner) bekommen eine kleine Miniatur nach Bauart und Größe aus dem Stat-Block:
+  - Bauart: Humanoid (Gegner mit Klinge), Untoter (bleich), Vierbeiner, Flieger (schlagende Flügel), Spinne;
+  - Größe: Tiny bis Gargantuan;
+  - Elite mit Goldkranz, Druiden in Tierform als Tier.
+- **Name und Lebensleiste** sitzen kompakt über der Figur. Gefallene liegen.
+- **Ausbau später:** hochgeladene 3D-Modelle (GLB) wären möglich, als eigene Ausbaustufe.
+
+**Echter Maßstab**
+- Eine 5-ft-Stufe ist so hoch wie ein Hex breit. Figuren sind etwa 6 ft groß.
+- Bäume sind etwa 22 ft hoch, Kiefern noch höher; Mauern 10 ft; Gras knöchel- bis kniehoch.
+- Fliegende schweben in echter Höhe.
+
+**3D-Strukturen für alle Kacheln**
+- **Natur:** Bäume, Kiefern, Büsche, Hecken, Baumstümpfe, Felsen, Geröll, Stalagmiten.
+- **Bauten:** Palisaden, Zäune, Türen, Säulen, Statuen, Treppen.
+- **Einrichtung:** Tische, Kisten, Fässer, Betten, Altar.
+- **Licht und Gefahren:** Lagerfeuer und Kohlebecken mit flackernder Flamme, leuchtende Pilze, Spinnennetze, Fallen mit Stacheln, Magiekreis.
+- **Boden und Wasser:** Schilf im Sumpf, Brücke, Sanddünen, Schneehügel.
+- **Bodentexturen je Familie:** Gras, Erde, Steinplatten, Dielen, Kopfsteinpflaster, Marmor, Teppich, Sand/Schnee/Eis.
+- Die Klippenwände behalten ihre Felsfarbe.
+
+**Sichtlinie in 3D**
+- Wie in 2D: Über einem Hex zeigen Linien zu allen Gegnern, die man von dort sehen würde, mit Entfernung und „👁 n in sight“.
+- Weiß heißt in Reichweite, gold gestrichelt zu weit.
+- Über einem Gegner erscheint die Linie von der eigenen Figur zu ihm.
+
+**Zielliste in der Aktionsleiste**
+- Über der Leiste stehen die sichtbaren Gegner (bei Unterstützungszaubern die Verbündeten), nächster zuerst, mit Entfernung in 3D, ↑ für Fliegende und einem Punkt für „in Reichweite“.
+- Ein Klick wirkt wie ein Rechtsklick auf die Figur: angreifen (inklusive Hinlaufen) oder zaubern. So trifft man auch Fliegende in 3D bequem.
+
+**GM-Leiste für Gegner**
+- Wählt der GM einen Gegner oder Verbündeten, erscheint dessen Leiste über der Karte:
+  - Aktionspunkte und Werte;
+  - Angriffe (der gewählte ist der Standard für Rechtsklick und Zielliste);
+  - Flächenfähigkeiten, Kriegsrufe, Dash, Disengage, Dodge, Hide;
+  - Stoßen (Wegstoßen/Umwerfen), dann Ziel in der Liste wählen;
+  - End turn.
+
+**Herunterspringen und Stoßen**
+- **Herunterspringen:** Gehende dürfen Klippen hinunterspringen; die Wegberechnung nimmt eine Treppe, wenn möglich. Ab 10 ft gibt es Fallschaden (1W6 pro 10 ft), danach liegt die Figur.
+- **Stoßen (5e-Shove):**
+  - Ersetzt einen Angriff.
+  - Stärke (Athletik) gegen Athletik oder Akrobatik des Ziels.
+  - Das Ziel darf höchstens eine Größe größer sein und muss in 5 ft sein (in 3D).
+  - Bei Erfolg wird es 5 ft weggestoßen oder umgeworfen:
+    - über eine Klippe oder in eine Grube: Fallschaden;
+    - in der Luft umgeworfen: Absturz.
+  - Für Spieler im Zielmenü („✋ Push 5 ft“, „⤓ Knock prone“), für den GM in der Gegnerleiste.
+
+**Szenario-Vorlagen (Editor, mit Seed neu würfelbar)**
+- **Neu:** Banditenlager, Höhle, Hochlandpass, Dorfplatz, Sumpf, Tempelruine, Schlucht mit Brücke, Wüstenoase, Winterwald mit gefrorenem See.
+  - **Banditenlager:** Palisade, Tore mit Kohlebecken, Lagerfeuer, Zelte.
+  - **Höhle:** Stalagmiten, Pilze, Gruben, unebener Boden.
+  - **Hochlandpass:** zwei Plateaus (15 und 25 ft) mit Treppen und Klippen.
+  - **Dorfplatz:** Häuser mit Türen, Brunnen, Zäune.
+  - **Sumpf:** Moor, Schilf, Baumstümpfe.
+  - **Tempelruine:** Säulenreihen, erhöhte Altar-Empore mit Statuen.
+  - **Schlucht mit Brücke:** tiefe Schlucht, Holzbrücke, hohe Ufer.
+- **Bisher:** Waldlichtung, Bach mit Furt, Ruine, Dungeon, offenes Feld.
+
+**Encounter-Generator (GM, im Seitenpanel)**
+- Eingaben:
+  - **Thema:** Kultisten, Ork-Kriegsbande, Banditen, Goblin-Plünderer, ruhelose Tote, wilde Tiere. Eigene Bibliotheks-Gegner, die zum Thema passen, kommen dazu.
+  - **Situation:** Lager, Hinterhalt, Belagerung, Patrouille, Bau.
+  - **Schwierigkeit:** easy bis deadly.
+  - **Gruppe:** Größe und Stufe.
+- **Generate:** Füllt das XP-Budget nach den DMG-Schwellen inklusive Gruppen-Multiplikator; ab „medium“ mit Anführer. „🎲 Reroll“ würfelt neu.
+- **Vorschau:** zeigt XP, angepasste XP und die tatsächliche Schwierigkeit. Einträge lassen sich entfernen oder aus der Bibliothek hinzufügen, die Bewertung rechnet mit.
+- **Platzieren nach Situation:**
+  - **Lager:** um das Lagerfeuer bzw. die Mitte.
+  - **Hinterhalt:** 20–35 ft um die Gruppe, bevorzugt in Deckung, alle versteckt mit gewürfeltem Stealth.
+  - **Belagerung:** vom gegenüberliegenden Rand, Fernkämpfer auf der höchsten Stelle.
+  - **Patrouille:** als Trupp in etwa 40 ft.
+  - **Bau:** auf der fernen Kartenseite.

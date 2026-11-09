@@ -43,16 +43,12 @@ describe('API: jumping down, shoving', () => {
   const st = () => repo.states.get(cid)!.state;
   let scene: SceneDefinition;
   let sinna: string;
-  let me: { x: number; y: number };
-  const step = Math.sqrt(3) * 30;
+  let me: { x: number; y: number } = { x: 0, y: 0 }; void me;
   const sheetOf = async () => ((await request('hannah', 'sheet', undefined, { token: sinna })).body as SheetPayload);
   const saveSheet = async (sheet: CharacterSheet) => {
     const cur = await sheetOf();
     expect((await request('hannah', 'sheet', { action: 'save', tokenId: sinna, sheet, expectedVersion: cur.version ?? 0 })).status).toBe(200);
   };
-  /** A fresh turn for Sinna (the encounter economy forgets what she used). */
-  const fresh = () => { const enc = st().sceneEncounters?.[scene.id]; if (enc?.economy) delete enc.economy[`pc-${sinna}`]; };
-  const cast = (spellId: string, slotLevel: number, targets?: unknown[]) => (fresh(), turn(scene.id, { action: 'cast', tokenId: sinna, spellId, slotLevel, ...(targets ? { targets } : {}) }, 'hannah'));
   const self = { kind: 'pc', tokenId: '' };
   beforeEach(async () => {
     resetSchemaCache(); repo = new MemoryRepo(); cookies = {};
@@ -77,7 +73,6 @@ describe('API: jumping down, shoving', () => {
 
 
   /** Sinna's turn (when initiative runs). */
-  const sinnaTurn = () => { const e = st().sceneEncounters?.[scene.id]; if (e?.status === 'active') { const i = e.participants.findIndex((p) => p.id === `pc-${sinna}`); if (i >= 0) { e.turnIndex = i; e.turnSerial = (e.turnSerial ?? 0) + 1; e.blockDone = []; } } };
 
   const npcTurn = (id: string) => { const e = st().sceneEncounters?.[scene.id]; if (e?.status === 'active') { const i = e.participants.findIndex((p) => p.id === `npc-${id}`); if (i >= 0) { e.turnIndex = i; e.turnSerial = (e.turnSerial ?? 0) + 1; e.blockDone = []; } } };
 
