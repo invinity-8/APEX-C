@@ -7,9 +7,11 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { Command } from '../game/commands';
 import { MARKER_STYLES, type MarkerStyle } from '../game/types';
 import type { TokenView } from '../game/visibility';
+import type { FigureLook } from '../game/figure';
 import type { DispatchResult, GameApi } from '../state/gameApi';
 import { CharacterPortrait, MARKER_LABEL, MarkerPreview } from './CharacterVisuals';
 import { Spinner } from './brand';
+import { FigureEditor } from './FigureEditor';
 
 const PALETTE = ['#d6b878', '#c09b58', '#c0392b', '#a3262b', '#6fb1e0', '#3d6fa6', '#7cc98a', '#3a7d44', '#a78bfa', '#6b4fa0', '#ece4d2', '#8a7a66'];
 const OUT = 512; // exported portrait size (px)
@@ -20,9 +22,10 @@ interface Props {
   token: TokenView;
   run: (cmd: Command) => Promise<DispatchResult>;
   notify: (msg: string, kind?: 'error' | 'info') => void;
+  isGm?: boolean;
 }
 
-export function AppearanceEditor({ game, token, run, notify }: Props) {
+export function AppearanceEditor({ game, token, run, notify, isGm = false }: Props) {
   const [title, setTitle] = useState(token.title);
   const [color, setColor] = useState(token.color);
   const [accent, setAccent] = useState(token.accent ?? '#c09b58');
@@ -43,8 +46,19 @@ export function AppearanceEditor({ game, token, run, notify }: Props) {
     if (r.ok) notify('Appearance saved – visible on the map and on character cards.', 'info');
   };
 
+  const [figureBusy, setFigureBusy] = useState(false);
+  const saveFigure = async (look: FigureLook | null) => {
+    setFigureBusy(true);
+    const r = await run({ type: 'setAppearance', tokenId: token.id, figure: look });
+    setFigureBusy(false);
+    if (r.ok) notify(look ? '3D figure saved – it now stands on the 3D battle map.' : '3D figure removed.', 'info');
+  };
+
   return (
     <div className="grid gap-3 lg:grid-cols-2">
+      <div className="lg:col-span-2">
+        <FigureEditor key={token.id} value={token.figure} onSave={saveFigure} gm={isGm} busy={figureBusy} title={`3D figure of ${token.name}`} ring={accent} />
+      </div>
       <section className="panel space-y-3 p-3">
         <h3 className="panel-title">Portrait</h3>
         <PortraitCropper game={game} token={token} notify={notify} />

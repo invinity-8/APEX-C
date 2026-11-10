@@ -8,6 +8,7 @@
  * In online mode the browser only sends commands to the server, which runs
  * exactly this function. Players therefore cannot cheat.
  */
+import type { FigureLook } from './figure.js';
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
 import { executePartyLoot, PARTY_LOOT_COMMANDS, type PartyLootCommand } from './items/partyLoot.js';
@@ -81,7 +82,7 @@ export type Command =
   | { type: 'createEvent'; eventId: string; name: string; description: string; hexes: string[]; effects: EventEffect[]; announce: boolean }
   | { type: 'announce'; category: AnnouncementCategory; title: string; text: string }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
-  | { type: 'setAppearance'; tokenId: string; name?: string; bodyType?: BodyType; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
+  | { type: 'setAppearance'; tokenId: string; name?: string; bodyType?: BodyType; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string; /** APEX 2.1: low-poly figure; null removes it. */ figure?: FigureLook | null }
   | {
       type: 'gmRestoreCharacter';
       tokenId: string;
@@ -511,6 +512,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (cmd.accent !== undefined) t.accent = cmd.accent.toLowerCase();
       if (cmd.marker !== undefined) t.marker = cmd.marker;
       if (cmd.initials !== undefined && cmd.initials.trim()) t.initials = cmd.initials.trim().slice(0, 3);
+      if (cmd.figure === null) delete t.figure; else if (cmd.figure !== undefined) t.figure = cmd.figure;
       return { ok: true, state }; // no knowledge refresh needed
     }
     case 'gmRestoreCharacter': {

@@ -4,6 +4,7 @@
  * it reaches the game logic.
  */
 import { parseStatBlock } from '../game/bestiary.js';
+import { parseLook } from '../game/figure.js';
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
@@ -357,6 +358,10 @@ export function parseCommand(raw: unknown): ParseResult {
       if (c.initials !== undefined) {
         if (typeof c.initials !== 'string' || c.initials.length > 6) return bad('initials');
         out.initials = c.initials;
+      }
+      if (c.figure !== undefined) {
+        if (c.figure === null) out.figure = null;
+        else { const look = parseLook(c.figure); if (!look) return bad('figure'); out.figure = look; }
       }
       if (Object.keys(out).length === 2) return bad('nothing to change');
       return { ok: true, command: out as Command };

@@ -3,6 +3,8 @@
  * elites. Built-ins can be copied and changed (a copy with the same id replaces the built-in in this campaign).
  */
 import { useMemo, useState } from 'react';
+import { FigureEditor } from './FigureEditor';
+import { autoLook, type FigureLook } from '../game/figure';
 import type { Command } from '../game/commands';
 import type { GameState } from '../game/types';
 import type { DispatchResult } from '../state/gameApi';
@@ -129,10 +131,18 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
   const [q, setQ] = useState('');
   const [shown, setShown] = useState<string | null>(all[0]?.id ?? null);
   const [editing, setEditing] = useState<StatBlock | null>(null);
+  const [figure, setFigure] = useState(false);
   const list = all.filter((b) => `${displayName(b)} ${b.type} ${b.cr}`.toLowerCase().includes(q.trim().toLowerCase()));
   const sel = all.find((b) => b.id === shown) ?? null;
   const own = (id: string) => (state.enemyLibrary ?? []).some((b) => b.id === id);
   const save = async (b: StatBlock) => { if ((await run({ type: 'enemyLibrarySave', block: b })).ok) { setEditing(null); setShown(b.id || null); } };
+  // APEX 2.1: the creature's 3D figure (saved on the campaign's copy of the stat block)
+  const saveLook = async (look: FigureLook | null) => {
+    if (!sel) return;
+    const next: StatBlock = { ...structuredClone(sel), source: 'custom' };
+    if (look) next.look = look; else delete next.look;
+    if ((await run({ type: 'enemyLibrarySave', block: next })).ok) setFigure(false);
+  };
   return (
     <div className="grid gap-3 p-3 lg:grid-cols-[18rem_1fr]" aria-label="Enemy library" data-testid="enemy-library">
       <section className="panel space-y-2 p-3">
@@ -142,7 +152,7 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
         <ul className="space-y-1">
           {list.map((b) => (
             <li key={b.id}>
-              <button type="button" className={`flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-xs ${shown === b.id ? 'border-gold-500 bg-gold-400/10' : 'border-ink-700 hover:border-gold-700'}`} onClick={() => (setShown(b.id), setEditing(null))}>
+              <button type="button" className={`flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-xs ${shown === b.id ? 'border-gold-500 bg-gold-400/10' : 'border-ink-700 hover:border-gold-700'}`} onClick={() => (setShown(b.id), setEditing(null), setFigure(false))}>
                 <EnemyBadge icon={b.icon} color={b.color} elite={b.elite} size={26} />
                 <span className="flex-1"><b className="text-marble-50">{displayName(b)}</b><span className="block text-marble-500">CR {b.cr} · AC {b.ac} · HP {b.hp}{own(b.id) ? ' · campaign' : ''}</span></span>
               </button>
@@ -160,8 +170,11 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-ghost" onClick={() => setEditing(own(sel.id) ? sel : { ...structuredClone(sel), source: 'custom' })}>{own(sel.id) ? 'Edit' : BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Adjust for this campaign' : 'Edit'}</button>
               <button type="button" className="btn btn-ghost" onClick={() => setEditing({ ...structuredClone(sel), id: `${sel.id}-elite`.slice(0, 40), elite: true, title: 'the Elite', hp: Math.round(sel.hp * 2), source: 'custom' })}>Make an elite from it</button>
+              <button type="button" className="btn btn-ghost" aria-pressed={figure} onClick={() => setFigure(!figure)} data-testid="enemy-figure">🧍 3D figure{sel.look ? ' ✓' : ''}</button>
               {own(sel.id) && <button type="button" className="btn btn-ghost hover:text-blood-400" onClick={() => void run({ type: 'enemyLibraryRemove', id: sel.id })}>{BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Restore the SRD version' : 'Delete'}</button>}
             </div>
+            {figure && <FigureEditor key={sel.id} gm value={sel.look ?? autoLook(`${sel.name} ${sel.type}`, sel.id, sel.color)} onSave={saveLook} onCancel={() => setFigure(false)} busy={busy} title={`3D figure – ${displayName(sel)}`} ring={sel.color} />}
+            {figure && !sel.look && <p className="text-[11px] text-marble-500">Without a saved figure every {sel.name} gets its own variation of the matching preset (bandits, cultists, guards, orcs …). Saving one fixes this look for all of them.</p>}
           </>
         ) : (
           <p className="text-marble-500">Choose a creature.</p>

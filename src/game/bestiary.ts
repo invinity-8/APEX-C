@@ -9,6 +9,7 @@
  * attacks (melee, ranged, spell attacks with reach / range), Multiattack (attacks per Attack action), area
  * abilities (saving throw, damage, area) and darkvision (GM vision modes).
  */
+import { parseLook, type FigureLook } from './figure.js';
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export const ABILITY_KEYS: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
@@ -88,6 +89,8 @@ export interface StatBlock {
   color: string;
   icon: string;
   source: 'SRD 5.1' | 'APEX' | 'custom';
+  /** APEX 2.1 – low-poly look for the 3D miniature (absent: picked automatically from the name/type). */
+  look?: FigureLook;
 }
 
 export const mod = (score: number) => Math.floor((score - 10) / 2);
@@ -189,7 +192,7 @@ export function parseStatBlock(raw: unknown): { ok: true; block: StatBlock } | {
       id, name, ...(o.elite === true ? { elite: true } : {}), ...(str(o.title, 40) ? { title: str(o.title, 40) } : {}),
       size: str(o.size, 20) || 'Medium', type: str(o.type, 40) || 'humanoid', ac, ...(str(o.acNote, 40) ? { acNote: str(o.acNote, 40) } : {}), hp, ...(str(o.hitDice, 20) ? { hitDice: str(o.hitDice, 20) } : {}),
       speedFt, ...(int(o.flyFt ?? 0, 0, 240) ? { flyFt: int(o.flyFt, 0, 240)! } : {}), ...(int(o.climbFt ?? 0, 0, 120) ? { climbFt: int(o.climbFt, 0, 120)! } : {}), abilities, ...(Object.keys(saves).length ? { saves } : {}), senses: str(o.senses, 80), darkvisionFt, languages: str(o.languages, 80), cr: str(o.cr, 6) || '?',
-      attacks, multiattack, ...(areas.length ? { areas } : {}), ...(buffs.length ? { buffs } : {}), traits, color, icon, source: 'custom',
+      attacks, multiattack, ...(areas.length ? { areas } : {}), ...(buffs.length ? { buffs } : {}), traits, color, icon, source: 'custom', ...(o.look && parseLook(o.look) ? { look: parseLook(o.look)! } : {}),
     },
   };
 }

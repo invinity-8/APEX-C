@@ -2,6 +2,7 @@
  * Scene-local view and movement rules (server only). Shared by the player snapshot, the GM focus and
  * scene movement so that what a player sees and what the server accepts always agree.
  */
+import type { FigureLook } from '../game/figure.js';
 import { hexAt, hexCentre, spawnSlots, tileSetOf } from '../campaign/hexScene.js';
 import { CARRIED_LIGHT_FT, enemiesOf, npcReach, torchesOf } from '../game/sceneCombat.js';
 import { darkvisionFeet, fogString, maskTerrain, sceneVision, type CarriedLight, type Viewer } from '../campaign/hexVision.js';
@@ -30,7 +31,7 @@ export interface PcPosition { tokenId: string; userId: string; x: number; y: num
 export type FigureBuild = 'humanoid' | 'beast' | 'flyer' | 'undead' | 'spider';
 /** Body shape of a creature for its 3D miniature (from the stat block type). */
 export const buildOf = (type: string, flyFt?: number): FigureBuild => /undead/i.test(type) ? 'undead' : flyFt ? 'flyer' : /spider|insect|vermin/i.test(type) ? 'spider' : /beast|monstrosity/i.test(type) ? 'beast' : 'humanoid';
-export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** Conditions and buffs (name, key). */ effects?: Array<{ id: string; name: string; key: string; mods?: EffectMods }>; concentration?: string; /** APEX 1.9: altitude above the ground (feet). */ alt?: number; /** APEX 2.0: size and body shape for the 3D miniature. */ size?: string; build?: FigureBuild; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ac?: number; torch?: boolean }
+export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** Conditions and buffs (name, key). */ effects?: Array<{ id: string; name: string; key: string; mods?: EffectMods }>; concentration?: string; /** APEX 1.9: altitude above the ground (feet). */ alt?: number; /** APEX 2.0: size and body shape for the 3D miniature. */ size?: string; build?: FigureBuild; /** APEX 2.1: a chosen low-poly look, else the creature kind the automatic look is picked from. */ look?: FigureLook; breed?: string; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ac?: number; torch?: boolean }
 
 /** Arrival slots for characters without a stored position (no two on the same hex). */
 export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } | null, rows: Array<{ tokenId: string; userId: string; stored?: { x: number; y: number } }>, blocked: Array<{ x: number; y: number }>): PcPosition[] {
@@ -71,7 +72,7 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e) || !noticed(`npc-${e.id}`, e.side === 'ally' ? 'party' : 'enemy')) continue;
     const block = statBlock(state, e.templateId);
-    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build: buildOf(`${block.type} ${block.name}`, e.flyFt) } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac, ...(e.tempHp ? { tempHp: e.tempHp } : {}) } : {}) });
+    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build: buildOf(`${block.type} ${block.name}`, e.flyFt), ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60) }) } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac, ...(e.tempHp ? { tempHp: e.tempHp } : {}) } : {}) });
   }
   return out;
 }

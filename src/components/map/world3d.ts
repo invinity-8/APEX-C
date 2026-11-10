@@ -14,6 +14,25 @@
 import * as THREE from 'three';
 import type { SceneToken } from './HexSceneMap';
 import { beastIcon } from './effectIcons';
+import { ancestryScale, buildLowPoly } from './lowpoly';
+import { autoLook, FIGURE_PRESETS, hashText, lookFromPreset, type FigureLook } from '../../game/figure';
+
+/** APEX 2.1 – the low-poly look of a figure: chosen, or automatic (heroes by token, humanoid NPCs by kind). */
+export function figureLook(tk: SceneToken): FigureLook | null {
+  if (tk.vitals?.form) return null; // wild shape: the beast miniature
+  const enemy = tk.enemy;
+  if (!enemy) {
+    if (tk.view?.figure) return tk.view.figure;
+    if (tk.view?.portraitV) return null; // an uploaded portrait stays a standee until a figure is built
+    const heroes = FIGURE_PRESETS.filter((p) => p.group === 'hero');
+    const h = hashText(tk.tokenId);
+    const look = lookFromPreset(heroes[h % heroes.length], h);
+    return /^#[0-9a-f]{6}$/i.test(tk.color) ? { ...look, primary: tk.color.toLowerCase() } : look;
+  }
+  if (enemy.look) return enemy.look;
+  if (enemy.build && enemy.build !== 'humanoid' && enemy.build !== 'undead') return null;
+  return autoLook(`${enemy.breed ?? ''} ${tk.name}`, tk.tokenId, tk.color);
+}
 
 export const FT = Math.sqrt(3) / 5;
 export const LEVEL = 5 * FT;
@@ -48,7 +67,15 @@ export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   let wings: THREE.Object3D[] | undefined;
   let height = 2.1 * scale;
   const body = new THREE.Group(); body.position.y = 0.12;
-  if (!enemy && tk.view?.portraitV && !tk.vitals?.form) {
+  const look = figureLook(tk);
+  if (look) {
+    const lp = buildLowPoly(look);
+    // enemies: the stat block's size class sets the height (a Small goblin is not shrunk twice)
+    const k = enemy?.size ? scale / ancestryScale(look) : scale;
+    lp.group.scale.setScalar(k);
+    body.add(lp.group);
+    height = lp.height * k;
+  } else if (!enemy && tk.view?.portraitV && !tk.vitals?.form) {
     card = standee(tk); body.add(card); height = 2.25;
   } else {
     const build = tk.vitals?.form ? (/eagle|hawk|owl|bat|raven|bird/i.test(tk.vitals.form) ? 'flyer' : /spider/i.test(tk.vitals.form) ? 'spider' : 'beast') : enemy?.build ?? 'humanoid';

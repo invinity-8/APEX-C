@@ -1,3 +1,4 @@
+import type { FigureLook } from './figure.js';
 import type { Equipment } from './equipment.js';
 /**
  * Fog of War, player knowledge and filtered views.
@@ -182,6 +183,8 @@ export interface TokenView {
   marker?: MarkerStyle;
   /** Portrait version (> 0 = a portrait exists; load it via op=portrait). */
   portraitV?: number;
+  /** APEX 2.1: the low-poly 3D figure (public like the colours). */
+  figure?: FigureLook;
   /** Nur für eigene/freigegebene Figuren bzw. den GM. */
   details?: TokenDetails;
 }
@@ -292,6 +295,7 @@ const tokenView = (t: Token, withDetails: boolean, withInventory = true, redact 
   ...(t.accent ? { accent: t.accent } : {}),
   ...(t.marker ? { marker: t.marker } : {}),
   ...(t.portrait ? { portraitV: t.portrait.v } : {}),
+  ...(t.figure ? { figure: t.figure } : {}),
   details: withDetails ? detailsOf(t, withInventory, redact) : undefined,
 });
 

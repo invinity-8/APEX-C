@@ -25,6 +25,8 @@ import { beastIcon } from './effectIcons';
 import type { SceneFx } from '../../game/sceneFx';
 import { useHexViewport } from './useHexViewport';
 
+import type { FigureLook } from '../../game/figure';
+
 export interface SceneToken {
   tokenId: string;
   x: number;
@@ -34,7 +36,7 @@ export interface SceneToken {
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
-  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string };
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string; /** APEX 2.1: chosen low-poly look, or the creature kind an automatic look is picked from. */ look?: FigureLook; breed?: string };
   /** Carries a light (torch glow). */
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
