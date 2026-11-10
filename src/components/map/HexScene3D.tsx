@@ -14,6 +14,7 @@ import { decodeTiles, heightLookup, hexAt, hexMovementCost, type TileDef } from 
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world3d';
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
@@ -51,6 +52,20 @@ interface Props {
   fx?: SceneFx[];
 }
 
+/** APEX 2.1 – 3D quality (per device): resolution, shadows, grass and animation. 'auto' picks by the device. */
+export type Quality3D = 'low' | 'medium' | 'high';
+const QUALITY_KEY = 'apex.3d.quality';
+export function readQuality(): Quality3D {
+  try { const v = localStorage.getItem(QUALITY_KEY); if (v === 'low' || v === 'medium' || v === 'high') return v; } catch { /* private mode */ }
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  return (nav.deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency ?? 8) <= 4 ? 'low' : 'medium';
+}
+const QUALITY: Record<Quality3D, { ratio: number; shadow: number; grass: number; fps: number }> = {
+  low: { ratio: 1, shadow: 0, grass: 0, fps: 0 },
+  medium: { ratio: 1.25, shadow: 2048, grass: 12, fps: 30 },
+  high: { ratio: 2, shadow: 4096, grass: 26, fps: 60 },
+};
+
 type Cam = { tx: number; tz: number; yaw: number; pitch: number; dist: number };
 
 export default function HexScene3D(p: Props) {
@@ -60,6 +75,15 @@ export default function HexScene3D(p: Props) {
   const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], fx: [] });
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
+  const [quality, setQualityState] = useState<Quality3D>(readQuality);
+  const qcfg = QUALITY[quality];
+  const setQuality = (v: Quality3D) => { setQualityState(v); try { localStorage.setItem(QUALITY_KEY, v); } catch { /* private mode */ } };
+  /** Render on demand: set when anything visible changed (the loop renders, then clears it). */
+  const dirty = useRef(true);
+  const qualityRef = useRef(quality);
+  qualityRef.current = quality;
+  // any React update (camera move, hover, new tokens …) means: draw again; scene changes re-bake the shadows
+  useEffect(() => { dirty.current = true; });
   const [tick, setTick] = useState(0);
   const ox = p.map.width / 2, oy = p.map.height / 2;
   const height = useMemo(() => heightLookup(p.map), [p.map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -77,7 +101,8 @@ export default function HexScene3D(p: Props) {
     const el = wrap.current!;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     // APEX 1.9: sharper picture – at least 1.5× supersampling, filmic tone mapping, larger shadow map
-    renderer.setPixelRatio(Math.min(2.5, Math.max(1.5, window.devicePixelRatio || 1)));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY[readQuality()].ratio * Math.max(1, window.devicePixelRatio || 1)));
+    renderer.shadowMap.autoUpdate = false; // shadows are re-baked only when the scene changes
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -91,7 +116,7 @@ export default function HexScene3D(p: Props) {
     const sun = new THREE.DirectionalLight(0xfff0d0, 1.6);
     sun.position.set(-30, 60, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(4096, 4096);
+    sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0004;
     Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 200 });
     scene.add(hemi, sun);
@@ -116,6 +141,21 @@ export default function HexScene3D(p: Props) {
     sun.intensity = p.phase === 'night' ? 0.25 : p.phase === 'dusk' ? 0.9 : 1.6;
     setTick((x) => x + 1);
   }, [p.phase]);
+
+  // --- quality: resolution and shadows follow the setting
+  useEffect(() => {
+    const t = three.current;
+    if (!t) return;
+    const dpr = window.devicePixelRatio || 1;
+    t.renderer.setPixelRatio(quality === 'high' ? Math.min(2.5, Math.max(1.5, dpr)) : quality === 'medium' ? Math.min(dpr, 1.25) : 1);
+    t.renderer.shadowMap.enabled = qcfg.shadow > 0;
+    const sun = t.scene.children[1] as THREE.DirectionalLight;
+    sun.castShadow = qcfg.shadow > 0;
+    if (qcfg.shadow && sun.shadow.mapSize.x !== qcfg.shadow) { sun.shadow.mapSize.set(qcfg.shadow, qcfg.shadow); sun.shadow.map?.dispose(); sun.shadow.map = null; }
+    t.renderer.shadowMap.needsUpdate = true;
+    const el = wrap.current; if (el) { const w = el.clientWidth || 600, h = el.clientHeight || 400; t.renderer.setSize(w, h, false); }
+    dirty.current = true;
+  }, [quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- terrain columns (instanced) and props (walls, trees, boulders)
   useEffect(() => {
@@ -164,7 +204,8 @@ export default function HexScene3D(p: Props) {
       t.scene.add(mesh);
       t.ground.push(mesh);
     }
-    // props of every tile: trees, pines, bushes, rocks, furniture, fires, ruins …
+    // props of every tile: trees, pines, bushes, rocks, furniture, fires, ruins … (merged below)
+    const props = new THREE.Group();
     for (const k of keys) {
       const tile = tiles.get(k)!;
       if (fogOf.get(k) === 'e' && !['tree', 'pine', 'wall', 'pillar', 'palisade', 'statue'].includes(tile.id)) continue;
@@ -175,12 +216,35 @@ export default function HexScene3D(p: Props) {
       const w = toWorld(center(h));
       prop.position.set(w.x, top(k), w.z);
       prop.rotation.y = rnd(77) * Math.PI * 2;
-      t.dynamic.add(prop);
+      props.add(prop);
+    }
+    // APEX 2.1 – performance: all static prop meshes are merged into one mesh per material (a few draw calls instead
+    // of thousands); animated parts (crowns, flames, wings) stay separate objects
+    props.updateMatrixWorld(true);
+    const animated = new Set<THREE.Object3D>([...anim.current.crowns, ...anim.current.flames]);
+    for (const o of animated) t.dynamic.attach(o);
+    const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    props.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material)) return;
+      const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrixWorld);
+      for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+      if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((g.attributes.position.count) * 2), 2));
+      if (!g.attributes.normal) g.computeVertexNormals();
+      buckets.set(m.material, [...(buckets.get(m.material) ?? []), g]);
+    });
+    for (const [material, list] of buckets) {
+      const merged = mergeGeometries(list, false);
+      list.forEach((g) => g.dispose());
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.castShadow = mesh.receiveShadow = true;
+      t.dynamic.add(mesh);
     }
     // APEX 1.9 – grass: swaying blades on grass and undergrowth (instanced, wind in the vertex shader)
     const grassKeys = keys.filter((k) => /grass|undergrowth|plains|forest|tallgrass/.test(tiles.get(k)!.id) && fogOf.get(k) !== 'e');
-    if (grassKeys.length) {
-      const per = 26;
+    if (grassKeys.length && qcfg.grass > 0) {
+      const per = qcfg.grass;
       const blade = new THREE.BufferGeometry();
       blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.03, 0, 0, 0.03, 0, 0, 0, 0.32, 0], 3));
       blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
@@ -242,7 +306,7 @@ export default function HexScene3D(p: Props) {
       t.dynamic.add(glow, flame);
     }
     setTick((x) => x + 1);
-  }, [tiles, fogOf, height, p.gm, p.phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tiles, fogOf, height, p.gm, p.phase, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
   const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join('')])) + (p.selectedTokenId ?? '');
@@ -281,6 +345,8 @@ export default function HexScene3D(p: Props) {
       });
     }
   }, [tokenKey, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  // shadows are baked, not drawn every frame: re-bake when terrain, figures, phase or quality change
+  useEffect(() => { if (three.current) three.current.renderer.shadowMap.needsUpdate = true; }, [tokenKey, tiles, height, p.phase, quality]);
 
   // --- overlays: reach area, hover, path preview, area preview
   useEffect(() => {
@@ -387,10 +453,20 @@ export default function HexScene3D(p: Props) {
   useEffect(() => {
     let raf = 0;
     const start = performance.now();
+    let last = 0;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const t = three.current;
       if (!t || document.hidden) return;
+      // APEX 2.1 – render on demand: every frame only while something moves (effects, wind at medium/high, at most
+      // the quality's frame rate); a still scene costs nothing
+      const cfg = QUALITY[qualityRef.current];
+      const busy = anim.current.fx.length > 0;
+      const animate = cfg.fps > 0;
+      if (!dirty.current && !busy && !animate) return;
+      if (!dirty.current && !busy && now - last < 1000 / cfg.fps) return;
+      last = now;
+      dirty.current = false;
       const sec = (now - start) / 1000;
       const a = anim.current;
       a.time.value = sec;
@@ -406,6 +482,7 @@ export default function HexScene3D(p: Props) {
       t.camera.position.set(c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist);
       t.camera.lookAt(c.tx, 1, c.tz);
       t.renderer.render(t.scene, t.camera);
+      t.renderer.shadowMap.needsUpdate = false;
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
@@ -486,7 +563,7 @@ export default function HexScene3D(p: Props) {
     ray.current.setFromCamera(ndc, t.camera);
     const hitTok = ray.current.intersectObjects(t.tokens.children, true)[0];
     if (hitTok) { let o: THREE.Object3D | null = hitTok.object; while (o && !o.userData.tokenId) o = o.parent; if (o) return { token: o.userData.tokenId as string, hex: hexKey(hexAt(p.map, { x: (o.position.x * HEX_SIZE) + ox, y: (o.position.z * HEX_SIZE) + oy })) }; }
-    const hits = [...ray.current.intersectObjects(t.ground, false), ...ray.current.intersectObjects(t.dynamic.children, true)].sort((a, b) => a.distance - b.distance);
+    const hits = ray.current.intersectObjects(t.ground, false); // props are see-through for picking (merged meshes)
     const hit = hits[0];
     if (!hit) return {};
     if ((hit.object as THREE.InstancedMesh).isInstancedMesh && hit.object.userData.keys && hit.instanceId !== undefined) return { hex: (hit.object.userData.keys as HexKey[])[hit.instanceId] };
@@ -564,10 +641,14 @@ export default function HexScene3D(p: Props) {
         aria-label={`${p.label}. 3D map. Hold the middle mouse button to orbit and tilt, drag to pan, mouse wheel zooms, Q/E orbit, R/F tilt.`}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
       {hover && hoverInfo && (
-        <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "3rem" }} data-testid="hover-3d">
+        <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
           <b>{hoverInfo.label}</b> · height {height(hover) * (p.map.unitsPerCell || 5)} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
         </div>
       )}
+      <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">
+        <span title="Resolution, shadows, grass and animation – lower is faster on weak devices">⚙ 3D</span>
+        {(['low', 'medium', 'high'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
+      </div>
       <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">🖱 middle button: orbit / tilt · left drag: pan · wheel: zoom · right-click: act</div>
     </div>
   );

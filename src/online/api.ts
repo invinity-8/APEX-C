@@ -111,8 +111,8 @@ export const api = {
   ping: (campaign: string, signal?: AbortSignal) => request<{ version: number; syncTopic: string }>('GET', 'ping', { campaign }, undefined, { timeoutMs: 10_000, signal }),
   session: () => request<SessionInfo>('GET', 'session'),
   /** since = version the client already has → the server answers {unchanged:true} instead of the full state. */
-  state: (campaign: string, as?: string, since?: number, signal?: AbortSignal) =>
-    request<CampaignPayload | UnchangedPayload>('GET', 'state', { campaign, as, since: since ? String(since) : undefined }, undefined, { signal }),
+  state: (campaign: string, as?: string, since?: number, signal?: AbortSignal, hexes?: string) =>
+    request<CampaignPayload | UnchangedPayload>('GET', 'state', { campaign, as, since: since ? String(since) : undefined, hexes }, undefined, { signal }),
   command: (campaignId: string, command: unknown, requestId: string, as?: string, worldId?: string | null, sceneRevision = 0) =>
     request<CampaignPayload>('POST', 'command', {}, { campaignId, command, as, requestId, sceneRevision, ...(worldId !== undefined ? { worldId } : {}) }),
   commandStatus: (requestId: string) =>

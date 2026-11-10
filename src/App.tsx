@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chronicle } from './components/ActivityLog';
 import { LegendContent } from './components/map/Legend';
 import { ArenaTab, SitesList, TeamsTab } from './components/GmPanel';
 import { CharacterSummary, PartyHealth } from './components/PartyWidgets';
-import { EquipmentPanel } from './components/EquipmentPanel';
 import { VitalsPanel } from './components/ResourceOrbs';
 import { WidgetTabs } from './workspace/WidgetTabs';
 import { Workspace, type WidgetDef } from './workspace/Workspace';
@@ -22,19 +21,21 @@ import { visibleFrom, type Fog } from './game/visibility';
 import type { GameApi } from './state/gameApi';
 import { phaseName } from './game/text';
 import { PlayersPanel } from './components/PlayersPanel';
-import { CharacterPanel } from './components/CharacterPanel';
-import { InventoryPanel } from './components/InventoryPanel';
-import { ArsenalPanel } from './components/ArsenalPanel';
-import { EnemyLibrary } from './components/EnemyLibrary';
 import { LootRollDock } from './components/LootRolls';
 import { MerchantShop } from './components/Merchant';
 import { FeedbackInbox } from './components/Feedback';
 import { WorldPanel } from './components/WorldPanel';
-import { SceneDirector } from './components/SceneDirector';
 import { useGameDirector } from './components/CampaignMapDirector';
 import { MapStage } from './components/map/MapStage';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
+// APEX 2.1 – performance: pages that are not on the map screen load on first use (smaller start bundle)
+const EquipmentPanel = lazy(() => import('./components/EquipmentPanel').then((m) => ({ default: m.EquipmentPanel })));
+const InventoryPanel = lazy(() => import('./components/InventoryPanel').then((m) => ({ default: m.InventoryPanel })));
+const ArsenalPanel = lazy(() => import('./components/ArsenalPanel').then((m) => ({ default: m.ArsenalPanel })));
+const EnemyLibrary = lazy(() => import('./components/EnemyLibrary').then((m) => ({ default: m.EnemyLibrary })));
+const SceneDirector = lazy(() => import('./components/SceneDirector').then((m) => ({ default: m.SceneDirector })));
+const CharacterPanel = lazy(() => import('./components/CharacterPanel').then((m) => ({ default: m.CharacterPanel })));
 
 type View = 'map' | 'scenes' | 'enemies' | 'character' | 'spells' | 'inventory' | 'journal' | 'merchant' | 'arsenal' | 'feedback';
 
@@ -496,6 +497,7 @@ export default function App({ game }: { game: GameApi }) {
               {toast.text}
             </div>
           )}
+          <Suspense fallback={<p className="p-6 text-sm text-marble-500">Loading…</p>}>
           {screen === 'journal' && game.online ? (
             <PlayerJournal sceneReference={game.scene?.scene ? { id: game.scene.scene.id, name: game.scene.scene.name } : undefined} />
           ) : screen === 'feedback' && isGm && game.online ? (
@@ -523,6 +525,7 @@ export default function App({ game }: { game: GameApi }) {
               </section>
             </div>
           )}
+          </Suspense>
         </div>
       )}
       <div className={`min-h-0 flex-1 ${screen === 'map' ? 'flex' : 'hidden'}`}>
