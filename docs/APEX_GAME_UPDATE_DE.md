@@ -559,7 +559,7 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tempo („crispy und schnell“)**
 - **GM-Aktualisierung:** Der Server schickt die unveränderten Arena-Hexe nicht mehr bei jeder Aktualisierung mit (Signatur-Abgleich). Eine GM-Aktualisierung schrumpft von etwa 296 KB auf etwa 18 KB.
-- **Start:** Seiten abseits der Karte werden erst bei Bedarf geladen (Charakter, Inventar, Arsenal, Gegnerbibliothek, Szenen). Das Start-Bundle schrumpft von 1135 KB auf 698 KB (gzip 340 → 214 KB).
+- **Start:** Seiten abseits der Karte werden erst bei Bedarf geladen (Charakter, Inventar, Arsenal, Gegnerbibliothek, Szenen). Das beim Start geladene JavaScript sinkt von 1116 KB auf 925 KB (gzip 332 → 293 KB), obwohl alle Neuerungen dieser Runde dazugekommen sind. three.js und der Figuren-Baukasten werden erst mit der 3D-Ansicht oder dem Figuren-Editor geladen.
 - **3D-Qualität:** Umschalter „low / medium / high“ oben rechts in der 3D-Karte. Die Wahl wird pro Gerät gespeichert; schwache Geräte starten automatisch mit „low“.
   - **low:** Auflösung 1×, keine Schatten, kein Gras, Bild nur bei Änderungen.
   - **medium:** etwas schärfer, Schatten, weniger Grashalme, höchstens 30 Bilder pro Sekunde.
