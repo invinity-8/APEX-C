@@ -31,7 +31,7 @@ import { loadPictureForSampling } from '../campaign/pictureSampling';
 import { ORIGIN, hexKey, hexesInRange, parseKey, type HexKey } from '../game/hex';
 import type { SceneDefinition } from '../server/scenes';
 import { HexSceneMap } from './map/HexSceneMap';
-import { PALETTE_PRESETS, paletteKey } from '../campaign/palette';
+import { MOODS, PALETTE_PRESETS, paletteKey, type SceneMood } from '../campaign/palette';
 
 type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light';
 const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light' };
@@ -199,6 +199,15 @@ export function HexSceneEditor({
               {map.palette && !PALETTE_PRESETS.some((p) => paletteKey(p.palette) === paletteKey(map.palette)) && <option value="custom">Custom</option>}
             </select>
           </label>
+          {set === 'battle' && (
+            <label>
+              3D mood{' '}
+              <select value={map.mood ?? ''} onChange={(e) => change({ mood: (e.target.value || undefined) as SceneMood | undefined })} data-testid="mood-select">
+                <option value="">Follows the time of day</option>
+                {MOODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </label>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             {(map.palette?.colors ?? []).map((c, i) => (
               <span key={i} className="inline-flex items-center gap-0.5">

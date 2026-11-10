@@ -15,6 +15,7 @@ import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '.
 import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { gradientMap, paletteKey } from '../../campaign/palette';
 import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world3d';
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
@@ -25,7 +26,7 @@ const BASE = 0.35;
 const toWorld = (px: { x: number; y: number }) => ({ x: px.x / HEX_SIZE, z: px.y / HEX_SIZE });
 
 interface Props {
-  map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'unitsPerCell' | 'unit'> & { nodes: MapNode[] };
+  map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'unitsPerCell' | 'unit' | 'palette' | 'mood'> & { nodes: MapNode[] };
   label: string;
   tokens?: SceneToken[];
   gm?: boolean;
@@ -94,6 +95,22 @@ export default function HexScene3D(p: Props) {
     return out;
   }, [p.map.hex, p.fog]);
   const top = (k: HexKey) => BASE + height(k) * LEVEL;
+  // APEX 2.1 – the map's colour scheme recolours ground, props and grass in 3D like on the 2D map
+  const pKey = paletteKey(p.map.palette);
+  const recolor = useMemo(() => {
+    if (!p.map.palette) return null;
+    const fn = gradientMap(p.map.palette);
+    const mats = new Map<THREE.Material, THREE.Material>();
+    const color = (c: THREE.Color) => { const [r, g, b] = fn([Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]); return c.setRGB(r / 255, g / 255, b / 255); };
+    const material = (m: THREE.Material) => {
+      const std = m as THREE.MeshStandardMaterial;
+      if (!std.isMeshStandardMaterial || (std.emissiveIntensity > 0 && std.emissive.getHex() !== 0)) return m;
+      let hit = mats.get(m);
+      if (!hit) { const c = std.clone(); color(c.color); hit = c; mats.set(m, c); }
+      return hit;
+    };
+    return { color, material };
+  }, [pKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const scenePoint = (k: HexKey) => { const c = center(parseKey(k)); return { x: c.x + ox, y: c.y + oy }; };
 
   // --- renderer, lights, camera (once)
@@ -130,17 +147,31 @@ export default function HexScene3D(p: Props) {
     return () => { ro.disconnect(); renderer.dispose(); el.removeChild(renderer.domElement); three.current = null; };
   }, []);
 
-  // --- background and light by phase
+  // --- background and light by phase, or the map's 3D mood (APEX 2.1)
   useEffect(() => {
     const t = three.current;
     if (!t) return;
-    t.scene.background = new THREE.Color(p.phase === 'night' ? 0x0b0f17 : p.phase === 'dusk' ? 0x2a2230 : 0x1b2027);
-    t.scene.fog = new THREE.Fog(t.scene.background as THREE.Color, 60, 160);
+    const mood = p.map.mood ?? (p.phase === 'night' ? 'night' : p.phase === 'dusk' ? 'dusk' : 'day');
+    const M: Record<string, { bg: number; sky: number; ground: number; hemi: number; sun: number; sunI: number; pos: [number, number, number]; fog?: [number, number]; exp?: number }> = {
+      day: { bg: 0x1b2027, sky: 0xfff4dd, ground: 0x2a2f2a, hemi: 0.9, sun: 0xfff0d0, sunI: 1.6, pos: [-30, 60, 20] },
+      golden: { bg: 0x3a2a22, sky: 0xffe0b0, ground: 0x4a3a2a, hemi: 1.0, sun: 0xffb46a, sunI: 1.9, pos: [-50, 28, 15], exp: 1.1 },
+      overcast: { bg: 0x4a5058, sky: 0xd8e0e8, ground: 0x3a3e40, hemi: 1.25, sun: 0xdfe6ee, sunI: 0.7, pos: [-20, 70, 30], fog: [40, 130] },
+      dusk: { bg: 0x2a2230, sky: 0x9a7ab0, ground: 0x2a1e2a, hemi: 0.6, sun: 0xff8a5a, sunI: 0.95, pos: [-55, 20, 10] },
+      night: { bg: 0x0b0f17, sky: 0x3a4a7a, ground: 0x0a0c12, hemi: 0.35, sun: 0x8fa8ff, sunI: 0.3, pos: [30, 60, -20] },
+      misty: { bg: 0x8a9298, sky: 0xe0e6ea, ground: 0x4a5048, hemi: 1.1, sun: 0xeef2f4, sunI: 0.75, pos: [-20, 60, 30], fog: [18, 75] },
+      storybook: { bg: 0x2b3a4a, sky: 0xfff8e8, ground: 0x3a4a2a, hemi: 1.1, sun: 0xfff2d0, sunI: 1.95, pos: [-35, 55, 25], exp: 1.15 },
+      gloom: { bg: 0x161c16, sky: 0x8a9a7a, ground: 0x10140e, hemi: 0.5, sun: 0x9ab08a, sunI: 0.55, pos: [-25, 50, 25], fog: [28, 110] },
+    };
+    const m = M[mood] ?? M.day;
+    t.scene.background = new THREE.Color(m.bg);
+    t.scene.fog = new THREE.Fog(m.bg, m.fog?.[0] ?? 60, m.fog?.[1] ?? 160);
     const [hemi, sun] = t.scene.children as [THREE.HemisphereLight, THREE.DirectionalLight];
-    hemi.intensity = p.phase === 'night' ? 0.35 : p.phase === 'dusk' ? 0.6 : 0.9;
-    sun.intensity = p.phase === 'night' ? 0.25 : p.phase === 'dusk' ? 0.9 : 1.6;
+    hemi.color.setHex(m.sky); hemi.groundColor.setHex(m.ground); hemi.intensity = m.hemi;
+    sun.color.setHex(m.sun); sun.intensity = m.sunI; sun.position.set(...m.pos);
+    t.renderer.toneMappingExposure = m.exp ?? 1.05;
+    t.renderer.shadowMap.needsUpdate = true;
     setTick((x) => x + 1);
-  }, [p.phase]);
+  }, [p.phase, p.map.mood]);
 
   // --- quality: resolution and shadows follow the setting
   useEffect(() => {
@@ -194,6 +225,7 @@ export default function HexScene3D(p: Props) {
         m4.compose(new THREE.Vector3(w.x, 0, w.z), new THREE.Quaternion(), new THREE.Vector3(1, h, 1));
         mesh.setMatrixAt(i, m4);
         col.set(pit ? '#141210' : tile.fill);
+        if (recolor && !pit) recolor.color(col);
         if (fogOf.get(k) === 'e') col.multiplyScalar(0.45); // remembered, not seen now
         else col.offsetHSL(0, 0, (((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) - 2) * 0.008);
         mesh.setColorAt(i, col);
@@ -208,7 +240,7 @@ export default function HexScene3D(p: Props) {
     const props = new THREE.Group();
     for (const k of keys) {
       const tile = tiles.get(k)!;
-      if (fogOf.get(k) === 'e' && !['tree', 'pine', 'wall', 'pillar', 'palisade', 'statue'].includes(tile.id)) continue;
+      if (fogOf.get(k) === 'e' && !tile.blocksSight && !['pillar', 'statue', 'well', 'fountain', 'tower'].includes(tile.id)) continue; // remembered hexes keep their buildings and trees
       const h = parseKey(k);
       const rnd = (i: number) => { const v = Math.sin((h.q * 73.1 + h.r * 19.7 + i * 12.9898)) * 43758.5453; return v - Math.floor(v); };
       const prop = tileProp(tile.id, tile.fill, rnd, anim.current);
@@ -237,7 +269,7 @@ export default function HexScene3D(p: Props) {
       const merged = mergeGeometries(list, false);
       list.forEach((g) => g.dispose());
       if (!merged) continue;
-      const mesh = new THREE.Mesh(merged, material);
+      const mesh = new THREE.Mesh(merged, recolor ? recolor.material(material) : material);
       mesh.castShadow = mesh.receiveShadow = true;
       t.dynamic.add(mesh);
     }
@@ -271,7 +303,7 @@ export default function HexScene3D(p: Props) {
           const hgt = (0.55 + rnd(i + 3) * 0.8) * tall;
           gm.compose(new THREE.Vector3(w.x + Math.cos(a) * r, y, w.z + Math.sin(a) * r), q, new THREE.Vector3(1, hgt, 1));
           grass.setMatrixAt(n, gm);
-          gc.set(tiles.get(k)!.fill).offsetHSL(0.01 * (rnd(i + 5) - 0.5), 0.08, (rnd(i + 11) - 0.35) * 0.16);
+          gc.set(tiles.get(k)!.fill); if (recolor) recolor.color(gc); gc.offsetHSL(0.01 * (rnd(i + 5) - 0.5), 0.08, (rnd(i + 11) - 0.35) * 0.16);
           grass.setColorAt(n, gc);
           n++;
         }
@@ -306,7 +338,7 @@ export default function HexScene3D(p: Props) {
       t.dynamic.add(glow, flame);
     }
     setTick((x) => x + 1);
-  }, [tiles, fogOf, height, p.gm, p.phase, quality]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
   const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed])) + (p.selectedTokenId ?? '');

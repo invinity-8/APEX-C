@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import type { SceneToken } from './HexSceneMap';
 import { beastIcon } from './effectIcons';
 import { ancestryScale, buildLowPoly } from './lowpoly';
+import { propV21 } from './props3d';
 import { autoLook, FIGURE_PRESETS, hashText, lookFromPreset, type FigureLook } from '../../game/figure';
 
 /** APEX 2.1 – the low-poly look of a figure: chosen, or automatic (heroes by token, humanoid NPCs by kind). */
@@ -285,7 +286,7 @@ export function tileProp(id: string, fill: string, rnd: (i: number) => number, a
     case 'sand': for (let i = 0; i < 4; i++) { const d = mesh(new THREE.SphereGeometry(0.5, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), std(new THREE.Color(fill).offsetHSL(0, 0, (rnd(i) - 0.5) * 0.06)), (rnd(i + 1) - 0.5) * 1.1, 0, (rnd(i + 2) - 0.5) * 1.1); d.scale.set(1, 0.18, 0.6); d.rotation.y = rnd(i + 5) * 3; add(d); } return g;
     case 'snow': for (let i = 0; i < 3; i++) { const d = mesh(new THREE.SphereGeometry(0.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), std(0xf4f8fb), (rnd(i + 1) - 0.5) * 0.9, 0, (rnd(i + 2) - 0.5) * 0.9); d.scale.set(1, 0.3, 1); add(d); } return g;
     case 'cavewall': case 'wall': return null; // walls are columns (see HexScene3D)
-    default: return null;
+    default: return propV21(id, fill, rnd, anim); // APEX 2.1 asset library
   }
 }
 
@@ -305,7 +306,7 @@ function webTexture(): THREE.Texture {
 
 const texCache = new Map<string, THREE.Texture>();
 /** Texture family of a tile's top surface. */
-export const surfaceOf = (id: string): string => (['stone', 'cavefloor'].includes(id) ? 'flag' : ['wood', 'bridge'].includes(id) ? 'planks' : id === 'cobbles' ? 'cobbles' : id === 'marble' ? 'marble' : id === 'carpet' ? 'carpet' : ['sand', 'snow', 'ice'].includes(id) ? 'smooth' : ['dirt', 'mud', 'rubble'].includes(id) ? 'earth' : 'grass');
+export const surfaceOf = (id: string): string => (['stone', 'cavefloor', 'citywall', 'tower', 'hearth', 'forge', 'sarcophagus', 'bones', 'cage', 'throne'].includes(id) ? 'flag' : ['wood', 'bridge', 'pier', 'counter', 'bookshelf', 'chest', 'weaponrack', 'barn', 'cottage'].includes(id) ? 'planks' : ['cobbles', 'townhouse', 'timberhouse', 'shop', 'gate', 'stall', 'fountain', 'lamppost', 'bench', 'planter', 'grate', 'banner', 'well'].includes(id) ? 'cobbles' : id === 'marble' ? 'marble' : id === 'carpet' ? 'carpet' : ['sand', 'snow', 'ice'].includes(id) ? 'smooth' : ['dirt', 'mud', 'rubble', 'veggies', 'cart', 'woodpile', 'haystack', 'wheat', 'windmill', 'signpost', 'trough'].includes(id) ? 'earth' : 'grass');
 export function surfaceTexture(kind: string): THREE.Texture {
   const hit = texCache.get(kind);
   if (hit) return hit;
