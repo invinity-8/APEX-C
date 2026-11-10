@@ -554,3 +554,82 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
   - **Belagerung:** vom gegenüberliegenden Rand, Fernkämpfer auf der höchsten Stelle.
   - **Patrouille:** als Trupp in etwa 40 ft.
   - **Bau:** auf der fernen Kartenseite.
+
+## APEX 2.1 – Low-Poly-Figuren, Asset-Bibliothek, Stadt- und Land-Layouts, Gegnergruppen, Tempo
+
+**Tempo („crispy und schnell“)**
+- **GM-Aktualisierung:** Der Server schickt die unveränderten Arena-Hexe nicht mehr bei jeder Aktualisierung mit (Signatur-Abgleich). Eine GM-Aktualisierung schrumpft von etwa 296 KB auf etwa 18 KB.
+- **Start:** Seiten abseits der Karte werden erst bei Bedarf geladen (Charakter, Inventar, Arsenal, Gegnerbibliothek, Szenen). Das Start-Bundle schrumpft von 1135 KB auf 698 KB (gzip 340 → 214 KB).
+- **3D-Qualität:** Umschalter „low / medium / high“ oben rechts in der 3D-Karte. Die Wahl wird pro Gerät gespeichert; schwache Geräte starten automatisch mit „low“.
+  - **low:** Auflösung 1×, keine Schatten, kein Gras, Bild nur bei Änderungen.
+  - **medium:** etwas schärfer, Schatten, weniger Grashalme, höchstens 30 Bilder pro Sekunde.
+  - **high:** wie bisher.
+- **Weniger Rechenlast:**
+  - Schatten werden nur neu berechnet, wenn sich Gelände oder Figuren ändern.
+  - Alle festen Requisiten einer Karte und alle Teile einer Figur werden je Material zu einem Objekt zusammengefasst.
+  - Klicks werten nur noch den Boden aus.
+- **Messwerte:** Im Testbrowser (Software-Grafik) stieg die 3D-Bildrate von 4 auf etwa 58 Bilder pro Sekunde bei „medium“.
+
+**Low-Poly-Figuren und Figuren-Editor**
+- **Stil:** Kantige, flach schattierte Miniaturen im Brettspiel-Stil mit großem Kopf und kurzen Gliedern.
+- **Teile-Baukasten:** 215 Teile in 22 Plätzen:
+  - **Körper:** Abstammung (Mensch, Zwerg, Elf, Halbling, Gnom, Ork, Goblin, Tiefling, Drachengeborener, Echsenmensch, Skelett, Zombie, Oger) und Statur.
+  - **Kopf und Gesicht:** Kopfform, Augen, Brauen, Nase, Mund, Ohren, Hörner, Haare, Bart.
+  - **Kleidung:** Kopfbedeckung, Oberkörper (Tunika bis Plattenpanzer), Schultern, Gürtel, Beine, Schuhe, Umhang.
+  - **Ausrüstung:** Rücken (Rucksack, Köcher, Banner, Flügel …), Haupthand mit 25 Waffen und Instrumenten, Nebenhand (Schilde, Buch, Laterne, Kugel, Heiliges Symbol …).
+  - **Details:** zum Beispiel Kriegsbemalung, Narbe, Monokel, Pfeife.
+- **Farben:** 7 Farbplätze (Haut, Haar, Haupt- und Akzentfarbe, Leder, Metall, Augen), jeweils mit Farbfeldern oder frei wählbar.
+- **Vorlagen:** 36 Stück, darunter Helden wie Kämpfer, Magier, Schurke, Kleriker, Paladin oder Barde, NPCs wie Bandit, Kultist, Wache, Ritter, Pirat oder Händler und Monster wie Ork, Goblin, Skelett, Zombie, Oger oder Echsenmensch. Dazu kommt ein Würfel für zufällige Figuren.
+- **Spieler:** Character → Appearance → „3D figure“.
+  - Die Live-Vorschau lässt sich drehen.
+  - Teile wechselt man mit ◀ ▶ oder direkt per Klick.
+  - Speichern setzt die Figur auf die 3D-Karte.
+  - Ohne gespeicherte Figur bekommt jeder Held eine Heldenvorlage in seiner Tokenfarbe. Ein hochgeladenes Porträt bleibt ein Aufsteller, bis eine Figur gespeichert ist.
+- **Spielleiter:** Gegnerbibliothek → Kreatur → „🧍 3D figure“ legt das Aussehen eines Werteblocks fest.
+- **Automatische NPC-Figuren:** Menschenähnliche Gegner ohne festes Aussehen erhalten automatisch die passende Vorlage nach Name oder Typ, und zwar pro Figur in einer anderen Variante. Fünf Banditen haben also fünf verschiedene Gesichter, Frisuren und Waffen. Tiere und Bestien behalten ihre Modelle.
+- **Speicherung:** Rein kosmetisch. Das Aussehen hängt am Charakter (`setAppearance` mit `figure`, serverseitig geprüft) und ist für alle sichtbar wie die Farben.
+
+**3D-Asset-Bibliothek (57 neue Kacheln, jetzt 104)**
+- **Hof und Dorf:** Weizenfeld, Gemüsebeet, Blumenwiese, Heuhaufen, Brunnen, Wagen, Holzstapel, Vogelscheuche, Tränke, Bienenstöcke, Trockenmauer, Kate (Reet), Scheune, Windmühle, Zelt, Wegweiser, Grabsteine, Schlafsack, Übungspuppe.
+- **Natur:** Obstbaum, Birke, toter Baum, umgestürzter Stamm, verstreute Steine, Kristalle, Seerosenteich.
+- **Stadt:** Steinhaus, Fachwerkhaus, Laden mit Markise, Stadtmauer mit Zinnen, Rundturm, Torhaus, Marktstand, Brunnen mit Fontäne, Straßenlaterne, Bank, Blumenkübel, Kanal, Gullideckel, Bannermast, Steg, Ruderboot.
+- **Innenräume und Gruft:** Tresen, Bücherregal, Truhe, Kamin, Esse mit Amboss, Waffenständer, Thron, Sarkophag, Knochen, Käfig, Urnen, Leiter, Wegschrein, Totem.
+- **Gebäude:** Jedes Gebäude-Hex ist ein Wandblock mit sechseckigem Dach. Mehrere bemalte Hexe ergeben ein Haus mit lebendiger Dachlandschaft (Reet, rote Ziegel, Schiefer).
+
+**Layouts für Land und Stadt (11 neue Vorlagen, mit Seed)**
+- **Land:**
+  - Gehöft (Felder mit Zaun, Scheune, Heu, Brunnen);
+  - Weiler an einer Kreuzung;
+  - ummauerter Obstgarten;
+  - Friedhof mit Kapelle;
+  - Herrenhaus mit Garten.
+- **Stadt:**
+  - Marktplatz mit Fontäne und Ständen;
+  - Gassen mit Kanal und Brücken;
+  - Hafen mit Stegen;
+  - Stadtmauer mit Türmen, Tor und Belagerungslager.
+- **Innen:** Taverne (Schankraum, Kamin, Zimmer) und Gruft.
+
+**Farbstil und Stimmung**
+- **Neue Farbpaletten:** 10 Stück.
+  - Land: Frühlingswiese, Erntegold, Bilderbuch, graues Moor.
+  - Stadt: Sandstein, Schiefer und Ruß, Königsviertel, Küste.
+  - Dazu: Mondnacht, Asche.
+- **Paletten in 3D:** Sie färben jetzt auch die 3D-Karte (Boden, Requisiten, Gras) wie in 2D.
+- **3D-Stimmung pro Karte:** im Editor unter „Colour scheme“. Zur Wahl stehen heller Tag, goldene Stunde, bedeckt, Dämmerung, Nacht, Nebel, Bilderbuch (kräftig) und Düster (verflucht). Ohne Auswahl folgt das Licht der Tageszeit.
+
+**Gegnergruppen und Spawnpunkte (die „Dreier-Kombination“)**
+- **Gruppen:** 15 fertige Gruppen, zum Beispiel Kultistenzelle, Banditenbande, Hinterhalt, Ork-Kriegstrupp, Goblins mit Oger, ruhelose Tote, Skelettwache, Wolfsrudel, Spinnennest und Bär mit Falken.
+- **Eigene Gruppen:** Gegnerbibliothek → „Groups“ mit 1–12 Kreaturen aus der Bibliothek, Symbol, Farbe, GM-Notiz und XP.
+- **Im Szeneneditor:** Werkzeug „⚔ Enemy groups“. Eine Gruppe auf die Karte ziehen, oder antippen und dann ein Hex anklicken. Das ergibt einen versteckten Spawnpunkt.
+- **Automatisch setzen:** „Place matching groups“ setzt passende Gruppen zum gewählten Layout (etwa Kultisten auf dem Markt, Untote auf dem Friedhof), weit weg vom Ankunftspunkt der Gruppe.
+- **Kombination:** Layout × Farbpalette/Stimmung × Gegnergruppe ergibt in drei Klicks ein fertiges Szenario.
+- **Im Spiel:** „⚔ Enemy groups on this map“ in den Kampfwerkzeugen.
+  - „Spawn“ setzt die Gruppe auf die freien Hexe am Marker; „Spawn all“ setzt alle.
+  - Jede Kreatur würfelt Initiative und hat ihr eigenes Aussehen.
+  - Die Marker sieht nur der Spielleiter, in 3D als rote Fahne.
+
+**Tests:** 539 Tests grün. Neu:
+- Figuren-Baukasten (Validierung, Varianten, Speichern und Rechte);
+- Asset-Bibliothek und Layouts (alle Größen und Seeds gültig und begehbar);
+- Gruppen (Validierung, Platzierung, Composer, Spawnen über die API, Marker nie bei Spielern).
