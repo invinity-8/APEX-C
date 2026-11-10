@@ -327,6 +327,20 @@ export default function HexScene3D(p: Props) {
     }
     // markers (lights, locations) as small glowing pins
     for (const n of p.map.nodes) {
+      // APEX 2.1 – enemy spawn markers (GM only): a red banner on a dashed ring
+      if (n.kind === 'enemies' && p.gm) {
+        const k = hexKey(hexAt(p.map, n));
+        if (!tiles.has(k)) continue;
+        const w = toWorld(center(parseKey(k)));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.12, 24), new THREE.MeshBasicMaterial({ color: 0xe5484d, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(w.x, top(k) + 0.05, w.z);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 6), new THREE.MeshBasicMaterial({ color: 0x3a2a1a }));
+        pole.position.set(w.x, top(k) + 1.2, w.z);
+        const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), new THREE.MeshBasicMaterial({ color: 0xb3261e, side: THREE.DoubleSide }));
+        flag.position.set(w.x + 0.42, top(k) + 2.1, w.z);
+        t.dynamic.add(ring, pole, flag);
+        continue;
+      }
       if (n.kind !== 'light' || (!p.gm && !n.visible)) continue;
       const k = hexKey(hexAt(p.map, n));
       if (!tiles.has(k) || fogOf.get(k) === '.') continue;

@@ -3,7 +3,9 @@
  * terrain with a brush, generate terrain with the Arena generator, or import a picture/PDF that is
  * sampled into hex terrain. Markers (spawn, locations, labels) sit on hex centres.
  */
-import { useState } from 'react';
+import { useContext, useState } from 'react';
+import { GroupsContext } from './groupsContext';
+import { allGroups, composeSpawns, groupSize, groupXp, LAYOUT_GROUPS, type EnemyGroup } from '../game/groups';
 import type { MapNode, SceneMap } from '../campaign/maps';
 import {
   PRESETS,
@@ -33,8 +35,8 @@ import type { SceneDefinition } from '../server/scenes';
 import { HexSceneMap } from './map/HexSceneMap';
 import { MOODS, PALETTE_PRESETS, paletteKey, type SceneMood } from '../campaign/palette';
 
-type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light';
-const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light' };
+type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light' | 'enemies';
+const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light', enemies: '⚔ Enemy groups' };
 
 export function HexSceneEditor({
   scene,
@@ -64,6 +66,29 @@ export function HexSceneEditor({
   const [undo, setUndo] = useState<SceneMap | null>(null);
   const [importing, setImporting] = useState(false);
   const current = map.nodes.find((n) => n.id === selected);
+  // APEX 2.1 – enemy groups: drag a group onto the map (or pick one and click a hex) to place a hidden spawn marker
+  const groupsCtx = useContext(GroupsContext);
+  const groups = allGroups(groupsCtx.custom);
+  const [groupId, setGroupId] = useState<string>(groups[0]?.id ?? '');
+  const [composeCount, setComposeCount] = useState(2);
+  const membersText = (gr: EnemyGroup) => gr.members.map((m) => `${m.count > 1 ? `${m.count}× ` : ''}${groupsCtx.blocks.find((b) => b.id === m.templateId)?.name ?? m.templateId}`).join(', ');
+  function placeGroup(gid: string, at: { x: number; y: number }) {
+    const gr = groups.find((x) => x.id === gid);
+    if (!gr) return;
+    const n: MapNode = { id: crypto.randomUUID(), ...at, label: gr.name, kind: 'enemies', group: gr.id, visible: false, width: 50, height: 50, description: gr.note ?? '', targetScene: null };
+    change({ nodes: [...map.nodes, n] });
+    setSelected(n.id);
+    setMessage(`${gr.name} placed (${groupSize(gr)} creatures). Players don't see the marker; spawn the group during the game from the battle tools.`);
+  }
+  function composeGroups() {
+    const fitting = (LAYOUT_GROUPS[preset] ?? []).map((id) => groups.find((x) => x.id === id)).filter((x): x is EnemyGroup => !!x);
+    const pool = fitting.length ? fitting : groups;
+    const pick: EnemyGroup[] = [];
+    for (let i = 0; i < composeCount; i++) pick.push(pool[(seed + i * 7) % pool.length]);
+    const spots = composeSpawns(map, pick, seed);
+    change({ nodes: [...map.nodes.filter((n) => n.kind !== 'enemies'), ...spots.map((sp) => ({ id: crypto.randomUUID(), x: sp.x, y: sp.y, label: sp.group.name, kind: 'enemies' as const, group: sp.group.id, visible: false, width: 50, height: 50, description: sp.group.note ?? '', targetScene: null }))] });
+    setMessage(`Placed ${spots.map((s) => s.group.name).join(' and ')} for this layout (seed ${seed}). Earlier enemy markers were replaced.`);
+  }
   const radius = map.hex?.radius ?? 8;
 
   function paint(key: HexKey) {
@@ -87,6 +112,7 @@ export function HexSceneEditor({
     if (tool === 'brush' || tool === 'height') return;
     if (!passable(map, parseKey(key)) && tool !== 'label' && tool !== 'light') return setMessage(`Impassable hexes cannot hold a ${tool}. Paint passable terrain first.`);
     const p = hexCentre(map, parseKey(key));
+    if (tool === 'enemies') return placeGroup(groupId, p);
     if (tool === 'spawn') {
       const spawn = map.nodes.find((n) => n.kind === 'spawn');
       if (spawn) {
@@ -122,7 +148,7 @@ export function HexSceneEditor({
     }
   }
 
-  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => (t !== 'light' && t !== 'height') || set === 'battle');
+  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => (t !== 'light' && t !== 'height' && t !== 'enemies') || set === 'battle');
   return (
     <>
     {battleScene && set !== 'battle' && (
@@ -178,9 +204,24 @@ export function HexSceneEditor({
             <span className="text-marble-500">One level (5 ft) is a step – climbing up costs 5 ft extra. Two or more levels are a cliff walkers can't take.</span>
           </div>
         )}
+        {tool === 'enemies' && (
+          <div className="space-y-1 text-xs" role="radiogroup" aria-label="Enemy groups" data-testid="group-picker">
+            <p className="text-marble-400">Drag a group onto the map – or pick one and click a hex. Markers are hidden from players; spawn them in the game.</p>
+            <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
+              {groups.map((gr) => (
+                <button key={gr.id} type="button" role="radio" aria-checked={groupId === gr.id} draggable onDragStart={(e) => { e.dataTransfer.setData('text/apex-group', gr.id); e.dataTransfer.effectAllowed = 'copy'; setGroupId(gr.id); }} onClick={() => setGroupId(gr.id)}
+                  className={`flex cursor-grab items-start gap-1.5 rounded-md border px-1.5 py-1 text-left ${groupId === gr.id ? 'border-blood-400 bg-blood-600/20' : 'border-ink-600 bg-ink-900/70 hover:border-blood-400/60'}`} title={gr.note} data-testid="group-card">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-base" style={{ background: gr.color }} aria-hidden>{gr.icon}</span>
+                  <span className="min-w-0"><b className="block text-marble-50">{gr.name}{gr.source === 'custom' ? ' ✦' : ''}</b><span className="block text-marble-400">{membersText(gr)} · {groupXp(gr, groupsCtx.blocks)} XP</span></span>
+                </button>
+              ))}
+            </div>
+            <p className="text-marble-500">Own groups: Enemy Library → Groups.</p>
+          </div>
+        )}
         <p className="text-xs text-marble-400">{tool === 'height' ? 'Click or drag over hexes to set their ground height.' : tool === 'brush' ? 'Click or drag over hexes to paint. Mouse wheel zooms.' : tool === 'select' ? 'Click a marker to edit it. Drag to pan, mouse wheel zooms.' : `Click a hex to place the ${tool}.`}</p>
         <div className="scene-editor-hex">
-          <HexSceneMap map={map} label={`${scene.name} editor`} gm selectedHex={current ? hexKey(hexAt(map, current)) : null} onPaint={(tool === 'brush' || tool === 'height') && !busy ? paint : undefined} onHexClick={tool !== 'brush' && tool !== 'height' && !busy ? (k) => clickHex(k) : undefined} />
+          <HexSceneMap map={map} label={`${scene.name} editor`} gm selectedHex={current ? hexKey(hexAt(map, current)) : null} onDropHex={battleScene && !busy ? (_k, p, data) => placeGroup(data, p) : undefined} onPaint={(tool === 'brush' || tool === 'height') && !busy ? paint : undefined} onHexClick={tool !== 'brush' && tool !== 'height' && !busy ? (k) => clickHex(k) : undefined} />
         </div>
       </div>
       <aside className="scene-editor-inspector" aria-label="Hex map settings">
@@ -256,6 +297,17 @@ export function HexSceneEditor({
             </button>
           </div>
         </fieldset>
+        {battleScene && set === 'battle' && (
+          <fieldset disabled={busy} className="scene-generator-panel" data-testid="group-composer">
+            <legend>Enemy groups for this layout</legend>
+            <p>Layout × colour scheme / mood × enemies: places fitting groups (e.g. a cultist cell in the market) far from the party spawn. Uses the generator's layout and seed.</p>
+            <label>
+              Groups · {composeCount} <input type="range" min={1} max={4} value={composeCount} onChange={(e) => setComposeCount(Number(e.target.value))} />
+            </label>
+            <button type="button" className="btn btn-ghost" onClick={composeGroups} data-testid="compose-groups">⚔ Place matching groups</button>
+            {map.nodes.some((n) => n.kind === 'enemies') && <button type="button" className="btn btn-ghost" onClick={() => change({ nodes: map.nodes.filter((n) => n.kind !== 'enemies') })}>Remove all enemy markers</button>}
+          </fieldset>
+        )}
         <fieldset disabled={busy || importing} className="scene-generator-panel">
           <legend>Import picture or PDF</legend>
           <p>A map picture (PNG, JPG, WebP) or the first page of a PDF is sampled into hex terrain by colour. Nothing is uploaded.</p>
@@ -289,7 +341,7 @@ export function HexSceneEditor({
               {map.nodes.map((n) => (
                 <li key={n.id} className={selected === n.id ? 'is-selected' : ''}>
                   <button type="button" className="scene-layer-select" aria-pressed={selected === n.id} onClick={() => setSelected(n.id)}>
-                    {n.kind === 'spawn' ? '⇣ ' : n.kind === 'label' ? '✎ ' : n.kind === 'light' ? '🔥 ' : '◆ '}
+                    {n.kind === 'spawn' ? '⇣ ' : n.kind === 'label' ? '✎ ' : n.kind === 'light' ? '🔥 ' : n.kind === 'enemies' ? '⚔ ' : '◆ '}
                     {n.label}
                   </button>
                 </li>
@@ -313,7 +365,15 @@ export function HexSceneEditor({
                 Light radius · {current.lightFt ?? 30} ft <input type="range" min="10" max="60" step="5" value={current.lightFt ?? 30} onChange={(e) => nodeChange({ lightFt: Number(e.target.value) })} />
               </label>
             )}
-            {current.kind !== 'spawn' && (
+            {current.kind === 'enemies' && (
+              <label>
+                Group{' '}
+                <select value={current.group ?? ''} onChange={(e) => { const gr = groups.find((x) => x.id === e.target.value); if (gr) nodeChange({ group: gr.id, label: gr.name }); }}>
+                  {groups.map((gr) => <option key={gr.id} value={gr.id}>{gr.icon} {gr.name} ({groupSize(gr)})</option>)}
+                </select>
+              </label>
+            )}
+            {current.kind !== 'spawn' && current.kind !== 'enemies' && (
               <>
                 <label>
                   <input type="checkbox" checked={current.visible} onChange={(e) => nodeChange({ visible: e.target.checked })} /> Revealed to players

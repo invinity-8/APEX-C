@@ -68,6 +68,8 @@ interface Props {
   onTokenClick?: (tokenId: string) => void;
   /** Editor brush: while set, dragging paints hexes instead of panning. */
   onPaint?: (key: HexKey) => void;
+  /** APEX 2.1 – something was dragged onto a hex (scene editor: enemy groups); `data` is the drag payload. */
+  onDropHex?: (key: HexKey, point: { x: number; y: number }, data: string) => void;
   /** Highlighted hex (e.g. the selected marker). */
   selectedHex?: HexKey | null;
   /** APEX 1.2 – right-click on a hex / a figure (confirm a move, cast at a point, open the attack menu). */
@@ -98,7 +100,7 @@ interface Props {
 const MAX_K = 3.5;
 const NO_TEAMS = new Set<string>();
 
-export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, pathMode, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [], aimAlt = 0 }: Props) {
+export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, onDropHex, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, pathMode, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [], aimAlt = 0 }: Props) {
   const { tokens, moving } = useAnimatedTokens(targetTokens, map);
   const reducedMotion = usePrefersReducedMotion();
   const [hover, setHover] = useState<HexKey | null>(null);
@@ -326,6 +328,8 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
       onPointerUp={() => { painting.current = false; cancelPress(); }}
       onPointerCancel={() => { painting.current = false; cancelPress(); }}
       onPointerLeave={() => setHover(null)}
+      onDragOver={onDropHex ? (e) => { if (e.dataTransfer.types.includes('text/apex-group')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; const k = pointKey(e); if (k !== hover) setHover(k); } } : undefined}
+      onDrop={onDropHex ? (e) => { const data = e.dataTransfer.getData('text/apex-group'); const k = pointKey(e); if (!data || !k) return; e.preventDefault(); const c = center(parseKey(k)); onDropHex(k, { x: c.x + ox, y: c.y + oy }, data); } : undefined}
       onContextMenu={(e) => {
         if (!onHexContext && !onTokenContext) return;
         e.preventDefault();
@@ -405,6 +409,12 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                   {n.kind === 'light' && <circle r={((n.lightFt ?? 30) / 5) * HEX_SIZE * 1.6} fill="url(#scene-light-glow)" opacity={phase === 'day' ? 0.25 : 0.9} />}
                   {n.kind === 'label' ? null : n.kind === 'light' ? (
                     <circle r={HEX_SIZE * 0.32} fill="#ffcf6b" stroke="#7a4a12" strokeWidth={2} />
+                  ) : n.kind === 'enemies' ? (
+                    <>
+                      <circle r={HEX_SIZE * 1.6} fill="rgba(179,38,30,.10)" stroke="rgba(229,72,77,.55)" strokeWidth={1.5} strokeDasharray="5 4" />
+                      <polygon points={hexCorners(0, 0, HEX_SIZE * 0.6)} fill="rgba(122,20,20,.9)" stroke="#e5484d" strokeWidth={2} />
+                      <text y={5} textAnchor="middle" fontSize={14}>⚔</text>
+                    </>
                   ) : (
                     <polygon points={hexCorners(0, 0, HEX_SIZE * 0.55)} fill={spawn ? 'rgba(110,200,140,.35)' : 'rgba(217,189,118,.85)'} stroke={spawn ? '#9fe2b0' : '#3a2c14'} strokeWidth={1.5} />
                   )}

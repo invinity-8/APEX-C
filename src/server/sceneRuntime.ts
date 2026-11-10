@@ -55,7 +55,7 @@ export interface SceneRuntime {
 export function publicMap(value: unknown): Omit<SceneMap, 'gmNotes'> | null {
   const map = parseMap(value); if (!map) return null;
   const { gmNotes: _private, ...rest } = map;
-  const nodes = map.nodes.filter(n => n.visible && n.kind !== 'spawn').map(({ generatedBy: _provenance, ...n }) => ({ ...n, targetScene: null }));
+  const nodes = map.nodes.filter(n => n.visible && n.kind !== 'spawn' && n.kind !== 'enemies').map(({ generatedBy: _provenance, ...n }) => ({ ...n, targetScene: null }));
   const ids = new Set(nodes.map(n => n.id));
   return { ...rest, backgroundAsset: map.playerBackgroundAsset, revealBackground: false, nodes, routes: map.routes.filter(r => r.visible && ids.has(r.from) && ids.has(r.to)) };
 }

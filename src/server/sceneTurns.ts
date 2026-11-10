@@ -38,6 +38,7 @@ import { battleFeatures, inspirationDie, rageDamage, spendUse } from '../game/cl
 import { findBeast } from '../game/beastCatalog.js';
 import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
 import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
+import { allGroups, groupTemplates, spotsAround } from '../game/groups.js';
 import { altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
 import { npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
@@ -111,6 +112,38 @@ async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Rec
   const partyLevel = Number.isSafeInteger(v.partyLevel) ? Math.max(1, Math.min(20, v.partyLevel as number)) : 1;
   const seed = Number.isSafeInteger(v.seed) ? (v.seed as number) : 1;
   const blocks = bestiary(ctx.state);
+  // APEX 2.1 – spawn the enemy group of one spawn marker (or of all markers) on the free hexes around it
+  if (v.op === 'spawnGroup' || v.op === 'spawnAll') {
+    const markers = map.nodes.filter((n) => n.kind === 'enemies' && n.group && (v.op === 'spawnAll' || n.id === v.nodeId));
+    if (!markers.length) return { status: 404, body: { error: 'No enemy spawn marker on the published map.' } };
+    const groups = allGroups(ctx.state.enemyGroups);
+    const pcs = await ctx.pcs!(scene.id, map);
+    const occupied = new Set([...pcs.map((p) => hexKeyAt(map, p)), ...enemiesOf(ctx.state, scene.id).filter((e) => !e.defeated).map((e) => hexKeyAt(map, e))]);
+    const plan: Array<{ templateId: string; at: { x: number; y: number } }> = [];
+    for (const m of markers) {
+      const gr = groups.find((x) => x.id === m.group);
+      if (!gr) continue;
+      const ids = groupTemplates(gr).filter((id) => !!statBlock(ctx.state!, id));
+      const spots = spotsAround(map, m, ids.length, occupied);
+      spots.forEach((at, i) => { occupied.add(hexKeyAt(map, at)); plan.push({ templateId: ids[i], at }); });
+    }
+    if (!plan.length) return { status: 422, body: { error: 'No free hexes near the marker(s).' } };
+    return mutate(user, repo, (s) => {
+      let st = structuredClone(s);
+      const names: string[] = [];
+      for (const item of plan) {
+        const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
+        const r = addEnemy(st, scene.id, newId, item.templateId, item.at, undefined, d20());
+        if (!r.ok) return r;
+        st = r.state;
+        names.push(enemiesOf(st, scene.id).find((x) => x.id === newId)!.name);
+      }
+      const label = markers.map((m) => m.label).join(', ');
+      const text = `${label}: ${names.join(', ')} appear${names.length === 1 ? 's' : ''}.`;
+      logCombat(st, scene.id, text);
+      return { ok: true, state: st, message: text };
+    });
+  }
   if (v.op === 'plan') {
     const plan = planEncounter({ theme: typeof v.theme === 'string' ? v.theme : 'bandits', situation, difficulty, partySize, partyLevel, seed, blocks });
     return { status: 200, body: { ok: true, plan } };

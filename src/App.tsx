@@ -1,3 +1,5 @@
+import { GroupsContext } from './components/groupsContext';
+import { bestiary, BUILTIN_BESTIARY } from './game/bestiary';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chronicle } from './components/ActivityLog';
 import { LegendContent } from './components/map/Legend';
@@ -503,7 +505,9 @@ export default function App({ game }: { game: GameApi }) {
           ) : screen === 'feedback' && isGm && game.online ? (
             <FeedbackInbox online={game.online} notify={notify} />
           ) : screen === 'scenes' && isGm && game.online ? (
-            <SceneDirector />
+            <GroupsContext.Provider value={{ custom: state?.enemyGroups ?? [], blocks: state ? bestiary(state) : BUILTIN_BESTIARY }}>
+              <SceneDirector />
+            </GroupsContext.Provider>
           ) : screen === 'enemies' && isGm && state ? (
             <EnemyLibrary state={state} run={run} busy={game.busy} />
           ) : screen === 'arsenal' && isGm && state ? (

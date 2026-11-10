@@ -4,6 +4,7 @@
  */
 import { useMemo, useState } from 'react';
 import { FigureEditor } from './FigureEditor';
+import { GroupLibrary } from './GroupLibrary';
 import { autoLook, type FigureLook } from '../game/figure';
 import type { Command } from '../game/commands';
 import type { GameState } from '../game/types';
@@ -132,6 +133,7 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
   const [shown, setShown] = useState<string | null>(all[0]?.id ?? null);
   const [editing, setEditing] = useState<StatBlock | null>(null);
   const [figure, setFigure] = useState(false);
+  const [view, setView] = useState<'creatures' | 'groups'>('creatures');
   const list = all.filter((b) => `${displayName(b)} ${b.type} ${b.cr}`.toLowerCase().includes(q.trim().toLowerCase()));
   const sel = all.find((b) => b.id === shown) ?? null;
   const own = (id: string) => (state.enemyLibrary ?? []).some((b) => b.id === id);
@@ -143,7 +145,15 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
     if (look) next.look = look; else delete next.look;
     if ((await run({ type: 'enemyLibrarySave', block: next })).ok) setFigure(false);
   };
+  const tabs = (
+    <div className="flex gap-1 px-3 pt-3" role="tablist">
+      {(['creatures', 'groups'] as const).map((v) => <button key={v} type="button" role="tab" aria-selected={view === v} className={`rounded-t-md px-3 py-1 text-sm ${view === v ? 'bg-ink-800 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => setView(v)} data-testid={`library-tab-${v}`}>{v === 'creatures' ? 'Creatures' : 'Groups'}</button>)}
+    </div>
+  );
+  if (view === 'groups') return <div aria-label="Enemy library" data-testid="enemy-library">{tabs}<div className="p-3"><GroupLibrary custom={state.enemyGroups ?? []} blocks={all} run={run} busy={busy} /></div></div>;
   return (
+    <>
+    {tabs}
     <div className="grid gap-3 p-3 lg:grid-cols-[18rem_1fr]" aria-label="Enemy library" data-testid="enemy-library">
       <section className="panel space-y-2 p-3">
         <h2 className="font-display text-xl font-black text-gold-200">Enemy Library</h2>
@@ -181,5 +191,6 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
         )}
       </section>
     </div>
+    </>
   );
 }

@@ -220,6 +220,15 @@ export function parseCommand(raw: unknown): ParseResult {
       const parsed = parseStatBlock(c.block);
       return parsed.ok ? { ok: true, command: { type: 'enemyLibrarySave', block: parsed.block } } : bad(`block: ${parsed.error}`);
     }
+    case 'enemyGroupSave': {
+      // structure only here; the creature ids are checked against the campaign's library when applied
+      const gr = c.group as Record<string, unknown> | undefined;
+      if (!gr || typeof gr !== 'object' || typeof gr.id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(gr.id) || typeof gr.name !== 'string' || !Array.isArray(gr.members)) return bad('group');
+      return { ok: true, command: { type: 'enemyGroupSave', group: gr as never } };
+    }
+    case 'enemyGroupRemove':
+      if (typeof c.id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(c.id)) return bad('id');
+      return { ok: true, command: { type: 'enemyGroupRemove', id: c.id } };
     case 'enemyLibraryRemove':
       if (typeof c.id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(c.id)) return bad('id');
       return { ok: true, command: { type: 'enemyLibraryRemove', id: c.id } };

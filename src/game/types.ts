@@ -441,6 +441,8 @@ export interface GameState {
   sceneAltitude?: Record<string, Record<string, import('./altitude.js').Altitude>>;
   /** APEX 1.2: the GM's own creatures and elites (built-in SRD creatures are not stored). */
   enemyLibrary?: import('./bestiary.js').StatBlock[];
+  /** APEX 2.1 – the GM's own enemy groups (built-in ones live in groups.ts). */
+  enemyGroups?: import('./groups.js').EnemyGroup[];
   /** Open reaction prompts per scene (opportunity attacks) – valid during the turn they were offered in. */
   sceneReactions?: Record<string, import('./sceneActions.js').ReactionOffer[]>;
   /** APEX 1.3: conditions and buffs per scene and participant id. */
