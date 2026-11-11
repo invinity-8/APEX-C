@@ -8,6 +8,38 @@ import { api } from '../online/api';
 import { BUILTIN_BESTIARY, type StatBlock } from '../game/bestiary';
 import { crXp, rate, SITUATIONS, THEMES, type Difficulty, type EncounterEntry, type EncounterPlan, type Situation } from '../game/encounters';
 
+/**
+ * APEX 2.1 – the enemy spawn markers placed in the scene editor: one click spawns a marker's group on the free hexes
+ * around it (each creature with its own look and initiative); "Spawn all" brings every group in at once.
+ */
+export function SpawnMarkers({ sceneId, markers, busy, onSpawned }: { sceneId: string; markers: Array<{ id: string; label: string; description?: string }>; busy: boolean; onSpawned: (message: string) => void }) {
+  const [error, setError] = useState('');
+  const [done, setDone] = useState<string[]>([]);
+  if (!markers.length) return null;
+  const spawn = async (nodeId?: string) => {
+    setError('');
+    try {
+      const r = await api.sceneTurn({ sceneId, action: 'encounter', op: nodeId ? 'spawnGroup' : 'spawnAll', ...(nodeId ? { nodeId } : {}) });
+      setDone(nodeId ? [...done, nodeId] : markers.map((m) => m.id));
+      onSpawned(r.message ?? 'Spawned.');
+    } catch (e) { setError(String(e)); }
+  };
+  return (
+    <section className="space-y-1.5 rounded-xl border border-blood-400/50 bg-ink-950/90 p-2.5 text-xs" aria-label="Enemy spawn markers" data-testid="spawn-markers">
+      <div className="flex items-center gap-2"><b className="font-display text-sm text-gold-200">⚔ Enemy groups on this map</b>{markers.length > 1 && <button type="button" className="btn btn-ghost ml-auto px-2 py-0.5" disabled={busy} onClick={() => void spawn()} data-testid="spawn-all">Spawn all</button>}</div>
+      <ul className="space-y-1">
+        {markers.map((m) => (
+          <li key={m.id} className="flex items-center gap-1.5 rounded border border-ink-700 bg-ink-900/60 px-1.5 py-1">
+            <span className="flex-1" title={m.description}>{m.label}{done.includes(m.id) ? <span className="text-emerald-300"> · spawned</span> : null}</span>
+            <button type="button" className="btn btn-gold px-2 py-0.5" disabled={busy} onClick={() => void spawn(m.id)} data-testid="spawn-group">{done.includes(m.id) ? 'Again' : 'Spawn'}</button>
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="text-rose-300">{error}</p>}
+    </section>
+  );
+}
+
 export function EncounterPanel({ sceneId, partySizeDefault, library, busy, onPlaced }: { sceneId: string; partySizeDefault: number; library: StatBlock[]; busy: boolean; onPlaced: (message: string) => void }) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(THEMES[0].id);

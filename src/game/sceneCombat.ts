@@ -9,6 +9,7 @@
  *    Advantage/disadvantage, saving throws and spells are still resolved by hand by the GM.
  *  - Enemy stats are SRD 5.1 basics (no flavour text), enough to try out a fight.
  */
+import type { FigureLook } from './figure.js';
 import type { GameState } from './types.js';
 import { BUILTIN_BESTIARY, displayName, initBonus, statBlock, type AbilityKey, type NpcArea, type NpcAttack, type StatBlock } from './bestiary.js';
 import { activeEncounter } from './sceneTurns.js';
@@ -23,6 +24,8 @@ export const ENEMY_TEMPLATES: EnemyTemplate[] = BUILTIN_BESTIARY.map(templateOf)
 export interface SceneEnemy {
   id: string;
   templateId: string;
+  /** APEX 2.1: this figure's own low-poly look (else the stat block's, else automatic). */
+  look?: FigureLook;
   name: string;
   x: number;
   y: number;

@@ -85,7 +85,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const tokens: SceneToken[] = [...own, ...figures.map(f => ({
       tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
       view: f.tokenId ? view(f.tokenId) : undefined,
-      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp, size: f.size, build: f.build } : undefined,
+      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp, size: f.size, build: f.build, look: f.look, breed: f.breed } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
       badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
       icons: figureIcons(f.effects, f.concentration),

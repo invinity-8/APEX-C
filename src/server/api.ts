@@ -161,6 +161,18 @@ export function withLegacyReader(repo: Repo): Repo {
   });
 }
 
+/** Cheap content signature of the Arena hexes (FNV-1a over the JSON), cached per object. */
+const hexSigCache = new WeakMap<object, string>();
+function hexesSignature(hexes: unknown): string {
+  if (hexes && typeof hexes === 'object' && hexSigCache.has(hexes)) return hexSigCache.get(hexes)!;
+  const text = JSON.stringify(hexes);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  const sig = `${(h >>> 0).toString(36)}-${text.length.toString(36)}`;
+  if (hexes && typeof hexes === 'object') hexSigCache.set(hexes, sig);
+  return sig;
+}
+
 export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResponse> {
   const repo = withLegacyReader(rawRepo);
   try {
@@ -201,7 +213,14 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
           const v = (await repo.stateVersion(user.campaignId)) ?? 0;
           if (v === since) return ok({ unchanged: true, version: v });
         }
-        return ok(await campaignPayload(user, repo, req.query.as));
+        // APEX 2.1: the GM's Arena hexes (the bulk of the state, ~280 KB) are only sent when they changed
+        const payload = (await campaignPayload(user, repo, req.query.as)) as unknown as { state?: { hexes?: unknown } } & Record<string, unknown>;
+        if (payload.state?.hexes) {
+          const sig = hexesSignature(payload.state.hexes);
+          if (req.query.hexes === sig) return ok({ ...payload, state: { ...payload.state, hexes: undefined }, hexesSig: sig, hexesOmitted: true });
+          return ok({ ...payload, hexesSig: sig });
+        }
+        return ok(payload);
       }
       case 'GET command-status':
         return ok(await commandStatus(user, req.query.requestId, repo));

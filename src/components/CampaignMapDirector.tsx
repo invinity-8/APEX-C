@@ -17,7 +17,7 @@ import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
 import { NpcBar } from './NpcBar';
-import { EncounterPanel } from './EncounterPanel';
+import { EncounterPanel, SpawnMarkers } from './EncounterPanel';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -924,6 +924,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               interaction={battle.interaction}
             />}
               dock={(bar) => <>
+                <SpawnMarkers sceneId={shownScene.id} markers={shownScene.map.nodes.filter((n) => n.kind === 'enemies')} busy={busy} onSpawned={(m) => { setNotice(m); game.online?.refresh(); void api.sceneFocus(shownScene.id, viewRef.current).then(setSnapshot); }} />
                 <EncounterPanel sceneId={shownScene.id} partySizeDefault={Object.keys(snapshot.pcMovement ?? {}).length} library={[]} busy={busy} onPlaced={(m) => { setNotice(m); game.online?.refresh(); void api.sceneFocus(shownScene.id, viewRef.current).then(setSnapshot); }} />
                 {selected?.kind === 'npc' && (() => { const npc = gmEnemies.find((e) => e.id === selected.id); return npc ? <NpcBar target={bar} snapshot={snapshot} encounter={gmEncounter} npc={npc} busy={busy} act={sceneTurn} attack={npcAttack} setAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} onTarget={(id) => battle.interaction.onTokenContext?.(id)} /> : null; })()}
                 {shownScene.category === 'battle' && shownScene.map.hex && (

@@ -526,7 +526,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
 
       {tab === 'appearance' && (
         <div className="space-y-3">
-          <AppearanceEditor game={game} token={token} run={run} notify={notify} />
+          <AppearanceEditor game={game} token={token} run={run} notify={notify} isGm={isGm} />
           <CosmeticsPicker tokenId={token.id} cosmetics={token.cosmetics} run={run} />
           <EntrySection title="Physical description" editing={editing} empty="Gender, age, height, eyes, hair …" rows={sheet.appearance} onChange={(appearance) => set({ appearance })} wide>
             {!editing && (

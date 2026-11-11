@@ -8,6 +8,8 @@
  * In online mode the browser only sends commands to the server, which runs
  * exactly this function. Players therefore cannot cheat.
  */
+import { parseGroup } from './groups.js';
+import type { FigureLook } from './figure.js';
 import { ITEM_RULE_LIMITS, type ItemRules } from './items/rules.js';
 import { executeLoot, LOOT_COMMANDS, type LootCommand } from './items/loot.js';
 import { executePartyLoot, PARTY_LOOT_COMMANDS, type PartyLootCommand } from './items/partyLoot.js';
@@ -34,7 +36,7 @@ import { T, fmt, phaseName } from './text.js';
 import { groupOf, refreshAllKnowledge, revealFor, visibleFrom } from './visibility.js';
 import { zoneStatus } from './zone.js';
 import type { Actor, AnnouncementCategory, EventEffect, GameState, Item, MarkerStyle, Phase, SiteVisibility, TeamStrategy, TeamVisibility, Token, BodyType, NarrativeItemRequest } from './types.js';
-import { parseStatBlock } from './bestiary.js';
+import { bestiary, parseStatBlock } from './bestiary.js';
 import { INVENTORY_LIMITS, canMerge, containerOfItem, isStackable, materializeInventory } from './inventory.js';
 
 export { fmt };
@@ -47,6 +49,8 @@ export type Command =
   /** APEX 1.2: the GM's enemy library (own creatures and elites). */
   | { type: 'enemyLibrarySave'; block: import('./bestiary.js').StatBlock }
   | { type: 'enemyLibraryRemove'; id: string }
+  | { type: 'enemyGroupSave'; group: import('./groups.js').EnemyGroup }
+  | { type: 'enemyGroupRemove'; id: string }
   | LootCommand
   | PartyLootCommand
   | MerchantCommand
@@ -81,7 +85,7 @@ export type Command =
   | { type: 'createEvent'; eventId: string; name: string; description: string; hexes: string[]; effects: EventEffect[]; announce: boolean }
   | { type: 'announce'; category: AnnouncementCategory; title: string; text: string }
   // ---- APEX 0.3: character resources & inventory (players: own character only)
-  | { type: 'setAppearance'; tokenId: string; name?: string; bodyType?: BodyType; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string }
+  | { type: 'setAppearance'; tokenId: string; name?: string; bodyType?: BodyType; title?: string; color?: string; accent?: string; marker?: MarkerStyle; initials?: string; /** APEX 2.1: low-poly figure; null removes it. */ figure?: FigureLook | null }
   | {
       type: 'gmRestoreCharacter';
       tokenId: string;
@@ -434,6 +438,17 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
     case 'enemyLibraryRemove':
       state.enemyLibrary = (state.enemyLibrary ?? []).filter((b) => b.id !== cmd.id);
       return { ok: true, state };
+    case 'enemyGroupSave': {
+      const group = parseGroup(cmd.group, bestiary(state));
+      if (!group) return fail(prev, 'Invalid group: 1–12 creatures from the enemy library.');
+      const list = (state.enemyGroups ?? []).filter((x) => x.id !== group.id);
+      if (list.length >= 100) return fail(prev, 'At most 100 own groups.');
+      state.enemyGroups = [...list, group].sort((a, b) => a.name.localeCompare(b.name));
+      return { ok: true, state };
+    }
+    case 'enemyGroupRemove':
+      state.enemyGroups = (state.enemyGroups ?? []).filter((x) => x.id !== cmd.id);
+      return { ok: true, state };
     case 'setItemRules': {
       if (cmd.rules === null) {
         delete state.itemRules;
@@ -511,6 +526,7 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (cmd.accent !== undefined) t.accent = cmd.accent.toLowerCase();
       if (cmd.marker !== undefined) t.marker = cmd.marker;
       if (cmd.initials !== undefined && cmd.initials.trim()) t.initials = cmd.initials.trim().slice(0, 3);
+      if (cmd.figure === null) delete t.figure; else if (cmd.figure !== undefined) t.figure = cmd.figure;
       return { ok: true, state }; // no knowledge refresh needed
     }
     case 'gmRestoreCharacter': {

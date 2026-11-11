@@ -159,6 +159,64 @@ const BATTLE_TILES: TileDef[] = [
     ['web', 'q', 'Spider web', 2, false, '#5a544c', 'Hazards', 'web', '#e8e8e8'],
     ['trap', 'x', 'Trap / spikes', 2, false, '#8d8a83', 'Hazards', 'trap', '#6a6660'],
     ['circle', 'm', 'Magic circle', 1, false, '#4a3a5e', 'Hazards', 'circle', '#c8a0ff', 10],
+    // APEX 2.1 – asset library: farm & village, town & city, interiors and crypts (codes from Latin-1 letters)
+    ['wheat', 'À', 'Wheat field', 2, false, '#b89a4a', 'Farm & village', 'fields', '#e0c060'],
+    ['veggies', 'Á', 'Vegetable patch', 2, false, '#6a5236', 'Farm & village', 'fields', '#5c8a3a'],
+    ['flowers', 'Â', 'Flower meadow', 1, false, '#6f8a45', 'Farm & village', 'heath', '#e070a0'],
+    ['haystack', 'Ã', 'Haystack', null, true, '#8a6f4a', 'Farm & village', 'bush', '#e0c060'],
+    ['well', 'Ä', 'Well', null, false, '#8a8580', 'Farm & village', 'pillar', '#5a5550'],
+    ['cart', 'Å', 'Cart / wagon', null, false, '#8a6f4a', 'Farm & village', 'crates', '#7a5230'],
+    ['woodpile', 'Æ', 'Woodpile', null, false, '#8a6f4a', 'Farm & village', 'crates', '#6a4422'],
+    ['scarecrow', 'Ç', 'Scarecrow', null, false, '#b89a4a', 'Farm & village', 'statue', '#d8c48a'],
+    ['trough', 'È', 'Water trough', null, false, '#8a6f4a', 'Farm & village', 'table', '#4f8fae'],
+    ['beehives', 'É', 'Beehives', null, false, '#6f8a45', 'Farm & village', 'barrels', '#e0b040'],
+    ['stonewall', 'Ê', 'Low stone wall', 2, false, '#6f8a45', 'Farm & village', 'fence', '#8a847a'],
+    ['cottage', 'Ë', 'Cottage (thatch)', null, true, '#8a6f4a', 'Farm & village', 'houses', '#d8c48a'],
+    ['barn', 'Ì', 'Barn', null, true, '#8a6f4a', 'Farm & village', 'houses', '#9a3a2a'],
+    ['windmill', 'Í', 'Windmill', null, true, '#8a6f4a', 'Farm & village', 'tower', '#e8dcc0'],
+    ['tent', 'Î', 'Tent', null, true, '#6f8a45', 'Farm & village', 'tents', '#c8b890'],
+    ['signpost', 'Ï', 'Signpost', 1, false, '#8a6f4a', 'Farm & village', 'fence', '#7a5230'],
+    ['orchard', 'Ð', 'Fruit tree', null, true, '#3a6a32', 'Nature', 'trees', '#c0392b'],
+    ['birch', 'Ñ', 'Birch', null, true, '#5a7a3a', 'Nature', 'trees', '#e8e4d8'],
+    ['deadtree', 'Ò', 'Dead tree', null, false, '#6a5a42', 'Nature', 'deadwood', '#4a3a2a'],
+    ['log', 'Ó', 'Fallen log', 2, false, '#6f8a45', 'Nature', 'stump', '#6a4a2a'],
+    ['rocks', 'Ô', 'Scattered stones', 1, false, '#7c7166', 'Rock & cave', 'dots', '#9a948a'],
+    ['townhouse', 'Õ', 'Townhouse (stone)', null, true, '#8a8580', 'Town & city', 'city', '#9a3a2a'],
+    ['timberhouse', 'Ö', 'Half-timbered house', null, true, '#8a8580', 'Town & city', 'houses', '#5a3a22'],
+    ['shop', 'Ø', 'Shop front', null, true, '#8a8580', 'Town & city', 'houses', '#2d4f8f'],
+    ['citywall', 'Ù', 'City wall', null, true, '#6a645c', 'Town & city', 'castle', '#8a847a'],
+    ['tower', 'Ú', 'Round tower', null, true, '#6a645c', 'Town & city', 'tower', '#8a847a'],
+    ['gate', 'Û', 'Gatehouse (open)', 1, false, '#8a8580', 'Town & city', 'door', '#6a645c'],
+    ['stall', 'Ü', 'Market stall', null, false, '#8a8580', 'Town & city', 'tents', '#c0392b'],
+    ['fountain', 'Ý', 'Fountain', null, false, '#8a8580', 'Town & city', 'shrine', '#6fb1e0'],
+    ['lamppost', 'Þ', 'Street lamp', null, false, '#8a8580', 'Town & city', 'brazier', '#ffcf6b', 15],
+    ['bench', 'ß', 'Bench', 2, false, '#8a8580', 'Town & city', 'table', '#7a5230'],
+    ['planter', 'à', 'Flower planter', 2, false, '#8a8580', 'Town & city', 'bush', '#e070a0'],
+    ['canalwater', 'á', 'Canal', null, false, '#2f5f7a', 'Town & city', 'waves', '#5a5550'],
+    ['grate', 'â', 'Sewer grate', 1, false, '#6a645c', 'Town & city', 'cobbles', '#2a2622'],
+    ['banner', 'ã', 'Banner pole', null, false, '#8a8580', 'Town & city', 'pillar', '#b3261e'],
+    ['pier', 'ä', 'Pier', 1, false, '#7a5a3a', 'Water', 'bridge', '#24577a'],
+    ['counter', 'å', 'Bar counter', null, false, '#8a5f36', 'Furniture & props', 'table', '#5a3a22'],
+    ['bookshelf', 'æ', 'Bookshelf', null, true, '#8a5f36', 'Furniture & props', 'crates', '#7a2a2a'],
+    ['chest', 'ç', 'Chest', null, false, '#8a5f36', 'Furniture & props', 'crates', '#d8b25a'],
+    ['hearth', 'è', 'Fireplace', null, true, '#8d8a83', 'Furniture & props', 'fire', '#ff9a3a', 20],
+    ['forge', 'é', 'Forge & anvil', null, false, '#5a544c', 'Furniture & props', 'brazier', '#ff9a3a', 10],
+    ['weaponrack', 'ê', 'Weapon rack', null, false, '#8a5f36', 'Furniture & props', 'fence', '#c8ccd2'],
+    ['throne', 'ë', 'Throne', null, false, '#7a2a2a', 'Furniture & props', 'statue', '#d8b25a'],
+    ['sarcophagus', 'ì', 'Sarcophagus', null, false, '#5a544c', 'Furniture & props', 'altar', '#a8a090'],
+    ['bones', 'í', 'Bones & skulls', 1, false, '#5a544c', 'Hazards', 'dots', '#e8dcc0'],
+    ['cage', 'î', 'Cage', null, false, '#5a544c', 'Furniture & props', 'fence', '#3a3632'],
+    ['gravestone', 'ï', 'Gravestones', 2, false, '#5f7a45', 'Farm & village', 'statue', '#9a948a'],
+    ['urns', 'ð', 'Urns & pottery', null, false, '#8a8580', 'Furniture & props', 'barrels', '#b87333'],
+    ['crystals', 'ñ', 'Crystal cluster', null, false, '#4a4a5a', 'Rock & cave', 'crystals', '#a0d8ff', 10],
+    ['boat', 'ò', 'Rowing boat', 2, false, '#24577a', 'Water', 'bridge', '#7a5230'],
+    ['ruinwall', 'ó', 'Broken wall', 2, false, '#7c7166', 'Structures', 'rockwall', '#8a847a'],
+    ['bedroll', 'ô', 'Bedroll', 1, false, '#6f8a45', 'Farm & village', 'tents', '#5c7a2a'],
+    ['lilies', 'õ', 'Lily pond', 2, false, '#4f8fae', 'Water', 'reeds', '#e070a0'],
+    ['shrine', 'ö', 'Wayside shrine', null, false, '#6f8a45', 'Structures', 'shrine', '#d8b25a'],
+    ['totem', 'ø', 'Tribal totem', null, false, '#8a6f4a', 'Structures', 'statue', '#b3261e'],
+    ['dummy', 'ù', 'Training dummy', null, false, '#8a6f4a', 'Farm & village', 'statue', '#c8b890'],
+    ['ladder', 'ú', 'Ladder', 1, false, '#8a8580', 'Structures', 'stairs', '#7a5230', undefined, 'Climb up or down one level at no extra cost.'],
   ] as Def[]).map(make),
 ];
 export const TILESETS: Record<TileSet, TileDef[]> = { region: REGION_TILES, battle: BATTLE_TILES };
@@ -209,7 +267,7 @@ export function validHexData(v: unknown): v is HexSceneData {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
   const h = v as HexSceneData;
   if (h.set !== undefined && h.set !== 'battle') return false;
-  const codes = [...BY_CODE[tileSetOf(h)].keys()].join('');
+  const codes = [...BY_CODE[tileSetOf(h)].keys()].map((c) => c.replace(/[\\\]^-]/g, '\\$&')).join('');
   if (h.heights !== undefined && (typeof h.heights !== 'string' || h.heights.length !== h.terrain.length || !/^[0-9a-z]+$/.test(h.heights))) return false;
   return Number.isInteger(h.radius) && h.radius >= MIN_HEX_RADIUS && h.radius <= MAX_HEX_RADIUS && typeof h.terrain === 'string' && h.terrain.length === hexCount(h.radius) && new RegExp(`^[${codes}.]+$`).test(h.terrain);
 }
@@ -273,7 +331,8 @@ export function sceneElevation(h: Axial, terrain: TerrainType): number {
 
 // ---------------------------------------------------------------- creation
 
-export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins' | 'dungeon' | 'camp' | 'cave' | 'highlands' | 'village' | 'swamp' | 'temple' | 'chasm' | 'desert' | 'winter';
+export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins' | 'dungeon' | 'camp' | 'cave' | 'highlands' | 'village' | 'swamp' | 'temple' | 'chasm' | 'desert' | 'winter'
+  | 'farmstead' | 'hamlet' | 'orchard' | 'graveyard' | 'manor' | 'market' | 'streets' | 'docks' | 'citygate' | 'tavern' | 'crypt';
 export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> = {
   region: [
     { id: 'wilderness', label: 'Wilderness (Arena generator)' },
@@ -296,6 +355,18 @@ export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> =
     { id: 'chasm', label: 'Chasm with a bridge' },
     { id: 'desert', label: 'Desert oasis (dunes, palms, water)' },
     { id: 'winter', label: 'Winter forest with a frozen lake' },
+    // APEX 2.1 – rural and city layouts
+    { id: 'farmstead', label: 'Rural · Farmstead (fields, barn, haystacks)' },
+    { id: 'hamlet', label: 'Rural · Hamlet at a crossroads' },
+    { id: 'orchard', label: 'Rural · Walled orchard with beehives' },
+    { id: 'graveyard', label: 'Rural · Graveyard with a chapel' },
+    { id: 'manor', label: 'Rural · Manor house and garden' },
+    { id: 'market', label: 'City · Market square with fountain' },
+    { id: 'streets', label: 'City · Streets, alleys and a canal' },
+    { id: 'docks', label: 'City · Harbour docks and piers' },
+    { id: 'citygate', label: 'City · City wall, towers and gate' },
+    { id: 'tavern', label: 'Interior · Tavern (taproom, hearth, rooms)' },
+    { id: 'crypt', label: 'Interior · Crypt (sarcophagi, bones, cages)' },
     { id: 'blank', label: 'Open field' },
   ],
 };
@@ -381,7 +452,7 @@ export function generateBattleScene(preset: HexPreset, radius: number, seed: num
       return ground(h);
     });
   }
-  const themed = themedBattleScene(preset, r, seed, rnd, ground);
+  const themed = themedBattleScene(preset, r, seed, rnd, ground) ?? settlementScene(preset, r, seed, rnd, ground);
   if (themed) return themed;
   return encodeTiles(r, 'battle', (h) => (rnd(h, 11) > 0.97 ? 'boulder' : rnd(h, 12) > 0.93 ? 'undergrowth' : ground(h)));
 }
@@ -525,6 +596,182 @@ function themedBattleScene(preset: HexPreset, r: number, seed: number, rnd: (h: 
         return 'snow';
       });
       return withLevels(data, (h) => (d0(h) <= Math.max(2, Math.round(r / 3)) ? 0 : Math.round(noise(h, 4, 9) * 2)));
+    }
+    default:
+      return null;
+  }
+}
+
+/** APEX 2.1 – rural and city layouts. Buildings are clusters of building hexes (each hex a wall block with a roof). */
+function settlementScene(preset: HexPreset, r: number, seed: number, rnd: (h: Axial, salt: number) => number, ground: (h: Axial) => BattleTile): HexSceneData | null {
+  const tiles = new Map<HexKey, TileId>();
+  const levels = new Map<HexKey, number>();
+  const inside = (h: Axial) => distance(h, ORIGIN) <= r;
+  const set = (h: Axial, t: TileId, force = true) => { const k = hexKey(h); if (inside(h) && (force || !tiles.has(k))) tiles.set(k, t); };
+  const free = (h: Axial) => inside(h) && !tiles.has(hexKey(h));
+  const at = (i: number, salt: number) => hash2(i, salt, seed);
+  const polar = (ang: number, dist: number): Axial => ({ q: Math.round(Math.cos(ang) * dist), r: Math.round(Math.sin(ang) * dist - (Math.cos(ang) * dist) / 2) });
+  const blob = (c: Axial, rad: number, t: TileId) => { for (const h of hexesInRange(c, rad)) set(h, t); };
+  /** A house of `size` hexes grown around c (compact, slightly irregular). */
+  const house = (c: Axial, size: number, t: TileId, salt: number) => {
+    const cells: Axial[] = [c];
+    for (let i = 0; cells.length < size && i < 40; i++) { const from = cells[Math.floor(at(i, salt) * cells.length)]; const n = neighbors(from)[Math.floor(at(i, salt + 1) * 6)]; if (!cells.some((x) => x.q === n.q && x.r === n.r) && inside(n)) cells.push(n); }
+    cells.forEach((h) => set(h, t));
+    return cells;
+  };
+  const line = (a: Axial, b: Axial, t: TileId, force = true) => hexLine(a, b).forEach((h) => set(h, t, force));
+  const ringAt = (c: Axial, rad: number) => hexesInRange(c, rad).filter((h) => distance(h, c) === rad);
+  const scatter = (n: number, t: TileId, salt: number, ok: (h: Axial) => boolean = () => true) => {
+    const all = hexesInRange(ORIGIN, r).filter((h) => free(h) && ok(h));
+    for (let i = 0; i < n && all.length; i++) { const j = Math.floor(at(i, salt) * all.length); set(all[j], t); all.splice(j, 1); }
+  };
+  const fill = (fn: (h: Axial) => TileId) => encodeTiles(r, 'battle', (h) => tiles.get(hexKey(h)) ?? fn(h));
+  const withLv = (data: HexSceneData) => (levels.size ? withLevels(data, (h) => levels.get(hexKey(h)) ?? 0) : data);
+  const lawn = (h: Axial): TileId => (rnd(h, 41) > 0.93 ? 'flowers' : rnd(h, 42) > 0.88 ? 'tallgrass' : ground(h));
+  switch (preset) {
+    case 'farmstead': {
+      const home = polar(at(1, 1) * 6.28, Math.round(r * 0.35)), barnAt = polar(at(1, 1) * 6.28 + 2.2, Math.round(r * 0.4));
+      house(home, 4, 'cottage', 10); house(barnAt, 5, 'barn', 20);
+      line(home, barnAt, 'dirt', false); line(home, polar(at(2, 2) * 6.28, r), 'dirt', false);
+      // fields: two fenced plots of wheat and vegetables
+      const fieldA = polar(at(1, 1) * 6.28 + 4.2, Math.round(r * 0.55)), fieldB = polar(at(1, 1) * 6.28 + 5.4, Math.round(r * 0.5));
+      const plot = (c: Axial, rad: number, crop: TileId) => { for (const h of hexesInRange(c, rad)) if (free(h)) set(h, distance(h, c) === rad ? (rnd(h, 3) > 0.25 ? 'fence' : 'grass') : crop); };
+      plot(fieldA, 2, 'wheat'); plot(fieldB, 2, 'veggies');
+      set(fieldA, 'scarecrow');
+      for (const h of ringAt(barnAt, 2).slice(0, 3)) if (free(h)) set(h, 'haystack');
+      const yard = ringAt(home, 2).filter(free);
+      [['well', 0], ['cart', 2], ['woodpile', 4], ['trough', 6], ['beehives', 8]].forEach(([t, i]) => { const h = yard[(i as number) % Math.max(1, yard.length)]; if (h && free(h)) set(h, t as TileId); });
+      scatter(Math.round(r * 0.8), 'tree', 5, (h) => distance(h, ORIGIN) >= r - 1);
+      scatter(Math.round(r * 0.5), 'stonewall', 6, (h) => distance(h, ORIGIN) === r - 2);
+      return fill(lawn);
+    }
+    case 'hamlet': {
+      // two dirt roads crossing in the middle, a well and a signpost, cottages and gardens around
+      for (let i = -r; i <= r; i++) { set({ q: i, r: 0 }, 'dirt'); set({ q: 0, r: i }, 'dirt'); }
+      set(ORIGIN, 'well'); set({ q: 1, r: -1 }, 'signpost');
+      for (let i = 0; i < 6; i++) {
+        const c = polar(i * 1.047 + 0.5 + at(i, 3) * 0.3, Math.round(r * (0.45 + at(i, 4) * 0.2)));
+        if (!free(c)) continue;
+        house(c, 3 + Math.floor(at(i, 5) * 3), at(i, 6) > 0.3 ? 'cottage' : 'timberhouse', 30 + i);
+        for (const h of ringAt(c, 2)) if (free(h) && rnd(h, 7) > 0.6) set(h, rnd(h, 8) > 0.5 ? 'fence' : rnd(h, 9) > 0.5 ? 'veggies' : 'flowers');
+      }
+      scatter(3, 'cart', 11, (h) => distance(h, ORIGIN) <= 3); scatter(2, 'woodpile', 12); scatter(3, 'barrels', 13);
+      scatter(Math.round(r * 0.9), 'orchard', 14, (h) => distance(h, ORIGIN) >= r - 1);
+      scatter(Math.round(r * 0.6), 'tree', 15, (h) => distance(h, ORIGIN) >= r - 2);
+      return fill(lawn);
+    }
+    case 'orchard': {
+      for (const h of ringAt(ORIGIN, r - 1)) set(h, Math.abs(h.q) <= 0 && h.r > 0 ? 'dirt' : 'stonewall');
+      for (const h of hexesInRange(ORIGIN, r - 2)) if ((h.q % 2 === 0) && ((h.r + h.q / 2) % 2 === 0) && free(h) && distance(h, ORIGIN) > 1) set(h, rnd(h, 16) > 0.15 ? 'orchard' : 'stump');
+      house(polar(at(1, 17) * 6.28, Math.round(r * 0.3)), 3, 'cottage', 40);
+      scatter(4, 'beehives', 18, (h) => distance(h, ORIGIN) < r - 2); scatter(2, 'cart', 19, (h) => distance(h, ORIGIN) < r - 2); scatter(3, 'crates', 20, (h) => distance(h, ORIGIN) < r - 2);
+      return fill((h) => (distance(h, ORIGIN) >= r ? (rnd(h, 21) > 0.6 ? 'tree' : 'grass') : lawn(h)));
+    }
+    case 'graveyard': {
+      for (const h of ringAt(ORIGIN, r - 1)) set(h, h.q === 0 && h.r > 0 ? 'gate' : rnd(h, 22) > 0.9 ? 'rubble' : 'stonewall');
+      const chapel = { q: 0, r: -Math.round(r * 0.55) };
+      house(chapel, 6, 'townhouse', 50); set({ q: chapel.q, r: chapel.r + 2 }, 'door');
+      for (const h of hexesInRange(ORIGIN, r - 2)) if (free(h) && h.q % 2 === 0 && h.r > chapel.r + 2 && Math.abs(h.q) > 0) set(h, rnd(h, 23) > 0.2 ? 'gravestone' : 'sarcophagus');
+      for (let i = -r; i < r; i++) set({ q: 0, r: i }, i >= chapel.r + 2 ? 'dirt' : tiles.get(hexKey({ q: 0, r: i })) ?? 'dirt', false);
+      scatter(Math.round(r * 0.6), 'deadtree', 24, (h) => distance(h, ORIGIN) <= r - 2); scatter(3, 'bones', 25); scatter(2, 'statue', 26, (h) => distance(h, ORIGIN) <= r - 2);
+      scatter(2, 'lamppost', 27, (h) => distance(h, ORIGIN) <= 2);
+      return fill((h) => (distance(h, ORIGIN) >= r ? (rnd(h, 28) > 0.55 ? 'deadtree' : 'undergrowth') : rnd(h, 29) > 0.8 ? 'mud' : 'grass'));
+    }
+    case 'manor': {
+      const hall = { q: 0, r: -Math.round(r * 0.5) };
+      blob(hall, 1, 'townhouse'); set({ q: hall.q - 2, r: hall.r + 1 }, 'townhouse'); set({ q: hall.q + 2, r: hall.r - 1 }, 'townhouse'); set({ q: hall.q, r: hall.r + 2 }, 'door');
+      for (const h of ringAt(ORIGIN, r - 1)) set(h, h.q === 0 && h.r > 0 ? 'gate' : 'hedge');
+      line({ q: 0, r: hall.r + 3 }, { q: 0, r: r - 1 }, 'dirt', false);
+      set({ q: 0, r: Math.round(r * 0.25) }, 'fountain');
+      for (const h of ringAt({ q: 0, r: Math.round(r * 0.25) }, 2)) if (free(h)) set(h, rnd(h, 30) > 0.5 ? 'planter' : 'cobbles');
+      for (const h of hexesInRange(ORIGIN, r - 2)) if (free(h) && Math.abs(h.q) >= 3 && rnd(h, 31) > 0.55) set(h, rnd(h, 32) > 0.5 ? 'hedge' : 'flowers');
+      scatter(2, 'statue', 33, (h) => distance(h, ORIGIN) < r - 2); scatter(3, 'bench', 34, (h) => distance(h, ORIGIN) < r - 2);
+      return fill((h) => (distance(h, ORIGIN) >= r ? (rnd(h, 35) > 0.5 ? 'tree' : 'grass') : 'grass'));
+    }
+    case 'market': {
+      const sq = Math.max(3, Math.round(r * 0.45));
+      set(ORIGIN, 'fountain');
+      for (const h of ringAt(ORIGIN, Math.max(2, sq - 1))) if (rnd(h, 36) > 0.45) set(h, 'stall');
+      // streets leaving the square in three directions
+      for (const d of [0, 2, 4]) line(ORIGIN, polar(d * 1.047, r), 'cobbles', false);
+      // houses around the square form the street walls
+      for (const h of hexesInRange(ORIGIN, r)) {
+        const d = distance(h, ORIGIN);
+        if (d > sq && free(h)) set(h, rnd(h, 37) > 0.2 ? (['townhouse', 'timberhouse', 'shop'] as const)[Math.floor(rnd(h, 38) * 3)] : 'cobbles');
+      }
+      for (const h of ringAt(ORIGIN, sq)) if (rnd(h, 39) > 0.8) set(h, 'lamppost');
+      scatter(5, 'crates', 40, (h) => distance(h, ORIGIN) <= sq); scatter(4, 'barrels', 41, (h) => distance(h, ORIGIN) <= sq); scatter(2, 'cart', 42, (h) => distance(h, ORIGIN) <= sq); scatter(2, 'bench', 43, (h) => distance(h, ORIGIN) <= sq); scatter(2, 'banner', 44, (h) => distance(h, ORIGIN) <= sq);
+      return fill(() => 'cobbles');
+    }
+    case 'streets': {
+      // a grid of lanes (every 4th row and column), blocks of houses between, a canal with a bridge
+      const lane = (h: Axial) => ((h.q % 4) + 4) % 4 === 0 || ((h.r % 4) + 4) % 4 === 0;
+      const canalRow = (h: Axial) => h.r + Math.round(h.q / 2) === 2;
+      for (const h of hexesInRange(ORIGIN, r)) {
+        if (canalRow(h)) { set(h, h.q === 0 || h.q === -4 || h.q === 4 ? 'bridge' : 'canalwater'); continue; }
+        if (lane(h)) { set(h, rnd(h, 45) > 0.93 ? 'grate' : 'cobbles'); continue; }
+        set(h, rnd(h, 46) > 0.12 ? (['townhouse', 'timberhouse', 'timberhouse', 'shop'] as const)[Math.floor(rnd(h, 47) * 4)] : rnd(h, 48) > 0.5 ? 'crates' : 'barrels');
+      }
+      for (const h of hexesInRange(ORIGIN, r)) if (lane(h) && !canalRow(h) && rnd(h, 49) > 0.94) set(h, 'lamppost');
+      return fill(() => 'cobbles');
+    }
+    case 'docks': {
+      // water on the far side, a stone quay, piers into the water, a warehouse row and cargo
+      const shore = (h: Axial) => h.r + Math.round(h.q / 2);
+      for (const h of hexesInRange(ORIGIN, r)) {
+        const s0 = shore(h);
+        if (s0 < -1) set(h, 'deep');
+        else if (s0 === -1) set(h, 'canalwater');
+        else if (s0 <= 1) set(h, 'cobbles');
+      }
+      for (const q of [-Math.round(r * 0.6), 0, Math.round(r * 0.6)]) for (let k = 0; k < 4; k++) { const h = { q, r: -1 - Math.round(q / 2) - k }; if (inside(h)) set(h, 'pier'); }
+      for (const h of hexesInRange(ORIGIN, r)) if (shore(h) >= Math.round(r * 0.5) && free(h)) set(h, rnd(h, 50) > 0.25 ? (rnd(h, 51) > 0.5 ? 'townhouse' : 'barn') : 'cobbles');
+      scatter(8, 'crates', 52, (h) => shore(h) >= 0 && shore(h) < r * 0.5); scatter(6, 'barrels', 53, (h) => shore(h) >= 0 && shore(h) < r * 0.5); scatter(2, 'cart', 54, (h) => shore(h) > 1 && shore(h) < r * 0.5);
+      scatter(3, 'lamppost', 55, (h) => shore(h) === 1);
+      return fill((h) => (shore(h) > 1 ? 'cobbles' : 'cobbles'));
+    }
+    case 'citygate': {
+      // the wall runs across the map; towers every few hexes and a gatehouse in the middle
+      const wallRow = (h: Axial) => h.r + Math.round(h.q / 2);
+      for (const h of hexesInRange(ORIGIN, r)) {
+        const w = wallRow(h);
+        if (w === 0) set(h, h.q === 0 ? 'gate' : Math.abs(h.q) % 5 === 2 ? 'tower' : 'citywall');
+        else if (w > 0 && w <= 2 && Math.abs(h.q) <= 1) set(h, 'cobbles');
+        else if (w < 0 && Math.abs(h.q) <= 1) set(h, 'dirt');
+        else if (w > Math.round(r * 0.5) && free(h)) set(h, rnd(h, 56) > 0.3 ? (['townhouse', 'timberhouse', 'shop'] as const)[Math.floor(rnd(h, 57) * 3)] : 'cobbles');
+      }
+      set({ q: -2, r: 2 }, 'banner'); set({ q: 2, r: 0 }, 'banner'); scatter(3, 'crates', 58, (h) => wallRow(h) > 0); scatter(2, 'cart', 59, (h) => wallRow(h) < -1);
+      scatter(Math.round(r * 0.6), 'tent', 60, (h) => wallRow(h) < -2 && Math.abs(h.q) > 2);
+      scatter(Math.round(r * 0.5), 'tree', 61, (h) => wallRow(h) < -2);
+      return fill((h) => (wallRow(h) > 0 ? 'cobbles' : lawn(h)));
+    }
+    case 'tavern': {
+      const hall = r - 1;
+      for (const h of ringAt(ORIGIN, hall)) set(h, h.q === 0 && h.r === hall ? 'door' : 'wall');
+      // a side room (bedrooms) behind an inner wall with a door
+      const split = (h: Axial) => h.r + Math.round(h.q / 2);
+      for (const h of hexesInRange(ORIGIN, hall - 1)) if (split(h) === -Math.round(hall * 0.45)) set(h, h.q === 0 ? 'door' : 'wall');
+      for (const h of hexesInRange(ORIGIN, hall - 1)) if (free(h) && split(h) < -Math.round(hall * 0.45) && rnd(h, 62) > 0.65) set(h, rnd(h, 63) > 0.4 ? 'bed' : 'chest');
+      // the bar along one side, a hearth on the opposite wall, tables
+      for (let i = -2; i <= 2; i++) set({ q: Math.round(hall * 0.6), r: i - Math.round(hall * 0.3) }, 'counter');
+      for (let i = -2; i <= 2; i++) set({ q: Math.round(hall * 0.6) + 1, r: i - Math.round(hall * 0.3) }, rnd({ q: i, r: 0 }, 64) > 0.4 ? 'barrels' : 'crates', false);
+      set({ q: -hall + 1, r: Math.round(hall * 0.3) }, 'hearth');
+      scatter(Math.round(hall * 1.4), 'table', 65, (h) => split(h) > -Math.round(hall * 0.45) + 1 && distance(h, ORIGIN) < hall - 1 && h.q < Math.round(hall * 0.6) - 1);
+      scatter(1, 'bookshelf', 66, (h) => distance(h, ORIGIN) === hall - 1);
+      return fill((h) => (distance(h, ORIGIN) > hall ? (rnd(h, 67) > 0.7 ? 'tree' : 'grass') : 'wood'));
+    }
+    case 'crypt': {
+      const rooms: Array<{ c: Axial; r: number }> = [{ c: ORIGIN, r: 2 + Math.floor(r / 6) }];
+      for (let i = 0; i < 5 + Math.floor(r / 3); i++) { const c = polar(at(i, 68) * 6.28, Math.round((0.35 + at(i, 69) * 0.5) * (r - 2))); rooms.push({ c, r: 1 + Math.round(r / 6) + Math.floor(at(i, 70) * 1.6) }); }
+      const floor = new Set<HexKey>();
+      for (const room of rooms) for (const h of hexesInRange(room.c, room.r)) if (inside(h)) floor.add(hexKey(h));
+      for (let i = 1; i < rooms.length; i++) for (const h of hexLine(rooms[i - 1].c, rooms[i].c)) { floor.add(hexKey(h)); floor.add(hexKey(neighbors(h)[i % 6])); }
+      for (const h of hexesInRange(ORIGIN, r)) if (!floor.has(hexKey(h))) set(h, 'wall');
+      set(ORIGIN, 'altar'); for (const h of ringAt(ORIGIN, 2)) if (rnd(h, 71) > 0.6) set(h, 'pillar');
+      for (const room of rooms.slice(1)) { if (free(room.c)) set(room.c, at(room.c.q + 9, room.c.r + 3) > 0.4 ? 'sarcophagus' : 'cage'); }
+      scatter(6, 'bones', 72, (h) => floor.has(hexKey(h))); scatter(4, 'brazier', 73, (h) => floor.has(hexKey(h))); scatter(3, 'rubble', 74, (h) => floor.has(hexKey(h))); scatter(2, 'web', 75, (h) => floor.has(hexKey(h)));
+      for (const h of hexesInRange(ORIGIN, 2)) levels.set(hexKey(h), 0);
+      return withLv(fill(() => 'stone'));
     }
     default:
       return null;

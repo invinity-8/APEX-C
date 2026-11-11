@@ -1,3 +1,4 @@
+import type { FigureLook } from './figure.js';
 import type { Equipment, ItemEquip } from './equipment.js';
 import type { ItemRules, Rarity } from './items/rules.js';
 import type { CurrencyId } from './items/currency.js';
@@ -226,6 +227,8 @@ export interface Token {
   beastImages?: Record<string, { path: string; v: number }>;
   /** APEX 0.7: cosmetic paper-doll silhouette (never affects rules). */
   bodyType?: BodyType;
+  /** APEX 2.1: the low-poly 3D figure built in the figure editor (cosmetic, public). */
+  figure?: FigureLook;
   /** APEX 0.7: Niri's Timetwister – a postponed turn waiting for the GM (bound to the character, not the item). */
   timeTwist?: { itemId: string; itemName: string; day: number; phase: Phase };
 }
@@ -438,6 +441,8 @@ export interface GameState {
   sceneAltitude?: Record<string, Record<string, import('./altitude.js').Altitude>>;
   /** APEX 1.2: the GM's own creatures and elites (built-in SRD creatures are not stored). */
   enemyLibrary?: import('./bestiary.js').StatBlock[];
+  /** APEX 2.1 – the GM's own enemy groups (built-in ones live in groups.ts). */
+  enemyGroups?: import('./groups.js').EnemyGroup[];
   /** Open reaction prompts per scene (opportunity attacks) – valid during the turn they were offered in. */
   sceneReactions?: Record<string, import('./sceneActions.js').ReactionOffer[]>;
   /** APEX 1.3: conditions and buffs per scene and participant id. */

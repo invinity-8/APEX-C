@@ -19,7 +19,26 @@ export const PALETTE_PRESETS: Array<{ id: string; label: string; palette: SceneP
   { id: 'autumn', label: 'Autumn', palette: { colors: ['#2a1a0e', '#6a3a14', '#b0641e', '#d8a040', '#ead08a'], strength: 0.55 } },
   { id: 'underdark', label: 'Underdark', palette: { colors: ['#0c0a14', '#2a2440', '#4a4a7a', '#7ae0d0'], strength: 0.65 } },
   { id: 'feywild', label: 'Feywild', palette: { colors: ['#1a0e2a', '#4a2a6a', '#3a8a6a', '#e0a0d8', '#fff0c0'], strength: 0.55 } },
+  // APEX 2.1 – rural and city schemes
+  { id: 'spring', label: 'Rural · Spring meadow', palette: { colors: ['#1e3a1a', '#3f7a2e', '#8ac25a', '#e8f0a8', '#fff8e0'], strength: 0.45 } },
+  { id: 'harvest', label: 'Rural · Harvest gold', palette: { colors: ['#2a1e0e', '#6a5020', '#b89a3a', '#e8cf7a', '#fff4d0'], strength: 0.5 } },
+  { id: 'storybook', label: 'Rural · Storybook (bright, saturated)', palette: { colors: ['#1a2a4a', '#2f7a4a', '#7ac05a', '#f2d06a', '#fff6e0'], strength: 0.4 } },
+  { id: 'moor', label: 'Rural · Grey moor', palette: { colors: ['#14181a', '#3a4440', '#6a7468', '#a8aca0', '#e0e0d8'], strength: 0.6 } },
+  { id: 'sandstone', label: 'City · Sandstone town', palette: { colors: ['#2a1a10', '#7a5a3a', '#c8a070', '#ecd8b0', '#fff4e0'], strength: 0.5 } },
+  { id: 'slate', label: 'City · Slate & soot', palette: { colors: ['#0e1014', '#2a3038', '#5a6470', '#9aa4ae', '#dde2e6'], strength: 0.55 } },
+  { id: 'royal', label: 'City · Royal quarter (marble, gold)', palette: { colors: ['#1a1428', '#4a3a6a', '#a8a0b8', '#e8d8a0', '#fffaf0'], strength: 0.45 } },
+  { id: 'coastal', label: 'City · Coastal (sea blue, whitewash)', palette: { colors: ['#0e1e2a', '#1f4a6a', '#5a9ab8', '#d8e4e0', '#ffffff'], strength: 0.45 } },
+  { id: 'moonlit', label: 'Moonlit (blue night)', palette: { colors: ['#06080e', '#141e34', '#2e4468', '#7a94c0', '#d0dcf0'], strength: 0.65 } },
+  { id: 'ashen', label: 'Ashen ruins', palette: { colors: ['#100c0a', '#3a3230', '#6a605a', '#a09890', '#d8d0c8'], strength: 0.7 } },
 ];
+
+/** APEX 2.1 – the 3D mood of a map: light colour and direction, sky, fog. Absent = follows the in-game time of day. */
+export type SceneMood = 'day' | 'golden' | 'overcast' | 'dusk' | 'night' | 'misty' | 'storybook' | 'gloom';
+export const MOODS: Array<{ id: SceneMood; label: string }> = [
+  { id: 'day', label: 'Bright day' }, { id: 'golden', label: 'Golden hour' }, { id: 'overcast', label: 'Overcast' }, { id: 'dusk', label: 'Dusk' },
+  { id: 'night', label: 'Night' }, { id: 'misty', label: 'Misty' }, { id: 'storybook', label: 'Storybook (vivid)' }, { id: 'gloom', label: 'Gloom (cursed)' },
+];
+export const validMood = (v: unknown): v is SceneMood => MOODS.some((m) => m.id === v);
 
 const HEX = /^#[0-9a-f]{6}$/i;
 export function validPalette(v: unknown): v is ScenePalette {

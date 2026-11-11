@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CHARACTER_COMMANDS, type Command } from '../game/commands';
 import { buildGmView, type ViewModel } from '../game/visibility';
-import type { CampaignPayload, SheetPayload, UnchangedPayload } from '../server/protocol';
+import type { GmPayload, CampaignPayload, SheetPayload, UnchangedPayload } from '../server/protocol';
 import { withLookup, type Connection, type DispatchResult, type GameApi, type OnlineControls, type SheetApi, type SheetResult } from '../state/gameApi';
 import { api, ApiError, newRequestId } from './api';
 import { supabase } from './supabase';
@@ -101,6 +101,8 @@ export function useOnlineGame(
   });
 
   const versionRef = useRef(0);
+
+  const hexesRef = useRef<{ sig: string; hexes: NonNullable<GmPayload['state']>['hexes'] } | null>(null);
   /** Active world id as last received – sent with every command (stale-world protection). */
   const worldRef = useRef<string | null | undefined>(undefined);
   const sceneRevisionRef = useRef(0);
@@ -148,6 +150,12 @@ export function useOnlineGame(
 
   const accept = useCallback(
     (p: CampaignPayload, force = false) => {
+      // APEX 2.1: unchanged Arena hexes are not re-sent – keep the ones we have
+      const extra = p as CampaignPayload & { hexesSig?: string; hexesOmitted?: boolean };
+      if (p.role === 'gm' && p.state) {
+        if (extra.hexesOmitted && hexesRef.current) p = { ...p, state: { ...p.state, hexes: hexesRef.current.hexes } };
+        else if (extra.hexesSig && p.state.hexes) hexesRef.current = { sig: extra.hexesSig, hexes: p.state.hexes };
+      }
       const sameChar = p.role === 'gm' || p.activeCharacter === activeRef.current || !activeRef.current;
       if (!force && sameChar && p.version < versionRef.current) return; // stale response – never overwrite newer state
       versionRef.current = p.version;
@@ -181,7 +189,7 @@ export function useOnlineGame(
       const promise = (async () => {
         try {
           const since = force ? undefined : versionRef.current || undefined;
-          const res = await api.state(campaignId, activeRef.current ?? undefined, since, ctrl.signal);
+          const res = await api.state(campaignId, activeRef.current ?? undefined, since, ctrl.signal, force ? undefined : hexesRef.current?.sig);
           if (!mounted.current) return;
           if (isUnchanged(res)) markOk();
           else accept(res, force);
