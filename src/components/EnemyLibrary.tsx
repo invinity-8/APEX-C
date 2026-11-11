@@ -6,6 +6,8 @@ import { useMemo, useState } from 'react';
 import { FigureEditor } from './FigureEditor';
 import { GroupLibrary } from './GroupLibrary';
 import { autoLook, type FigureLook } from '../game/figure';
+import { CreaturePicker } from './CreaturePicker';
+import type { CreatureChoice } from '../game/creatures';
 import type { Command } from '../game/commands';
 import type { GameState } from '../game/types';
 import type { DispatchResult } from '../state/gameApi';
@@ -142,7 +144,14 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
   const saveLook = async (look: FigureLook | null) => {
     if (!sel) return;
     const next: StatBlock = { ...structuredClone(sel), source: 'custom' };
-    if (look) next.look = look; else delete next.look;
+    if (look) { next.look = look; delete next.creature; } else delete next.look;
+    if ((await run({ type: 'enemyLibrarySave', block: next })).ok) setFigure(false);
+  };
+  // APEX 2.2: or a creature model (beasts, dragons, aberrations …)
+  const saveCreature = async (creature: CreatureChoice | null) => {
+    if (!sel) return;
+    const next: StatBlock = { ...structuredClone(sel), source: 'custom' };
+    if (creature) { next.creature = creature; delete next.look; } else delete next.creature;
     if ((await run({ type: 'enemyLibrarySave', block: next })).ok) setFigure(false);
   };
   const tabs = (
@@ -183,8 +192,9 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
               <button type="button" className="btn btn-ghost" aria-pressed={figure} onClick={() => setFigure(!figure)} data-testid="enemy-figure">🧍 3D figure{sel.look ? ' ✓' : ''}</button>
               {own(sel.id) && <button type="button" className="btn btn-ghost hover:text-blood-400" onClick={() => void run({ type: 'enemyLibraryRemove', id: sel.id })}>{BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Restore the SRD version' : 'Delete'}</button>}
             </div>
-            {figure && <FigureEditor key={sel.id} gm value={sel.look ?? autoLook(`${sel.name} ${sel.type}`, sel.id, sel.color)} onSave={saveLook} onCancel={() => setFigure(false)} busy={busy} title={`3D figure – ${displayName(sel)}`} ring={sel.color} />}
-            {figure && !sel.look && <p className="text-[11px] text-marble-500">Without a saved figure every {sel.name} gets its own variation of the matching preset (bandits, cultists, guards, orcs …). Saving one fixes this look for all of them.</p>}
+            {figure && <CreaturePicker key={`c-${sel.id}`} block={sel} busy={busy} onSave={saveCreature} />}
+            {figure && <FigureEditor key={sel.id} gm value={sel.look ?? autoLook(`${sel.name} ${sel.type}`, sel.id, sel.color)} onSave={saveLook} onCancel={() => setFigure(false)} busy={busy} title={`Humanoid figure – ${displayName(sel)}`} ring={sel.color} />}
+            {figure && !sel.look && !sel.creature && <p className="text-[11px] text-marble-500">Without a saved figure every {sel.name} gets its own variation of the matching preset (bandits, cultists, guards, orcs …). Saving one fixes this look for all of them.</p>}
           </>
         ) : (
           <p className="text-marble-500">Choose a creature.</p>

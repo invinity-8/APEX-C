@@ -28,9 +28,10 @@ export const FIGURE_PARTS = {
   legs: ['trousers', 'shorts', 'skirt', 'robe', 'greaves', 'kilt', 'rags'],
   boots: ['boots', 'tall', 'sandals', 'bare', 'armored', 'wraps'],
   cloak: ['none', 'short', 'long', 'tattered', 'fur', 'cape', 'mantle'],
-  back: ['none', 'backpack', 'quiver', 'bedroll', 'banner', 'scabbard', 'wings'],
+  back: ['none', 'backpack', 'quiver', 'bedroll', 'banner', 'scabbard', 'wings', 'batwings', 'fairywings', 'dragonwings'],
   main: ['none', 'sword', 'longsword', 'greatsword', 'axe', 'greataxe', 'mace', 'hammer', 'warhammer', 'spear', 'halberd', 'dagger', 'scimitar', 'club', 'staff', 'wand', 'bow', 'crossbow', 'torch', 'pick', 'scythe', 'flail', 'trident', 'lute', 'sickle', 'whip'],
   off: ['none', 'roundshield', 'kiteshield', 'towershield', 'buckler', 'dagger', 'book', 'lantern', 'orb', 'torch', 'holy', 'potion', 'handaxe', 'skull'],
+  mount: ['none', 'horse', 'warhorse', 'pony', 'camel', 'wardog', 'lizard', 'pegasus', 'unicorn', 'nightmare', 'griffon', 'hippogriff', 'roc', 'wyvern', 'drake'],
   extra: ['none', 'necklace', 'scarf', 'amulet', 'earring', 'monocle', 'pipe', 'warpaint', 'tattoos', 'scar', 'freckles', 'blush'],
 } as const;
 
@@ -52,7 +53,7 @@ export const EYE_COLOURS = ['#141210', '#3b5a8f', '#2f6b3a', '#6b4224', '#d8b25a
 export const DEFAULT_LOOK: FigureLook = {
   body: 'human', build: 'average', head: 'round', eyes: 'dots', brows: 'thin', mouth: 'smile', nose: 'button', ears: 'normal',
   hair: 'short', beard: 'none', hat: 'none', horns: 'none', torso: 'tunic', shoulders: 'none', belt: 'belt', legs: 'trousers', boots: 'boots',
-  cloak: 'none', back: 'none', main: 'sword', off: 'none', extra: 'none',
+  cloak: 'none', back: 'none', main: 'sword', off: 'none', mount: 'none', extra: 'none',
   skin: '#eebf94', hairColor: '#6b4224', primary: '#2d4f8f', secondary: '#e8d4a6', leather: '#6b4a2b', metal: '#c8ccd2', eyeColor: '#141210',
 };
 
@@ -160,7 +161,7 @@ export function randomLook(seed: number, heroOnly = true): FigureLook {
 /** Labels for the editor. */
 export const PART_LABELS: Record<FigurePartKey, string> = {
   body: 'Ancestry', build: 'Build', head: 'Head shape', eyes: 'Eyes', brows: 'Brows', mouth: 'Mouth', nose: 'Nose', ears: 'Ears', hair: 'Hair', beard: 'Beard', hat: 'Headwear', horns: 'Horns',
-  torso: 'Torso', shoulders: 'Shoulders', belt: 'Belt', legs: 'Legs', boots: 'Feet', cloak: 'Cloak', back: 'On the back', main: 'Main hand', off: 'Off hand', extra: 'Detail',
+  torso: 'Torso', shoulders: 'Shoulders', belt: 'Belt', legs: 'Legs', boots: 'Feet', cloak: 'Cloak', back: 'On the back', main: 'Main hand', off: 'Off hand', mount: 'Mount', extra: 'Detail',
 };
 export const COLOUR_LABELS: Record<FigureColourKey, string> = { skin: 'Skin', hairColor: 'Hair', primary: 'Main colour', secondary: 'Trim', leather: 'Leather', metal: 'Metal', eyeColor: 'Eyes' };
 export const partLabel = (v: string) => v.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());

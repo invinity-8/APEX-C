@@ -17,6 +17,7 @@ const TABS: Array<{ id: string; label: string; parts: FigurePartKey[]; colours: 
   { id: 'hair', label: 'Hair', parts: ['hair', 'beard'], colours: ['hairColor'] },
   { id: 'clothes', label: 'Clothes', parts: ['hat', 'torso', 'shoulders', 'belt', 'legs', 'boots', 'cloak'], colours: ['primary', 'secondary', 'leather'] },
   { id: 'gear', label: 'Gear', parts: ['main', 'off', 'back'], colours: ['metal'] },
+  { id: 'mount', label: 'Mount', parts: ['mount'], colours: [] },
 ];
 const SWATCHES: Record<FigureColourKey, readonly string[]> = { skin: SKIN_TONES, hairColor: HAIR_COLOURS, primary: CLOTH_COLOURS, secondary: CLOTH_COLOURS, leather: ['#6b4a2b', '#4a3220', '#8a6a45', '#3a2a1a', '#2a2a2a', '#a07850', '#5a2a1a'], metal: METAL_COLOURS, eyeColor: EYE_COLOURS };
 

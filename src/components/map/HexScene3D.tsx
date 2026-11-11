@@ -355,7 +355,7 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -519,7 +519,7 @@ export default function HexScene3D(p: Props) {
       for (const c of a.crowns) { c.rotation.z = Math.sin(sec * 0.9 + c.userData.phase) * 0.035; c.rotation.x = Math.sin(sec * 0.7 + c.userData.phase * 1.3) * 0.025; }
       for (const w of a.water) w.opacity = 0.66 + Math.sin(sec * 1.3 + (w.userData.phase as number)) * 0.06;
       for (const f of a.flames) { f.scale.y = 0.85 + Math.sin(sec * 9 + f.id) * 0.12 + Math.sin(sec * 23 + f.id * 2) * 0.05; f.rotation.y = sec * 0.6; }
-      for (const w of a.wings) w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number);
+      for (const w of a.wings) { if (w.userData.flapZ) w.rotation.z = Math.sin(sec * 6 + w.id) * (w.userData.amp as number) * (w.userData.side as number); else w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number); }
       // standees turn towards the camera (around the vertical axis)
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }

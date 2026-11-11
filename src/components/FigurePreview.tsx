@@ -5,9 +5,11 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { FigureLook } from '../game/figure';
 import { buildLowPoly } from './map/lowpoly';
+import { buildCreature } from './map/creatures3d';
 
-export default function FigurePreview({ look, ring = '#d8b25a', size = 280 }: { look: FigureLook; ring?: string; size?: number }) {
+export default function FigurePreview({ look, creature, ring = '#d8b25a', size = 280 }: { look?: FigureLook; creature?: { kind: string; tint?: string }; ring?: string; size?: number }) {
   const wrap = useRef<HTMLDivElement>(null);
+  const wingsRef = useRef<THREE.Object3D[]>([]);
   const t = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; holder: THREE.Group; yaw: number; drag: number | null; spin: boolean } | null>(null);
 
   useEffect(() => {
@@ -32,6 +34,8 @@ export default function FigurePreview({ look, ring = '#d8b25a', size = 280 }: { 
       const s = t.current; if (!s || document.hidden) return;
       if (s.spin && s.drag === null) s.yaw += 0.006;
       s.holder.rotation.y = s.yaw;
+      const sec = performance.now() / 1000;
+      for (const w of wingsRef.current) w.rotation.z = Math.sin(sec * 6) * ((w.userData.amp as number) ?? 0.5) * ((w.userData.side as number) ?? 1);
       renderer.render(scene, camera);
     };
     raf = requestAnimationFrame(frame);
@@ -47,13 +51,17 @@ export default function FigurePreview({ look, ring = '#d8b25a', size = 280 }: { 
     base.position.y = 0.06;
     const ringM = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.035, 8, 40), new THREE.MeshBasicMaterial({ color: ring }));
     ringM.rotation.x = Math.PI / 2; ringM.position.y = 0.12;
-    const fig = buildLowPoly(look);
+    const made = creature ? buildCreature(creature.kind, creature.tint, true) : look ? buildLowPoly(look) : null;
+    if (!made) return;
+    const fig = { group: made.group, height: made.height };
+    if (creature) { const bb = new THREE.Box3().setFromObject(made.group); const k = 2.0 / Math.max(1.2, bb.getSize(new THREE.Vector3()).length() * 0.6); made.group.scale.setScalar(k); fig.height = made.height * k; }
     fig.group.position.y = 0.12;
+    wingsRef.current = (made as { wings?: THREE.Object3D[] }).wings ?? [];
     // tall figures (ogres, wizard hats) are framed by scaling the camera distance
     const h = Math.max(2.2, fig.height + 0.3);
     s.camera.position.set(0, h * 0.75, h * 2.9); s.camera.lookAt(0, h * 0.48, 0);
     s.holder.add(base, ringM, fig.group);
-  }, [look, ring]);
+  }, [look, creature?.kind, creature?.tint, ring]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

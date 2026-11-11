@@ -5,9 +5,11 @@
  * merged per material, so a whole figure costs only a few draw calls.
  */
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { FigureLook } from '../../game/figure';
 import { buildBeard, buildHair, type HeadShape } from './hair3d';
+import { mergeByMaterial } from './merge3d';
+import { buildCreature, wing } from './creatures3d';
+import { sizeScale } from './sizes';
 
 type C = THREE.ColorRepresentation;
 const cache = new Map<string, THREE.MeshStandardMaterial>();
@@ -59,11 +61,11 @@ const BUILD: Record<FigureLook['build'], { w: number; leg: number; belly: number
   average: { w: 1, leg: 1, belly: 0 }, slim: { w: 0.85, leg: 1.04, belly: 0 }, stocky: { w: 1.14, leg: 0.88, belly: 0.1 }, broad: { w: 1.25, leg: 1, belly: 0 }, heavy: { w: 1.32, leg: 0.94, belly: 0.24 },
 };
 
-export interface LowPolyFigure { group: THREE.Group; height: number }
+export interface LowPolyFigure { group: THREE.Group; height: number; /** flapping wings of a winged mount */ wings?: THREE.Object3D[] }
 /** The ancestry's own scale (a halfling is smaller than a human); stat-block sizes replace it for enemies. */
 export const ancestryScale = (look: FigureLook) => (ANCESTRY[look.body] ?? ANCESTRY.human).s;
 
-export function buildLowPoly(look: FigureLook): LowPolyFigure {
+export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {}): LowPolyFigure {
   const root = new THREE.Group();
   const g = new THREE.Group(); root.add(g);
   const a = ANCESTRY[look.body] ?? ANCESTRY.human;
@@ -80,27 +82,45 @@ export function buildLowPoly(look: FigureLook): LowPolyFigure {
   const armoured = ['chain', 'scale', 'plate'].includes(look.torso);
   const footY = 0.1, hip = footY + leg, top = hip + th, neck = top + 0.05, headY = neck + hr * 0.92;
 
+  // ---- riding (APEX 2.2): thighs forward over the saddle, shins down along the mount's flanks
+  const riding = look.mount !== 'none' && !!look.mount;
+  if (riding) {
+    const legC = look.legs === 'greaves' ? metal : look.legs === 'trousers' ? M(shade(look.leather, 0.85)) : primD;
+    const bootC = look.boots === 'armored' ? metal : look.boots === 'bare' || look.boots === 'sandals' ? skin : leatherD;
+    for (const sx of [-1, 1]) {
+      const knee = new THREE.Vector3(sx * (0.11 * b.w + 0.2), hip - 0.08, 0.3);
+      const hipP = new THREE.Vector3(sx * 0.11 * b.w, hip, 0.02);
+      const foot = new THREE.Vector3(sx * (0.11 * b.w + 0.26), hip - leg * 0.85, 0.24);
+      for (const [p0, p1, r] of [[hipP, knee, limb * 1.15], [knee, foot, limb]] as Array<[THREE.Vector3, THREE.Vector3, number]>) {
+        const m = add(g, cyl(r * 0.9, r, p0.distanceTo(p1), 6), legC, [(p0.x + p1.x) / 2, (p0.y + p1.y) / 2, (p0.z + p1.z) / 2]);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
+      }
+      add(g, box(0.15, 0.1, 0.24), bootC, [foot.x, foot.y - 0.02, foot.z + 0.06]);
+    }
+    if (look.legs === 'kilt' || look.legs === 'robe' || look.torso === 'robe' || look.torso === 'cultrobe' || look.torso === 'dress') add(g, cyl(tw * 0.95, tw * 1.25, leg * 0.35, 8), prim, [0, hip - leg * 0.12, 0.05]);
+  } else {
   // ---- feet
-  for (const sx of [-1, 1]) {
-    const x = sx * 0.11 * b.w;
-    const fm = look.boots === 'bare' ? skin : look.boots === 'sandals' ? skin : look.boots === 'armored' ? metal : look.boots === 'wraps' ? M(mix(look.secondary, '#d8c9a8', 0.6)) : leatherD;
-    add(g, box(0.15, 0.1, 0.24), fm, [x, 0.05, 0.04]);
-    if (look.boots === 'sandals') add(g, box(0.16, 0.025, 0.25), leather, [x, 0.012, 0.04]);
-    if (look.boots === 'tall' || look.boots === 'armored') add(g, cyl(limb * 1.35, limb * 1.25, leg * 0.5, 6), look.boots === 'armored' ? metal : leatherD, [x, footY + leg * 0.22, 0]);
-    if (look.boots === 'wraps') for (let i = 0; i < 3; i++) add(g, tor(limb * 1.15, 0.018, Math.PI * 2, 3, 6), fm, [x, footY + 0.05 + i * 0.07, 0], [Math.PI / 2, 0, 0.2]);
-  }
-  // ---- legs
-  const legM = bone ? skin : look.legs === 'shorts' ? prim : look.legs === 'greaves' ? metal : look.legs === 'rags' ? M(shade(look.primary, 0.5)) : primD;
-  for (const sx of [-1, 1]) {
-    const x = sx * 0.11 * b.w;
-    add(g, cyl(limb * 1.1, limb, leg, 6), look.legs === 'trousers' && !bone ? M(shade(look.leather, 0.85)) : legM, [x, footY + leg / 2, 0]);
-    if (look.legs === 'shorts' && !bone) add(g, cyl(limb * 0.95, limb * 0.9, leg * 0.5, 6), skin, [x, footY + leg * 0.25, 0]);
-    if (look.legs === 'greaves') add(g, ico(limb * 1.4), metalD, [x, footY + leg * 0.5, 0.03]);
-  }
-  if (look.legs === 'skirt' || look.legs === 'kilt') add(g, cyl(tw * 0.92, tw * (look.legs === 'kilt' ? 1.05 : 1.2), leg * (look.legs === 'kilt' ? 0.45 : 0.75), 7), look.legs === 'kilt' ? sec : prim, [0, hip - leg * (look.legs === 'kilt' ? 0.2 : 0.35), 0]);
-  if (look.legs === 'robe' || look.torso === 'dress') add(g, cyl(tw * 0.9, tw * 1.3, leg + 0.06, 8), look.torso === 'robe' || look.torso === 'cultrobe' || look.torso === 'dress' ? prim : primD, [0, footY + leg / 2 - 0.02, 0]);
-  if (look.legs === 'rags') add(g, cyl(tw * 0.9, tw * 1.1, leg * 0.45, 5), M(shade(look.primary, 0.5)), [0, hip - leg * 0.18, 0], [0, 0.3, 0]);
+    for (const sx of [-1, 1]) {
+      const x = sx * 0.11 * b.w;
+      const fm = look.boots === 'bare' ? skin : look.boots === 'sandals' ? skin : look.boots === 'armored' ? metal : look.boots === 'wraps' ? M(mix(look.secondary, '#d8c9a8', 0.6)) : leatherD;
+      add(g, box(0.15, 0.1, 0.24), fm, [x, 0.05, 0.04]);
+      if (look.boots === 'sandals') add(g, box(0.16, 0.025, 0.25), leather, [x, 0.012, 0.04]);
+      if (look.boots === 'tall' || look.boots === 'armored') add(g, cyl(limb * 1.35, limb * 1.25, leg * 0.5, 6), look.boots === 'armored' ? metal : leatherD, [x, footY + leg * 0.22, 0]);
+      if (look.boots === 'wraps') for (let i = 0; i < 3; i++) add(g, tor(limb * 1.15, 0.018, Math.PI * 2, 3, 6), fm, [x, footY + 0.05 + i * 0.07, 0], [Math.PI / 2, 0, 0.2]);
+    }
+    // ---- legs
+    const legM = bone ? skin : look.legs === 'shorts' ? prim : look.legs === 'greaves' ? metal : look.legs === 'rags' ? M(shade(look.primary, 0.5)) : primD;
+    for (const sx of [-1, 1]) {
+      const x = sx * 0.11 * b.w;
+      add(g, cyl(limb * 1.1, limb, leg, 6), look.legs === 'trousers' && !bone ? M(shade(look.leather, 0.85)) : legM, [x, footY + leg / 2, 0]);
+      if (look.legs === 'shorts' && !bone) add(g, cyl(limb * 0.95, limb * 0.9, leg * 0.5, 6), skin, [x, footY + leg * 0.25, 0]);
+      if (look.legs === 'greaves') add(g, ico(limb * 1.4), metalD, [x, footY + leg * 0.5, 0.03]);
+    }
+    if (look.legs === 'skirt' || look.legs === 'kilt') add(g, cyl(tw * 0.92, tw * (look.legs === 'kilt' ? 1.05 : 1.2), leg * (look.legs === 'kilt' ? 0.45 : 0.75), 7), look.legs === 'kilt' ? sec : prim, [0, hip - leg * (look.legs === 'kilt' ? 0.2 : 0.35), 0]);
+    if (look.legs === 'robe' || look.torso === 'dress') add(g, cyl(tw * 0.9, tw * 1.3, leg + 0.06, 8), look.torso === 'robe' || look.torso === 'cultrobe' || look.torso === 'dress' ? prim : primD, [0, footY + leg / 2 - 0.02, 0]);
+    if (look.legs === 'rags') add(g, cyl(tw * 0.9, tw * 1.1, leg * 0.45, 5), M(shade(look.primary, 0.5)), [0, hip - leg * 0.18, 0], [0, 0.3, 0]);
 
+  }
   // ---- torso
   const torsoC = look.torso === 'bare' ? skin : look.torso === 'shirt' || look.torso === 'apron' ? sec : look.torso === 'leather' || look.torso === 'studded' ? leather : look.torso === 'chain' ? M(shade(look.metal, 0.85), { metal: true, rough: 0.55 }) : look.torso === 'scale' || look.torso === 'plate' ? metal : look.torso === 'rags' ? M(shade(look.primary, 0.55)) : look.torso === 'furs' ? leather : prim;
   if (bone && (look.torso === 'bare' || look.torso === 'rags')) {
@@ -302,7 +322,14 @@ export function buildLowPoly(look: FigureLook): LowPolyFigure {
     case 'bedroll': add(g, cyl(0.1, 0.1, tw * 1.7, 6), M('#5c7a2a'), [0, top - 0.02, -tw - 0.08], [0, 0, Math.PI / 2]); break;
     case 'banner': add(g, cyl(0.02, 0.02, 1.6, 4), M('#6b4a2b'), [tw * 0.5, hip + 0.8, -tw - 0.08]); add(g, box(0.45, 0.55, 0.02), prim, [tw * 0.5 + 0.24, hip + 1.3, -tw - 0.08]); add(g, ico(0.07, 0), sec, [tw * 0.5 + 0.24, hip + 1.3, -tw - 0.06]); break;
     case 'scabbard': add(g, cyl(0.04, 0.03, 0.9, 5), leatherD, [0, hip + th * 0.5, -tw - 0.06], [0, 0, 0.7]); break;
-    case 'wings': ex2((sx) => { const w = add(g, new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.9, 0.5), new THREE.Vector2(1.1, -0.1), new THREE.Vector2(0.75, -0.25), new THREE.Vector2(0.4, -0.15)])), M(shade(look.primary, 0.6), { side: true }), [sx * 0.08, top - 0.05, -tw - 0.05], [0, sx > 0 ? -0.35 : Math.PI + 0.35, 0]); w.scale.y = 1; }); break;
+    case 'wings': case 'batwings': case 'fairywings': case 'dragonwings': {
+      // APEX 2.2: feathered, bat, fairy and dragon wings from the creature kit (static on the figure)
+      const kind = look.back === 'wings' ? 'feather' : look.back === 'fairywings' ? 'insect' : 'membrane';
+      const c1 = look.back === 'wings' ? '#f2ecdc' : look.back === 'dragonwings' ? look.primary : shade(look.primary, 0.5);
+      const c2 = look.back === 'wings' ? '#e8dcc0' : look.back === 'fairywings' ? '#c8e8ff' : look.back === 'dragonwings' ? look.secondary : shade(look.primary, 0.7);
+      for (const sx of [-1, 1]) { const w = wing([sx * 0.1, top - 0.08, -tw - 0.05], sx, look.back === 'fairywings' ? 0.7 : 0.95, kind, c1, c2); w.rotation.y = sx * 0.35; w.rotation.z = sx * 0.25; g.add(w); }
+      break;
+    }
   }
   // ---- tail
   if (look.tail || look.body === 'tiefling' || look.body === 'dragonborn' || look.body === 'lizardfolk') {
@@ -321,8 +348,19 @@ export function buildLowPoly(look: FigureLook): LowPolyFigure {
   // the whole figure on the ancestry's scale, merged for speed
   g.scale.setScalar(a.s);
   const hatH = { wizard: hr * 2.6, crown: hr * 1.4, antlers: hr * 1.6, horned: hr * 1.4, cowl: hr * 1.2, strawhat: hr * 1.1, feathercap: hr * 1.6 }[look.hat as string] ?? hr * 1.05;
-  const height = (headY + hatH) * a.s;
-  return { group: mergeByMaterial(root), height };
+  let height = (headY + hatH) * a.s;
+  const merged = mergeByMaterial(root);
+  if (!riding) return { group: merged, height };
+  // the mount at its own size class; the rider sits on its back
+  const mount = buildCreature(look.mount, undefined, false);
+  if (!mount) return { group: merged, height };
+  const ms = (mount.ride ?? sizeScale(mount.size)) * (opts.mountScale ?? 1);
+  mount.group.scale.setScalar(ms);
+  const seat = mount.seat ?? [0, mount.height * 0.6, 0];
+  merged.position.set(seat[0] * ms, seat[1] * ms - hip * a.s + 0.04, seat[2] * ms);
+  const out = new THREE.Group(); out.add(mount.group, merged);
+  height = merged.position.y + height;
+  return { group: out, height, wings: mount.wings };
 }
 
 interface Mats { metal: THREE.Material; metalD: THREE.Material; leather: THREE.Material; leatherD: THREE.Material; prim: THREE.Material; sec: THREE.Material; gold: THREE.Material; wood: THREE.Material; glow: THREE.Material; flame: THREE.Material; bone?: THREE.Material; dark?: THREE.Material }
@@ -386,28 +424,4 @@ function offModel(id: FigureLook['off'], m: Mats): THREE.Object3D | null {
   return null;
 }
 
-/** Merges all meshes of a group per material (one draw call per material); keeps transforms baked. */
-export function mergeByMaterial(root: THREE.Object3D): THREE.Group {
-  root.updateMatrixWorld(true);
-  const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
-  root.traverse((o) => {
-    const mm = o as THREE.Mesh;
-    if (!mm.isMesh || Array.isArray(mm.material)) return;
-    const geo = (mm.geometry.index ? mm.geometry.toNonIndexed() : mm.geometry.clone()).applyMatrix4(mm.matrixWorld);
-    for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
-    if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
-    if (!geo.attributes.normal) geo.computeVertexNormals();
-    buckets.set(mm.material, [...(buckets.get(mm.material) ?? []), geo]);
-    mm.geometry.dispose();
-  });
-  const out = new THREE.Group();
-  for (const [material, list] of buckets) {
-    const merged = mergeGeometries(list, false);
-    list.forEach((x) => x.dispose());
-    if (!merged) continue;
-    const mesh = new THREE.Mesh(merged, material);
-    mesh.castShadow = true; mesh.receiveShadow = true;
-    out.add(mesh);
-  }
-  return out;
-}
+export { mergeByMaterial } from './merge3d';
