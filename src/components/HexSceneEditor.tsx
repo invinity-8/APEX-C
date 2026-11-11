@@ -3,7 +3,7 @@
  * terrain with a brush, generate terrain with the Arena generator, or import a picture/PDF that is
  * sampled into hex terrain. Markers (spawn, locations, labels) sit on hex centres.
  */
-import { useContext, useState } from 'react';
+import { lazy, Suspense, useContext, useState } from 'react';
 import { GroupsContext } from './groupsContext';
 import { allGroups, composeSpawns, groupSize, groupXp, LAYOUT_GROUPS, type EnemyGroup } from '../game/groups';
 import type { MapNode, SceneMap } from '../campaign/maps';
@@ -35,6 +35,8 @@ import type { SceneDefinition } from '../server/scenes';
 import { HexSceneMap } from './map/HexSceneMap';
 import { MOODS, PALETTE_PRESETS, paletteKey, type SceneMood } from '../campaign/palette';
 
+const HexScene3D = lazy(() => import('./map/HexScene3D'));
+
 type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light' | 'enemies';
 const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light', enemies: '⚔ Enemy groups' };
 
@@ -52,6 +54,9 @@ export function HexSceneEditor({
   setMessage: (m: string) => void;
 }) {
   const [tool, setTool] = useState<Tool>('brush');
+  // APEX 2.2 – the editor's 3D view (remembered per device): see heights, structures and markers while painting
+  const [view3d, setView3dState] = useState(() => { try { return localStorage.getItem('apex.editor3d') === '1'; } catch { return false; } });
+  const setView3d = (v: boolean) => { setView3dState(v); try { localStorage.setItem('apex.editor3d', v ? '1' : '0'); } catch { /* private mode */ } };
   const set = tileSetOf(map.hex);
   const battleScene = scene.category === 'battle';
   const [terrain, setTerrain] = useState<TileId>(set === 'battle' ? 'wall' : 'forest');
@@ -219,9 +224,16 @@ export function HexSceneEditor({
             <p className="text-marble-500">Own groups: Enemy Library → Groups.</p>
           </div>
         )}
-        <p className="text-xs text-marble-400">{tool === 'height' ? 'Click or drag over hexes to set their ground height.' : tool === 'brush' ? 'Click or drag over hexes to paint. Mouse wheel zooms.' : tool === 'select' ? 'Click a marker to edit it. Drag to pan, mouse wheel zooms.' : `Click a hex to place the ${tool}.`}</p>
+        <p className="text-xs text-marble-400">{view3d && set === 'battle' ? (tool === 'brush' || tool === 'height' ? '3D: click a hex to paint it (large brush paints its neighbours too). Drag pans, middle mouse orbits, wheel zooms.' : `3D: click a hex to place the ${tool === 'enemies' ? 'group' : tool}.`) : tool === 'height' ? 'Click or drag over hexes to set their ground height.' : tool === 'brush' ? 'Click or drag over hexes to paint. Mouse wheel zooms.' : tool === 'select' ? 'Click a marker to edit it. Drag to pan, mouse wheel zooms.' : `Click a hex to place the ${tool}.`}</p>
         <div className="scene-editor-hex">
-          <HexSceneMap map={map} label={`${scene.name} editor`} gm selectedHex={current ? hexKey(hexAt(map, current)) : null} onDropHex={battleScene && !busy ? (_k, p, data) => placeGroup(data, p) : undefined} onPaint={(tool === 'brush' || tool === 'height') && !busy ? paint : undefined} onHexClick={tool !== 'brush' && tool !== 'height' && !busy ? (k) => clickHex(k) : undefined} />
+          {set === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="editor-toggle-3d" title={view3d ? 'Back to the 2D editor' : '3D view: click hexes to paint or place; middle mouse orbits, wheel zooms'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
+          {view3d && set === 'battle' ? (
+            <Suspense fallback={<p className="p-4 text-sm text-marble-400">Loading 3D…</p>}>
+              <HexScene3D map={map} label={`${scene.name} editor`} gm phase="day" onHexClick={busy ? undefined : (k) => ((tool === 'brush' || tool === 'height') ? paint(k) : clickHex(k))} />
+            </Suspense>
+          ) : (
+            <HexSceneMap map={map} label={`${scene.name} editor`} gm selectedHex={current ? hexKey(hexAt(map, current)) : null} onDropHex={battleScene && !busy ? (_k, p, data) => placeGroup(data, p) : undefined} onPaint={(tool === 'brush' || tool === 'height') && !busy ? paint : undefined} onHexClick={tool !== 'brush' && tool !== 'height' && !busy ? (k) => clickHex(k) : undefined} />
+          )}
         </div>
       </div>
       <aside className="scene-editor-inspector" aria-label="Hex map settings">
