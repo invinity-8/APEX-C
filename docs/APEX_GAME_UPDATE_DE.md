@@ -633,3 +633,43 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Figuren-Baukasten (Validierung, Varianten, Speichern und Rechte);
 - Asset-Bibliothek und Layouts (alle Größen und Seeds gültig und begehbar);
 - Gruppen (Validierung, Platzierung, Composer, Spawnen über die API, Marker nie bei Spielern).
+
+## APEX 2.2 – Frisuren, Kreaturen-Baukasten, Reittiere und Flügel, 3D im Szeneneditor
+
+**Frisuren und Bärte neu modelliert**
+- **Haarschale:** Jede Frisur besteht aus einer Haarschale, die der Kopfform folgt. Sie ist entlang eines echten Haaransatzes geschnitten (Stirn, Schläfen, über den Ohren, Nacken).
+- **Strähnen:** Darauf liegen geformte, kantige Strähnen für Pony, Seitenpartien, Mähnen, Kämme und Zöpfe.
+- **Neue Frisuren:** 12 Stück, zusammen jetzt 28. Neu sind Zurückgekämmt, Undercut, Afro, Dreads, Vokuhila, Zottelig, Wallend, Tonsur, Einzelzopf, Kamm, Pagenkopf und Seitenscheitel.
+- **Kopfbedeckungen:** Unter Mützen und Helmen schaut das Haar unter der Krempe hervor. Kapuzen verdecken den Scheitel; lange Haare bleiben sichtbar.
+- **Bärte:** Vollbärte sind eine Kieferschale mit Strähnen. Langer, gegabelter und geflochtener Bart sowie Schnurrbärte sind geformt.
+
+**Kreaturen-Baukasten (76 Modelle)**
+- **Tiere:** Wolf, Hund, Hyäne, Bär, Eisbär, Keiler, Hirsch, Ziege/Widder, Ochse/Stier, Löwe, Panther, Tiger, Riesenratte, Krokodil, Riesenechse, Elefant, Mammut, Affe, Frosch, Hai, Fisch, Würgeschlange, Kobra, Riesenspinne, Skorpion, Käfer, Krabbe, Tausendfüßer, Adler, Eule, Rabe, Geier, Fledermaus.
+- **Reittiere:** Pferd, Kriegsross mit Rossharnisch, Pony/Maultier, Kamel, Worg, Reitechse, Pegasus, Einhorn, Nachtmahr, Greif, Hippogreif, Roc.
+- **Monstrositäten:** Eulenbär, Basilisk, Mantikor, Hydra, Purpurwurm, Mimic, Rostmonster, Minotaurus, Yeti.
+- **Drachen:** Drache in zwölf Farben (rot, blau, grün, schwarz, weiß, gold, silber, bronze, kupfer, messing, Schatten, Feen), Wyvern, Drake.
+- **Aberrationen:** Beholder, Aboleth, Otyugh, Gibbering Mouther, Oktopus/Kraken-Brut.
+- **Elementare und Schleime:** Feuer-, Wasser-, Luft- und Erdelementar, Schleim/Pudding, Gallertwürfel, Irrlicht.
+- **Konstrukte und Pflanzen:** Golem (Stein, Eisen, Lehm, Fleisch), Gargyl, Treant, Schlurfender Hügel.
+- **Geister und Unholde:** Geist/Gespenst/Schreckgespenst, großer Dämon/Teufel, Höllenhund.
+- **Flügel:** Sie schlagen in der 3D-Karte (Federn, Hautflügel, Insektenflügel); am Boden nur leicht.
+- **Automatisch:** Name und Typ des Werteblocks wählen das Modell. „Young Red Dragon“ wird ein roter Drache, „Gelatinous Cube“ ein Würfel, ein Werteblock vom Typ Aberration ein Gibbering Mouther. Humanoide behalten ihre Figuren.
+- **Tierform:** Die Tierform der Druiden zeigt das passende Tier.
+- **Spielleiter:** Gegnerbibliothek → „🧍 3D figure“ → „Creature model“ legt ein Modell (bei Drachen mit Farbe) für einen Werteblock fest, mit Live-Vorschau. Die Wahl wird serverseitig geprüft.
+
+**Reittiere und Flügel für Helden**
+- **Reittier:** Neuer Platz „Mount“ im Figuren-Editor mit 14 Reittieren, vom Pferd bis zum Wyvern. Die Figur sitzt im Sattel, geflügelte Reittiere schlagen mit den Flügeln.
+- **Flügel auf dem Rücken:** Federflügel, Fledermausflügel, Feenflügel und Drachenflügel.
+- Rein kosmetisch, ohne Regelwirkung.
+
+**3D im Szeneneditor**
+- **Umschalter:** ⛰ 3D / ⬢ 2D oben rechts in der Editor-Karte, pro Gerät gespeichert.
+- **Malen in 3D:** Ein Klick malt das Hex mit der gewählten Kachel oder Höhe; der große Pinsel malt die Nachbarn mit.
+- **Marker in 3D:** Spawn, Orte, Licht und Gegnergruppen werden per Klick gesetzt.
+- **Anzeige:** Spawn (grün), Orte (gold) und Gegnergruppen (rote Fahne) sind in 3D zu sehen.
+
+**Tests:** 543 Tests grün. Neu ist `creatures22`:
+- Alle Modelle, Frisuren, Bärte, Rückenteile und Reittiere bauen fehlerfrei; Listen und Baukasten sind synchron.
+- Gängige Monsternamen landen beim richtigen Modell.
+- Die Kreaturwahl wird validiert.
+- Alte Figuren ohne Reittier bleiben gültig.

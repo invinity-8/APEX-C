@@ -1,0 +1,92 @@
+/**
+ * APEX 2.2 – the creature models of the 3D kit (ids, labels, groups) without three.js, for validation and editors.
+ * The builders live in components/map/creatures3d.ts (a test keeps both lists in sync).
+ */
+export const CREATURE_LIST: Array<{ id: string; label: string; group: string }> = [
+  { id: 'wolf', label: 'Wolf', group: 'Beasts' },
+  { id: 'dog', label: 'Dog / hound', group: 'Beasts' },
+  { id: 'hyena', label: 'Hyena', group: 'Beasts' },
+  { id: 'bear', label: 'Bear', group: 'Beasts' },
+  { id: 'polarbear', label: 'Polar bear', group: 'Beasts' },
+  { id: 'boar', label: 'Boar', group: 'Beasts' },
+  { id: 'deer', label: 'Deer / elk', group: 'Beasts' },
+  { id: 'goat', label: 'Goat / ram', group: 'Beasts' },
+  { id: 'ox', label: 'Ox / bull', group: 'Beasts' },
+  { id: 'cat', label: 'Big cat (lion, panther, tiger)', group: 'Beasts' },
+  { id: 'panther', label: 'Panther', group: 'Beasts' },
+  { id: 'tiger', label: 'Tiger', group: 'Beasts' },
+  { id: 'rat', label: 'Giant rat', group: 'Beasts' },
+  { id: 'crocodile', label: 'Crocodile / giant lizard', group: 'Beasts' },
+  { id: 'lizard', label: 'Giant lizard', group: 'Mounts' },
+  { id: 'elephant', label: 'Elephant / mammoth', group: 'Beasts' },
+  { id: 'mammoth', label: 'Mammoth', group: 'Beasts' },
+  { id: 'ape', label: 'Ape', group: 'Beasts' },
+  { id: 'frog', label: 'Giant frog / toad', group: 'Beasts' },
+  { id: 'shark', label: 'Shark', group: 'Beasts' },
+  { id: 'fish', label: 'Giant fish', group: 'Beasts' },
+  { id: 'snake', label: 'Snake / constrictor', group: 'Beasts' },
+  { id: 'cobra', label: 'Cobra / viper', group: 'Beasts' },
+  { id: 'spider', label: 'Giant spider', group: 'Beasts' },
+  { id: 'scorpion', label: 'Giant scorpion', group: 'Beasts' },
+  { id: 'beetle', label: 'Giant beetle', group: 'Beasts' },
+  { id: 'crab', label: 'Giant crab', group: 'Beasts' },
+  { id: 'centipede', label: 'Giant centipede', group: 'Beasts' },
+  { id: 'eagle', label: 'Eagle / hawk', group: 'Beasts' },
+  { id: 'owl', label: 'Owl', group: 'Beasts' },
+  { id: 'raven', label: 'Raven / crow', group: 'Beasts' },
+  { id: 'vulture', label: 'Vulture', group: 'Beasts' },
+  { id: 'roc', label: 'Roc / giant eagle', group: 'Mounts' },
+  { id: 'bat', label: 'Bat', group: 'Beasts' },
+  { id: 'horse', label: 'Horse', group: 'Mounts' },
+  { id: 'warhorse', label: 'Warhorse (barding)', group: 'Mounts' },
+  { id: 'pony', label: 'Pony / mule', group: 'Mounts' },
+  { id: 'camel', label: 'Camel', group: 'Mounts' },
+  { id: 'wardog', label: 'War wolf / worg', group: 'Mounts' },
+  { id: 'pegasus', label: 'Pegasus', group: 'Mounts' },
+  { id: 'unicorn', label: 'Unicorn', group: 'Mounts' },
+  { id: 'nightmare', label: 'Nightmare', group: 'Mounts' },
+  { id: 'griffon', label: 'Griffon', group: 'Mounts' },
+  { id: 'hippogriff', label: 'Hippogriff', group: 'Mounts' },
+  { id: 'owlbear', label: 'Owlbear', group: 'Monstrosities' },
+  { id: 'basilisk', label: 'Basilisk', group: 'Monstrosities' },
+  { id: 'manticore', label: 'Manticore', group: 'Monstrosities' },
+  { id: 'hydra', label: 'Hydra', group: 'Monstrosities' },
+  { id: 'worm', label: 'Giant worm (purple worm)', group: 'Monstrosities' },
+  { id: 'mimic', label: 'Mimic', group: 'Monstrosities' },
+  { id: 'rustmonster', label: 'Rust monster', group: 'Monstrosities' },
+  { id: 'dragon', label: 'Dragon (wyrmling to ancient)', group: 'Dragons' },
+  { id: 'wyvern', label: 'Wyvern', group: 'Dragons' },
+  { id: 'drake', label: 'Drake (wingless)', group: 'Dragons' },
+  { id: 'beholder', label: 'Beholder (eye tyrant)', group: 'Aberrations' },
+  { id: 'aboleth', label: 'Aboleth', group: 'Aberrations' },
+  { id: 'otyugh', label: 'Otyugh', group: 'Aberrations' },
+  { id: 'mouther', label: 'Gibbering mouther', group: 'Aberrations' },
+  { id: 'octopus', label: 'Octopus / kraken spawn', group: 'Aberrations' },
+  { id: 'fire', label: 'Fire elemental', group: 'Elementals & oozes' },
+  { id: 'water', label: 'Water elemental', group: 'Elementals & oozes' },
+  { id: 'air', label: 'Air elemental', group: 'Elementals & oozes' },
+  { id: 'earth', label: 'Earth elemental', group: 'Elementals & oozes' },
+  { id: 'ooze', label: 'Ooze / slime / pudding', group: 'Elementals & oozes' },
+  { id: 'cube', label: 'Gelatinous cube', group: 'Elementals & oozes' },
+  { id: 'wisp', label: 'Will-o’-wisp', group: 'Elementals & oozes' },
+  { id: 'golem', label: 'Golem (stone / iron / clay)', group: 'Constructs & plants' },
+  { id: 'gargoyle', label: 'Gargoyle', group: 'Constructs & plants' },
+  { id: 'treant', label: 'Treant / awakened tree', group: 'Constructs & plants' },
+  { id: 'shambling', label: 'Shambling mound / blight', group: 'Constructs & plants' },
+  { id: 'ghost', label: 'Ghost / specter / wraith', group: 'Undead & spirits' },
+  { id: 'demon', label: 'Demon / devil (large)', group: 'Fiends' },
+  { id: 'minotaur', label: 'Minotaur', group: 'Monstrosities' },
+  { id: 'yeti', label: 'Yeti', group: 'Monstrosities' },
+  { id: 'hellhound', label: 'Hell hound', group: 'Fiends' },
+];
+export const CREATURE_KINDS = CREATURE_LIST.map((c) => c.id);
+export const DRAGON_TINTS = ['red', 'blue', 'green', 'black', 'white', 'gold', 'silver', 'bronze', 'copper', 'brass', 'shadow', 'fairy'];
+export interface CreatureChoice { kind: string; tint?: string }
+/** Validates an explicit creature model (kind from the kit, tint a dragon colour or #rrggbb). */
+export function parseCreature(v: unknown): CreatureChoice | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.kind !== 'string' || !CREATURE_KINDS.includes(o.kind)) return null;
+  if (o.tint !== undefined && (typeof o.tint !== 'string' || !(DRAGON_TINTS.includes(o.tint) || /^#[0-9a-f]{6}$/i.test(o.tint)))) return null;
+  return { kind: o.kind, ...(typeof o.tint === 'string' ? { tint: o.tint.toLowerCase() } : {}) };
+}

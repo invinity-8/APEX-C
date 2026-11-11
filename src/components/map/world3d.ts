@@ -16,6 +16,7 @@ import type { SceneToken } from './HexSceneMap';
 import { beastIcon } from './effectIcons';
 import { ancestryScale, buildLowPoly } from './lowpoly';
 import { propV21 } from './props3d';
+import { buildCreature, creatureFor } from './creatures3d';
 import { autoLook, FIGURE_PRESETS, hashText, lookFromPreset, type FigureLook } from '../../game/figure';
 
 /** APEX 2.1 – the low-poly look of a figure: chosen, or automatic (heroes by token, humanoid NPCs by kind). */
@@ -35,10 +36,20 @@ export function figureLook(tk: SceneToken): FigureLook | null {
   return autoLook(`${enemy.breed ?? ''} ${tk.name}`, tk.tokenId, tk.color);
 }
 
+/** APEX 2.2 – the creature model of a figure: explicit, by wild-shape form, or by name/type (humanoids: none). */
+export function figureCreature(tk: SceneToken): { kind: string; tint?: string } | null {
+  if (tk.vitals?.form) return creatureFor(tk.vitals.form);
+  const e = tk.enemy;
+  if (!e || e.look) return null;
+  if (e.creature) return e.creature;
+  if (/humanoid/i.test(e.breed ?? '')) return null;
+  return creatureFor(`${e.breed ?? ''} ${tk.name}`);
+}
+
 export const FT = Math.sqrt(3) / 5;
 export const LEVEL = 5 * FT;
-const SIZE: Record<string, number> = { tiny: 0.45, small: 0.75, medium: 1, large: 1.9, huge: 2.8, gargantuan: 3.8 };
-export const sizeScale = (size?: string) => SIZE[(size ?? 'medium').toLowerCase()] ?? 1;
+export { sizeScale } from './sizes';
+import { sizeScale } from './sizes';
 
 const mats = new Map<string, THREE.Material>();
 function mat(key: string, make: () => THREE.Material): THREE.Material {
@@ -56,7 +67,10 @@ export interface FigureParts { group: THREE.Group; card?: THREE.Object3D; wings?
 /** A figure: base, standee or miniature, label. `ringColor` marks the side / selection. */
 export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   const enemy = tk.enemy;
-  const scale = enemy ? sizeScale(enemy.size) : 1;
+  const creatureId = figureCreature(tk);
+  const creature = creatureId ? buildCreature(creatureId.kind, creatureId.tint, (tk.alt ?? 0) > 0) : null;
+  const look = creature ? null : figureLook(tk);
+  const scale = enemy?.size ? sizeScale(enemy.size) : creature ? sizeScale(creature.size) : look && look.mount !== 'none' && look.mount ? 1.6 : 1;
   const down = enemy?.condition === 'down';
   const g = new THREE.Group();
   const baseR = Math.max(0.42, 0.6 * Math.min(scale, 2.6));
@@ -68,13 +82,20 @@ export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   let wings: THREE.Object3D[] | undefined;
   let height = 2.1 * scale;
   const body = new THREE.Group(); body.position.y = 0.12;
-  const look = figureLook(tk);
-  if (look) {
+  if (creature) {
+    // APEX 2.2 – beasts, monsters, dragons, aberrations …: the model scaled to the size class
+    creature.group.scale.setScalar(scale);
+    body.add(creature.group);
+    wings = creature.wings;
+    height = creature.height * scale;
+  } else if (look) {
+    const riding = !!look.mount && look.mount !== 'none';
     const lp = buildLowPoly(look);
-    // enemies: the stat block's size class sets the height (a Small goblin is not shrunk twice)
-    const k = enemy?.size ? scale / ancestryScale(look) : scale;
+    // enemies: the stat block's size class sets the height (a Small goblin is not shrunk twice); riders keep scale 1
+    const k = riding ? 1 : enemy?.size ? scale / ancestryScale(look) : scale;
     lp.group.scale.setScalar(k);
     body.add(lp.group);
+    if (lp.wings) wings = lp.wings;
     height = lp.height * k;
   } else if (!enemy && tk.view?.portraitV && !tk.vitals?.form) {
     card = standee(tk); body.add(card); height = 2.25;

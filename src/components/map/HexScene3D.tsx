@@ -96,6 +96,7 @@ export default function HexScene3D(p: Props) {
   }, [p.map.hex, p.fog]);
   const top = (k: HexKey) => BASE + height(k) * LEVEL;
   // APEX 2.1 – the map's colour scheme recolours ground, props and grass in 3D like on the 2D map
+  const nodesKey = p.map.nodes.map((n) => `${n.id}:${Math.round(n.x)}:${Math.round(n.y)}:${n.kind}:${n.lightFt ?? ''}`).join('|');
   const pKey = paletteKey(p.map.palette);
   const recolor = useMemo(() => {
     if (!p.map.palette) return null;
@@ -341,6 +342,18 @@ export default function HexScene3D(p: Props) {
         t.dynamic.add(ring, pole, flag);
         continue;
       }
+      if ((n.kind === 'spawn' || n.kind === 'location') && p.gm) {
+        const k = hexKey(hexAt(p.map, n));
+        if (!tiles.has(k)) continue;
+        const w = toWorld(center(parseKey(k)));
+        const spawnNode = n.kind === 'spawn';
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 0.95, 6), new THREE.MeshBasicMaterial({ color: spawnNode ? 0x6fe0a0 : 0xd8b25a, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2; ring.rotation.z = Math.PI / 6; ring.position.set(w.x, top(k) + 0.04, w.z);
+        const pin = new THREE.Mesh(spawnNode ? new THREE.ConeGeometry(0.22, 0.5, 4) : new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: spawnNode ? 0x6fe0a0 : 0xd8b25a }));
+        pin.position.set(w.x, top(k) + (spawnNode ? 1.0 : 1.2), w.z); if (spawnNode) pin.rotation.x = Math.PI;
+        t.dynamic.add(ring, pin);
+        continue;
+      }
       if (n.kind !== 'light' || (!p.gm && !n.visible)) continue;
       const k = hexKey(hexAt(p.map, n));
       if (!tiles.has(k) || fogOf.get(k) === '.') continue;
@@ -352,10 +365,10 @@ export default function HexScene3D(p: Props) {
       t.dynamic.add(glow, flame);
     }
     setTick((x) => x + 1);
-  }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -519,7 +532,7 @@ export default function HexScene3D(p: Props) {
       for (const c of a.crowns) { c.rotation.z = Math.sin(sec * 0.9 + c.userData.phase) * 0.035; c.rotation.x = Math.sin(sec * 0.7 + c.userData.phase * 1.3) * 0.025; }
       for (const w of a.water) w.opacity = 0.66 + Math.sin(sec * 1.3 + (w.userData.phase as number)) * 0.06;
       for (const f of a.flames) { f.scale.y = 0.85 + Math.sin(sec * 9 + f.id) * 0.12 + Math.sin(sec * 23 + f.id * 2) * 0.05; f.rotation.y = sec * 0.6; }
-      for (const w of a.wings) w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number);
+      for (const w of a.wings) { if (w.userData.flapZ) w.rotation.z = Math.sin(sec * 6 + w.id) * (w.userData.amp as number) * (w.userData.side as number); else w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number); }
       // standees turn towards the camera (around the vertical axis)
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
