@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { FigureLook } from '../../game/figure';
+import { buildBeard, buildHair, type HeadShape } from './hair3d';
 
 type C = THREE.ColorRepresentation;
 const cache = new Map<string, THREE.MeshStandardMaterial>();
@@ -240,44 +241,11 @@ export function buildLowPoly(look: FigureLook): LowPolyFigure {
     case 'earring': add(head, tor(0.035, 0.01, Math.PI * 2, 3, 6), gold, [hr * 0.98, -hr * 0.2, 0]); break;
     case 'tattoos': add(head, box(hr * 0.06, hr * 0.5, 0.02), M(shade(look.skin, 0.45)), [hr * 0.5, 0, faceZ - 0.06], [0, 0.45, 0]); break;
   }
-  // ---- beard
-  const beardM = hairM, by = -hr * 0.5;
-  switch (look.beard) {
-    case 'stubble': add(head, sph(hr * 1.01, 8, 4, Math.PI * 0.2, Math.PI * 0.6, Math.PI * 0.55, Math.PI * 0.4), M(mix(look.skin, look.hairColor, 0.45)), [0, 0, 0]); break;
-    case 'moustache': ex2((sx) => add(head, box(hr * 0.3, hr * 0.09, 0.05), beardM, [sx * hr * 0.15, -hr * 0.27, faceZ + 0.01], [0, 0, -sx * 0.25])); break;
-    case 'handlebar': ex2((sx) => { add(head, box(hr * 0.3, hr * 0.09, 0.05), beardM, [sx * hr * 0.15, -hr * 0.27, faceZ + 0.01], [0, 0, -sx * 0.2]); add(head, tor(hr * 0.09, 0.02, Math.PI, 3, 5), beardM, [sx * hr * 0.33, -hr * 0.2, faceZ], [0, 0, sx > 0 ? -1.5 : Math.PI + 1.5]); }); break;
-    case 'goatee': add(head, cone(hr * 0.15, hr * 0.4, 5), beardM, [0, by - hr * 0.25, faceZ - hr * 0.15], [Math.PI, 0, 0]); break;
-    case 'chin': add(head, box(hr * 0.45, hr * 0.25, hr * 0.3), beardM, [0, by - hr * 0.2, faceZ - hr * 0.2]); break;
-    case 'full': case 'long': case 'forked': case 'braided':
-      add(head, ico(hr * 0.75, 0), beardM, [0, by - hr * 0.08, hr * 0.35], [0, 0, 0], [1.15, 0.85, 0.75]);
-      ex2((sx) => add(head, box(hr * 0.3, hr * 0.09, 0.05), beardM, [sx * hr * 0.15, -hr * 0.27, faceZ + 0.01], [0, 0, -sx * 0.25]));
-      if (look.beard === 'long') add(head, cone(hr * 0.45, hr * 1.1, 5), beardM, [0, by - hr * 0.75, hr * 0.5], [Math.PI, 0, 0]);
-      if (look.beard === 'forked') ex2((sx) => add(head, cone(hr * 0.2, hr * 0.8, 4), beardM, [sx * hr * 0.2, by - hr * 0.7, hr * 0.5], [Math.PI, 0, sx * 0.15]));
-      if (look.beard === 'braided') { add(head, cyl(hr * 0.15, hr * 0.1, hr * 1.0, 5), beardM, [0, by - hr * 0.8, hr * 0.5]); for (let i = 0; i < 2; i++) add(head, cyl(hr * 0.17, hr * 0.17, 0.05, 6), gold, [0, by - hr * (0.6 + i * 0.45), hr * 0.5]); }
-      break;
-    case 'mutton': ex2((sx) => add(head, box(hr * 0.3, hr * 0.7, hr * 0.5), beardM, [sx * hr * 0.75, -hr * 0.3, hr * 0.3])); break;
-  }
-  // ---- hair
-  const coverTop = ['hood', 'cowl', 'helmet', 'greathelm', 'horned', 'turban', 'wizard', 'cap', 'tricorn', 'feathercap', 'strawhat', 'skullcap'].includes(look.hat);
-  const cap = (k = 0.58) => add(head, sph(hr * 1.07, 8, 5, 0, Math.PI * 2, 0, Math.PI * k), hairM, [0, hr * 0.02, -hr * 0.03]);
-  if (!bone && look.hair !== 'none') {
-    if (!coverTop) {
-      if (['short', 'messy', 'spiky', 'bob', 'long', 'ponytail', 'bun', 'braids', 'curly', 'pigtails'].includes(look.hair)) cap(look.hair === 'bob' || look.hair === 'long' ? 0.62 : 0.52);
-      if (look.hair === 'buzz') add(head, sph(hr * 1.02, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.45), M(mix(look.skin, look.hairColor, 0.7)), [0, hr * 0.02, -hr * 0.03]);
-      if (look.hair === 'short' || look.hair === 'bob') add(head, box(hr * 1.3, hr * 0.25, hr * 0.3), hairM, [0, hr * 0.65, hr * 0.62], [0.35, 0, 0]);
-      if (look.hair === 'messy') for (let i = 0; i < 6; i++) add(head, cone(hr * 0.16, hr * 0.4, 4), hairM, [Math.cos(i * 1.05) * hr * 0.6, hr * 0.8, Math.sin(i * 1.05) * hr * 0.6], [Math.sin(i) * 0.7, 0, Math.cos(i * 1.05) * -0.7]);
-      if (look.hair === 'spiky') for (let i = 0; i < 7; i++) add(head, cone(hr * 0.17, hr * 0.6, 4), hairM, [Math.cos(i * 0.9) * hr * 0.45, hr * 0.95, Math.sin(i * 0.9) * hr * 0.45 - hr * 0.1], [Math.sin(i * 0.9) * 0.6, 0, -Math.cos(i * 0.9) * 0.6]);
-      if (look.hair === 'mohawk') for (let i = 0; i < 5; i++) add(head, cone(hr * 0.13, hr * 0.55, 4), hairM, [0, hr * (0.95 - Math.abs(i - 1.5) * 0.08), hr * (0.55 - i * 0.32)], [-(i - 1.5) * 0.35, 0, 0]);
-      if (look.hair === 'curly') for (let i = 0; i < 9; i++) add(head, ico(hr * 0.26, 0), hairM, [Math.cos(i * 0.7) * hr * 0.7, hr * (0.55 + (i % 3) * 0.12), Math.sin(i * 0.7) * hr * 0.7 - hr * 0.1]);
-      if (look.hair === 'wild') add(head, ico(hr * 1.25, 0), hairM, [0, hr * 0.3, -hr * 0.2], [0.3, 0.5, 0.2], [1.05, 0.9, 1]);
-      if (look.hair === 'topknot') { add(head, cyl(hr * 0.12, hr * 0.15, hr * 0.3, 5), hairM, [0, hr * 1.05, -hr * 0.1]); add(head, ico(hr * 0.2, 0), hairM, [0, hr * 1.25, -hr * 0.1]); }
-      if (look.hair === 'sidecut') add(head, sph(hr * 1.07, 8, 5, Math.PI * 0.5, Math.PI, 0, Math.PI * 0.55), hairM, [0, hr * 0.02, 0], [0, 0, -0.3]);
-      if (look.hair === 'bun') add(head, ico(hr * 0.35, 0), hairM, [0, hr * 0.7, -hr * 0.75]);
-    }
-    if (look.hair === 'long' || look.hair === 'bob' || look.hair === 'wild') add(head, box(hr * 1.9, hr * (look.hair === 'long' ? 1.9 : 0.9), hr * 0.5), hairM, [0, look.hair === 'long' ? -hr * 0.55 : -hr * 0.05, -hr * 0.65]);
-    if (look.hair === 'ponytail') add(head, cyl(hr * 0.18, hr * 0.08, hr * 1.4, 5), hairM, [0, -hr * 0.2, -hr * 1.05], [0.35, 0, 0]);
-    if (look.hair === 'braids' || look.hair === 'pigtails') ex2((sx) => { add(head, cyl(hr * 0.13, hr * 0.09, hr * (look.hair === 'braids' ? 1.5 : 0.8), 5), hairM, [sx * hr * 0.85, -hr * (look.hair === 'braids' ? 0.6 : 0.2), hr * 0.05], [0, 0, sx * 0.1]); if (look.hair === 'pigtails') add(head, ico(hr * 0.25, 0), hairM, [sx * hr * 0.95, hr * 0.3, -hr * 0.1]); });
-  }
+  // ---- beard and hair (APEX 2.2: sculpted shells and locks, see hair3d.ts)
+  const shape = (bone ? 'round' : look.head) as HeadShape;
+  if (!bone) buildBeard(head, look.beard, hr, shape, faceZ, { hair: hairM, skinMix: M(mix(look.skin, look.hairColor, 0.45)), gold });
+  const hatCover = ['hood', 'cowl', 'greathelm', 'turban'].includes(look.hat) ? 'full' : ['helmet', 'horned', 'cap', 'tricorn', 'feathercap', 'strawhat', 'wizard', 'skullcap', 'bandana'].includes(look.hat) ? 'brim' : 'none';
+  if (!bone) buildHair(head, look.hair, hr, shape, { hair: hairM, dark: M(shade(look.hairColor, 0.7)), shaved: M(mix(look.skin, look.hairColor, 0.55)), tie: M(look.secondary) }, hatCover);
   // ---- horns
   const hornM = M('#e8dcc0', { rough: 0.6 });
   const horns = look.horns === 'none' && look.body === 'tiefling' ? 'small' : look.horns;

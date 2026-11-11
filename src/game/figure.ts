@@ -18,7 +18,7 @@ export const FIGURE_PARTS = {
   mouth: ['none', 'smile', 'flat', 'frown', 'open', 'grin', 'tusks', 'fangs'],
   nose: ['button', 'pointy', 'broad', 'hooked', 'none'],
   ears: ['normal', 'pointed', 'long', 'big', 'none'],
-  hair: ['none', 'buzz', 'short', 'messy', 'spiky', 'mohawk', 'bob', 'long', 'ponytail', 'bun', 'topknot', 'braids', 'curly', 'wild', 'sidecut', 'pigtails'],
+  hair: ['none', 'buzz', 'short', 'messy', 'spiky', 'mohawk', 'bob', 'long', 'ponytail', 'bun', 'topknot', 'braids', 'curly', 'wild', 'sidecut', 'pigtails', 'slicked', 'undercut', 'afro', 'dreads', 'mullet', 'shaggy', 'flowing', 'tonsure', 'braid', 'crest', 'pageboy', 'swept'],
   beard: ['none', 'stubble', 'moustache', 'handlebar', 'goatee', 'chin', 'full', 'long', 'forked', 'braided', 'mutton'],
   hat: ['none', 'hood', 'cowl', 'wizard', 'cap', 'bandana', 'headband', 'helmet', 'greathelm', 'horned', 'crown', 'circlet', 'tricorn', 'feathercap', 'strawhat', 'turban', 'skullcap', 'antlers', 'mask'],
   horns: ['none', 'small', 'curled', 'ram', 'long'],
@@ -79,7 +79,7 @@ export function parseLook(v: unknown): FigureLook | null {
 
 export interface FigurePreset { id: string; label: string; group: 'hero' | 'npc' | 'monster'; look: Partial<FigureLook>; /** Parts the variation may swap (per figure). */ vary?: Partial<{ [K in FigurePartKey]: ReadonlyArray<PartValue<K>> }>; colours?: Partial<Record<FigureColourKey, readonly string[]>>; match?: RegExp }
 
-const humanVary = { hair: ['short', 'messy', 'buzz', 'long', 'ponytail', 'bun', 'curly', 'none', 'sidecut', 'braids'], beard: ['none', 'none', 'stubble', 'moustache', 'goatee', 'full', 'chin'], eyes: ['dots', 'narrow', 'angry', 'wide', 'scarred'], brows: ['thin', 'thick', 'angry', 'bushy'], head: ['round', 'square', 'oval', 'long'], nose: ['button', 'pointy', 'broad', 'hooked'] } as const;
+const humanVary = { hair: ['short', 'messy', 'buzz', 'long', 'ponytail', 'bun', 'curly', 'none', 'sidecut', 'braids', 'slicked', 'undercut', 'shaggy', 'mullet', 'swept', 'braid', 'dreads', 'afro'], beard: ['none', 'none', 'stubble', 'moustache', 'goatee', 'full', 'chin'], eyes: ['dots', 'narrow', 'angry', 'wide', 'scarred'], brows: ['thin', 'thick', 'angry', 'bushy'], head: ['round', 'square', 'oval', 'long'], nose: ['button', 'pointy', 'broad', 'hooked'] } as const;
 const anyHuman = { skin: SKIN_TONES.slice(0, 7), hairColor: HAIR_COLOURS.slice(0, 9) };
 
 export const FIGURE_PRESETS: FigurePreset[] = [
