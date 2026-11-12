@@ -36,7 +36,7 @@ export interface SceneToken {
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
-  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string; /** APEX 2.1: chosen low-poly look, or the creature kind an automatic look is picked from. */ look?: FigureLook; breed?: string; /** APEX 2.2: an explicit creature model (beast, dragon, aberration …). */ creature?: { kind: string; tint?: string } };
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string; /** APEX 2.1: chosen low-poly look, or the creature kind an automatic look is picked from. */ look?: FigureLook; breed?: string; /** APEX 2.2: an explicit creature model (beast, dragon, aberration …). */ creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' } };
   /** Carries a light (torch glow). */
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
@@ -409,6 +409,8 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                   {n.kind === 'light' && <circle r={((n.lightFt ?? 30) / 5) * HEX_SIZE * 1.6} fill="url(#scene-light-glow)" opacity={phase === 'day' ? 0.25 : 0.9} />}
                   {n.kind === 'label' ? null : n.kind === 'light' ? (
                     <circle r={HEX_SIZE * 0.32} fill="#ffcf6b" stroke="#7a4a12" strokeWidth={2} />
+                  ) : n.kind === 'fauna' ? (
+                    <text y={5} textAnchor="middle" fontSize={15} opacity={0.85}>🐾</text>
                   ) : n.kind === 'enemies' ? (
                     <>
                       <circle r={HEX_SIZE * 1.6} fill="rgba(179,38,30,.10)" stroke="rgba(229,72,77,.55)" strokeWidth={1.5} strokeDasharray="5 4" />

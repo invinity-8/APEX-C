@@ -78,15 +78,78 @@ export const CREATURE_LIST: Array<{ id: string; label: string; group: string }> 
   { id: 'minotaur', label: 'Minotaur', group: 'Monstrosities' },
   { id: 'yeti', label: 'Yeti', group: 'Monstrosities' },
   { id: 'hellhound', label: 'Hell hound', group: 'Fiends' },
+  { id: 'rabbit', label: 'Rabbit / hare', group: 'Beasts' },
+  { id: 'squirrel', label: 'Squirrel', group: 'Beasts' },
+  { id: 'hedgehog', label: 'Hedgehog', group: 'Beasts' },
+  { id: 'fox', label: 'Fox', group: 'Beasts' },
+  { id: 'badger', label: 'Badger', group: 'Beasts' },
+  { id: 'housecat', label: 'Cat', group: 'Beasts' },
+  { id: 'sheep', label: 'Sheep / ram / lamb', group: 'Beasts' },
+  { id: 'cow', label: 'Cow / bull / calf', group: 'Beasts' },
+  { id: 'pig', label: 'Pig / sow / piglet', group: 'Beasts' },
+  { id: 'chicken', label: 'Chicken / rooster', group: 'Beasts' },
+  { id: 'duck', label: 'Duck / goose', group: 'Beasts' },
+  { id: 'swan', label: 'Swan', group: 'Beasts' },
+  { id: 'billygoat', label: 'Billy goat', group: 'Beasts' },
+  { id: 'donkey', label: 'Donkey', group: 'Mounts' },
+  { id: 'zebra', label: 'Zebra', group: 'Beasts' },
+  { id: 'llama', label: 'Llama / alpaca', group: 'Mounts' },
+  { id: 'bison', label: 'Bison / buffalo / yak', group: 'Beasts' },
+  { id: 'rhino', label: 'Rhinoceros', group: 'Beasts' },
+  { id: 'hippo', label: 'Hippopotamus', group: 'Beasts' },
+  { id: 'giraffe', label: 'Giraffe', group: 'Beasts' },
+  { id: 'turtle', label: 'Turtle / tortoise', group: 'Beasts' },
+  { id: 'snail', label: 'Giant snail', group: 'Beasts' },
+  { id: 'butterfly', label: 'Butterfly / moth', group: 'Beasts' },
+  { id: 'displacer', label: 'Displacer beast', group: 'Monstrosities' },
+  { id: 'blinkdog', label: 'Blink dog', group: 'Monstrosities' },
+  { id: 'winterwolf', label: 'Winter wolf / frost wolf', group: 'Monstrosities' },
+  { id: 'ghostwolf', label: 'Spectral wolf / ghost beast', group: 'Undead & spirits' },
+  { id: 'spectralstag', label: 'Spectral / silver stag', group: 'Undead & spirits' },
+  { id: 'jackalope', label: 'Jackalope', group: 'Monstrosities' },
+  { id: 'moonhare', label: 'Moon hare', group: 'Monstrosities' },
+  { id: 'kitsune', label: 'Kitsune (many-tailed fox)', group: 'Monstrosities' },
+  { id: 'firefox', label: 'Fire fox / flame beast', group: 'Monstrosities' },
+  { id: 'cockatrice', label: 'Cockatrice', group: 'Monstrosities' },
+  { id: 'phoenix', label: 'Phoenix', group: 'Monstrosities' },
+  { id: 'thunderbird', label: 'Thunderbird / storm eagle', group: 'Monstrosities' },
+  { id: 'cerberus', label: 'Three-headed hound (cerberus)', group: 'Fiends' },
+  { id: 'chimera', label: 'Chimera', group: 'Monstrosities' },
+  { id: 'bulette', label: 'Bulette (land shark)', group: 'Monstrosities' },
+  { id: 'ankheg', label: 'Ankheg', group: 'Monstrosities' },
+  { id: 'carrioncrawler', label: 'Carrion crawler', group: 'Monstrosities' },
+  { id: 'umberhulk', label: 'Umber hulk', group: 'Monstrosities' },
+  { id: 'roper', label: 'Roper / piercer', group: 'Monstrosities' },
+  { id: 'darkmantle', label: 'Darkmantle', group: 'Monstrosities' },
+  { id: 'seaserpent', label: 'Sea serpent', group: 'Monstrosities' },
+  { id: 'jellyfish', label: 'Giant jellyfish', group: 'Aberrations' },
+  { id: 'kraken', label: 'Kraken', group: 'Aberrations' },
+  { id: 'grell', label: 'Grell', group: 'Aberrations' },
+  { id: 'devourer', label: 'Intellect devourer', group: 'Aberrations' },
+  { id: 'flumph', label: 'Flumph', group: 'Aberrations' },
+  { id: 'gazer', label: 'Gazer / spectator', group: 'Aberrations' },
+  { id: 'nothic', label: 'Nothic', group: 'Aberrations' },
+  { id: 'cloaker', label: 'Cloaker', group: 'Aberrations' },
+  { id: 'slaad', label: 'Slaad (frog fiend)', group: 'Aberrations' },
+  { id: 'myconid', label: 'Myconid / walking mushroom', group: 'Constructs & plants' },
+  { id: 'glowshroom', label: 'Glowing mushroom giant', group: 'Constructs & plants' },
+  { id: 'flytrap', label: 'Carnivorous plant', group: 'Constructs & plants' },
+  { id: 'bonedragon', label: 'Bone dragon (dracolich)', group: 'Dragons' },
+  { id: 'skelhorse', label: 'Skeletal steed', group: 'Undead & spirits' },
+  { id: 'worldturtle', label: 'World turtle (boss)', group: 'Monstrosities' },
+  { id: 'skywhale', label: 'Sky whale (boss)', group: 'Monstrosities' },
+  { id: 'colossus', label: 'Obsidian colossus (boss)', group: 'Constructs & plants' },
 ];
 export const CREATURE_KINDS = CREATURE_LIST.map((c) => c.id);
 export const DRAGON_TINTS = ['red', 'blue', 'green', 'black', 'white', 'gold', 'silver', 'bronze', 'copper', 'brass', 'shadow', 'fairy'];
-export interface CreatureChoice { kind: string; tint?: string }
+export const CREATURE_VARIANTS = ['male', 'female', 'young'] as const;
+export interface CreatureChoice { kind: string; tint?: string; variant?: (typeof CREATURE_VARIANTS)[number] }
 /** Validates an explicit creature model (kind from the kit, tint a dragon colour or #rrggbb). */
 export function parseCreature(v: unknown): CreatureChoice | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
   if (typeof o.kind !== 'string' || !CREATURE_KINDS.includes(o.kind)) return null;
   if (o.tint !== undefined && (typeof o.tint !== 'string' || !(DRAGON_TINTS.includes(o.tint) || /^#[0-9a-f]{6}$/i.test(o.tint)))) return null;
-  return { kind: o.kind, ...(typeof o.tint === 'string' ? { tint: o.tint.toLowerCase() } : {}) };
+  if (o.variant !== undefined && !(CREATURE_VARIANTS as readonly unknown[]).includes(o.variant)) return null;
+  return { kind: o.kind, ...(typeof o.tint === 'string' ? { tint: o.tint.toLowerCase() } : {}), ...(o.variant ? { variant: o.variant as CreatureChoice['variant'] } : {}) };
 }

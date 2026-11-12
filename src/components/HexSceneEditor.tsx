@@ -5,6 +5,7 @@
  */
 import { lazy, Suspense, useContext, useState } from 'react';
 import { GroupsContext } from './groupsContext';
+import { FAUNA, faunaNodes, faunaOf } from '../game/fauna';
 import { allGroups, composeSpawns, groupSize, groupXp, LAYOUT_GROUPS, type EnemyGroup } from '../game/groups';
 import type { MapNode, SceneMap } from '../campaign/maps';
 import {
@@ -40,8 +41,8 @@ import { MOODS, PALETTE_PRESETS, paletteKey, type SceneMood } from '../campaign/
 
 const HexScene3D = lazy(() => import('./map/HexScene3D'));
 
-type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light' | 'enemies';
-const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light', enemies: '⚔ Enemy groups' };
+type Tool = 'brush' | 'height' | 'select' | 'spawn' | 'location' | 'label' | 'light' | 'enemies' | 'fauna';
+const TOOL_LABEL: Record<Tool, string> = { brush: '🖌 Paint terrain', height: '⛰ Height', select: '◎ Select', spawn: '⇣ Spawn', location: '◆ Location', label: '✎ Label', light: '🔥 Light', enemies: '⚔ Enemy groups', fauna: '🐾 Animals' };
 
 export function HexSceneEditor({
   scene,
@@ -79,6 +80,9 @@ export function HexSceneEditor({
   const groups = allGroups(groupsCtx.custom);
   const [groupId, setGroupId] = useState<string>(groups[0]?.id ?? '');
   const [composeCount, setComposeCount] = useState(2);
+  const [withFauna, setWithFauna] = useState(true);
+  const [species, setSpecies] = useState('sheep');
+  const [faunaCount, setFaunaCount] = useState(4);
   // APEX 2.3 – relief: hills, terraces, valleys … for any battle map
   const [relief, setRelief] = useState<ReliefStyle>('hills');
   const [reliefStrength, setReliefStrength] = useState(2);
@@ -124,6 +128,13 @@ export function HexSceneEditor({
     if (!passable(map, parseKey(key)) && tool !== 'label' && tool !== 'light') return setMessage(`Impassable hexes cannot hold a ${tool}. Paint passable terrain first.`);
     const p = hexCentre(map, parseKey(key));
     if (tool === 'enemies') return placeGroup(groupId, p);
+    if (tool === 'fauna') {
+      const f = faunaOf(species);
+      const n: MapNode = { id: crypto.randomUUID(), ...p, label: f?.label ?? species, kind: 'fauna', species, count: faunaCount, visible: true, width: 50, height: 50, description: '', targetScene: null };
+      change({ nodes: [...map.nodes, n] });
+      setSelected(n.id);
+      return setMessage(`${faunaCount} × ${f?.label.toLowerCase() ?? species} placed. They graze, hop or circle in 3D and shy away from figures – purely decoration.`);
+    }
     if (tool === 'spawn') {
       const spawn = map.nodes.find((n) => n.kind === 'spawn');
       if (spawn) {
@@ -139,8 +150,11 @@ export function HexSceneEditor({
   }
   function generate() {
     setUndo(map);
-    change(replaceTerrain(map, set === 'battle' ? generateBattleScene(preset, radius, seed) : generateHexScene(preset, radius, seed)), true);
-    setMessage(`Generated “${PRESETS[set].find((p) => p.id === preset)?.label}” with seed ${seed}. Markers were kept. Save the draft to keep it.`);
+    const next = replaceTerrain(map, set === 'battle' ? generateBattleScene(preset, radius, seed) : generateHexScene(preset, radius, seed));
+    // APEX 2.3 – living biomes: the layout's animals replace earlier animal markers
+    const fauna = set === 'battle' && withFauna ? faunaNodes(next, preset, seed) : [];
+    change(set === 'battle' && withFauna ? { ...next, nodes: [...next.nodes.filter((n) => n.kind !== 'fauna'), ...fauna] } : next, true);
+    setMessage(`Generated “${PRESETS[set].find((p) => p.id === preset)?.label}” with seed ${seed}${fauna.length ? ` and ${fauna.map((f) => `${f.count} ${f.label.toLowerCase()}`).join(', ')}` : ''}. Markers were kept. Save the draft to keep it.`);
   }
   async function importPicture(file?: File) {
     if (!file) return;
@@ -159,7 +173,7 @@ export function HexSceneEditor({
     }
   }
 
-  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => (t !== 'light' && t !== 'height' && t !== 'enemies') || set === 'battle');
+  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => (t !== 'light' && t !== 'height' && t !== 'enemies' && t !== 'fauna') || set === 'battle');
   return (
     <>
     {battleScene && set !== 'battle' && (
@@ -213,6 +227,13 @@ export function HexSceneEditor({
             <label className="hex-brush-size"><input type="checkbox" checked={brush === 1} onChange={(e) => setBrush(e.target.checked ? 1 : 0)} /> Large brush</label>
             {map.hex?.heights && <button type="button" className="btn btn-ghost px-2 py-0.5" onClick={() => { if (map.hex) change({ hex: setHeights(map.hex, [...hexesInRange(ORIGIN, map.hex.radius)].map(hexKey), () => 0) }); }}>Flatten all</button>}
             <span className="text-marble-500">One level (5 ft) is a step – climbing up costs 5 ft extra. Two or more levels are a cliff walkers can't take.</span>
+          </div>
+        )}
+        {tool === 'fauna' && (
+          <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="fauna-picker">
+            <label className="flex items-center gap-1 text-marble-300">Animals <select value={species} onChange={(e) => setSpecies(e.target.value)}>{FAUNA.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</select></label>
+            <label className="flex items-center gap-1 text-marble-300">How many · {faunaCount} <input type="range" min={1} max={12} value={faunaCount} onChange={(e) => setFaunaCount(Number(e.target.value))} /></label>
+            <span className="text-marble-500">Click a hex. Players see them too; they never fight (use the enemy library for that).</span>
           </div>
         )}
         {tool === 'enemies' && (
@@ -304,6 +325,7 @@ export function HexSceneEditor({
             Seed <input type="number" min="0" max="4294967295" value={seed} onChange={(e) => setSeed(Math.max(0, Math.floor(Number(e.target.value) || 0)))} />
           </label>
           <div className="scene-editor-actions">
+            {set === 'battle' && <label><input type="checkbox" checked={withFauna} onChange={(e) => setWithFauna(e.target.checked)} /> Add the layout's animals (sheep on the farm, crows in the graveyard …)</label>}
             <button type="button" className="btn btn-gold" onClick={generate}>
               Generate
             </button>
@@ -373,7 +395,7 @@ export function HexSceneEditor({
               {map.nodes.map((n) => (
                 <li key={n.id} className={selected === n.id ? 'is-selected' : ''}>
                   <button type="button" className="scene-layer-select" aria-pressed={selected === n.id} onClick={() => setSelected(n.id)}>
-                    {n.kind === 'spawn' ? '⇣ ' : n.kind === 'label' ? '✎ ' : n.kind === 'light' ? '🔥 ' : n.kind === 'enemies' ? '⚔ ' : '◆ '}
+                    {n.kind === 'spawn' ? '⇣ ' : n.kind === 'label' ? '✎ ' : n.kind === 'light' ? '🔥 ' : n.kind === 'enemies' ? '⚔ ' : n.kind === 'fauna' ? '🐾 ' : '◆ '}
                     {n.label}
                   </button>
                 </li>

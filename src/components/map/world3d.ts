@@ -37,7 +37,7 @@ export function figureLook(tk: SceneToken): FigureLook | null {
 }
 
 /** APEX 2.2 – the creature model of a figure: explicit, by wild-shape form, or by name/type (humanoids: none). */
-export function figureCreature(tk: SceneToken): { kind: string; tint?: string } | null {
+export function figureCreature(tk: SceneToken): { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' } | null {
   if (tk.vitals?.form) return creatureFor(tk.vitals.form);
   const e = tk.enemy;
   if (!e || e.look) return null;
@@ -70,7 +70,7 @@ export interface FigureParts { group: THREE.Group; card?: THREE.Object3D; wings?
 export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   const enemy = tk.enemy;
   const creatureId = figureCreature(tk);
-  const creature = creatureId ? buildCreature(creatureId.kind, creatureId.tint, (tk.alt ?? 0) > 0) : null;
+  const creature = creatureId ? buildCreature(creatureId.kind, creatureId.tint, (tk.alt ?? 0) > 0, creatureId.variant) : null;
   const look = creature ? null : figureLook(tk);
   const scale = enemy?.size ? sizeScale(enemy.size) : creature ? sizeScale(creature.size) : look && look.mount !== 'none' && look.mount ? 1.6 : 1;
   const down = enemy?.condition === 'down';

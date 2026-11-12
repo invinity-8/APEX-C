@@ -21,6 +21,9 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { buildCreature } from './creatures3d';
+import { faunaOf } from '../../game/fauna';
+import { sizeScale } from './sizes';
 import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world3d';
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
@@ -82,7 +85,7 @@ export default function HexScene3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group; composer?: EffectComposer } | null>(null);
   /** Animated things: grass shader time, swaying crowns, water, running combat effects. */
-  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fx: [] });
+  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [] });
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
   const [quality, setQualityState] = useState<Quality3D>(readQuality);
@@ -218,7 +221,7 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t || !p.map.hex) return;
     t.dynamic.clear();
-    anim.current.crowns = []; anim.current.flames = []; anim.current.water = []; anim.current.lights = [];
+    anim.current.crowns = []; anim.current.flames = []; anim.current.water = []; anim.current.lights = []; anim.current.fauna = [];
     for (const g of t.ground) { t.scene.remove(g); g.geometry.dispose(); }
     t.ground = [];
     const keys = [...tiles.keys()].filter((k) => fogOf.get(k) !== '.');
@@ -362,6 +365,26 @@ export default function HexScene3D(p: Props) {
     }
     // markers (lights, locations) as small glowing pins
     for (const n of p.map.nodes) {
+      // APEX 2.3 – living biomes: a group of ambient animals that graze, hop, peck or circle in the sky
+      if (n.kind === 'fauna' && (p.gm || n.visible)) {
+        const f = faunaOf(n.species);
+        const home = hexAt(p.map, n);
+        if (!f || !tiles.has(hexKey(home)) || fogOf.get(hexKey(home)) === '.') continue;
+        const spots = hexesInRange(home, 2).map(hexKey).filter((k) => { const tl = tiles.get(k); return !!tl && tl.cost !== null && !/deep/.test(tl.id) && fogOf.get(k) !== '.'; }).map((k) => { const w = toWorld(center(parseKey(k))); return new THREE.Vector3(w.x, top(k), w.z); });
+        if (!spots.length) continue;
+        const scale = sizeScale(f.size) * (f.size === 'tiny' ? 1.2 : 1);
+        for (let i = 0; i < Math.min(12, n.count ?? 3); i++) {
+          const roll = ((i * 37 + n.id.length * 11) % 10) / 10;
+          const model = buildCreature(n.species!, undefined, f.behaviour === 'fly', f.behaviour === 'fly' ? undefined : roll < 0.25 ? 'young' : roll < 0.6 ? 'female' : undefined);
+          if (!model) break;
+          model.group.scale.multiplyScalar(scale);
+          const at = spots[(i * 7) % spots.length].clone().add(new THREE.Vector3((roll - 0.5) * 0.8, 0, (((i * 13) % 10) / 10 - 0.5) * 0.8));
+          model.group.position.copy(at); model.group.rotation.y = roll * Math.PI * 2;
+          t.dynamic.add(model.group);
+          anim.current.fauna.push({ obj: model.group, behaviour: f.behaviour, spots, home: spots[0].clone(), target: null, wait: roll * 4, phase: roll * 10, wings: model.wings });
+        }
+        continue;
+      }
       // APEX 2.1 – enemy spawn markers (GM only): a red banner on a dashed ring
       if (n.kind === 'enemies' && p.gm) {
         const k = hexKey(hexAt(p.map, n));
@@ -572,6 +595,7 @@ export default function HexScene3D(p: Props) {
       for (const w of a.wings) { if (w.userData.flapZ) w.rotation.z = Math.sin(sec * 6 + w.id) * (w.userData.amp as number) * (w.userData.side as number); else w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number); }
       // APEX 2.3 – idle life: breathing, weight shift, turning to the nearest opponent, creatures resting until approached
       idleStep(t.tokens, sec);
+      faunaStep(a.fauna, t.tokens, sec);
       // standees turn towards the camera (around the vertical axis)
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
@@ -755,6 +779,41 @@ export default function HexScene3D(p: Props) {
 
 type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null };
 const ALERT_RANGE = 5 * Math.sqrt(3) * 1.05; // ≈ 5 hexes (25 ft): closer opponents wake resting creatures
+type Critter = { obj: THREE.Object3D; behaviour: string; spots: THREE.Vector3[]; home: THREE.Vector3; target: THREE.Vector3 | null; wait: number; phase: number; wings: THREE.Object3D[]; last?: number };
+/** Ambient animals: walk between spots and graze, hop, peck, prowl – or circle in the sky; shy away from figures. */
+function faunaStep(list: Critter[], tokens: THREE.Group, sec: number) {
+  for (const c of list) {
+    const dt = Math.min(0.1, sec - (c.last ?? sec)); c.last = sec;
+    const o = c.obj;
+    if (c.behaviour === 'fly') {
+      const r = 2.2 + (c.phase % 3) * 0.6, a = sec * (0.35 + (c.phase % 2) * 0.1) + c.phase;
+      o.position.set(c.home.x + Math.cos(a) * r, c.home.y + 3.2 + Math.sin(sec * 0.7 + c.phase) * 0.5 + (c.phase % 4) * 0.3, c.home.z + Math.sin(a) * r);
+      o.rotation.y = -a; // tangent of the circle
+      for (const w of c.wings) w.rotation.z = Math.sin(sec * 9 + c.phase) * 0.6 * ((w.userData.side as number) ?? 1);
+      continue;
+    }
+    // shy: a figure close by → run to the farthest spot
+    let near: THREE.Object3D | null = null, nd = 2.4;
+    for (const tk of tokens.children) { const d = tk.position.distanceTo(o.position); if (d < nd) { nd = d; near = tk; } }
+    if (near && (!c.target || c.target.distanceTo(near.position) < 2.4)) { c.target = c.spots.reduce((b, sp) => (sp.distanceTo(near!.position) > b.distanceTo(near!.position) ? sp : b), c.spots[0]).clone(); c.wait = 0; }
+    if (!c.target) {
+      c.wait -= dt;
+      // grazing / pecking: the body dips
+      o.rotation.x = c.behaviour === 'graze' ? 0.18 + Math.sin(sec * 2 + c.phase) * 0.05 : c.behaviour === 'peck' ? Math.max(0, Math.sin(sec * 6 + c.phase)) * 0.35 : 0;
+      if (c.wait <= 0) { c.target = c.spots[Math.floor(((Math.sin(sec * 13.7 + c.phase) + 1) / 2) * c.spots.length) % c.spots.length].clone().add(new THREE.Vector3(Math.sin(c.phase * 3 + sec) * 0.5, 0, Math.cos(c.phase * 5 + sec) * 0.5)); }
+      continue;
+    }
+    o.rotation.x = 0;
+    const to = c.target.clone().sub(o.position); to.y = 0;
+    const d = to.length();
+    const speed = (near ? 2.2 : 1) * (c.behaviour === 'hop' ? 0.9 : c.behaviour === 'prowl' ? 0.6 : c.behaviour === 'peck' ? 0.45 : 0.32);
+    if (d < 0.08) { c.target = null; c.wait = 1.5 + (c.phase % 4); continue; }
+    const yaw = Math.atan2(to.x, to.z); let dy = yaw - o.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.rotation.y += dy * Math.min(1, dt * 6);
+    o.position.addScaledVector(to.normalize(), Math.min(d, speed * dt));
+    const ground = c.spots.reduce((b, sp) => (Math.hypot(sp.x - o.position.x, sp.z - o.position.z) < Math.hypot(b.x - o.position.x, b.z - o.position.z) ? sp : b), c.spots[0]).y;
+    o.position.y = ground + (c.behaviour === 'hop' ? Math.abs(Math.sin(sec * 9 + c.phase)) * 0.3 : 0);
+  }
+}
 let idleTick = 0;
 const yawMemory = new Map<string, number>();
 /** Idle animation of all figures (runs in the render loop, ~0.1 ms for a battle). */
