@@ -673,3 +673,50 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - Gängige Monsternamen landen beim richtigen Modell.
 - Die Kreaturwahl wird validiert.
 - Alte Figuren ohne Reittier bleiben gültig.
+
+## APEX 2.3 – Frauen und Männer, Leerlauf-Animationen, Licht, Relief, Bestiarium 2.0
+
+**Sechs Körpertypen**
+- **Neuer Platz „Body“:** Frau oder Mann, dazu die Statur schlank, muskulös oder kräftig. Im Figuren-Editor stehen sechs Schnellwahl-Knöpfe. Ältere Staturen bleiben gültig.
+- **Frauen:** Taille, breitere Hüften, Brust, schmalere Schultern, feinere Glieder und schlankerer Hals, dazu Wimpern und getönte Lippen.
+- **Muskulös:** kräftige Schultern und dickere Arme.
+- **Heldinnen:** zehn neue Vorlagen (Schildmaid, Zauberin, Jägerin, Priesterin, Walküre, Hexe, Schurkin, Druidin, Mönchin, Paladinin).
+- **NPCs:** Banditen, Wachen, Kultisten und andere sind in etwa der Hälfte der Fälle Frauen, mit passenden Frisuren und ohne Bart.
+
+**Leerlauf-Animationen** (ab Qualität „medium“)
+- **Atmen:** Alle Figuren atmen und verlagern leicht das Gewicht.
+- **Hinsehen:** Figuren drehen sich langsam zum nächsten Gegner und behalten die Richtung. Helden und NPCs drehen zusätzlich den Kopf.
+- **Ruhen:** Tiere, Monster und Drachen legen sich hin und falten die Flügel, solange kein Gegner näher als 25 ft ist. Kommt jemand heran, stehen sie auf und schauen ihn an.
+
+**Licht**
+- **Lichtquellen:** Lagerfeuer, Kohlebecken, Kamine, Essen, Lava, Straßenlaternen, Kristalle, Leuchtpilze und Magiekreise leuchten ihre Umgebung aus. Feuer flackert.
+- **„high“:** Bloom auf Glühendem (Flammen, Magie, erleuchtete Fenster) und weiche Schatten.
+- **Neue Stufe „ultra“:** zusätzlich Umgebungsverdeckung (GTAO) für tiefe Ecken und Kontaktschatten.
+- **Markierungen:** Mit Bloom und Umgebungsverdeckung erscheinen Reichweite und Pfad als klare Hex-Ränder.
+
+**Relief**
+- **Höhenstile:** Acht Stile (sanfte Hügel, wellige Höhen, Terrassen, Tal, Grat, Schlucht, Plateaus, Klippen) mit Stärke 1–5 und Seed. Im Szeneneditor unter „Relief (heights)“.
+- **Regeln:**
+  - Wasser liegt in den Senken, Häuser stehen eben.
+  - Hänge bleiben begehbar, also höchstens eine Stufe pro Hex. Terrassen und Klippen bilden absichtlich Steilwände.
+- **Layouts:** Ländliche Vorlagen sowie Wald, Fluss, Sumpf, Winter, Ruinen und Lager bekommen automatisch ein passendes Relief. Stadtplätze bleiben eben.
+
+**Bestiarium 2.0 (136 Modelle)**
+- **Neu:** 60 Modelle.
+  - **Hof- und Kleintiere:** Hase, Schaf, Kuh, Schwein, Huhn, Ente/Gans, Schwan, Katze, Fuchs, Dachs, Eichhörnchen, Igel, Esel, Zebra, Lama, Bison, Nashorn, Nilpferd, Giraffe, Schildkröte, Schnecke, Schmetterling.
+  - **Magische Tiere:** Displacer Beast, Blinkhund, Winterwolf, Geisterwolf und Geisterhirsch, Wolpertinger, Mondhase, Kitsune, Feuerfuchs, Cockatrice, Phönix, Donnervogel, Kerberos, Chimäre.
+  - **Monster:** Bulette, Ankheg, Aaskriecher, Umber Hulk, Roper, Darkmantle, Seeschlange, Riesenqualle, Krake.
+  - **Aberrationen:** Grell, Intellect Devourer, Flumph, Gazer, Nothic, Cloaker, Slaad.
+  - **Pflanzen:** Myconid, Leuchtpilz-Riese, fleischfressende Pflanze.
+  - **Untote:** Knochendrache, Skelettross.
+  - **Bosse:** Weltenschildkröte, Himmelswal, Obsidian-Koloss.
+- **Varianten:** männlich, weiblich und jung, zum Beispiel Bär, Bärin und Bärenjunges. Die Löwin hat keine Mähne, die Hirschkuh kein Geweih, die Kuh kleine Hörner; Jungtiere haben große Köpfe, kurze Beine und keine Hörner.
+  - Wählbar im Creature Picker, oder automatisch aus Namen wie „cub“, „lamb“, „Lioness“, „Bärin“ oder „Kalb“.
+- **Zuordnung:** Deutsche Namen und Synonyme werden erkannt (Hase, Schaf, Bärin, Roter Drache …). Ausnahmen werden zuerst geprüft: Eine Wolfsspinne ist eine Spinne, Werwölfe bleiben menschenähnliche Figuren.
+- **Lebendige Biome:** Tiergruppen als Kartenmarker (Art und Anzahl), rein dekorativ und auch für Spieler sichtbar.
+  - In 3D grasen, hüpfen, picken oder streifen die Tiere umher, Vögel und Fledermäuse kreisen am Himmel. Kommt eine Figur zu nahe, weichen sie aus.
+  - Im Editor setzt das Werkzeug „🐾 Animals“ eine Gruppe. Beim Generieren kommen passende Tiere dazu: Schafe, Hühner und Kühe auf dem Gehöft, Krähen und Fledermäuse auf dem Friedhof, Frösche und Irrlichter im Sumpf.
+
+**Tests:** 549 Tests grün.
+- **Neu:** Relief (`relief23`) und Bestiarium (`bestiary23`), außerdem Körpertypen.
+- **Korrektur:** Der Wild-Shape-Test (`battle17`) berücksichtigt jetzt kritische Treffer; er schlug zuvor zufällig etwa jeden sechsten Lauf fehl.
