@@ -16,6 +16,11 @@ import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { gradientMap, paletteKey } from '../../campaign/palette';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world3d';
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
@@ -54,26 +59,30 @@ interface Props {
 }
 
 /** APEX 2.1 – 3D quality (per device): resolution, shadows, grass and animation. 'auto' picks by the device. */
-export type Quality3D = 'low' | 'medium' | 'high';
+export type Quality3D = 'low' | 'medium' | 'high' | 'ultra';
 const QUALITY_KEY = 'apex.3d.quality';
 export function readQuality(): Quality3D {
-  try { const v = localStorage.getItem(QUALITY_KEY); if (v === 'low' || v === 'medium' || v === 'high') return v; } catch { /* private mode */ }
+  try { const v = localStorage.getItem(QUALITY_KEY); if (v === 'low' || v === 'medium' || v === 'high' || v === 'ultra') return v; } catch { /* private mode */ }
   const nav = navigator as Navigator & { deviceMemory?: number };
   return (nav.deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency ?? 8) <= 4 ? 'low' : 'medium';
 }
-const QUALITY: Record<Quality3D, { ratio: number; shadow: number; grass: number; fps: number }> = {
-  low: { ratio: 1, shadow: 0, grass: 0, fps: 0 },
-  medium: { ratio: 1.25, shadow: 2048, grass: 12, fps: 30 },
-  high: { ratio: 2, shadow: 4096, grass: 26, fps: 60 },
+const QUALITY: Record<Quality3D, { ratio: number; shadow: number; grass: number; fps: number; lights: number; bloom: boolean; ao: boolean; soft: boolean }> = {
+  low: { ratio: 1, shadow: 0, grass: 0, fps: 0, lights: 0, bloom: false, ao: false, soft: false },
+  medium: { ratio: 1.25, shadow: 2048, grass: 12, fps: 30, lights: 3, bloom: false, ao: false, soft: false },
+  high: { ratio: 2, shadow: 4096, grass: 26, fps: 60, lights: 6, bloom: true, ao: false, soft: true },
+  // APEX 2.3: ambient occlusion on top – deep corners, contact shadows under figures and props
+  ultra: { ratio: 2, shadow: 4096, grass: 26, fps: 60, lights: 8, bloom: true, ao: true, soft: true },
 };
+/** Tiles that burn or glow: their light flickers (fire) or stays steady (magic, lamps). */
+const FLICKER = new Set(['campfire', 'brazier', 'hearth', 'forge', 'lava', 'lamppost']);
 
 type Cam = { tx: number; tz: number; yaw: number; pitch: number; dist: number };
 
 export default function HexScene3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
-  const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group } | null>(null);
+  const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group; composer?: EffectComposer } | null>(null);
   /** Animated things: grass shader time, swaying crowns, water, running combat effects. */
-  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], fx: [] });
+  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fx: [] });
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
   const [quality, setQualityState] = useState<Quality3D>(readQuality);
@@ -141,7 +150,8 @@ export default function HexScene3D(p: Props) {
     const dynamic = new THREE.Group(), tokens = new THREE.Group(), overlay = new THREE.Group(), effects = new THREE.Group();
     scene.add(dynamic, tokens, overlay, effects);
     three.current = { renderer, scene, camera, ground: [], dynamic, tokens, overlay, effects };
-    const resize = () => { const w = el.clientWidth || 600, h = el.clientHeight || 400; renderer.setSize(w, h, false); renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'; camera.aspect = w / h; camera.updateProjectionMatrix(); setTick((t) => t + 1); };
+    if (import.meta.env.DEV) (window as unknown as { __apex3d?: unknown }).__apex3d = three.current; // dev: inspect the scene from tests
+    const resize = () => { const w = el.clientWidth || 600, h = el.clientHeight || 400; renderer.setSize(w, h, false); three.current?.composer?.setSize(w, h); renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'; camera.aspect = w / h; camera.updateProjectionMatrix(); setTick((t) => t + 1); };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     resize();
@@ -179,7 +189,21 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t) return;
     const dpr = window.devicePixelRatio || 1;
-    t.renderer.setPixelRatio(quality === 'high' ? Math.min(2.5, Math.max(1.5, dpr)) : quality === 'medium' ? Math.min(dpr, 1.25) : 1);
+    t.renderer.setPixelRatio(quality === 'high' ? Math.min(2.5, Math.max(1.5, dpr)) : quality === 'ultra' ? Math.min(2, Math.max(1.5, dpr)) : quality === 'medium' ? Math.min(dpr, 1.25) : 1);
+    t.renderer.shadowMap.type = qcfg.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    // post-processing: bloom on glowing things (fire, magic, lit windows), ambient occlusion on ultra
+    t.composer?.dispose(); t.composer = undefined;
+    if (qcfg.bloom || qcfg.ao) {
+      const el0 = wrap.current; const w = el0?.clientWidth || 600, h = el0?.clientHeight || 400;
+      const composer = new EffectComposer(t.renderer);
+      composer.addPass(new RenderPass(t.scene, t.camera));
+      if (qcfg.ao) { const ao = new GTAOPass(t.scene, t.camera, w, h); ao.blendIntensity = 0.85; composer.addPass(ao); }
+      if (qcfg.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.45, 0.82));
+      composer.addPass(new OutputPass());
+      composer.setSize(w, h);
+      t.composer = composer;
+    }
+    t.scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
     t.renderer.shadowMap.enabled = qcfg.shadow > 0;
     const sun = t.scene.children[1] as THREE.DirectionalLight;
     sun.castShadow = qcfg.shadow > 0;
@@ -194,7 +218,7 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t || !p.map.hex) return;
     t.dynamic.clear();
-    anim.current.crowns = []; anim.current.flames = []; anim.current.water = [];
+    anim.current.crowns = []; anim.current.flames = []; anim.current.water = []; anim.current.lights = [];
     for (const g of t.ground) { t.scene.remove(g); g.geometry.dispose(); }
     t.ground = [];
     const keys = [...tiles.keys()].filter((k) => fogOf.get(k) !== '.');
@@ -326,6 +350,16 @@ export default function HexScene3D(p: Props) {
       wm.userData.phase = m.userData.phase;
       t.dynamic.add(m); anim.current.water.push(wm);
     }
+    // APEX 2.3 – tiles that burn or glow light their surroundings (the nearest to the middle, as many as the quality allows)
+    const glowing = keys.filter((k) => tiles.get(k)!.light && fogOf.get(k) !== 'e').sort((x, y) => distance(parseKey(x), ORIGIN) - distance(parseKey(y), ORIGIN)).slice(0, qcfg.lights);
+    for (const k of glowing) {
+      const tile = tiles.get(k)!, w = toWorld(center(parseKey(k)));
+      const fire = FLICKER.has(tile.id);
+      const l = new THREE.PointLight(new THREE.Color(fire ? '#ffa04a' : tile.accent ?? '#9fd8ff'), fire ? 3.2 : 2.0, ((tile.light ?? 15) / 5) * 1.73 * 1.6, 1.5);
+      l.position.set(w.x, top(k) + (tile.id === 'lamppost' ? 2.4 : tile.id === 'lava' ? 0.4 : 1.1), w.z);
+      l.userData = { base: l.intensity, flicker: fire, phase: (parseKey(k).q * 7 + parseKey(k).r * 3) % 10 };
+      t.dynamic.add(l); anim.current.lights.push(l);
+    }
     // markers (lights, locations) as small glowing pins
     for (const n of p.map.nodes) {
       // APEX 2.1 – enemy spawn markers (GM only): a red banner on a dashed ring
@@ -416,8 +450,11 @@ export default function HexScene3D(p: Props) {
     const disc = (k: HexKey, color: number, opacity: number, lift = 0.02, scale = 0.92) => {
       const pts = Array.from({ length: 6 }, (_, i) => corner(0, 0, scale, i));
       const s = new THREE.Shape(pts.map((q) => new THREE.Vector2(q.x, q.y)));
+      // with post-processing (bloom / AO) translucent fills wash out the dark ground (tone mapping after blending), so
+      // the overlay becomes an opaque hex rim instead – crisp and readable in every light
+      if (t.composer) { const inner = Array.from({ length: 6 }, (_, i) => corner(0, 0, scale * (opacity >= 0.4 ? 0.78 : 0.9), i)); s.holes.push(new THREE.Path(inner.map((q) => new THREE.Vector2(q.x, q.y)).reverse())); }
       const g = new THREE.ShapeGeometry(s); g.rotateX(Math.PI / 2);
-      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+      const m = new THREE.Mesh(g, t.composer ? new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.18 + opacity * 0.9), side: THREE.DoubleSide }) : new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
       const w = toWorld(center(parseKey(k)));
       m.position.set(w.x, top(k) + lift, w.z);
       t.overlay.add(m);
@@ -482,7 +519,7 @@ export default function HexScene3D(p: Props) {
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {
@@ -542,7 +579,8 @@ export default function HexScene3D(p: Props) {
       const c = cam.current;
       t.camera.position.set(c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist);
       t.camera.lookAt(c.tx, 1, c.tz);
-      t.renderer.render(t.scene, t.camera);
+      for (const l of a.lights) if (l.userData.flicker) l.intensity = (l.userData.base as number) * (0.8 + 0.2 * Math.sin(sec * 11 + (l.userData.phase as number)) * Math.sin(sec * 6.7 + (l.userData.phase as number) * 1.7));
+      if (t.composer) t.composer.render(); else t.renderer.render(t.scene, t.camera);
       t.renderer.shadowMap.needsUpdate = false;
     };
     raf = requestAnimationFrame(frame);
@@ -708,7 +746,7 @@ export default function HexScene3D(p: Props) {
       )}
       <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">
         <span title="Resolution, shadows, grass and animation – lower is faster on weak devices">⚙ 3D</span>
-        {(['low', 'medium', 'high'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
+        {(['low', 'medium', 'high', 'ultra'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
       </div>
       <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">🖱 middle button: orbit / tilt · left drag: pan · wheel: zoom · right-click: act</div>
     </div>
