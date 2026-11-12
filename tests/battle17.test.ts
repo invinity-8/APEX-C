@@ -137,7 +137,9 @@ describe('API: a level-1 druid with Wild Shape, Shillelagh, Thunderwave', () => 
     expect((hit.body as { message: string }).message).toMatch(/reverts to normal form/);
     const after = (await sheetOf()).sheet!;
     expect(after.wildShape).toBeUndefined();
-    expect(after.hitPoints!.current).toBe(7); // 3 damage: 1 to the wolf, 2 carried over
+    // 3 damage (a critical hit doubles the dice: 6): 1 to the wolf, the rest carried over to the druid's 9 HP
+    const dmg = /CRITICAL HIT/.test((hit.body as { message: string }).message) ? 6 : 3;
+    expect(after.hitPoints!.current).toBe(9 - (dmg - 1));
   });
 
   it('Shillelagh on yourself: the staff strike uses the Shillelagh numbers', async () => {

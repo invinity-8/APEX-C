@@ -74,3 +74,19 @@ describe('figure kit 2.2: hair, beards, wings, mounts', () => {
     expect(parseLook(old)?.mount).toBe('none');
   });
 });
+
+describe('APEX 2.3: women and men, three builds each', async () => {
+  const { BODY_TYPES_3D, feminine, lookFromPreset, FIGURE_PRESETS } = await import('../src/game/figure');
+  it('all six body types build; heroines exist; NPC variations include women without beards', () => {
+    expect(BODY_TYPES_3D).toHaveLength(6);
+    for (const t of BODY_TYPES_3D) for (const torso of FIGURE_PARTS.torso) expect(buildLowPoly({ ...DEFAULT_LOOK, sex: t.sex, build: t.build, torso }).height, `${t.id} ${torso}`).toBeGreaterThan(1);
+    expect(FIGURE_PRESETS.filter((p) => p.group === 'hero' && p.look.sex === 'female').length).toBeGreaterThanOrEqual(10);
+    const bandit = FIGURE_PRESETS.find((p) => p.id === 'bandit')!;
+    const looks = Array.from({ length: 40 }, (_, i) => lookFromPreset(bandit, i + 1));
+    const women = looks.filter((l) => l.sex === 'female');
+    expect(women.length).toBeGreaterThan(8);
+    expect(looks.length - women.length).toBeGreaterThan(8);
+    for (const w of women) { expect(w.beard).toBe('none'); expect(parseLook(w)).not.toBeNull(); }
+    expect(feminine({ ...DEFAULT_LOOK, beard: 'full', hair: 'none' }).hair).not.toBe('none');
+  });
+});
