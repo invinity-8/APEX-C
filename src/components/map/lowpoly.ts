@@ -62,7 +62,7 @@ const BUILD: Record<FigureLook['build'], { w: number; leg: number; belly: number
   slim: { w: 0.85, leg: 1.04, belly: 0, arm: 0.9 }, stocky: { w: 1.14, leg: 0.88, belly: 0.1, arm: 1.12 }, broad: { w: 1.25, leg: 1, belly: 0, arm: 1.2, delt: true },
 };
 
-export interface LowPolyFigure { group: THREE.Group; height: number; /** flapping wings of a winged mount */ wings?: THREE.Object3D[] }
+export interface LowPolyFigure { group: THREE.Group; height: number; /** flapping wings of a winged mount */ wings?: THREE.Object3D[]; /** the head pivot (turns towards what the figure looks at) */ head?: THREE.Object3D }
 /** The ancestry's own scale (a halfling is smaller than a human); stat-block sizes replace it for enemies. */
 export const ancestryScale = (look: FigureLook) => (ANCESTRY[look.body] ?? ANCESTRY.human).s;
 
@@ -366,18 +366,26 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
   g.scale.setScalar(a.s);
   const hatH = { wizard: hr * 2.6, crown: hr * 1.4, antlers: hr * 1.6, horned: hr * 1.4, cowl: hr * 1.2, strawhat: hr * 1.1, feathercap: hr * 1.6 }[look.hat as string] ?? hr * 1.05;
   let height = (headY + hatH) * a.s;
+  // APEX 2.3: the head is merged on its own, as a pivot that can turn (idle look-at)
+  root.updateMatrixWorld(true);
+  const headMatrix = head.matrixWorld.clone();
+  head.parent?.remove(head);
+  head.position.set(0, 0, 0); head.updateMatrixWorld(true);
+  const headMerged = mergeByMaterial(head);
   const merged = mergeByMaterial(root);
-  if (!riding) return { group: merged, height };
+  const headPivot = new THREE.Group(); headPivot.applyMatrix4(headMatrix); headPivot.add(headMerged); headPivot.userData.head = true;
+  merged.add(headPivot);
+  if (!riding) return { group: merged, height, head: headPivot };
   // the mount at its own size class; the rider sits on its back
   const mount = buildCreature(look.mount, undefined, false);
-  if (!mount) return { group: merged, height };
+  if (!mount) return { group: merged, height, head: headPivot };
   const ms = (mount.ride ?? sizeScale(mount.size)) * (opts.mountScale ?? 1);
   mount.group.scale.setScalar(ms);
   const seat = mount.seat ?? [0, mount.height * 0.6, 0];
   merged.position.set(seat[0] * ms, seat[1] * ms - hip * a.s + 0.04, seat[2] * ms);
   const out = new THREE.Group(); out.add(mount.group, merged);
   height = merged.position.y + height;
-  return { group: out, height, wings: mount.wings };
+  return { group: out, height, wings: mount.wings, head: headPivot };
 }
 
 interface Mats { metal: THREE.Material; metalD: THREE.Material; leather: THREE.Material; leatherD: THREE.Material; prim: THREE.Material; sec: THREE.Material; gold: THREE.Material; wood: THREE.Material; glow: THREE.Material; flame: THREE.Material; bone?: THREE.Material; dark?: THREE.Material }

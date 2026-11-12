@@ -388,8 +388,8 @@ export default function HexScene3D(p: Props) {
         const fig = buildFigure(tk, ringColor);
         const g = fig.group;
         g.position.set(w.x + off.x, y + lift, w.z + off.z);
-        g.rotation.y = enemy ? Math.PI : 0;
-        g.userData = { tokenId: tk.tokenId };
+        g.rotation.y = yawMemory.get(tk.tokenId) ?? (enemy ? Math.PI : 0); // keeps the direction it last turned to
+        g.userData = { tokenId: tk.tokenId, idle: { kind: fig.animKind, body: fig.body, head: fig.head, baseY: fig.body.position.y, phase: (tk.tokenId.charCodeAt(0) * 13 + tk.tokenId.length * 7) % 100 / 10, hostile: !!enemy && !enemy.ally, yaw: g.rotation.y, rest: 0, height: fig.height, wings: fig.wings ?? [] } };
         if (fig.card) anim.current.cards.push(fig.card);
         if (fig.wings) anim.current.wings.push(...fig.wings);
         if (lift > 0) {
@@ -533,6 +533,8 @@ export default function HexScene3D(p: Props) {
       for (const w of a.water) w.opacity = 0.66 + Math.sin(sec * 1.3 + (w.userData.phase as number)) * 0.06;
       for (const f of a.flames) { f.scale.y = 0.85 + Math.sin(sec * 9 + f.id) * 0.12 + Math.sin(sec * 23 + f.id * 2) * 0.05; f.rotation.y = sec * 0.6; }
       for (const w of a.wings) { if (w.userData.flapZ) w.rotation.z = Math.sin(sec * 6 + w.id) * (w.userData.amp as number) * (w.userData.side as number); else w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number); }
+      // APEX 2.3 – idle life: breathing, weight shift, turning to the nearest opponent, creatures resting until approached
+      idleStep(t.tokens, sec);
       // standees turn towards the camera (around the vertical axis)
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
@@ -711,6 +713,52 @@ export default function HexScene3D(p: Props) {
       <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">🖱 middle button: orbit / tilt · left drag: pan · wheel: zoom · right-click: act</div>
     </div>
   );
+}
+
+type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null };
+const ALERT_RANGE = 5 * Math.sqrt(3) * 1.05; // ≈ 5 hexes (25 ft): closer opponents wake resting creatures
+let idleTick = 0;
+const yawMemory = new Map<string, number>();
+/** Idle animation of all figures (runs in the render loop, ~0.1 ms for a battle). */
+function idleStep(tokens: THREE.Group, sec: number) {
+  const list = tokens.children.filter((c) => c.userData.idle) as THREE.Object3D[];
+  // every few frames: the nearest opponent of every figure
+  if (idleTick++ % 8 === 0) for (const a of list) {
+    const ia = a.userData.idle as Idle;
+    let best: THREE.Object3D | null = null, bd = Infinity;
+    for (const b of list) { if (b === a || (b.userData.idle as Idle).hostile === ia.hostile) continue; const d = a.position.distanceTo(b.position); if (d < bd) { bd = d; best = b; } }
+    ia.target = best && bd < ALERT_RANGE * 2.2 ? Math.atan2(best.position.x - a.position.x, best.position.z - a.position.z) : null;
+    (ia as Idle & { near: number }).near = bd;
+  }
+  for (const a of list) {
+    const ia = a.userData.idle as Idle & { near?: number };
+    if (ia.kind === 'still') continue;
+    const t = sec + ia.phase;
+    // turn (slowly) towards the nearest opponent in sight range
+    if (ia.target !== null && ia.target !== undefined && ia.kind !== 'standee') {
+      let d = ia.target - a.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+      a.rotation.y += d * 0.04;
+      yawMemory.set(a.userData.tokenId as string, a.rotation.y);
+    }
+    // creatures rest when nobody is near and rise when someone approaches
+    const restGoal = (ia.kind === 'creature' || ia.kind === 'flyer') && (ia.near ?? Infinity) > ALERT_RANGE ? 1 : 0;
+    ia.rest += (restGoal - ia.rest) * 0.03;
+    const breathe = Math.sin(t * (ia.kind === 'humanoid' ? 2.1 : 1.5)) * (ia.kind === 'humanoid' ? 0.012 : 0.025);
+    ia.body.scale.y = (1 + breathe) * (1 - ia.rest * 0.28);
+    ia.body.scale.x = ia.body.scale.z = 1 - breathe * 0.4 + ia.rest * 0.05;
+    ia.body.position.y = ia.baseY;
+    ia.body.rotation.z = ia.kind === 'humanoid' ? Math.sin(t * 0.7) * 0.018 : 0;
+    ia.body.rotation.x = ia.kind === 'humanoid' ? 0 : -ia.rest * 0.05 + Math.sin(t * 0.9) * 0.01;
+    for (const w of ia.wings) w.userData.amp = ia.rest > 0.5 ? 0.04 : w.userData.amp0 ?? (w.userData.amp0 = w.userData.amp ?? 0.15);
+    if (ia.head) {
+      // the head looks around a little, or at the opponent (relative to the body)
+      let rel = 0;
+      if (ia.target !== null && ia.target !== undefined) { rel = ia.target - a.rotation.y; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); }
+      const goal = Math.max(-0.7, Math.min(0.7, rel)) + Math.sin(t * 0.4) * 0.25 * (ia.target === null ? 1 : 0.2);
+      ia.head.rotation.y += (goal - ia.head.rotation.y) * 0.06;
+      ia.head.rotation.x = Math.sin(t * 0.55) * 0.04;
+    }
+  }
 }
 
 let rockTex: THREE.Texture | null = null;
