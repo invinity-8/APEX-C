@@ -37,7 +37,7 @@ export function figureLook(tk: SceneToken): FigureLook | null {
 }
 
 /** APEX 2.2 – the creature model of a figure: explicit, by wild-shape form, or by name/type (humanoids: none). */
-export function figureCreature(tk: SceneToken): { kind: string; tint?: string } | null {
+export function figureCreature(tk: SceneToken): { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' } | null {
   if (tk.vitals?.form) return creatureFor(tk.vitals.form);
   const e = tk.enemy;
   if (!e || e.look) return null;
@@ -62,13 +62,15 @@ const mesh = (geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0)
 
 // ---------------------------------------------------------------- figures
 
-export interface FigureParts { group: THREE.Group; card?: THREE.Object3D; wings?: THREE.Object3D[]; label: THREE.Sprite; height: number }
+export interface FigureParts { group: THREE.Group; card?: THREE.Object3D; wings?: THREE.Object3D[]; label: THREE.Sprite; height: number;
+  /** APEX 2.3 – idle animation: the body (breathes, rests), the head pivot (looks), what kind of figure it is */
+  body: THREE.Object3D; head?: THREE.Object3D; animKind: 'humanoid' | 'creature' | 'flyer' | 'standee' | 'still' }
 
 /** A figure: base, standee or miniature, label. `ringColor` marks the side / selection. */
 export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   const enemy = tk.enemy;
   const creatureId = figureCreature(tk);
-  const creature = creatureId ? buildCreature(creatureId.kind, creatureId.tint, (tk.alt ?? 0) > 0) : null;
+  const creature = creatureId ? buildCreature(creatureId.kind, creatureId.tint, (tk.alt ?? 0) > 0, creatureId.variant) : null;
   const look = creature ? null : figureLook(tk);
   const scale = enemy?.size ? sizeScale(enemy.size) : creature ? sizeScale(creature.size) : look && look.mount !== 'none' && look.mount ? 1.6 : 1;
   const down = enemy?.condition === 'down';
@@ -81,6 +83,8 @@ export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   let card: THREE.Object3D | undefined;
   let wings: THREE.Object3D[] | undefined;
   let height = 2.1 * scale;
+  let head: THREE.Object3D | undefined;
+  let animKind: FigureParts['animKind'] = 'still';
   const body = new THREE.Group(); body.position.y = 0.12;
   if (creature) {
     // APEX 2.2 – beasts, monsters, dragons, aberrations …: the model scaled to the size class
@@ -88,6 +92,7 @@ export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
     body.add(creature.group);
     wings = creature.wings;
     height = creature.height * scale;
+    animKind = creature.flies ? 'flyer' : 'creature';
   } else if (look) {
     const riding = !!look.mount && look.mount !== 'none';
     const lp = buildLowPoly(look);
@@ -97,8 +102,9 @@ export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
     body.add(lp.group);
     if (lp.wings) wings = lp.wings;
     height = lp.height * k;
+    head = lp.head; animKind = 'humanoid';
   } else if (!enemy && tk.view?.portraitV && !tk.vitals?.form) {
-    card = standee(tk); body.add(card); height = 2.25;
+    card = standee(tk); body.add(card); height = 2.25; animKind = 'standee';
   } else {
     const build = tk.vitals?.form ? (/eagle|hawk|owl|bat|raven|bird/i.test(tk.vitals.form) ? 'flyer' : /spider/i.test(tk.vitals.form) ? 'spider' : 'beast') : enemy?.build ?? 'humanoid';
     const color = new THREE.Color(tk.color);
@@ -116,7 +122,8 @@ export function buildFigure(tk: SceneToken, ringColor: number): FigureParts {
   label.renderOrder = 5;
   g.add(label);
   if (tk.target) { const tr = new THREE.Mesh(new THREE.TorusGeometry(baseR * 1.3, 0.04, 6, 40), new THREE.MeshBasicMaterial({ color: 0xffd36b })); tr.rotation.x = Math.PI / 2; tr.position.y = 0.14; g.add(tr); }
-  return { group: g, card, wings, label, height };
+  if (down) animKind = 'still';
+  return { group: g, card, wings, label, height, body, head, animKind };
 }
 
 /** Cardboard standee: the portrait in a framed card with a printed back. */

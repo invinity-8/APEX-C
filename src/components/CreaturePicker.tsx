@@ -12,9 +12,10 @@ const FigurePreview = lazy(() => import('./FigurePreview'));
 export function CreaturePicker({ block, busy, onSave }: { block: StatBlock; busy: boolean; onSave: (c: CreatureChoice | null) => void | Promise<void> }) {
   const [kind, setKind] = useState(block.creature?.kind ?? '');
   const [tint, setTint] = useState(block.creature?.tint ?? '');
+  const [variant, setVariant] = useState<CreatureChoice['variant'] | ''>(block.creature?.variant ?? '');
   const groups = [...new Set(CREATURE_LIST.map((c) => c.group))];
   const isDragon = kind === 'dragon' || kind === 'drake';
-  const dirty = kind !== (block.creature?.kind ?? '') || tint !== (block.creature?.tint ?? '');
+  const dirty = kind !== (block.creature?.kind ?? '') || tint !== (block.creature?.tint ?? '') || variant !== (block.creature?.variant ?? '');
   return (
     <section className="space-y-2 rounded-xl border border-arcane-500/40 bg-ink-950/80 p-3 text-xs" aria-label="Creature model" data-testid="creature-picker">
       <div className="flex flex-wrap items-center gap-2"><b className="font-display text-sm text-gold-200">🐉 Creature model</b><span className="text-marble-500">{CREATURE_LIST.length} models · without a choice the 3D map picks one from the name and type</span></div>
@@ -22,7 +23,7 @@ export function CreaturePicker({ block, busy, onSave }: { block: StatBlock; busy
         <div className="shrink-0">
           {kind ? (
             <Suspense fallback={<div className="grid place-items-center rounded-xl border border-ink-700 bg-ink-900 text-marble-500" style={{ width: 220, height: 253 }}>Loading 3D…</div>}>
-              <FigurePreview creature={{ kind, ...(tint ? { tint } : {}) }} ring={block.color} size={220} />
+              <FigurePreview creature={{ kind, ...(tint ? { tint } : {}), ...(variant ? { variant } : {}) }} ring={block.color} size={220} />
             </Suspense>
           ) : <div className="grid place-items-center rounded-xl border border-dashed border-ink-600 p-4 text-center text-marble-500" style={{ width: 220, height: 253 }}>Humanoid figure (below) or automatic choice</div>}
         </div>
@@ -35,6 +36,7 @@ export function CreaturePicker({ block, busy, onSave }: { block: StatBlock; busy
               </div>
             </div>
           ))}
+          <div className="flex flex-wrap items-center gap-1"><span className="text-marble-400">Variant</span>{([['', 'Adult'], ['male', 'Male'], ['female', 'Female'], ['young', 'Young']] as const).map(([v, l]) => <button key={v} type="button" aria-pressed={variant === v} className={`rounded px-1.5 ${variant === v ? 'bg-gold-500/25 text-gold-100' : 'text-marble-300 hover:text-gold-200'}`} onClick={() => setVariant(v)}>{l}</button>)}</div>
           {isDragon && (
             <div className="flex flex-wrap items-center gap-1"><span className="text-marble-400">Dragon colour</span>{DRAGON_TINTS.map((t) => <button key={t} type="button" aria-pressed={tint === t} className={`rounded px-1.5 ${tint === t ? 'bg-gold-500/25 text-gold-100' : 'text-marble-300 hover:text-gold-200'}`} onClick={() => setTint(t)}>{t}</button>)}</div>
           )}
@@ -44,7 +46,7 @@ export function CreaturePicker({ block, busy, onSave }: { block: StatBlock; busy
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <button type="button" className="btn btn-gold px-3 py-1" disabled={busy || !kind || !dirty} onClick={() => void onSave({ kind, ...(tint ? { tint } : {}) })} data-testid="creature-save">Use this model</button>
+        <button type="button" className="btn btn-gold px-3 py-1" disabled={busy || !kind || !dirty} onClick={() => void onSave({ kind, ...(tint ? { tint } : {}), ...(variant ? { variant } : {}) })} data-testid="creature-save">Use this model</button>
         {block.creature && <button type="button" className="btn btn-ghost px-2 py-1" disabled={busy} onClick={() => void onSave(null)}>Back to automatic</button>}
       </div>
     </section>

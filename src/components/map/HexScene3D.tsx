@@ -16,6 +16,14 @@ import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { gradientMap, paletteKey } from '../../campaign/palette';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { buildCreature } from './creatures3d';
+import { faunaOf } from '../../game/fauna';
+import { sizeScale } from './sizes';
 import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world3d';
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
@@ -54,26 +62,30 @@ interface Props {
 }
 
 /** APEX 2.1 – 3D quality (per device): resolution, shadows, grass and animation. 'auto' picks by the device. */
-export type Quality3D = 'low' | 'medium' | 'high';
+export type Quality3D = 'low' | 'medium' | 'high' | 'ultra';
 const QUALITY_KEY = 'apex.3d.quality';
 export function readQuality(): Quality3D {
-  try { const v = localStorage.getItem(QUALITY_KEY); if (v === 'low' || v === 'medium' || v === 'high') return v; } catch { /* private mode */ }
+  try { const v = localStorage.getItem(QUALITY_KEY); if (v === 'low' || v === 'medium' || v === 'high' || v === 'ultra') return v; } catch { /* private mode */ }
   const nav = navigator as Navigator & { deviceMemory?: number };
   return (nav.deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency ?? 8) <= 4 ? 'low' : 'medium';
 }
-const QUALITY: Record<Quality3D, { ratio: number; shadow: number; grass: number; fps: number }> = {
-  low: { ratio: 1, shadow: 0, grass: 0, fps: 0 },
-  medium: { ratio: 1.25, shadow: 2048, grass: 12, fps: 30 },
-  high: { ratio: 2, shadow: 4096, grass: 26, fps: 60 },
+const QUALITY: Record<Quality3D, { ratio: number; shadow: number; grass: number; fps: number; lights: number; bloom: boolean; ao: boolean; soft: boolean }> = {
+  low: { ratio: 1, shadow: 0, grass: 0, fps: 0, lights: 0, bloom: false, ao: false, soft: false },
+  medium: { ratio: 1.25, shadow: 2048, grass: 12, fps: 30, lights: 3, bloom: false, ao: false, soft: false },
+  high: { ratio: 2, shadow: 4096, grass: 26, fps: 60, lights: 6, bloom: true, ao: false, soft: true },
+  // APEX 2.3: ambient occlusion on top – deep corners, contact shadows under figures and props
+  ultra: { ratio: 2, shadow: 4096, grass: 26, fps: 60, lights: 8, bloom: true, ao: true, soft: true },
 };
+/** Tiles that burn or glow: their light flickers (fire) or stays steady (magic, lamps). */
+const FLICKER = new Set(['campfire', 'brazier', 'hearth', 'forge', 'lava', 'lamppost']);
 
 type Cam = { tx: number; tz: number; yaw: number; pitch: number; dist: number };
 
 export default function HexScene3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
-  const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group } | null>(null);
+  const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group; composer?: EffectComposer } | null>(null);
   /** Animated things: grass shader time, swaying crowns, water, running combat effects. */
-  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], fx: [] });
+  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [] });
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
   const [quality, setQualityState] = useState<Quality3D>(readQuality);
@@ -141,7 +153,8 @@ export default function HexScene3D(p: Props) {
     const dynamic = new THREE.Group(), tokens = new THREE.Group(), overlay = new THREE.Group(), effects = new THREE.Group();
     scene.add(dynamic, tokens, overlay, effects);
     three.current = { renderer, scene, camera, ground: [], dynamic, tokens, overlay, effects };
-    const resize = () => { const w = el.clientWidth || 600, h = el.clientHeight || 400; renderer.setSize(w, h, false); renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'; camera.aspect = w / h; camera.updateProjectionMatrix(); setTick((t) => t + 1); };
+    if (import.meta.env.DEV) (window as unknown as { __apex3d?: unknown }).__apex3d = three.current; // dev: inspect the scene from tests
+    const resize = () => { const w = el.clientWidth || 600, h = el.clientHeight || 400; renderer.setSize(w, h, false); three.current?.composer?.setSize(w, h); renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'; camera.aspect = w / h; camera.updateProjectionMatrix(); setTick((t) => t + 1); };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     resize();
@@ -179,7 +192,21 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t) return;
     const dpr = window.devicePixelRatio || 1;
-    t.renderer.setPixelRatio(quality === 'high' ? Math.min(2.5, Math.max(1.5, dpr)) : quality === 'medium' ? Math.min(dpr, 1.25) : 1);
+    t.renderer.setPixelRatio(quality === 'high' ? Math.min(2.5, Math.max(1.5, dpr)) : quality === 'ultra' ? Math.min(2, Math.max(1.5, dpr)) : quality === 'medium' ? Math.min(dpr, 1.25) : 1);
+    t.renderer.shadowMap.type = qcfg.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    // post-processing: bloom on glowing things (fire, magic, lit windows), ambient occlusion on ultra
+    t.composer?.dispose(); t.composer = undefined;
+    if (qcfg.bloom || qcfg.ao) {
+      const el0 = wrap.current; const w = el0?.clientWidth || 600, h = el0?.clientHeight || 400;
+      const composer = new EffectComposer(t.renderer);
+      composer.addPass(new RenderPass(t.scene, t.camera));
+      if (qcfg.ao) { const ao = new GTAOPass(t.scene, t.camera, w, h); ao.blendIntensity = 0.85; composer.addPass(ao); }
+      if (qcfg.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.45, 0.82));
+      composer.addPass(new OutputPass());
+      composer.setSize(w, h);
+      t.composer = composer;
+    }
+    t.scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
     t.renderer.shadowMap.enabled = qcfg.shadow > 0;
     const sun = t.scene.children[1] as THREE.DirectionalLight;
     sun.castShadow = qcfg.shadow > 0;
@@ -194,7 +221,7 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t || !p.map.hex) return;
     t.dynamic.clear();
-    anim.current.crowns = []; anim.current.flames = []; anim.current.water = [];
+    anim.current.crowns = []; anim.current.flames = []; anim.current.water = []; anim.current.lights = []; anim.current.fauna = [];
     for (const g of t.ground) { t.scene.remove(g); g.geometry.dispose(); }
     t.ground = [];
     const keys = [...tiles.keys()].filter((k) => fogOf.get(k) !== '.');
@@ -326,8 +353,38 @@ export default function HexScene3D(p: Props) {
       wm.userData.phase = m.userData.phase;
       t.dynamic.add(m); anim.current.water.push(wm);
     }
+    // APEX 2.3 – tiles that burn or glow light their surroundings (the nearest to the middle, as many as the quality allows)
+    const glowing = keys.filter((k) => tiles.get(k)!.light && fogOf.get(k) !== 'e').sort((x, y) => distance(parseKey(x), ORIGIN) - distance(parseKey(y), ORIGIN)).slice(0, qcfg.lights);
+    for (const k of glowing) {
+      const tile = tiles.get(k)!, w = toWorld(center(parseKey(k)));
+      const fire = FLICKER.has(tile.id);
+      const l = new THREE.PointLight(new THREE.Color(fire ? '#ffa04a' : tile.accent ?? '#9fd8ff'), fire ? 3.2 : 2.0, ((tile.light ?? 15) / 5) * 1.73 * 1.6, 1.5);
+      l.position.set(w.x, top(k) + (tile.id === 'lamppost' ? 2.4 : tile.id === 'lava' ? 0.4 : 1.1), w.z);
+      l.userData = { base: l.intensity, flicker: fire, phase: (parseKey(k).q * 7 + parseKey(k).r * 3) % 10 };
+      t.dynamic.add(l); anim.current.lights.push(l);
+    }
     // markers (lights, locations) as small glowing pins
     for (const n of p.map.nodes) {
+      // APEX 2.3 – living biomes: a group of ambient animals that graze, hop, peck or circle in the sky
+      if (n.kind === 'fauna' && (p.gm || n.visible)) {
+        const f = faunaOf(n.species);
+        const home = hexAt(p.map, n);
+        if (!f || !tiles.has(hexKey(home)) || fogOf.get(hexKey(home)) === '.') continue;
+        const spots = hexesInRange(home, 2).map(hexKey).filter((k) => { const tl = tiles.get(k); return !!tl && tl.cost !== null && !/deep/.test(tl.id) && fogOf.get(k) !== '.'; }).map((k) => { const w = toWorld(center(parseKey(k))); return new THREE.Vector3(w.x, top(k), w.z); });
+        if (!spots.length) continue;
+        const scale = sizeScale(f.size) * (f.size === 'tiny' ? 1.2 : 1);
+        for (let i = 0; i < Math.min(12, n.count ?? 3); i++) {
+          const roll = ((i * 37 + n.id.length * 11) % 10) / 10;
+          const model = buildCreature(n.species!, undefined, f.behaviour === 'fly', f.behaviour === 'fly' ? undefined : roll < 0.25 ? 'young' : roll < 0.6 ? 'female' : undefined);
+          if (!model) break;
+          model.group.scale.multiplyScalar(scale);
+          const at = spots[(i * 7) % spots.length].clone().add(new THREE.Vector3((roll - 0.5) * 0.8, 0, (((i * 13) % 10) / 10 - 0.5) * 0.8));
+          model.group.position.copy(at); model.group.rotation.y = roll * Math.PI * 2;
+          t.dynamic.add(model.group);
+          anim.current.fauna.push({ obj: model.group, behaviour: f.behaviour, spots, home: spots[0].clone(), target: null, wait: roll * 4, phase: roll * 10, wings: model.wings });
+        }
+        continue;
+      }
       // APEX 2.1 – enemy spawn markers (GM only): a red banner on a dashed ring
       if (n.kind === 'enemies' && p.gm) {
         const k = hexKey(hexAt(p.map, n));
@@ -388,8 +445,8 @@ export default function HexScene3D(p: Props) {
         const fig = buildFigure(tk, ringColor);
         const g = fig.group;
         g.position.set(w.x + off.x, y + lift, w.z + off.z);
-        g.rotation.y = enemy ? Math.PI : 0;
-        g.userData = { tokenId: tk.tokenId };
+        g.rotation.y = yawMemory.get(tk.tokenId) ?? (enemy ? Math.PI : 0); // keeps the direction it last turned to
+        g.userData = { tokenId: tk.tokenId, idle: { kind: fig.animKind, body: fig.body, head: fig.head, baseY: fig.body.position.y, phase: (tk.tokenId.charCodeAt(0) * 13 + tk.tokenId.length * 7) % 100 / 10, hostile: !!enemy && !enemy.ally, yaw: g.rotation.y, rest: 0, height: fig.height, wings: fig.wings ?? [] } };
         if (fig.card) anim.current.cards.push(fig.card);
         if (fig.wings) anim.current.wings.push(...fig.wings);
         if (lift > 0) {
@@ -416,8 +473,11 @@ export default function HexScene3D(p: Props) {
     const disc = (k: HexKey, color: number, opacity: number, lift = 0.02, scale = 0.92) => {
       const pts = Array.from({ length: 6 }, (_, i) => corner(0, 0, scale, i));
       const s = new THREE.Shape(pts.map((q) => new THREE.Vector2(q.x, q.y)));
+      // with post-processing (bloom / AO) translucent fills wash out the dark ground (tone mapping after blending), so
+      // the overlay becomes an opaque hex rim instead – crisp and readable in every light
+      if (t.composer) { const inner = Array.from({ length: 6 }, (_, i) => corner(0, 0, scale * (opacity >= 0.4 ? 0.78 : 0.9), i)); s.holes.push(new THREE.Path(inner.map((q) => new THREE.Vector2(q.x, q.y)).reverse())); }
       const g = new THREE.ShapeGeometry(s); g.rotateX(Math.PI / 2);
-      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+      const m = new THREE.Mesh(g, t.composer ? new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.18 + opacity * 0.9), side: THREE.DoubleSide }) : new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
       const w = toWorld(center(parseKey(k)));
       m.position.set(w.x, top(k) + lift, w.z);
       t.overlay.add(m);
@@ -482,7 +542,7 @@ export default function HexScene3D(p: Props) {
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {
@@ -533,6 +593,9 @@ export default function HexScene3D(p: Props) {
       for (const w of a.water) w.opacity = 0.66 + Math.sin(sec * 1.3 + (w.userData.phase as number)) * 0.06;
       for (const f of a.flames) { f.scale.y = 0.85 + Math.sin(sec * 9 + f.id) * 0.12 + Math.sin(sec * 23 + f.id * 2) * 0.05; f.rotation.y = sec * 0.6; }
       for (const w of a.wings) { if (w.userData.flapZ) w.rotation.z = Math.sin(sec * 6 + w.id) * (w.userData.amp as number) * (w.userData.side as number); else w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number); }
+      // APEX 2.3 – idle life: breathing, weight shift, turning to the nearest opponent, creatures resting until approached
+      idleStep(t.tokens, sec);
+      faunaStep(a.fauna, t.tokens, sec);
       // standees turn towards the camera (around the vertical axis)
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
@@ -540,7 +603,8 @@ export default function HexScene3D(p: Props) {
       const c = cam.current;
       t.camera.position.set(c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist);
       t.camera.lookAt(c.tx, 1, c.tz);
-      t.renderer.render(t.scene, t.camera);
+      for (const l of a.lights) if (l.userData.flicker) l.intensity = (l.userData.base as number) * (0.8 + 0.2 * Math.sin(sec * 11 + (l.userData.phase as number)) * Math.sin(sec * 6.7 + (l.userData.phase as number) * 1.7));
+      if (t.composer) t.composer.render(); else t.renderer.render(t.scene, t.camera);
       t.renderer.shadowMap.needsUpdate = false;
     };
     raf = requestAnimationFrame(frame);
@@ -706,11 +770,92 @@ export default function HexScene3D(p: Props) {
       )}
       <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">
         <span title="Resolution, shadows, grass and animation – lower is faster on weak devices">⚙ 3D</span>
-        {(['low', 'medium', 'high'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
+        {(['low', 'medium', 'high', 'ultra'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
       </div>
       <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">🖱 middle button: orbit / tilt · left drag: pan · wheel: zoom · right-click: act</div>
     </div>
   );
+}
+
+type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null };
+const ALERT_RANGE = 5 * Math.sqrt(3) * 1.05; // ≈ 5 hexes (25 ft): closer opponents wake resting creatures
+type Critter = { obj: THREE.Object3D; behaviour: string; spots: THREE.Vector3[]; home: THREE.Vector3; target: THREE.Vector3 | null; wait: number; phase: number; wings: THREE.Object3D[]; last?: number };
+/** Ambient animals: walk between spots and graze, hop, peck, prowl – or circle in the sky; shy away from figures. */
+function faunaStep(list: Critter[], tokens: THREE.Group, sec: number) {
+  for (const c of list) {
+    const dt = Math.min(0.1, sec - (c.last ?? sec)); c.last = sec;
+    const o = c.obj;
+    if (c.behaviour === 'fly') {
+      const r = 2.2 + (c.phase % 3) * 0.6, a = sec * (0.35 + (c.phase % 2) * 0.1) + c.phase;
+      o.position.set(c.home.x + Math.cos(a) * r, c.home.y + 3.2 + Math.sin(sec * 0.7 + c.phase) * 0.5 + (c.phase % 4) * 0.3, c.home.z + Math.sin(a) * r);
+      o.rotation.y = -a; // tangent of the circle
+      for (const w of c.wings) w.rotation.z = Math.sin(sec * 9 + c.phase) * 0.6 * ((w.userData.side as number) ?? 1);
+      continue;
+    }
+    // shy: a figure close by → run to the farthest spot
+    let near: THREE.Object3D | null = null, nd = 2.4;
+    for (const tk of tokens.children) { const d = tk.position.distanceTo(o.position); if (d < nd) { nd = d; near = tk; } }
+    if (near && (!c.target || c.target.distanceTo(near.position) < 2.4)) { c.target = c.spots.reduce((b, sp) => (sp.distanceTo(near!.position) > b.distanceTo(near!.position) ? sp : b), c.spots[0]).clone(); c.wait = 0; }
+    if (!c.target) {
+      c.wait -= dt;
+      // grazing / pecking: the body dips
+      o.rotation.x = c.behaviour === 'graze' ? 0.18 + Math.sin(sec * 2 + c.phase) * 0.05 : c.behaviour === 'peck' ? Math.max(0, Math.sin(sec * 6 + c.phase)) * 0.35 : 0;
+      if (c.wait <= 0) { c.target = c.spots[Math.floor(((Math.sin(sec * 13.7 + c.phase) + 1) / 2) * c.spots.length) % c.spots.length].clone().add(new THREE.Vector3(Math.sin(c.phase * 3 + sec) * 0.5, 0, Math.cos(c.phase * 5 + sec) * 0.5)); }
+      continue;
+    }
+    o.rotation.x = 0;
+    const to = c.target.clone().sub(o.position); to.y = 0;
+    const d = to.length();
+    const speed = (near ? 2.2 : 1) * (c.behaviour === 'hop' ? 0.9 : c.behaviour === 'prowl' ? 0.6 : c.behaviour === 'peck' ? 0.45 : 0.32);
+    if (d < 0.08) { c.target = null; c.wait = 1.5 + (c.phase % 4); continue; }
+    const yaw = Math.atan2(to.x, to.z); let dy = yaw - o.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.rotation.y += dy * Math.min(1, dt * 6);
+    o.position.addScaledVector(to.normalize(), Math.min(d, speed * dt));
+    const ground = c.spots.reduce((b, sp) => (Math.hypot(sp.x - o.position.x, sp.z - o.position.z) < Math.hypot(b.x - o.position.x, b.z - o.position.z) ? sp : b), c.spots[0]).y;
+    o.position.y = ground + (c.behaviour === 'hop' ? Math.abs(Math.sin(sec * 9 + c.phase)) * 0.3 : 0);
+  }
+}
+let idleTick = 0;
+const yawMemory = new Map<string, number>();
+/** Idle animation of all figures (runs in the render loop, ~0.1 ms for a battle). */
+function idleStep(tokens: THREE.Group, sec: number) {
+  const list = tokens.children.filter((c) => c.userData.idle) as THREE.Object3D[];
+  // every few frames: the nearest opponent of every figure
+  if (idleTick++ % 8 === 0) for (const a of list) {
+    const ia = a.userData.idle as Idle;
+    let best: THREE.Object3D | null = null, bd = Infinity;
+    for (const b of list) { if (b === a || (b.userData.idle as Idle).hostile === ia.hostile) continue; const d = a.position.distanceTo(b.position); if (d < bd) { bd = d; best = b; } }
+    ia.target = best && bd < ALERT_RANGE * 2.2 ? Math.atan2(best.position.x - a.position.x, best.position.z - a.position.z) : null;
+    (ia as Idle & { near: number }).near = bd;
+  }
+  for (const a of list) {
+    const ia = a.userData.idle as Idle & { near?: number };
+    if (ia.kind === 'still') continue;
+    const t = sec + ia.phase;
+    // turn (slowly) towards the nearest opponent in sight range
+    if (ia.target !== null && ia.target !== undefined && ia.kind !== 'standee') {
+      let d = ia.target - a.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+      a.rotation.y += d * 0.04;
+      yawMemory.set(a.userData.tokenId as string, a.rotation.y);
+    }
+    // creatures rest when nobody is near and rise when someone approaches
+    const restGoal = (ia.kind === 'creature' || ia.kind === 'flyer') && (ia.near ?? Infinity) > ALERT_RANGE ? 1 : 0;
+    ia.rest += (restGoal - ia.rest) * 0.03;
+    const breathe = Math.sin(t * (ia.kind === 'humanoid' ? 2.1 : 1.5)) * (ia.kind === 'humanoid' ? 0.012 : 0.025);
+    ia.body.scale.y = (1 + breathe) * (1 - ia.rest * 0.28);
+    ia.body.scale.x = ia.body.scale.z = 1 - breathe * 0.4 + ia.rest * 0.05;
+    ia.body.position.y = ia.baseY;
+    ia.body.rotation.z = ia.kind === 'humanoid' ? Math.sin(t * 0.7) * 0.018 : 0;
+    ia.body.rotation.x = ia.kind === 'humanoid' ? 0 : -ia.rest * 0.05 + Math.sin(t * 0.9) * 0.01;
+    for (const w of ia.wings) w.userData.amp = ia.rest > 0.5 ? 0.04 : w.userData.amp0 ?? (w.userData.amp0 = w.userData.amp ?? 0.15);
+    if (ia.head) {
+      // the head looks around a little, or at the opponent (relative to the body)
+      let rel = 0;
+      if (ia.target !== null && ia.target !== undefined) { rel = ia.target - a.rotation.y; rel = Math.atan2(Math.sin(rel), Math.cos(rel)); }
+      const goal = Math.max(-0.7, Math.min(0.7, rel)) + Math.sin(t * 0.4) * 0.25 * (ia.target === null ? 1 : 0.2);
+      ia.head.rotation.y += (goal - ia.head.rotation.y) * 0.06;
+      ia.head.rotation.x = Math.sin(t * 0.55) * 0.04;
+    }
+  }
 }
 
 let rockTex: THREE.Texture | null = null;

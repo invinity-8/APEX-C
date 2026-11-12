@@ -5,14 +5,14 @@
  */
 import { lazy, Suspense, useMemo, useState } from 'react';
 import {
-  CLOTH_COLOURS, COLOUR_LABELS, DEFAULT_LOOK, EYE_COLOURS, FIGURE_PARTS, FIGURE_PRESETS, HAIR_COLOURS, lookFromPreset, METAL_COLOURS, PART_LABELS, partLabel, randomLook, SKIN_TONES,
+  BODY_TYPES_3D, CLOTH_COLOURS, COLOUR_LABELS, DEFAULT_LOOK, EYE_COLOURS, FIGURE_PARTS, FIGURE_PRESETS, HAIR_COLOURS, lookFromPreset, METAL_COLOURS, PART_LABELS, partLabel, randomLook, SKIN_TONES,
   type FigureColourKey, type FigureLook, type FigurePartKey,
 } from '../game/figure';
 
 const FigurePreview = lazy(() => import('./FigurePreview'));
 
 const TABS: Array<{ id: string; label: string; parts: FigurePartKey[]; colours: FigureColourKey[] }> = [
-  { id: 'body', label: 'Body', parts: ['body', 'build', 'head', 'ears', 'horns'], colours: ['skin'] },
+  { id: 'body', label: 'Body', parts: ['body', 'sex', 'build', 'head', 'ears', 'horns'], colours: ['skin'] },
   { id: 'face', label: 'Face', parts: ['eyes', 'brows', 'nose', 'mouth', 'extra'], colours: ['eyeColor'] },
   { id: 'hair', label: 'Hair', parts: ['hair', 'beard'], colours: ['hairColor'] },
   { id: 'clothes', label: 'Clothes', parts: ['hat', 'torso', 'shoulders', 'belt', 'legs', 'boots', 'cloak'], colours: ['primary', 'secondary', 'leather'] },
@@ -65,6 +65,11 @@ export function FigureEditor({ value, onSave, onCancel, gm = false, busy = false
             {TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`rounded-t-md px-2 py-1 ${tab === t.id ? 'bg-ink-800 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => setTab(t.id)} data-testid={`figure-tab-${t.id}`}>{t.label}</button>)}
           </div>
           <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+            {tab === 'body' && (
+              <div className="grid grid-cols-3 gap-1" role="radiogroup" aria-label="Body type" data-testid="body-types">
+                {BODY_TYPES_3D.map((t) => <button key={t.id} type="button" role="radio" aria-checked={look.sex === t.sex && look.build === t.build} className={`rounded-md border px-1.5 py-1 text-left ${look.sex === t.sex && look.build === t.build ? 'border-gold-400 bg-gold-500/20 text-gold-100' : 'border-ink-600 bg-ink-900/70 text-marble-200 hover:border-gold-400/50'}`} onClick={() => setLook((l) => (t.sex === 'female' && l.sex !== 'female' ? { ...l, sex: 'female', build: t.build, beard: 'none' } : { ...l, sex: t.sex, build: t.build }))}>{t.sex === 'female' ? '♀' : '♂'} {t.label.split(' · ')[1]}</button>)}
+              </div>
+            )}
             {current.parts.map((k) => (
               <div key={k} className="space-y-0.5">
                 <div className="flex items-center gap-1">

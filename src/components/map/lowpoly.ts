@@ -57,11 +57,12 @@ const ANCESTRY: Record<FigureLook['body'], Dims> = {
   zombie: { s: 1, leg: 0.5, th: 0.62, tw: 0.3, hr: 0.33, limb: 0.075 },
   ogre: { s: 1, leg: 0.5, th: 0.74, tw: 0.46, hr: 0.3, limb: 0.11 },
 };
-const BUILD: Record<FigureLook['build'], { w: number; leg: number; belly: number }> = {
-  average: { w: 1, leg: 1, belly: 0 }, slim: { w: 0.85, leg: 1.04, belly: 0 }, stocky: { w: 1.14, leg: 0.88, belly: 0.1 }, broad: { w: 1.25, leg: 1, belly: 0 }, heavy: { w: 1.32, leg: 0.94, belly: 0.24 },
+const BUILD: Record<FigureLook['build'], { w: number; leg: number; belly: number; arm: number; delt?: boolean }> = {
+  average: { w: 1, leg: 1, belly: 0, arm: 1 }, slender: { w: 0.84, leg: 1.05, belly: 0, arm: 0.88 }, muscular: { w: 1.18, leg: 1.0, belly: 0, arm: 1.4, delt: true }, heavy: { w: 1.32, leg: 0.94, belly: 0.24, arm: 1.2 },
+  slim: { w: 0.85, leg: 1.04, belly: 0, arm: 0.9 }, stocky: { w: 1.14, leg: 0.88, belly: 0.1, arm: 1.12 }, broad: { w: 1.25, leg: 1, belly: 0, arm: 1.2, delt: true },
 };
 
-export interface LowPolyFigure { group: THREE.Group; height: number; /** flapping wings of a winged mount */ wings?: THREE.Object3D[] }
+export interface LowPolyFigure { group: THREE.Group; height: number; /** flapping wings of a winged mount */ wings?: THREE.Object3D[]; /** the head pivot (turns towards what the figure looks at) */ head?: THREE.Object3D }
 /** The ancestry's own scale (a halfling is smaller than a human); stat-block sizes replace it for enemies. */
 export const ancestryScale = (look: FigureLook) => (ANCESTRY[look.body] ?? ANCESTRY.human).s;
 
@@ -70,7 +71,10 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
   const g = new THREE.Group(); root.add(g);
   const a = ANCESTRY[look.body] ?? ANCESTRY.human;
   const b = BUILD[look.build] ?? BUILD.average;
-  const leg = a.leg * b.leg, th = a.th, tw = a.tw * b.w, hr = a.hr, limb = a.limb * (look.build === 'slim' ? 0.9 : look.build === 'average' ? 1 : 1.12);
+  // APEX 2.3: women – narrower shoulders, a waist, wider hips, a bust; slightly shorter, finer limbs
+  const fem = look.sex === 'female' && !['skeleton'].includes(look.body);
+  const leg = a.leg * b.leg * (fem ? 0.97 : 1), th = a.th * (fem ? 0.96 : 1), tw = a.tw * b.w * (fem ? 0.88 : 1), hr = a.hr, limb = a.limb * (fem ? 0.88 : 1) * Math.min(1.15, b.arm);
+  const armR = a.limb * (fem ? 0.88 : 1) * b.arm;
   const bone = look.body === 'skeleton';
   const skin = M(look.skin), skinD = M(shade(look.skin, 0.8));
   const hairM = M(look.hairColor);
@@ -128,8 +132,17 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     for (let i = 0; i < 4; i++) add(g, tor(tw * (0.85 - i * 0.08), 0.025, Math.PI * 1.6, 3, 8), skin, [0, top - 0.1 - i * 0.12, 0], [Math.PI / 2, 0, Math.PI * 0.7]);
     add(g, cyl(tw * 0.7, tw * 0.75, 0.12, 6), skin, [0, hip + 0.04, 0]);
   } else {
-    add(g, cyl(tw, tw * 0.84, th, 7), torsoC, [0, hip + th / 2, 0]);
-    if (b.belly) add(g, ico(tw * (0.62 + b.belly * 0.6), 1), torsoC, [0, hip + th * 0.35, tw * 0.25 + b.belly * 0.2], [0, 0, 0], [1, 0.85, 0.75]);
+    if (fem) {
+      // chest to waist, then the hips (in the colour of the legs or a long garment)
+      add(g, cyl(tw * 1.0, tw * 0.78, th * 0.62, 7), torsoC, [0, hip + th * 0.69, 0]);
+      add(g, cyl(tw * 0.78, tw * 0.98, th * 0.4, 7), torsoC, [0, hip + th * 0.2, 0]);
+      const long = ['robe', 'cultrobe', 'dress', 'coat'].includes(look.torso) || ['robe', 'skirt', 'kilt'].includes(look.legs);
+      add(g, ico(tw * 1.0, 1), long ? torsoC : look.legs === 'trousers' ? M(shade(look.leather, 0.85)) : primD, [0, hip + 0.02, 0], [0, 0, 0], [1.08 + b.belly * 0.5, 0.5, 0.92]);
+      const bustM = look.torso === 'bare' ? sec : torsoC;
+      add(g, ico(tw * (0.5 + b.belly * 0.15), 1), bustM, [0, top - th * 0.28, tw * 0.42], [0.15, 0, 0], [1.55, 0.72, 0.85]);
+      if (look.torso === 'bare') add(g, cyl(tw * 0.98, tw * 0.95, th * 0.2, 7), sec, [0, top - th * 0.32, 0]);
+    } else add(g, cyl(tw * (b.delt ? 1.06 : 1), tw * 0.84, th, 7), torsoC, [0, hip + th / 2, 0]);
+    if (b.belly) add(g, ico(tw * (0.62 + b.belly * 0.6) * (fem ? 0.85 : 1), 1), torsoC, [0, hip + th * 0.35, tw * 0.25 + b.belly * 0.2], [0, 0, 0], [1, 0.85, 0.75]);
   }
   const front = (y: number) => tw * (0.84 + 0.16 * ((y - hip) / th)) + 0.005;
   switch (look.torso) {
@@ -170,9 +183,11 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
   const hands: THREE.Group[] = [];
   for (const sx of [1, -1]) {
     const pivot = new THREE.Group();
-    pivot.position.set(sx * (tw + limb * 0.6), top - 0.07, 0);
+    pivot.position.set(sx * (tw * (b.delt ? 1.06 : 1) + armR * 0.6), top - 0.07, 0);
     pivot.rotation.set(zombie ? -1.35 : sx > 0 ? -0.55 : -0.25, 0, sx * (zombie ? 0.05 : 0.14));
-    add(pivot, cyl(limb * 1.05, limb * 0.9, armLen, 6), sleeve, [0, -armLen / 2, 0]);
+    add(pivot, cyl(armR * 1.05, armR * 0.9, armLen, 6), sleeve, [0, -armLen / 2, 0]);
+    if (b.delt && !bone) add(pivot, ico(armR * 1.7, 0), sleeve, [0, -armR * 0.3, 0]);
+    if (b.arm > 1.25 && !bone) add(pivot, ico(armR * 1.25, 0), sleeve, [0, -armLen * 0.4, 0.02], [0, 0, 0], [1, 1.3, 1]);
     if (look.extra === 'tattoos' && !['bare', 'vest'].includes(look.torso)) { /* tattoos only show on bare arms */ }
     if (look.extra === 'tattoos' && ['bare', 'vest'].includes(look.torso)) add(pivot, cyl(limb * 1.08, limb * 1.08, 0.05, 6), M(shade(look.skin, 0.45)), [0, -armLen * 0.4, 0]);
     const hand = new THREE.Group(); hand.position.set(0, -armLen, 0); pivot.add(hand);
@@ -180,7 +195,7 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     g.add(pivot); hands.push(hand);
   }
   // ---- neck and head
-  if (!bone) add(g, cyl(hr * 0.35, hr * 0.4, 0.12, 6), skin, [0, top + 0.03, 0]); else add(g, cyl(0.03, 0.03, 0.12, 4), skin, [0, top + 0.03, 0]);
+  if (!bone) add(g, cyl(hr * (fem ? 0.27 : b.delt ? 0.42 : 0.35), hr * (fem ? 0.32 : b.delt ? 0.48 : 0.4), 0.12, 6), skin, [0, top + 0.03, 0]); else add(g, cyl(0.03, 0.03, 0.12, 4), skin, [0, top + 0.03, 0]);
   const head = new THREE.Group(); head.position.set(0, headY, 0); g.add(head);
   let fz = hr * 0.9; // front surface of the face
   const snout = look.body === 'dragonborn' || look.body === 'lizardfolk';
@@ -213,6 +228,7 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
       case 'closed': add(head, box(hr * 0.24, hr * 0.03, 0.03), dark, p); break;
       case 'hollow': add(head, ico(hr * 0.15), dark, [p[0], p[1], p[2] - 0.02]); break;
     }
+    if (fem && !['patch', 'hollow', 'glowing'].includes(look.eyes)) add(head, box(hr * 0.12, hr * 0.04, 0.03), dark, [sx * (ex + hr * 0.12), ey + hr * 0.08, faceZ - 0.01], [0, 0, sx * 0.5]); // lashes
     // brows
     const bp: [number, number, number] = [sx * ex, ey + hr * 0.24, faceZ - 0.01];
     const bm = look.brows === 'bushy' ? hairM : M(shade(look.hairColor, 0.8));
@@ -240,9 +256,10 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     if (look.nose === 'hooked') add(head, cone(hr * 0.1, hr * 0.34, 4), skinD, [0, np[1] - hr * 0.04, np[2] + hr * 0.08], [Math.PI / 2 + 0.6, 0, 0]);
   }
   const my = snout ? -hr * 0.45 : -hr * 0.42, mz = snout ? faceZ + hr * 0.82 : faceZ - 0.01;
+  const lipM = fem ? M(mix(look.skin, '#a03a4a', 0.55)) : dark;
   switch (look.mouth) {
-    case 'smile': add(head, tor(hr * 0.17, hr * 0.035, Math.PI, 3, 6), dark, [0, my + hr * 0.08, mz], [0, 0, Math.PI]); break;
-    case 'flat': add(head, box(hr * 0.32, hr * 0.05, 0.03), dark, [0, my, mz]); break;
+    case 'smile': add(head, tor(hr * 0.17, hr * 0.035, Math.PI, 3, 6), lipM, [0, my + hr * 0.08, mz], [0, 0, Math.PI]); break;
+    case 'flat': add(head, box(hr * 0.32, hr * (fem ? 0.07 : 0.05), 0.03), lipM, [0, my, mz]); break;
     case 'frown': add(head, tor(hr * 0.15, hr * 0.035, Math.PI, 3, 6), dark, [0, my - hr * 0.06, mz]); break;
     case 'open': add(head, ico(hr * 0.13, 0), dark, [0, my, mz], [0, 0, 0], [1.2, 1, 0.4]); break;
     case 'grin': add(head, box(hr * 0.42, hr * 0.12, 0.03), white, [0, my, mz]); add(head, box(hr * 0.46, hr * 0.02, 0.035), dark, [0, my, mz]); break;
@@ -349,18 +366,26 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
   g.scale.setScalar(a.s);
   const hatH = { wizard: hr * 2.6, crown: hr * 1.4, antlers: hr * 1.6, horned: hr * 1.4, cowl: hr * 1.2, strawhat: hr * 1.1, feathercap: hr * 1.6 }[look.hat as string] ?? hr * 1.05;
   let height = (headY + hatH) * a.s;
+  // APEX 2.3: the head is merged on its own, as a pivot that can turn (idle look-at)
+  root.updateMatrixWorld(true);
+  const headMatrix = head.matrixWorld.clone();
+  head.parent?.remove(head);
+  head.position.set(0, 0, 0); head.updateMatrixWorld(true);
+  const headMerged = mergeByMaterial(head);
   const merged = mergeByMaterial(root);
-  if (!riding) return { group: merged, height };
+  const headPivot = new THREE.Group(); headPivot.applyMatrix4(headMatrix); headPivot.add(headMerged); headPivot.userData.head = true;
+  merged.add(headPivot);
+  if (!riding) return { group: merged, height, head: headPivot };
   // the mount at its own size class; the rider sits on its back
   const mount = buildCreature(look.mount, undefined, false);
-  if (!mount) return { group: merged, height };
+  if (!mount) return { group: merged, height, head: headPivot };
   const ms = (mount.ride ?? sizeScale(mount.size)) * (opts.mountScale ?? 1);
   mount.group.scale.setScalar(ms);
   const seat = mount.seat ?? [0, mount.height * 0.6, 0];
   merged.position.set(seat[0] * ms, seat[1] * ms - hip * a.s + 0.04, seat[2] * ms);
   const out = new THREE.Group(); out.add(mount.group, merged);
   height = merged.position.y + height;
-  return { group: out, height, wings: mount.wings };
+  return { group: out, height, wings: mount.wings, head: headPivot };
 }
 
 interface Mats { metal: THREE.Material; metalD: THREE.Material; leather: THREE.Material; leatherD: THREE.Material; prim: THREE.Material; sec: THREE.Material; gold: THREE.Material; wood: THREE.Material; glow: THREE.Material; flame: THREE.Material; bone?: THREE.Material; dark?: THREE.Material }
