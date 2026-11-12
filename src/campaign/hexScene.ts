@@ -404,7 +404,13 @@ export function generateHexScene(preset: HexPreset, radius: number, seed: number
 const riverRow = (h: Axial, seed: number) => h.r + Math.round(h.q / 2) - Math.round(Math.sin((h.q + (seed % 7)) / 3) * 1.5);
 
 /** 5-foot battle tiles. Same seed → same map. */
+/** A battle map for a preset (APEX 2.3: with the layout's default relief, unless the layout sets its own heights). */
 export function generateBattleScene(preset: HexPreset, radius: number, seed: number): HexSceneData {
+  const data = generateBattleSceneFlat(preset, radius, seed);
+  const rel = LAYOUT_RELIEF[preset];
+  return rel && !data.heights ? applyRelief(data, rel[0], rel[1], seed) : data;
+}
+function generateBattleSceneFlat(preset: HexPreset, radius: number, seed: number): HexSceneData {
   const r = clampRadius(radius);
   const rnd = (h: Axial, salt: number) => hash2(h.q * 7 + salt, h.r * 13 - salt, seed);
   const ground = (h: Axial): BattleTile => (valueNoise(h.q / 3 + 5, h.r / 3, seed) > 0.72 ? 'dirt' : 'grass');
@@ -452,7 +458,9 @@ export function generateBattleScene(preset: HexPreset, radius: number, seed: num
       return ground(h);
     });
   }
-  const themed = themedBattleScene(preset, r, seed, rnd, ground) ?? settlementScene(preset, r, seed, rnd, ground);
+  const settled = settlementScene(preset, r, seed, rnd, ground);
+  if (settled) return settled;
+  const themed = themedBattleScene(preset, r, seed, rnd, ground);
   if (themed) return themed;
   return encodeTiles(r, 'battle', (h) => (rnd(h, 11) > 0.97 ? 'boulder' : rnd(h, 12) > 0.93 ? 'undergrowth' : ground(h)));
 }
@@ -777,6 +785,74 @@ function settlementScene(preset: HexPreset, r: number, seed: number, rnd: (h: Ax
       return null;
   }
 }
+
+/** APEX 2.3 – relief styles for battle maps (5-ft levels). */
+export type ReliefStyle = 'none' | 'hills' | 'rolling' | 'terraces' | 'valley' | 'ridge' | 'canyon' | 'plateaus' | 'crags';
+export const RELIEF_STYLES: Array<{ id: ReliefStyle; label: string }> = [
+  { id: 'none', label: 'Flat' }, { id: 'hills', label: 'Gentle hills' }, { id: 'rolling', label: 'Rolling high ground' }, { id: 'terraces', label: 'Terraces (cliffs between steps)' },
+  { id: 'valley', label: 'Valley (high edges)' }, { id: 'ridge', label: 'Ridge through the middle' }, { id: 'canyon', label: 'Canyon with sloped sides' }, { id: 'plateaus', label: 'Plateaus with slopes' }, { id: 'crags', label: 'Crags (steep, rocky)' },
+];
+const WATERY = /deep|shallow|water|swamp|lilies|pier|bridge|boat/;
+const BUILDING = /wall|cottage|barn|windmill|townhouse|timberhouse|shop|tower|gate|palisade|hearth|counter|bookshelf/;
+
+/**
+ * Raises the ground of a battle map in a style (strength 1–5, seeded). Water sits in the lowest spots, every building
+ * cluster stands on one level, and – except for terraces and crags – neighbouring hexes differ by at most one level
+ * (a step you can walk), so the map stays playable.
+ */
+export function applyRelief(data: HexSceneData, style: ReliefStyle, strength: number, seed: number): HexSceneData {
+  if (style === 'none') { const { heights: _h, ...flat } = data; void _h; return flat; }
+  const r = data.radius, k = Math.max(1, Math.min(5, Math.round(strength)));
+  const all = hexesInRange(ORIGIN, r);
+  const tiles = decodeTiles(data);
+  const n = (h: Axial, sx: number, salt: number) => valueNoise(h.q / sx + salt, h.r / sx - salt, seed);
+  const raw = new Map<HexKey, number>();
+  for (const h of all) {
+    const d = distance(h, ORIGIN) / Math.max(1, r);
+    const row = Math.abs(h.r + Math.round(h.q / 2) - Math.round((n(h, 6, 3) - 0.5) * 3));
+    let v = 0;
+    switch (style) {
+      case 'hills': v = n(h, 4.5, 1) * k * 1.2; break;
+      case 'rolling': v = (n(h, 6, 2) * 0.7 + n(h, 2.5, 5) * 0.3) * k * 1.6; break;
+      case 'terraces': v = Math.floor(n(h, 5, 7) * (k + 1)) * 2; break;
+      case 'valley': v = Math.max(0, d - 0.25) * k * 2.4 + n(h, 3, 9) * 0.8; break;
+      case 'ridge': v = Math.max(0, 1 - row / Math.max(2, r * 0.45)) * k * 1.6 + n(h, 3, 11) * 0.6; break;
+      case 'canyon': v = Math.min(k + 1, Math.max(0, row - 1)) ; break;
+      case 'plateaus': {
+        let best = 0;
+        for (let i = 0; i < 3; i++) { const c = { q: Math.round((hash2(i, 61, seed) - 0.5) * r * 1.2), r: Math.round((hash2(i, 62, seed) - 0.5) * r * 1.2) }; const rad = 1 + Math.floor(hash2(i, 63, seed) * 2); best = Math.max(best, k + 1 - Math.max(0, distance(h, c) - rad)); }
+        v = best; break;
+      }
+      case 'crags': v = Math.pow(n(h, 2.5, 13), 2) * k * 3.5; break;
+    }
+    raw.set(hexKey(h), Math.max(0, Math.round(v)));
+  }
+  // water in the hollows: a watery hex takes the lowest level around it
+  for (const h of all) { const t = tiles.get(hexKey(h)); if (t && WATERY.test(t.id)) raw.set(hexKey(h), Math.min(...[h, ...neighbors(h)].map((x) => raw.get(hexKey(x)) ?? 99))); }
+  // buildings: every cluster on one level (its lowest)
+  const seen = new Set<HexKey>();
+  for (const h of all) {
+    const key = hexKey(h), t = tiles.get(key);
+    if (!t || !BUILDING.test(t.id) || seen.has(key)) continue;
+    const cluster: HexKey[] = []; const queue = [h]; seen.add(key);
+    while (queue.length) { const c = queue.pop()!; cluster.push(hexKey(c)); for (const nb of neighbors(c)) { const nk = hexKey(nb), nt = tiles.get(nk); if (nt && BUILDING.test(nt.id) && !seen.has(nk)) { seen.add(nk); queue.push(nb); } } }
+    const lv = Math.min(...cluster.map((c) => raw.get(c) ?? 0)); for (const c of cluster) raw.set(c, lv);
+  }
+  // walkable slopes: lower any hex that stands more than one level above a neighbour (repeat until stable)
+  if (style !== 'terraces' && style !== 'crags') {
+    for (let pass = 0; pass < 40; pass++) {
+      let changed = false;
+      for (const h of all) { const key = hexKey(h), v = raw.get(key)!; const lo = Math.min(...neighbors(h).filter(inRange(r)).map((x) => raw.get(hexKey(x))!)); if (v > lo + 1) { raw.set(key, lo + 1); changed = true; } }
+      if (!changed) break;
+    }
+  }
+  return withLevels(data, (h) => Math.min(MAX_LEVEL, raw.get(hexKey(h)) ?? 0));
+}
+const inRange = (r: number) => (h: Axial) => distance(h, ORIGIN) <= r;
+/** The relief a layout gets by default (more 3D life without hand work). */
+export const LAYOUT_RELIEF: Partial<Record<HexPreset, [ReliefStyle, number]>> = {
+  farmstead: ['hills', 2], hamlet: ['hills', 2], orchard: ['rolling', 2], graveyard: ['hills', 1], manor: ['rolling', 1], forest: ['hills', 2], river: ['valley', 2], swamp: ['hills', 1], winter: ['rolling', 2], ruins: ['hills', 1], camp: ['hills', 1], wilderness: ['rolling', 2],
+};
 
 function clampRadius(radius: number) {
   return Math.max(MIN_HEX_RADIUS, Math.min(MAX_HEX_RADIUS, Math.round(radius)));

@@ -28,6 +28,9 @@ import {
   resizeHexScene,
   sampleImageToHex,
   type HexPreset,
+  applyRelief,
+  RELIEF_STYLES,
+  type ReliefStyle,
 } from '../campaign/hexScene';
 import { loadPictureForSampling } from '../campaign/pictureSampling';
 import { ORIGIN, hexKey, hexesInRange, parseKey, type HexKey } from '../game/hex';
@@ -76,6 +79,9 @@ export function HexSceneEditor({
   const groups = allGroups(groupsCtx.custom);
   const [groupId, setGroupId] = useState<string>(groups[0]?.id ?? '');
   const [composeCount, setComposeCount] = useState(2);
+  // APEX 2.3 – relief: hills, terraces, valleys … for any battle map
+  const [relief, setRelief] = useState<ReliefStyle>('hills');
+  const [reliefStrength, setReliefStrength] = useState(2);
   const membersText = (gr: EnemyGroup) => gr.members.map((m) => `${m.count > 1 ? `${m.count}× ` : ''}${groupsCtx.blocks.find((b) => b.id === m.templateId)?.name ?? m.templateId}`).join(', ');
   function placeGroup(gid: string, at: { x: number; y: number }) {
     const gr = groups.find((x) => x.id === gid);
@@ -309,6 +315,20 @@ export function HexSceneEditor({
             </button>
           </div>
         </fieldset>
+        {set === 'battle' && (
+          <fieldset disabled={busy} className="scene-generator-panel" data-testid="relief-panel">
+            <legend>Relief (heights)</legend>
+            <p>Hills, terraces, valleys and plateaus for this map. Water settles in the hollows, houses stay level, slopes stay walkable (terraces and crags make cliffs). Uses the generator's seed.</p>
+            <label>
+              Style{' '}
+              <select value={relief} onChange={(e) => setRelief(e.target.value as ReliefStyle)} data-testid="relief-style">{RELIEF_STYLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select>
+            </label>
+            <label>
+              Strength · {reliefStrength} <input type="range" min={1} max={5} value={reliefStrength} onChange={(e) => setReliefStrength(Number(e.target.value))} />
+            </label>
+            <button type="button" className="btn btn-ghost" onClick={() => { if (!map.hex) return; setUndo(map); change({ hex: applyRelief(map.hex, relief, reliefStrength, seed) }); setMessage(relief === 'none' ? 'The map is flat again.' : `Relief “${RELIEF_STYLES.find((r) => r.id === relief)?.label}” applied (seed ${seed}). Undo restores the previous heights.`); }} data-testid="apply-relief">⛰ Apply relief</button>
+          </fieldset>
+        )}
         {battleScene && set === 'battle' && (
           <fieldset disabled={busy} className="scene-generator-panel" data-testid="group-composer">
             <legend>Enemy groups for this layout</legend>
