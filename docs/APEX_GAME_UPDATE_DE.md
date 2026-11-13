@@ -787,3 +787,61 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tests:** 560 Tests grün.
 - **Neu:** `bestiary24` (Stat-Blöcke gültig, eindeutige IDs, Modelle; Flugsicht), `stealth24` (Radien, ❗/❓, Richtung) und `faces24` (alle Gesichtsteile, Haare unter jeder Kopfbedeckung).
+
+## APEX 2.5 – Weltzeit, Wetter, Horizont, weicher Boden, Bewegungshilfen
+
+**Kamera und Bedienung**
+- **WASD:** schiebt die Kamera in 3D (gedrückt halten, gleitend) und in 2D, solange die Maus über der Karte ist oder die Karte den Fokus hat. In Eingabefeldern greift WASD nicht.
+- **Doppelklick auf eine Figur:** zentriert die Kamera auf sie, auch auf Gegner und außerhalb ihres Zuges (2D und 3D).
+- **Laufanimation in 3D:** Spieler und Gegner laufen (oder fliegen) sichtbar ihren Pfad entlang, mit Blick in Laufrichtung.
+- **Mauszeiger:** ein vergoldeter Zeiger im Stil einer Gladius-Spitze mit Lorbeer; über Knöpfen mit kleinem Stern.
+
+**Was ein Rechtsklick tut**
+- **Symbol am Mauszeiger:** zeigt, was ein Rechtsklick jetzt auslösen würde:
+  - 👣 laufen (mit Fuß-Angabe), 🗡️ Nahkampf, 🏹 Fernkampf, ✨ Zauber oder Flächenfähigkeit;
+  - 👣🗡️ hinlaufen und angreifen, ☰ Aktion wählen, ⛔ geht nicht (außer Reichweite, kein Weg).
+  - Gilt für Spieler und für den GM (Charaktere und Gegner).
+- **Pfadfarben:** weiß, so weit die Bewegung reicht; orange, wo nur ein Dash hinkommt; rot darüber hinaus (2D und 3D).
+- **Zu weit:** Ein Rechtsklick über die Bewegung hinaus öffnet eine Auswahl. Ein zweiter Rechtsklick nimmt den ersten Eintrag, Esc bricht ab.
+  - „Dash (Aktion) und hin“.
+  - „Dash als Bonusaktion“ (mit Cunning Action).
+  - „So weit wie möglich“.
+  - Reicht auch ein Dash nicht, gibt es „mit Dash so weit wie möglich“.
+- **GM:** Ausgewählte Gegner zeigen dieselben Pfade, Symbole und Dash-Auswahl. Die Gegnerleiste hat jetzt eine Bewegungsleiste wie die Spieler (mit Dash-Markierung).
+
+**Sicht**
+- **Dunkelsicht:** Charaktere sehen im Dunkeln mit Darkvision aus dem Bogen, sonst aus der Abstammung (Zwerg, Elf, Halbork, Gnom, Tiefling … 60 ft; Drow 120 ft) oder aus der Wild-Shape-Form. Gegner nutzen die Sinne ihres Stat-Blocks.
+- **Blindsicht:** Blindsight, Tremorsense und Truesight wirken ohne Licht.
+- **Dämmerlicht:** Dunkelsicht reicht bei Dämmerlicht weiter als die üblichen 60 ft.
+- **Nebel:** begrenzt die Sicht auf 30 ft (Blindsicht ausgenommen).
+
+**Zeit, Wetter, Jahreszeit**
+- **Zifferblatt (GM, Game-Tab → „Time, season and weather“):** gezeichnete Tag/Nacht-Scheibe; die Sonne bzw. den Mond ziehen, um die Uhrzeit zu stellen.
+  - **Zeit laufen lassen:** ▶ Run, in Echtzeit (×1) oder schneller (×6, ×60, ×360).
+  - **Springen:** „Skip to dawn“ (nächster Morgen, z. B. nach dem Lagern), „Skip to 4 am“, Mittag, Abend, +1 h.
+- **Kampagnenweit:** Uhrzeit und Jahreszeit gelten für alle Szenen.
+  - **Licht:** Das Licht einer Szene folgt der Uhrzeit (7–18 Uhr hell, Morgen- und Abenddämmerung dämmrig, nachts dunkel), außer der GM stellt es von Hand. Der Haken „follows the time of day“ schaltet zurück.
+  - **Spieler:** sehen eine kleine Uhr auf der Karte.
+- **Wetter pro Szene:** klar, Schäfchenwolken, bewölkt, dunkle Wolken, Regen, Nebel, Schnee. In 3D gibt es ziehende Wolken, fallenden Regen und Schnee, und Himmel und Licht passen sich an.
+- **Jahreszeit:** Frühling (frisches Grün), Sommer, Herbst (Laub orange-rot), Winter (fahl, etwas Reif).
+  - **Schneeregler:** legt zusätzlich Schnee auf Boden und Bäume.
+  - **Wirkung:** Gilt für jede Karte, auch für generierte Wälder, ohne sie im Szeneneditor zu ändern.
+
+**3D-Welt**
+- **Himmel:** Farbverlauf nach Uhrzeit, Sterne in klaren Nächten, Sonne und Mond wandern.
+- **Horizont je Szene:** passend zur Karte (Gebirge, Waldhügel, Sumpf, Dünen, Schneegipfel, Stadtumland, Küste, Höhlenwände), mit Luftperspektive.
+- **Umland:** Hinter dem Kartenrand läuft das Land in einem Kranz aus Hexfeldern weiter, mit den Farben des Randes und auslaufender Höhe. Danach folgt eine Ebene mit vereinzelten Bäumen. Die Karte schwebt nicht mehr als Insel.
+- **Unbekannte Felder:** liegen auf der gemittelten Höhe ihrer Nachbarn statt als Abgrund, in einer ruhigen Kartenfarbe (tagsüber Pergament-Ocker, in der Dämmerung aschgrau, nachts dunkel).
+
+**Weicher Boden**
+- **Durchgehende Oberfläche:** Die Ecken eines Feldes nehmen die mittlere Höhe der begehbaren Nachbarn an. Hänge fließen ineinander, Wiesen wellen sich leicht.
+- **Kanten:** Felswände gibt es nur noch an Klippen (mehr als 5 ft), an Mauern und am äußersten Rand.
+- **Markierungen:** Reichweite und Hover legen sich auf die Oberfläche.
+- **Regeln:** Jedes Feld behält seine Höhe in der Mitte; dort stehen Figuren und Objekte.
+- **Höhen in 1-ft-Schritten:** Zusätzlich zur Stufe (5 ft) kann ein Feld 0–4 ft höher liegen.
+  - **Regeln:** Bis 2 ft Unterschied läuft man frei, 3–5 ft aufwärts zählt als Klettern (doppelte Kosten), mehr ist eine Klippe. Ab 10 ft nach unten gibt es Fallschaden.
+  - **Generator:** Das Relief erzeugt automatisch Rampen in 1-ft-Schritten (Terrassen und Felsspitzen bleiben Stufen).
+  - **Szeneneditor:** „〰 Smooth slopes“ glättet eine vorhandene Karte. Bestehende Karten bleiben unverändert, bis man das auslöst.
+
+**Tests:** 569 Tests grün.
+- **Neu:** `senses25` (Dunkelsicht, Blindsicht, Abstammung) und `world25` (Weltzeit, Nebelsicht, Dash-Auswahl, 1-ft-Stufen).

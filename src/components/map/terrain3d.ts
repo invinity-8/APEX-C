@@ -52,18 +52,27 @@ export function buildTerrain(cells: Map<HexKey, TerrainCell>, connectStep: numbe
   /** Height of hex k's corner i: the mean of k and the connected hexes sharing that corner. */
   const cornerH = new Map<HexKey, number[]>();
   const cornerCol = new Map<HexKey, THREE.Color[]>();
+  // the hexes at a corner fall into groups of (transitively) connected hexes; each group shares one height, so
+  // connected neighbours always meet without a crack
+  const groupOf = new Map<string, Map<HexKey, HexKey[]>>();
+  for (const [pk, list] of share) {
+    const parent = new Map(list.map((x) => [x, x]));
+    const find = (x: HexKey): HexKey => { let r = x; while (parent.get(r) !== r) r = parent.get(r)!; return r; };
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (connected(cells.get(list[i])!, cells.get(list[j])!)) parent.set(find(list[i]), find(list[j]));
+    const groups = new Map<HexKey, HexKey[]>();
+    for (const x of list) { const r = find(x); groups.set(r, [...(groups.get(r) ?? []), x]); }
+    const byHex = new Map<HexKey, HexKey[]>();
+    for (const g of groups.values()) for (const x of g) byHex.set(x, g);
+    groupOf.set(pk, byHex);
+  }
   for (const [k, c] of cells) {
     const hs: number[] = [], cs: THREE.Color[] = [];
     for (const pk of cornerKeys.get(k)!) {
-      let sum = 0, n = 0;
+      const g = groupOf.get(pk)!.get(k)!;
+      let sum = 0;
       const col = new THREE.Color(0, 0, 0); let cn = 0;
-      for (const o of share.get(pk)!) {
-        const oc = cells.get(o)!;
-        if (o !== k && !connected(c, oc)) continue;
-        sum += oc.top; n++;
-        if (oc.family === c.family) { col.add(oc.color); cn++; }
-      }
-      hs.push(sum / n); cs.push(col.multiplyScalar(1 / Math.max(1, cn)));
+      for (const o of g) { const oc = cells.get(o)!; sum += oc.top; if (oc.family === c.family) { col.add(oc.color); cn++; } }
+      hs.push(sum / g.length); cs.push(col.multiplyScalar(1 / Math.max(1, cn)));
     }
     cornerH.set(k, hs); cornerCol.set(k, cs);
   }
