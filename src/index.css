@@ -690,3 +690,9 @@
   .journal-page-left, .journal-page-right { border-radius: 6px; box-shadow: none; }
   .journal-page-left { margin-bottom: 8px; }
 }
+
+/* APEX 2.5 – a gilded, Roman-inspired arcane cursor (falls back to the system cursor) */
+html, body { cursor: url('/cursors/apex.svg') 2 2, auto; }
+button:not(:disabled), a[href], [role=button], [role=tab], [role=option], [role=radio], summary, label:has(input[type=checkbox]), select { cursor: url('/cursors/apex-pointer.svg') 2 2, pointer; }
+input[type=text], input[type=search], input:not([type]), textarea { cursor: text; }
+[data-testid=hex-scene-3d], [data-testid=hex-scene-map] { cursor: url('/cursors/apex.svg') 2 2, crosshair; }

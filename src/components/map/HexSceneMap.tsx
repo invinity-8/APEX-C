@@ -152,21 +152,26 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
   // camera: glide to the active figure when its turn starts
   const focusedFor = useRef('');
   const setTf = vp.setTf;
-  useEffect(() => {
-    if (!focus || !vp.tf || !vp.size.w || focusedFor.current === focus.key) return;
-    focusedFor.current = focus.key;
+  const glideRaf = useRef(0);
+  /** Glide the view so that the SVG point `w` is in the middle. */
+  const glideTo = (w: { x: number; y: number }) => {
+    if (!vp.tf || !vp.size.w) return;
+    cancelAnimationFrame(glideRaf.current);
     const k = Math.max(vp.tf.k, 0.9);
-    const w = { x: focus.x - ox, y: focus.y - oy };
     const from = vp.tf, to = { k, x: vp.size.w / 2 - w.x * k, y: vp.size.h / 2 - w.y * k };
-    let raf = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - t0) / 450), e = 1 - (1 - t) ** 3;
       setTf({ k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e });
-      if (t < 1) raf = requestAnimationFrame(tick);
+      if (t < 1) glideRaf.current = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    glideRaf.current = requestAnimationFrame(tick);
+  };
+  useEffect(() => {
+    if (!focus || !vp.tf || !vp.size.w || focusedFor.current === focus.key) return;
+    focusedFor.current = focus.key;
+    glideTo({ x: focus.x - ox, y: focus.y - oy });
+    return () => cancelAnimationFrame(glideRaf.current);
   }, [focus?.key, vp.tf === null, vp.size.w]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // previews for the hovered hex
@@ -437,7 +442,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
               if (enemy?.enemy) {
                 const c = center(parseKey(k)), e = enemy.enemy, down = e.condition === 'down';
                 return (
-                  <g key={k} transform={`translate(${c.x},${c.y})`} onClick={(ev) => (ev.stopPropagation(), onTokenClick?.(enemy.tokenId))} style={{ cursor: onTokenClick ? 'pointer' : undefined }} data-testid="enemy-token" opacity={down ? 0.45 : 1}>
+                  <g key={k} transform={`translate(${c.x},${c.y})`} onDoubleClick={(ev) => (ev.stopPropagation(), glideTo(c))} onClick={(ev) => (ev.stopPropagation(), onTokenClick?.(enemy.tokenId))} style={{ cursor: onTokenClick ? 'pointer' : undefined }} data-testid="enemy-token" opacity={down ? 0.45 : 1}>
                     {enemy.target && <circle r={HEX_SIZE * 0.78} fill="none" stroke="#ffd36b" strokeWidth={2.5} strokeDasharray="5 4" />}
                     {enemy.tokenId === selectedTokenId && <circle r={HEX_SIZE * 0.72} fill="none" stroke="#f3dc9a" strokeWidth={3} />}
                     {e.elite && <EliteFrame r={HEX_SIZE * 0.55} />}
@@ -456,7 +461,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
               if (views.length === group.length && group.some((t) => t.target)) {
                 const c = center(parseKey(k));
                 return (
-                  <g key={k}>
+                  <g key={k} onDoubleClick={(ev) => (ev.stopPropagation(), glideTo(c))}>
                     <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} portraits />
                     <circle cx={c.x} cy={c.y} r={HEX_SIZE * 0.8} fill="none" stroke="#ffd36b" strokeWidth={2.5} strokeDasharray="5 4" pointerEvents="none" />
                   </g>
@@ -467,7 +472,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                 const icons = group.flatMap((t) => t.icons ?? []);
                 const v = group.length === 1 ? group[0].vitals : undefined;
                 return (
-                  <g key={k}>
+                  <g key={k} onDoubleClick={(ev) => (ev.stopPropagation(), glideTo(c0))}>
                     <TokenStack tokens={views} selectedId={selectedTokenId} viewerId={null} hiddenTeamIds={NO_TEAMS} onSelect={(id) => onTokenClick?.(id)} portraits />
                     <g transform={`translate(${c0.x},${c0.y})`} pointerEvents="none">
                       {v?.form && (
@@ -486,7 +491,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
               }
               const c = center(parseKey(k));
               return (
-                <g key={k} transform={`translate(${c.x},${c.y})`} onClick={(e) => (e.stopPropagation(), onTokenClick?.(group[0].tokenId))}>
+                <g key={k} transform={`translate(${c.x},${c.y})`} onDoubleClick={(e) => (e.stopPropagation(), glideTo(c))} onClick={(e) => (e.stopPropagation(), onTokenClick?.(group[0].tokenId))}>
                   <circle r={HEX_SIZE * 0.5} fill={group[0].color} stroke={group.some((t) => t.tokenId === selectedTokenId) ? '#f3dc9a' : '#fff'} strokeWidth={2} />
                   <text y={HEX_SIZE * 0.95} textAnchor="middle" fontSize={10} fill="#fff" stroke="#000" strokeWidth={2.5} paintOrder="stroke">
                     {group.map((t) => t.name).join(', ')}

@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
-import { decodeTiles, heightLookup, hexAt, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
+import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
 import { MAX_ALTITUDE_FT } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
@@ -92,7 +92,9 @@ export default function HexScene3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group; composer?: EffectComposer } | null>(null);
   /** Animated things: grass shader time, swaying crowns, water, running combat effects. */
-  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [] });
+  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }>; moves: Move[] }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [], moves: [] });
+  /** APEX 2.5 – where every figure stood last time (to walk it along its path when it moves). */
+  const lastPos = useRef(new Map<string, { k: HexKey; alt: number; pos: THREE.Vector3 }>());
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
   const [quality, setQualityState] = useState<Quality3D>(readQuality);
@@ -468,6 +470,20 @@ export default function HexScene3D(p: Props) {
           g.add(shadow, line);
         }
         t.tokens.add(g);
+        // APEX 2.5 – movement animation: walk (or fly) the figure along its path from where it stood before
+        const prev = lastPos.current.get(tk.tokenId);
+        const final = g.position.clone();
+        lastPos.current.set(tk.tokenId, { k, alt: tk.alt ?? 0, pos: final.clone() });
+        if (prev && prev.k !== k && distance(parseKey(prev.k), parseKey(k)) <= 40) {
+          const fly = (tk.alt ?? 0) > 0 || prev.alt > 0;
+          const r = hexMovementCost(p.map, hexCentre(p.map, parseKey(prev.k)), tk, { fly, climb: true });
+          const mid = r.ok ? r.steps.slice(0, -1).map((s, i, all) => { const sk = hexKey(hexAt(p.map, s)); const ww = toWorld(center(parseKey(sk))); const f = (i + 1) / (all.length + 1); return new THREE.Vector3(ww.x, top(sk) + (prev.alt + ((tk.alt ?? 0) - prev.alt) * f) / 5 * LEVEL, ww.z); }) : [];
+          const pts = [prev.pos.clone(), ...mid, final];
+          g.position.copy(pts[0]);
+          g.userData.moving = true;
+          anim.current.moves = anim.current.moves.filter((m) => m.id !== tk.tokenId);
+          anim.current.moves.push({ id: tk.tokenId, obj: g, pts, born: performance.now(), dur: Math.min(4000, 260 * (pts.length - 1)) });
+        }
       });
     }
   }, [tokenKey, height]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -667,22 +683,41 @@ export default function HexScene3D(p: Props) {
     cam.current.dist = Math.max(14, r * 2.4);
     setTick((x) => x + 1);
   }, [p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!p.focus) return;
-    const k = hexKey(hexAt(p.map, p.focus));
-    const w = toWorld(center(parseKey(k)));
+  const flyRaf = useRef(0);
+  const flyTo = (w: { x: number; z: number }) => {
+    cancelAnimationFrame(flyRaf.current);
     const from = { ...cam.current };
     const start = performance.now();
-    let raf = 0;
     const step = (now: number) => {
       const e = Math.min(1, (now - start) / 500), q = 1 - (1 - e) ** 3;
       cam.current.tx = from.tx + (w.x - from.tx) * q; cam.current.tz = from.tz + (w.z - from.tz) * q;
       setTick((x) => x + 1);
-      if (e < 1) raf = requestAnimationFrame(step);
+      if (e < 1) flyRaf.current = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    flyRaf.current = requestAnimationFrame(step);
+  };
+  useEffect(() => {
+    if (!p.focus) return;
+    flyTo(toWorld(center(parseKey(hexKey(hexAt(p.map, p.focus))))));
+    return () => cancelAnimationFrame(flyRaf.current);
   }, [p.focus?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // APEX 2.5 – WASD: held keys pan the camera (while the pointer is over the map or the map has focus)
+  const keys = useRef(new Set<string>());
+  const lastKeyFrame = useRef(0);
+  const over = useRef(false);
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) => { const el = e.target as HTMLElement | null; return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable); };
+    const down = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (!['w', 'a', 's', 'd'].includes(k) || e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
+      if (!over.current && document.activeElement !== wrap.current) return;
+      e.preventDefault(); keys.current.add(k); dirty.current = true;
+    };
+    const up = (e: KeyboardEvent) => { keys.current.delete(e.key.toLowerCase()); };
+    const blur = () => keys.current.clear();
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur); };
+  }, []);
 
   // --- render loop (wind, water, combat effects); pauses while the tab is hidden
   useEffect(() => {
@@ -696,7 +731,7 @@ export default function HexScene3D(p: Props) {
       // APEX 2.1 – render on demand: every frame only while something moves (effects, wind at medium/high, at most
       // the quality's frame rate); a still scene costs nothing
       const cfg = QUALITY[qualityRef.current];
-      const busy = anim.current.fx.length > 0;
+      const busy = anim.current.fx.length > 0 || anim.current.moves.length > 0 || keys.current.size > 0;
       const animate = cfg.fps > 0;
       if (!dirty.current && !busy && !animate) return;
       if (!dirty.current && !busy && now - last < 1000 / cfg.fps) return;
@@ -716,6 +751,14 @@ export default function HexScene3D(p: Props) {
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
       a.fx = a.fx.filter((f) => { const age = now - f.born; if (age > f.life) { f.dispose(); return false; } if (age >= 0) f.update(age / f.life); return true; });
+      a.moves = a.moves.filter((m) => stepMove(m, now));
+      // APEX 2.5 – WASD pans smoothly while held (speed grows with the zoom)
+      if (keys.current.size) {
+        const c = cam.current, dt = Math.min(0.05, (now - (lastKeyFrame.current || now)) / 1000), sp = c.dist * 0.9 * dt;
+        const fw = (keys.current.has('w') ? 1 : 0) - (keys.current.has('s') ? 1 : 0), rt = (keys.current.has('d') ? 1 : 0) - (keys.current.has('a') ? 1 : 0);
+        c.tx += (-Math.sin(c.yaw) * fw + Math.cos(c.yaw) * rt) * sp; c.tz += (-Math.cos(c.yaw) * fw - Math.sin(c.yaw) * rt) * sp;
+      }
+      lastKeyFrame.current = now;
       const c = cam.current;
       t.camera.position.set(c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist);
       t.camera.lookAt(c.tx, 1, c.tz);
@@ -848,6 +891,13 @@ export default function HexScene3D(p: Props) {
     if (hit.token && p.onTokenClick) return p.onTokenClick(hit.token);
     if (hit.hex && p.onHexClick) p.onHexClick(hit.hex, scenePoint(hit.hex));
   };
+  const onDouble = (e: React.MouseEvent) => {
+    // APEX 2.5 – double-click any figure (also enemies, also off-turn): centre the camera on it
+    const hit = pick(e);
+    if (!hit.token) return;
+    const o = three.current?.tokens.children.find((c) => c.userData.tokenId === hit.token);
+    if (o) flyTo({ x: o.position.x, z: o.position.z });
+  };
   const onContext = (e: React.MouseEvent) => {
     e.preventDefault();
     const hit = pick(e);
@@ -877,8 +927,8 @@ export default function HexScene3D(p: Props) {
   return (
     <div className="relative h-full w-full select-none" style={{ minHeight: 360 }}>
       <div ref={wrap} className="absolute inset-0 touch-none outline-none focus-visible:ring-2 focus-visible:ring-gold-400/50" tabIndex={0} role="application" data-testid="hex-scene-3d"
-        aria-label={`${p.label}. 3D map. Hold the middle mouse button to orbit and tilt, drag to pan, mouse wheel zooms, Q/E orbit, R/F tilt.`}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
+        aria-label={`${p.label}. 3D map. WASD or drag to pan, middle mouse button to orbit and tilt, mouse wheel zooms, Q/E orbit, R/F tilt, double-click a figure to centre it.`}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerEnter={() => { over.current = true; }} onPointerLeave={() => { setHover(null); over.current = false; }} onDoubleClick={onDouble} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
       {hover && hoverInfo && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
           <b>{hoverInfo.label}</b> · height {height(hover) * (p.map.unitsPerCell || 5)} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
@@ -888,11 +938,24 @@ export default function HexScene3D(p: Props) {
         <span title="Resolution, shadows, grass and animation – lower is faster on weak devices">⚙ 3D</span>
         {(['low', 'medium', 'high', 'ultra'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
       </div>
-      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">🖱 middle button: orbit / tilt · left drag: pan · wheel: zoom · right-click: act</div>
+      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">WASD / left drag: pan · middle button: orbit · wheel: zoom · double-click figure: centre · right-click: act</div>
     </div>
   );
 }
 
+type Move = { id: string; obj: THREE.Object3D; pts: THREE.Vector3[]; born: number; dur: number };
+/** One frame of a figure walking along its path; false when it has arrived. */
+function stepMove(m: Move, now: number): boolean {
+  const e = Math.min(1, (now - m.born) / m.dur);
+  const f = e * (m.pts.length - 1), i = Math.min(m.pts.length - 2, Math.floor(f)), u = f - i;
+  const a = m.pts[i], b = m.pts[i + 1];
+  m.obj.position.lerpVectors(a, b, u);
+  // a little bounce per step, facing the way it walks
+  m.obj.position.y += Math.abs(Math.sin(u * Math.PI)) * 0.12 * (e < 1 ? 1 : 0);
+  if (b.x !== a.x || b.z !== a.z) { m.obj.rotation.y = Math.atan2(b.x - a.x, b.z - a.z); yawMemory.set(m.id, m.obj.rotation.y); }
+  if (e >= 1) { m.obj.position.copy(m.pts[m.pts.length - 1]); m.obj.userData.moving = false; return false; }
+  return true;
+}
 type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null; /** APEX 2.4 – sneaking: 1 = crouched low */ crouch: number; crouchNow: number };
 const ALERT_RANGE = 5 * Math.sqrt(3) * 1.05; // ≈ 5 hexes (25 ft): closer opponents wake resting creatures
 type Critter = { obj: THREE.Object3D; behaviour: string; spots: THREE.Vector3[]; home: THREE.Vector3; target: THREE.Vector3 | null; wait: number; phase: number; wings: THREE.Object3D[]; last?: number };
@@ -948,7 +1011,7 @@ function idleStep(tokens: THREE.Group, sec: number) {
     if (ia.kind === 'still') continue;
     const t = sec + ia.phase;
     // turn (slowly) towards the nearest opponent in sight range
-    if (ia.target !== null && ia.target !== undefined && ia.kind !== 'standee') {
+    if (ia.target !== null && ia.target !== undefined && ia.kind !== 'standee' && !a.userData.moving) {
       let d = ia.target - a.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
       a.rotation.y += d * 0.04;
       yawMemory.set(a.userData.tokenId as string, a.rotation.y);
