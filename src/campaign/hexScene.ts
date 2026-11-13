@@ -238,6 +238,11 @@ export interface HexSceneData {
    * Absent = flat (every older map). Steps of one level are stairs (climbing up costs extra), two or more are cliffs.
    */
   heights?: string;
+  /**
+   * APEX 2.5 – finer ground: 0–4 extra feet on top of the hex's level, one digit per hex ('0'–'4'). Absent = whole
+   * levels only. Slopes of a few feet are walked freely, 3–5 ft up counts as climbing, more than 5 ft is a cliff.
+   */
+  fine?: string;
 }
 export const MAX_LEVEL = 35;
 const LEVEL_CODES = '0123456789abcdefghijklmnopqrstuvwxyz';
@@ -248,18 +253,67 @@ export function heightLookup(map: Pick<SceneMap, 'hex'>): (k: HexKey) => number 
   const data = map.hex;
   if (!data?.heights) return () => 0;
   const index = new Map(hexesInRange(ORIGIN, data.radius).map((h, i) => [hexKey(h), i]));
-  const hs = data.heights;
-  return (k) => { const i = index.get(k); return i === undefined ? 0 : levelOf(hs[i]); };
+  const hs = data.heights, fine = data.fine;
+  return (k) => { const i = index.get(k); return i === undefined ? 0 : levelOf(hs[i]) + (fine ? Number(fine[i] ?? 0) / 5 : 0); };
+}
+/**
+ * APEX 2.5 – smooths a map's slopes with 1-ft steps: each hex leans towards the mean of its walkable neighbours (at
+ * most ±2 ft from its level), so ramps replace 5-ft stairs. Cliffs stay cliffs, walkable steps stay walkable,
+ * water and buildings stay level.
+ */
+export function smoothHeights(data: HexSceneData): HexSceneData {
+  if (!data.heights) return data;
+  const all = hexesInRange(ORIGIN, data.radius);
+  const tiles = decodeTiles(data);
+  const base = new Map(all.map((h, i) => [hexKey(h), levelOf(data.heights![i])]));
+  const flat = (k: HexKey) => { const t = tiles.get(k); return !t || WATERY.test(t.id) || BUILDING.test(t.id) || t.id === 'wall' || t.id === 'cavewall' || t.id === 'pit'; };
+  const t = new Map(base);
+  const near = (h: Axial) => neighbors(h).map(hexKey).filter((n) => base.has(n) && Math.abs(base.get(n)! - base.get(hexKey(h))!) <= 1);
+  for (let pass = 0; pass < 3; pass++) {
+    const next = new Map(t);
+    for (const h of all) {
+      const k = hexKey(h);
+      if (flat(k)) continue;
+      const ns = near(h);
+      if (!ns.length) continue;
+      const mean = ns.reduce((s, n) => s + t.get(n)!, t.get(k)!) / (ns.length + 1);
+      next.set(k, Math.max(base.get(k)! - 0.4, Math.min(base.get(k)! + 0.4, mean)));
+    }
+    for (const [k, v] of next) t.set(k, v);
+  }
+  // keep the classes: a walkable step must stay walkable (≤ 1 level), a cliff stays a cliff (> 1 level)
+  for (let pass = 0; pass < 6; pass++) {
+    let changed = false;
+    for (const h of all) {
+      const k = hexKey(h);
+      for (const n of neighbors(h).map(hexKey).filter((x) => base.has(x))) {
+        const was = Math.abs(base.get(k)! - base.get(n)!), now = Math.abs(t.get(k)! - t.get(n)!);
+        if ((was <= 1 && now > 1 + 1e-9) || (was > 1 && now <= 1 + 1e-9)) { t.set(k, base.get(k)!); t.set(n, base.get(n)!); changed = true; }
+      }
+    }
+    if (!changed) break;
+  }
+  // encode: whole level + 0–4 ft (quantised to 1 ft)
+  const heights: string[] = [], fine: string[] = [];
+  for (const h of all) {
+    const ft = Math.max(0, Math.round(t.get(hexKey(h))! * 5));
+    heights.push(levelCode(Math.floor(ft / 5))); fine.push(String(ft % 5));
+  }
+  const f = fine.join('');
+  return { ...data, heights: heights.join(''), ...(/^0+$/.test(f) ? {} : { fine: f }) };
 }
 /** Raises / lowers / sets the ground of single hexes (editor height brush). */
 export function setHeights(data: HexSceneData, keys: HexKey[], level: (current: number) => number): HexSceneData {
   const n = data.terrain.length;
   const chars = (data.heights ?? '0'.repeat(n)).split('');
   const index = new Map(hexesInRange(ORIGIN, data.radius).map((h, i) => [hexKey(h), i]));
-  for (const k of keys) { const i = index.get(k); if (i !== undefined) chars[i] = levelCode(level(levelOf(chars[i]))); }
+  const fine = data.fine ? data.fine.split('') : null;
+  for (const k of keys) { const i = index.get(k); if (i !== undefined) { chars[i] = levelCode(level(levelOf(chars[i]))); if (fine) fine[i] = '0'; } }
   const heights = chars.join('');
-  if (/^0+$/.test(heights)) { const { heights: _drop, ...flat } = data; void _drop; return flat; }
-  return { ...data, heights };
+  const { fine: _f, ...rest } = data; void _f;
+  if (/^0+$/.test(heights)) { const { heights: _drop, ...flat } = rest; void _drop; return flat; }
+  const f = fine?.join('');
+  return { ...rest, heights, ...(f && !/^0+$/.test(f) ? { fine: f } : {}) };
 }
 export const tileSetOf = (data: Pick<HexSceneData, 'set'> | undefined): TileSet => (data?.set === 'battle' ? 'battle' : 'region');
 
@@ -269,6 +323,7 @@ export function validHexData(v: unknown): v is HexSceneData {
   if (h.set !== undefined && h.set !== 'battle') return false;
   const codes = [...BY_CODE[tileSetOf(h)].keys()].map((c) => c.replace(/[\\\]^-]/g, '\\$&')).join('');
   if (h.heights !== undefined && (typeof h.heights !== 'string' || h.heights.length !== h.terrain.length || !/^[0-9a-z]+$/.test(h.heights))) return false;
+  if (h.fine !== undefined && (typeof h.fine !== 'string' || !h.heights || h.fine.length !== h.terrain.length || !/^[0-4]+$/.test(h.fine))) return false;
   return Number.isInteger(h.radius) && h.radius >= MIN_HEX_RADIUS && h.radius <= MAX_HEX_RADIUS && typeof h.terrain === 'string' && h.terrain.length === hexCount(h.radius) && new RegExp(`^[${codes}.]+$`).test(h.terrain);
 }
 
@@ -468,7 +523,8 @@ function generateBattleSceneFlat(preset: HexPreset, radius: number, seed: number
 /** Ground heights (5-ft levels) for a generated map. */
 function withLevels(data: HexSceneData, level: (h: Axial) => number): HexSceneData {
   const heights = hexesInRange(ORIGIN, data.radius).map((h) => levelCode(level(h))).join('');
-  return /^0+$/.test(heights) ? data : { ...data, heights };
+  const { fine: _f, ...rest } = data; void _f;
+  return /^0+$/.test(heights) ? rest : { ...rest, heights };
 }
 
 /**
@@ -801,7 +857,7 @@ const BUILDING = /wall|cottage|barn|windmill|townhouse|timberhouse|shop|tower|ga
  * (a step you can walk), so the map stays playable.
  */
 export function applyRelief(data: HexSceneData, style: ReliefStyle, strength: number, seed: number): HexSceneData {
-  if (style === 'none') { const { heights: _h, ...flat } = data; void _h; return flat; }
+  if (style === 'none') { const { heights: _h, fine: _f, ...flat } = data; void _h; void _f; return flat; }
   const r = data.radius, k = Math.max(1, Math.min(5, Math.round(strength)));
   const all = hexesInRange(ORIGIN, r);
   const tiles = decodeTiles(data);
@@ -846,7 +902,9 @@ export function applyRelief(data: HexSceneData, style: ReliefStyle, strength: nu
       if (!changed) break;
     }
   }
-  return withLevels(data, (h) => Math.min(MAX_LEVEL, raw.get(hexKey(h)) ?? 0));
+  // APEX 2.5 – 1-ft ramps between the levels (not for terraces and crags: they are meant to be steps)
+  const leveled = withLevels(data, (h) => Math.min(MAX_LEVEL, raw.get(hexKey(h)) ?? 0));
+  return style === 'terraces' || style === 'crags' ? leveled : smoothHeights(leveled);
 }
 const inRange = (r: number) => (h: Axial) => distance(h, ORIGIN) <= r;
 /** The relief a layout gets by default (more 3D life without hand work). */
@@ -1000,9 +1058,10 @@ export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map), o
     // climbing speed: cliffs are climbable at normal cost (going up and down)
     if (opts.climb) return c;
     // APEX 2.0: jumping down a cliff is possible (falling damage from 10 ft); paths prefer stairs (+1 per jump)
-    if (dh <= -2) return c + 1;
-    if (dh > 1) return null;
-    return dh === 1 ? c + 1 : c;
+    // APEX 2.5 – heights in 1-ft steps: up to 2 ft is walked freely, 3–5 ft up counts as climbing (double), more is a cliff
+    if (dh <= -2 + 1e-9) return c + 1;
+    if (dh > 1 + 1e-9) return null;
+    return dh >= 0.6 - 1e-9 ? c + 1 : c;
   };
 }
 /** Drops of two or more levels along a walked path (jumping down a cliff): the fall in feet per jump. */
@@ -1011,7 +1070,7 @@ export function pathDrops(map: Pick<SceneMap, 'hex'>, path: Axial[], from?: Axia
   const h = heightLookup(map);
   const out: number[] = [];
   const pts = from ? [from, ...path] : path;
-  for (let i = 1; i < pts.length; i++) { const d = h(hexKey(pts[i - 1])) - h(hexKey(pts[i])); if (d >= 2) out.push(d * 5); }
+  for (let i = 1; i < pts.length; i++) { const d = h(hexKey(pts[i - 1])) - h(hexKey(pts[i])); if (d >= 2 - 1e-9) out.push(Math.round(d * 5)); }
   return out;
 }
 /** How a creature moves: flying (in the air) or with a climbing speed. */

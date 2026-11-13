@@ -14,6 +14,7 @@ import { activeActors, blockOf } from './sceneActions.js';
 import { onTurnStart } from './combatEffects.js';
 import type { GameState, SceneClockState, SceneEncounter, SceneEncounterParticipant } from './types.js';
 
+import { WEATHER_LABEL, type Weather } from './worldTime.js';
 export const defaultClock = (): SceneClockState => ({ day: 1, phase: 'day', lighting: 'bright', version: 0 });
 export const clockOf = (state: Pick<GameState, 'sceneClocks'>, sceneId: string): SceneClockState => ({ ...defaultClock(), ...(state.sceneClocks?.[sceneId] ?? {}) });
 export const activeEncounter = (state: Pick<GameState, 'sceneEncounters'>, sceneId: string): SceneEncounter | null => {
@@ -23,16 +24,18 @@ export const activeEncounter = (state: Pick<GameState, 'sceneEncounters'>, scene
 
 type Result = { ok: true; state: GameState; message?: string } | { ok: false; error: string };
 
-export function setClock(prev: GameState, sceneId: string, expectedVersion: number, change: { phase?: 'day' | 'night'; nextDay?: boolean; lighting?: SceneClockState['lighting'] }): Result {
+export function setClock(prev: GameState, sceneId: string, expectedVersion: number, change: { phase?: 'day' | 'night'; nextDay?: boolean; lighting?: SceneClockState['lighting']; weather?: Weather; followTime?: boolean }): Result {
   const clock = clockOf(prev, sceneId);
   if (clock.version !== expectedVersion) return { ok: false, error: 'The scene time changed. Refresh and try again.' };
   const next: SceneClockState = { ...clock, version: clock.version + 1 };
   if (change.nextDay) { next.day = clock.day + 1; next.phase = 'day'; }
   else if (change.phase) next.phase = change.phase;
-  if (change.lighting) next.lighting = change.lighting;
+  if (change.lighting) { next.lighting = change.lighting; next.followTime = false; }
+  if (change.followTime !== undefined) next.followTime = change.followTime;
+  if (change.weather) next.weather = change.weather;
   const state = structuredClone(prev);
   state.sceneClocks = { ...(state.sceneClocks ?? {}), [sceneId]: next };
-  return { ok: true, state, message: change.nextDay ? `Day ${next.day} begins – travel is restored.` : change.phase ? `${next.phase === 'night' ? 'Night' : 'Day'} falls on the scene.` : `Lighting: ${next.lighting}.` };
+  return { ok: true, state, message: change.nextDay ? `Day ${next.day} begins – travel is restored.` : change.phase ? `${next.phase === 'night' ? 'Night' : 'Day'} falls on the scene.` : change.weather ? `Weather: ${WEATHER_LABEL[change.weather]}.` : change.followTime ? 'Lighting follows the time of day.' : `Lighting: ${next.lighting}.` };
 }
 
 export interface InitiativeEntry { tokenId: string; name: string; roll: number; bonus: number }

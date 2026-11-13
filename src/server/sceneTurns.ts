@@ -39,6 +39,7 @@ import { findBeast } from '../game/beastCatalog.js';
 import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
 import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
 import { allGroups, groupTemplates, spotsAround } from '../game/groups.js';
+import { WEATHERS, changeWorldTime, clockText, dayOf, parseWorldTimeChange } from '../game/worldTime.js';
 import { altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
 import { npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
@@ -539,9 +540,26 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     if (!Number.isSafeInteger(v.expectedVersion)) return { status: 400, body: { error: 'Invalid version.' } };
     const phase = v.phase === 'day' || v.phase === 'night' ? v.phase : undefined;
     const lighting = v.lighting === 'bright' || v.lighting === 'dim' || v.lighting === 'dark' ? v.lighting : undefined;
-    if (!phase && !lighting && v.nextDay !== true) return { status: 400, body: { error: 'Nothing to change.' } };
+    const weather = WEATHERS.find((w) => w === v.weather);
+    const followTime = typeof v.followTime === 'boolean' ? v.followTime : undefined;
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM changes time and weather.' } };
+    if (!phase && !lighting && !weather && followTime === undefined && v.nextDay !== true) return { status: 400, body: { error: 'Nothing to change.' } };
     await rememberCurrentVision(user, repo, sceneId).catch(() => undefined);
-    return mutate(user, repo, (s) => setClock(s, sceneId, v.expectedVersion as number, { phase, lighting, nextDay: v.nextDay === true }));
+    return mutate(user, repo, (s) => setClock(s, sceneId, v.expectedVersion as number, { phase, lighting, nextDay: v.nextDay === true, weather, followTime }));
+  }
+  if (v.action === 'time') {
+    // APEX 2.5 – campaign time (dial, real time, skip to dawn), season and snow – GM only
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM changes the time.' } };
+    const c = parseWorldTimeChange(v);
+    if (typeof c === 'string') return { status: 400, body: { error: c } };
+    await rememberCurrentVision(user, repo, sceneId).catch(() => undefined);
+    return mutate(user, repo, (s) => {
+      const st = structuredClone(s);
+      st.worldTime = changeWorldTime(s.worldTime, c);
+      const m = st.worldTime.minute;
+      const text = c.skipTo !== undefined ? `Time skips to day ${dayOf(m)}, ${clockText(m)}.` : c.season ? `Season: ${c.season}.` : c.snow !== undefined ? `Snow: ${Math.round(c.snow * 100)} %.` : c.run !== undefined ? (c.run ? `Time runs (×${st.worldTime.rate ?? 1}).` : `Time stops at ${clockText(m)}.`) : `Time: day ${dayOf(m)}, ${clockText(m)}.`;
+      return { ok: true, state: st, message: text };
+    });
   }
   return { status: 400, body: { error: 'Invalid scene action.' } };
 }

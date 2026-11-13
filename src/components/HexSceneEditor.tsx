@@ -29,7 +29,7 @@ import {
   resizeHexScene,
   sampleImageToHex,
   type HexPreset,
-  applyRelief,
+  applyRelief, smoothHeights,
   RELIEF_STYLES,
   type ReliefStyle,
 } from '../campaign/hexScene';
@@ -349,6 +349,7 @@ export function HexSceneEditor({
               Strength · {reliefStrength} <input type="range" min={1} max={5} value={reliefStrength} onChange={(e) => setReliefStrength(Number(e.target.value))} />
             </label>
             <button type="button" className="btn btn-ghost" onClick={() => { if (!map.hex) return; setUndo(map); change({ hex: applyRelief(map.hex, relief, reliefStrength, seed) }); setMessage(relief === 'none' ? 'The map is flat again.' : `Relief “${RELIEF_STYLES.find((r) => r.id === relief)?.label}” applied (seed ${seed}). Undo restores the previous heights.`); }} data-testid="apply-relief">⛰ Apply relief</button>
+            {map.hex?.heights && <button type="button" className="btn btn-ghost" title="Turns 5-ft stairs into gentle ramps of 1-ft steps; cliffs stay cliffs, water and houses stay level" onClick={() => { if (!map.hex) return; setUndo(map); change({ hex: smoothHeights(map.hex) }); setMessage('Slopes smoothed in 1-ft steps. Undo restores the previous heights.'); }} data-testid="smooth-relief">〰 Smooth slopes (1-ft steps)</button>}
           </fieldset>
         )}
         {battleScene && set === 'battle' && (

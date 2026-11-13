@@ -140,10 +140,13 @@ export function useHexViewport({ bounds, maxK, fitMaxK, fitSignature }: { bounds
   const onKeyDown = (e: React.KeyboardEvent) => {
     const step = 60;
     const pan = (dx: number, dy: number) => setTf((t) => (t ? { ...t, x: t.x + dx, y: t.y + dy } : t));
-    if (e.key === 'ArrowLeft') pan(step, 0);
-    else if (e.key === 'ArrowRight') pan(-step, 0);
-    else if (e.key === 'ArrowUp') pan(0, step);
-    else if (e.key === 'ArrowDown') pan(0, -step);
+    // APEX 2.5: WASD pans too
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (k === 'ArrowLeft' || k === 'a') pan(step, 0);
+    else if (k === 'ArrowRight' || k === 'd') pan(-step, 0);
+    else if (k === 'ArrowUp' || k === 'w') pan(0, step);
+    else if (k === 'ArrowDown' || k === 's') pan(0, -step);
     else if (e.key === '+' || e.key === '=') zoomAt(1.25, size.w / 2, size.h / 2);
     else if (e.key === '-') zoomAt(0.8, size.w / 2, size.h / 2);
     else if (e.key === '0') fit();

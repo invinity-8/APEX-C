@@ -3,6 +3,7 @@
  * bar: action economy, its attacks (the chosen one is the default for right-clicks), area abilities, war cries,
  * Dash / Disengage / Dodge / Hide, the target strip and End turn.
  */
+import { speedWith } from '../game/combatEffects';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SceneSnapshot } from '../server/sceneRuntime';
@@ -50,7 +51,21 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
             {orb('Action', !!b.action, 'rounded-full bg-emerald-500')}
             {orb('Bonus', !!b.bonus, 'rotate-45 scale-75 bg-amber-400')}
             {orb('Reaction', reactionUsed(encounter, actor), 'rounded-full bg-arcane-500')}
-            <span className="text-marble-300">moved {b.moved ?? 0} ft</span>
+            {(() => {
+              // APEX 2.5 – the same movement bar as the players have (Dash doubles it)
+              const total = (fig ? speedWith((fig.effects ?? []).map((x) => ({ mods: x.mods ?? {} })), npc.speedFt) : npc.speedFt) * (b.dash ? 2 : 1);
+              const left = Math.max(0, total - (b.moved ?? 0));
+              return (
+                <span className="flex min-w-[11rem] flex-1 items-center gap-2" title={`${left} of ${total} ft left${b.dash ? ' (Dash)' : ''}`}>
+                  <span aria-hidden className="text-base">👣</span>
+                  <span className="relative h-3 flex-1 overflow-hidden rounded-full border border-ink-600 bg-ink-800" role="meter" aria-label="Movement left" aria-valuemin={0} aria-valuemax={total} aria-valuenow={left} data-testid="npc-movement-bar">
+                    <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-gold-500 to-gold-200 transition-[width] duration-300" style={{ width: `${total ? (left / total) * 100 : 0}%` }} />
+                    {b.dash && <span className="absolute inset-y-0 border-l border-dashed border-sky-300" style={{ left: '50%' }} />}
+                  </span>
+                  <b className="tabular-nums text-marble-100">{Math.round(left)}<span className="text-marble-500"> / {Math.round(total)} ft</span></b>
+                </span>
+              );
+            })()}
           </>}
           {!myTurn && <span className="text-amber-300">not its turn</span>}
         </div>

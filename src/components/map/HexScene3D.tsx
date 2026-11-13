@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
-import { decodeTiles, heightLookup, hexAt, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
+import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
 import { MAX_ALTITUDE_FT } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
@@ -29,6 +29,9 @@ import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
 import { FX_COLOR } from './CombatFx';
+import { buildTerrain, type Terrain, type TerrainCell } from './terrain3d';
+import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, seasonTint, unknownColour, type Backdrop, type Light, type WeatherFx } from './environment3d';
+import type { Season, Weather } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
 import { fromPixel } from '../../game/hex';
 
@@ -51,6 +54,10 @@ interface Props {
   onTokenContext?: (tokenId: string) => void;
   pathFrom?: { x: number; y: number } | null;
   pathBudget?: number | null;
+  /** APEX 2.5 – feet a Dash would add (orange part of the path). */
+  pathDash?: number | null;
+  /** APEX 2.5 – the hovered hex (for the action shown at the pointer). */
+  onHoverHex?: (k: HexKey | null) => void;
   /** APEX 1.9 – flying / climbing for the path preview. */
   pathMode?: { fly?: boolean; climb?: boolean };
   areaAt?: ((point: { x: number; y: number }) => HexKey[]) | null;
@@ -64,6 +71,8 @@ interface Props {
   fx?: SceneFx[];
   /** APEX 2.4 – the moving figure can fly: its current altitude (ft). Shows the reach as a 3D volume around it. */
   flyAlt?: number | null;
+  /** APEX 2.5 – time of day (hours), weather, season and snow of the scene. */
+  env?: { hour?: number; weather?: Weather; season?: Season; snow?: number };
   /** APEX 2.4 – sneaking: awareness rings of the opponents and (GM) spotted / heard marks. */
   stealth?: { rings: AwarenessRing[]; marks?: StealthMark[] } | null;
 }
@@ -92,9 +101,14 @@ export default function HexScene3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group; composer?: EffectComposer } | null>(null);
   /** Animated things: grass shader time, swaying crowns, water, running combat effects. */
-  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }> }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [] });
+  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }>; moves: Move[] }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [], moves: [] });
+  /** APEX 2.5 – where every figure stood last time (to walk it along its path when it moves). */
+  const lastPos = useRef(new Map<string, { k: HexKey; alt: number; pos: THREE.Vector3 }>());
+  /** APEX 2.5 – the smooth ground surface (heights inside a hex for grass, markers …). */
+  const terrainRef = useRef<Terrain | null>(null);
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
+  useEffect(() => { p.onHoverHex?.(hover); }, [hover]); // eslint-disable-line react-hooks/exhaustive-deps
   const [quality, setQualityState] = useState<Quality3D>(readQuality);
   const qcfg = QUALITY[quality];
   const setQuality = (v: Quality3D) => { setQualityState(v); try { localStorage.setItem(QUALITY_KEY, v); } catch { /* private mode */ } };
@@ -117,11 +131,14 @@ export default function HexScene3D(p: Props) {
   // APEX 2.1 – the map's colour scheme recolours ground, props and grass in 3D like on the 2D map
   const nodesKey = p.map.nodes.map((n) => `${n.id}:${Math.round(n.x)}:${Math.round(n.y)}:${n.kind}:${n.lightFt ?? ''}`).join('|');
   const pKey = paletteKey(p.map.palette);
+  // APEX 2.5 – season and snow tint the map like a colour scheme does
+  const season = p.env?.season, snow = Math.round((p.env?.snow ?? 0) * 20) / 20;
+  const seasonal = (season && season !== 'summer') || snow > 0;
   const recolor = useMemo(() => {
-    if (!p.map.palette) return null;
-    const fn = gradientMap(p.map.palette);
+    if (!p.map.palette && !seasonal) return null;
+    const fn = p.map.palette ? gradientMap(p.map.palette) : null;
     const mats = new Map<THREE.Material, THREE.Material>();
-    const color = (c: THREE.Color) => { const [r, g, b] = fn([Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]); return c.setRGB(r / 255, g / 255, b / 255); };
+    const color = (c: THREE.Color) => { if (fn) { const [r, g, b] = fn([Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]); c.setRGB(r / 255, g / 255, b / 255); } return seasonal ? seasonTint(c, season, snow) : c; };
     const material = (m: THREE.Material) => {
       const std = m as THREE.MeshStandardMaterial;
       if (!std.isMeshStandardMaterial || (std.emissiveIntensity > 0 && std.emissive.getHex() !== 0)) return m;
@@ -130,7 +147,7 @@ export default function HexScene3D(p: Props) {
       return hit;
     };
     return { color, material };
-  }, [pKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pKey, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
   const scenePoint = (k: HexKey) => { const c = center(parseKey(k)); return { x: c.x + ox, y: c.y + oy }; };
 
   // --- renderer, lights, camera (once)
@@ -168,31 +185,74 @@ export default function HexScene3D(p: Props) {
     return () => { ro.disconnect(); renderer.dispose(); el.removeChild(renderer.domElement); three.current = null; };
   }, []);
 
-  // --- background and light by phase, or the map's 3D mood (APEX 2.1)
+  // --- APEX 2.5: sky, sun and fog from the time of day and the weather (or the map's 3D mood, APEX 2.1)
+  const biome = useMemo(() => biomeOf(tiles), [tiles]);
+  const envRef = useRef<{ sky?: ReturnType<typeof buildSky>; backdrop?: Backdrop; weather?: WeatherFx; light?: Light; recolorFill?: (l: Light) => void }>({});
+  const hourNow = p.env?.hour ?? (p.phase === 'night' ? 0.5 : p.phase === 'dusk' ? 19.2 : 12);
+  const hourKey = Math.round(hourNow * 4) / 4; // re-light every quarter hour
+  const weather = p.env?.weather ?? 'clear';
   useEffect(() => {
     const t = three.current;
     if (!t) return;
-    const mood = p.map.mood ?? (p.phase === 'night' ? 'night' : p.phase === 'dusk' ? 'dusk' : 'day');
     const M: Record<string, { bg: number; sky: number; ground: number; hemi: number; sun: number; sunI: number; pos: [number, number, number]; fog?: [number, number]; exp?: number }> = {
-      day: { bg: 0x1b2027, sky: 0xfff4dd, ground: 0x2a2f2a, hemi: 0.9, sun: 0xfff0d0, sunI: 1.6, pos: [-30, 60, 20] },
       golden: { bg: 0x3a2a22, sky: 0xffe0b0, ground: 0x4a3a2a, hemi: 1.0, sun: 0xffb46a, sunI: 1.9, pos: [-50, 28, 15], exp: 1.1 },
       overcast: { bg: 0x4a5058, sky: 0xd8e0e8, ground: 0x3a3e40, hemi: 1.25, sun: 0xdfe6ee, sunI: 0.7, pos: [-20, 70, 30], fog: [40, 130] },
-      dusk: { bg: 0x2a2230, sky: 0x9a7ab0, ground: 0x2a1e2a, hemi: 0.6, sun: 0xff8a5a, sunI: 0.95, pos: [-55, 20, 10] },
-      night: { bg: 0x0b0f17, sky: 0x3a4a7a, ground: 0x0a0c12, hemi: 0.35, sun: 0x8fa8ff, sunI: 0.3, pos: [30, 60, -20] },
       misty: { bg: 0x8a9298, sky: 0xe0e6ea, ground: 0x4a5048, hemi: 1.1, sun: 0xeef2f4, sunI: 0.75, pos: [-20, 60, 30], fog: [18, 75] },
       storybook: { bg: 0x2b3a4a, sky: 0xfff8e8, ground: 0x3a4a2a, hemi: 1.1, sun: 0xfff2d0, sunI: 1.95, pos: [-35, 55, 25], exp: 1.15 },
       gloom: { bg: 0x161c16, sky: 0x8a9a7a, ground: 0x10140e, hemi: 0.5, sun: 0x9ab08a, sunI: 0.55, pos: [-25, 50, 25], fog: [28, 110] },
     };
-    const m = M[mood] ?? M.day;
-    t.scene.background = new THREE.Color(m.bg);
-    t.scene.fog = new THREE.Fog(m.bg, m.fog?.[0] ?? 60, m.fog?.[1] ?? 160);
+    const base = lightFor(hourKey, weather);
+    const m = p.map.mood ? M[p.map.mood] : undefined;
+    // a designed mood keeps its look; the sky colours still come from the time of day
+    const l: Light = m ? { ...base, hemiSky: m.sky, hemiGround: m.ground, hemi: m.hemi, sun: m.sun, sunI: m.sunI * (base.sunI / 1.6), sunPos: m.pos, exposure: m.exp ?? base.exposure, ...(m.fog ? { fogNear: m.fog[0], fogFar: m.fog[1], fog: m.bg, horizon: m.bg } : {}) } : base;
+    const e = envRef.current;
+    e.light = l;
+    const sky = biomeHasSky(biome);
+    if (!e.sky) { e.sky = buildSky(); t.scene.add(e.sky.mesh, e.sky.stars); }
+    e.sky.mesh.visible = sky; e.sky.stars.visible = sky && l.stars > 0.02;
+    e.sky.set(l);
+    t.scene.background = sky ? null : new THREE.Color(0x0a0908);
+    t.scene.fog = new THREE.Fog(sky ? l.fog : 0x0a0908, l.fogNear, l.fogFar);
     const [hemi, sun] = t.scene.children as [THREE.HemisphereLight, THREE.DirectionalLight];
-    hemi.color.setHex(m.sky); hemi.groundColor.setHex(m.ground); hemi.intensity = m.hemi;
-    sun.color.setHex(m.sun); sun.intensity = m.sunI; sun.position.set(...m.pos);
-    t.renderer.toneMappingExposure = m.exp ?? 1.05;
+    hemi.color.setHex(l.hemiSky); hemi.groundColor.setHex(l.hemiGround); hemi.intensity = l.hemi;
+    sun.color.setHex(l.sun); sun.intensity = l.sunI; sun.position.set(...l.sunPos);
+    t.renderer.toneMappingExposure = l.exposure;
+    e.backdrop?.set(l, season, snow);
+    e.recolorFill?.(l);
     t.renderer.shadowMap.needsUpdate = true;
+    dirty.current = true;
     setTick((x) => x + 1);
-  }, [p.phase, p.map.mood]);
+  }, [hourKey, weather, p.map.mood, biome, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- APEX 2.5: the land beyond the map's edge and the horizon (per biome)
+  useEffect(() => {
+    const t = three.current;
+    if (!t || !p.map.hex) return;
+    const e = envRef.current;
+    if (e.backdrop) { t.scene.remove(e.backdrop.group); e.backdrop.dispose(); }
+    const R = p.map.hex.radius;
+    e.backdrop = buildBackdrop(biome, (R + 5) * 1.5, BASE - 0.04, (R * 7 + tiles.size) % 97 + 1);
+    // the plain starts inside the skirt of hexes around the map (see the terrain effect), so there is no gap
+    const ringGeo = new THREE.RingGeometry((R + 5) * 1.5, (R + 5) * 1.5 + 420, 64, 1);
+    const plain = e.backdrop.group.children[0] as THREE.Mesh;
+    plain.geometry.dispose(); plain.geometry = ringGeo;
+    t.scene.add(e.backdrop.group);
+    if (e.light) e.backdrop.set(e.light, season, snow);
+    dirty.current = true;
+    return () => { if (e.backdrop) { t.scene.remove(e.backdrop.group); e.backdrop.dispose(); e.backdrop = undefined; } };
+  }, [biome, p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- APEX 2.5: clouds, rain and snow
+  useEffect(() => {
+    const t = three.current;
+    if (!t || !p.map.hex) return;
+    const e = envRef.current;
+    const fx = buildWeather(weather, e.light ?? lightFor(hourKey, weather), p.map.hex.radius * 1.8);
+    e.weather = fx;
+    t.scene.add(fx.group);
+    dirty.current = true;
+    return () => { t.scene.remove(fx.group); fx.dispose(); if (e.weather === fx) e.weather = undefined; };
+  }, [weather, p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- quality: resolution and shadows follow the setting
   useEffect(() => {
@@ -246,11 +306,22 @@ export default function HexScene3D(p: Props) {
     const families = new Map<string, HexKey[]>();
     for (const k of keys) { const f = surfaceOf(tiles.get(k)!.id); families.set(f, [...(families.get(f) ?? []), k]); }
     const m4 = new THREE.Matrix4(), col = new THREE.Color();
+    // APEX 2.5 – the visible ground is one smooth surface (terrain3d.ts); the instanced columns stay invisible for picking
+    const pickMat = new THREE.MeshBasicMaterial({ visible: false });
+    const cells = new Map<HexKey, TerrainCell>();
+    const famMats = new Map<string, THREE.Material>();
+    const surfaceMat = (fam: string) => {
+      let m = famMats.get(fam);
+      if (!m) {
+        const tex = surfaceTexture(fam === 'fog' || fam === 'skirt' ? 'earth' : fam);
+        const sm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: fam === 'marble' ? 0.35 : fam === 'smooth' ? 0.6 : 0.92, metalness: 0.02, map: tex, ...(qcfg.shadow ? { bumpMap: tex, bumpScale: fam === 'marble' || fam === 'carpet' ? 0.6 : fam === 'cobbles' || fam === 'flag' ? 3.2 : 2.2 } : {}) });
+        groundSurface(sm);
+        famMats.set(fam, sm); m = sm;
+      }
+      return m;
+    };
     for (const [fam, list] of families) {
-      const top0 = new THREE.MeshStandardMaterial({ roughness: fam === 'marble' ? 0.35 : fam === 'smooth' ? 0.6 : 0.92, metalness: 0.02, map: surfaceTexture(fam), ...(qcfg.shadow ? { bumpMap: surfaceTexture(fam), bumpScale: fam === 'marble' || fam === 'carpet' ? 0.6 : fam === 'cobbles' || fam === 'flag' ? 3.2 : 2.2 } : {}) });
-      groundSurface(top0);
-      const mesh = new THREE.InstancedMesh(geo, [top0, side], list.length);
-      mesh.receiveShadow = true; mesh.castShadow = true;
+      const mesh = new THREE.InstancedMesh(geo, pickMat, list.length);
       list.forEach((k, i) => {
         const tile = tiles.get(k)!;
         const w = toWorld(center(parseKey(k)));
@@ -264,14 +335,65 @@ export default function HexScene3D(p: Props) {
         if (recolor && !pit) recolor.color(col);
         if (fogOf.get(k) === 'e') col.multiplyScalar(0.45); // remembered, not seen now
         else col.offsetHSL(0, 0, (((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) - 2) * 0.008);
-        mesh.setColorAt(i, col);
+        cells.set(k, { top: h, family: fam, color: col.clone(), apart: wallTall > 0 || pit, wavy: fam === 'grass' || fam === 'earth' });
       });
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.userData.keys = list;
       t.scene.add(mesh);
       t.ground.push(mesh);
     }
+    // APEX 2.5 – hexes nobody can see are not an abyss: they continue the land at the height of their known
+    // neighbours, in a plain fog colour (parchment by day, ash at dusk, dark at night). Around the map a skirt of
+    // land rings (the edge's colours, heights fading to the plain) leads into the horizon instead of a cliff edge.
+    const fogMat = surfaceMat('fog') as THREE.MeshStandardMaterial;
+    {
+      const R = p.map.hex.radius;
+      const known = new Map<HexKey, number>();
+      for (const k of keys) known.set(k, height(k));
+      const unknown = hexesInRange(ORIGIN, R).map(hexKey).filter((k) => !known.has(k));
+      const skirt = hexesInRange(ORIGIN, R + 6).filter((h) => distance(h, ORIGIN) > R).map(hexKey);
+      // heights: spread inwards from known hexes ring by ring (unknown), then fade out towards the plain (skirt)
+      const est = new Map<HexKey, number>(known);
+      let open = [...unknown, ...skirt];
+      for (let pass = 0; pass < 40 && open.length; pass++) {
+        const next: HexKey[] = [], found: Array<[HexKey, number]> = [];
+        for (const k of open) {
+          const ns = hexesInRange(parseKey(k), 1).map(hexKey).filter((n) => n !== k && est.has(n));
+          if (!ns.length) { next.push(k); continue; }
+          const avg = ns.reduce((s2, n) => s2 + est.get(n)!, 0) / ns.length;
+          const ring = Math.max(0, distance(parseKey(k), ORIGIN) - R);
+          found.push([k, ring > 0 ? Math.max(0, Math.round(avg * (1 - ring / 6) * 5) / 5) : Math.round(avg * 5) / 5]);
+        }
+        for (const [k, v] of found) est.set(k, v);
+        if (next.length === open.length) break;
+        open = next;
+      }
+      if (unknown.length) {
+        const mesh = new THREE.InstancedMesh(geo, pickMat, unknown.length);
+        unknown.forEach((k, i) => {
+          const w = toWorld(center(parseKey(k))), h = BASE + (est.get(k) ?? 0) * LEVEL;
+          m4.compose(new THREE.Vector3(w.x, 0, w.z), new THREE.Quaternion(), new THREE.Vector3(1, h, 1)); mesh.setMatrixAt(i, m4);
+          cells.set(k, { top: h, family: 'fog', color: new THREE.Color(1, 1, 1).multiplyScalar(0.94 + ((((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) + 5) % 5) * 0.03), wavy: true });
+        });
+        mesh.instanceMatrix.needsUpdate = true; mesh.userData.keys = unknown;
+        t.scene.add(mesh); t.ground.push(mesh);
+      }
+      for (const k of skirt) {
+        const h = parseKey(k), ring = distance(h, ORIGIN) - R;
+        const edge = hexesInRange(h, ring).map(hexKey).find((n) => tiles.has(n) && fogOf.get(n) !== '.');
+        const c = new THREE.Color(edge ? tiles.get(edge)!.fill : '#6a7a48');
+        if (edge && /wall|water|deep|river|lava|pit|chasm/.test(tiles.get(edge)!.id)) c.set(0x6a7048);
+        if (recolor) recolor.color(c);
+        c.offsetHSL(0, 0, (((h.q * 5 + h.r * 11) % 5) - 2) * 0.012 - ring * 0.01);
+        cells.set(k, { top: BASE + (est.get(k) ?? 0) * LEVEL, family: 'skirt', color: c, wavy: true });
+      }
+      envRef.current.recolorFill = (l) => { fogMat.color.copy(unknownColour(l)); };
+      if (envRef.current.light) envRef.current.recolorFill(envRef.current.light);
+    }
+    const wallMat = side.clone(); wallMat.side = THREE.DoubleSide; wallMat.onBeforeCompile = side.onBeforeCompile;
+    const terrain = buildTerrain(cells, LEVEL * 1.01, surfaceMat, wallMat, BASE - 0.6);
+    terrainRef.current = terrain;
+    for (const m of terrain.meshes.values()) t.dynamic.add(m);
     // props of every tile: trees, pines, bushes, rocks, furniture, fires, ruins … (merged below)
     const props = new THREE.Group();
     for (const k of keys) {
@@ -291,6 +413,8 @@ export default function HexScene3D(p: Props) {
     props.updateMatrixWorld(true);
     const animated = new Set<THREE.Object3D>([...anim.current.crowns, ...anim.current.flames]);
     for (const o of animated) t.dynamic.attach(o);
+    // APEX 2.5 – colour scheme / season also on the swaying crowns
+    if (recolor) for (const o of anim.current.crowns) o.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh && m.material) m.material = Array.isArray(m.material) ? m.material.map((x) => recolor.material(x)) : recolor.material(m.material); });
     const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
     props.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -330,14 +454,14 @@ export default function HexScene3D(p: Props) {
       const gm = new THREE.Matrix4(), gc = new THREE.Color(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
       let n = 0;
       for (const k of grassKeys) {
-        const w = toWorld(center(parseKey(k))), y = top(k), seed = parseKey(k).q * 73856093 ^ parseKey(k).r * 19349663;
+        const w = toWorld(center(parseKey(k))), seed = parseKey(k).q * 73856093 ^ parseKey(k).r * 19349663;
         const rnd = (i: number) => { const v = Math.sin(seed + i * 12.9898) * 43758.5453; return v - Math.floor(v); };
         for (let i = 0; i < per; i++) {
           const a = rnd(i) * Math.PI * 2, r = Math.sqrt(rnd(i + 99)) * 0.82;
           q.setFromAxisAngle(up, rnd(i + 7) * Math.PI);
           const tall = /tallgrass|undergrowth/.test(tiles.get(k)!.id) ? 2.6 : 1;
           const hgt = (0.55 + rnd(i + 3) * 0.8) * tall;
-          gm.compose(new THREE.Vector3(w.x + Math.cos(a) * r, y, w.z + Math.sin(a) * r), q, new THREE.Vector3(1, hgt, 1));
+          gm.compose(new THREE.Vector3(w.x + Math.cos(a) * r, terrain.surfaceY(k, Math.cos(a) * r, Math.sin(a) * r) - 0.02, w.z + Math.sin(a) * r), q, new THREE.Vector3(1, hgt, 1));
           grass.setMatrixAt(n, gm);
           gc.set(tiles.get(k)!.fill); if (recolor) recolor.color(gc); gc.offsetHSL(0.01 * (rnd(i + 5) - 0.5), 0.08, (rnd(i + 11) - 0.35) * 0.16);
           grass.setColorAt(n, gc);
@@ -468,6 +592,20 @@ export default function HexScene3D(p: Props) {
           g.add(shadow, line);
         }
         t.tokens.add(g);
+        // APEX 2.5 – movement animation: walk (or fly) the figure along its path from where it stood before
+        const prev = lastPos.current.get(tk.tokenId);
+        const final = g.position.clone();
+        lastPos.current.set(tk.tokenId, { k, alt: tk.alt ?? 0, pos: final.clone() });
+        if (prev && prev.k !== k && distance(parseKey(prev.k), parseKey(k)) <= 40) {
+          const fly = (tk.alt ?? 0) > 0 || prev.alt > 0;
+          const r = hexMovementCost(p.map, hexCentre(p.map, parseKey(prev.k)), tk, { fly, climb: true });
+          const mid = r.ok ? r.steps.slice(0, -1).map((s, i, all) => { const sk = hexKey(hexAt(p.map, s)); const ww = toWorld(center(parseKey(sk))); const f = (i + 1) / (all.length + 1); return new THREE.Vector3(ww.x, top(sk) + (prev.alt + ((tk.alt ?? 0) - prev.alt) * f) / 5 * LEVEL, ww.z); }) : [];
+          const pts = [prev.pos.clone(), ...mid, final];
+          g.position.copy(pts[0]);
+          g.userData.moving = true;
+          anim.current.moves = anim.current.moves.filter((m) => m.id !== tk.tokenId);
+          anim.current.moves.push({ id: tk.tokenId, obj: g, pts, born: performance.now(), dur: Math.min(4000, 260 * (pts.length - 1)) });
+        }
       });
     }
   }, [tokenKey, height]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -542,6 +680,9 @@ export default function HexScene3D(p: Props) {
       // the overlay becomes an opaque hex rim instead – crisp and readable in every light
       if (t.composer) { const inner = Array.from({ length: 6 }, (_, i) => corner(0, 0, scale * (opacity >= 0.4 ? 0.78 : 0.9), i)); s.holes.push(new THREE.Path(inner.map((q) => new THREE.Vector2(q.x, q.y)).reverse())); }
       const g = new THREE.ShapeGeometry(s); g.rotateX(Math.PI / 2);
+      // APEX 2.5 – the marker follows the smooth ground (corners rise and fall with the slope)
+      const terr = terrainRef.current;
+      if (terr && lift < 0.5) { const pa = g.attributes.position as THREE.BufferAttribute; for (let i = 0; i < pa.count; i++) pa.setY(i, terr.surfaceY(k, pa.getX(i), pa.getZ(i)) - top(k)); pa.needsUpdate = true; }
       const m = new THREE.Mesh(g, t.composer ? new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.18 + opacity * 0.9), side: THREE.DoubleSide }) : new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
       const w = toWorld(center(parseKey(k)));
       m.position.set(w.x, top(k) + lift, w.z);
@@ -643,7 +784,8 @@ export default function HexScene3D(p: Props) {
           const fromK = hexKey(hexAt(p.map, p.pathFrom));
           const z0 = height(fromK) * unit + (p.flyAlt ?? 0), z1 = height(hover) * unit + (p.aimAlt ?? 0);
           const vertical = flying ? Math.abs(z1 - z0) : 0;
-          const ok = p.pathBudget === null || p.pathBudget === undefined || r.cost + vertical <= p.pathBudget + 1e-9;
+          const budget = p.pathBudget ?? null, dashFt = p.pathDash ?? 0;
+          const band = (cost: number) => (budget === null || cost <= budget + 1e-9 ? 0 : cost <= budget + dashFt + 1e-9 ? 1 : 2);
           const all = [p.pathFrom, ...r.steps];
           const pts = all.map((q, i) => {
             const k = hexKey(hexAt(p.map, q)); const w = toWorld(center(parseKey(k)));
@@ -651,14 +793,22 @@ export default function HexScene3D(p: Props) {
             const z = z0 + ((z1 - z0) * i) / Math.max(1, all.length - 1);
             return new THREE.Vector3(w.x, Math.max(top(k), BASE + (z / 5) * LEVEL) + 0.15, w.z);
           });
-          const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.2);
-          const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(8, pts.length * 6), 0.07, 6, false), new THREE.MeshBasicMaterial({ color: ok ? 0xf3dc9a : 0xff6b5a }));
-          t.overlay.add(tube);
+          // APEX 2.5 – white within the movement left, orange where only a Dash gets there, red beyond (+ climbing)
+          const costs = [0, ...r.steps.map((st, n) => st.cost + (flying ? (vertical * (n + 1)) / r.steps.length : 0))];
+          let from = 0;
+          const runEnd = (n: number) => { let e = n; while (e + 1 < pts.length - 1 && band(costs[e + 2]) === band(costs[n + 1])) e++; return e + 1; };
+          while (from < pts.length - 1) {
+            const to = runEnd(from), seg = pts.slice(from, to + 1);
+            const col = [0xf6f1e2, 0xffa040, 0xff5a4a][band(costs[from + 1])];
+            const curve = seg.length > 2 ? new THREE.CatmullRomCurve3(seg, false, 'centripetal', 0.2) : new THREE.LineCurve3(seg[0], seg[1]);
+            t.overlay.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(4, seg.length * 6), 0.07, 6, false), new THREE.MeshBasicMaterial({ color: col })));
+            from = to;
+          }
         }
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.pathDash, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {
@@ -667,22 +817,42 @@ export default function HexScene3D(p: Props) {
     cam.current.dist = Math.max(14, r * 2.4);
     setTick((x) => x + 1);
   }, [p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!p.focus) return;
-    const k = hexKey(hexAt(p.map, p.focus));
-    const w = toWorld(center(parseKey(k)));
+  const flyRaf = useRef(0);
+  const flyTo = (w: { x: number; z: number }) => {
+    cancelAnimationFrame(flyRaf.current);
     const from = { ...cam.current };
     const start = performance.now();
-    let raf = 0;
     const step = (now: number) => {
       const e = Math.min(1, (now - start) / 500), q = 1 - (1 - e) ** 3;
       cam.current.tx = from.tx + (w.x - from.tx) * q; cam.current.tz = from.tz + (w.z - from.tz) * q;
       setTick((x) => x + 1);
-      if (e < 1) raf = requestAnimationFrame(step);
+      if (e < 1) flyRaf.current = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    flyRaf.current = requestAnimationFrame(step);
+  };
+  useEffect(() => {
+    if (!p.focus) return;
+    flyTo(toWorld(center(parseKey(hexKey(hexAt(p.map, p.focus))))));
+    return () => cancelAnimationFrame(flyRaf.current);
   }, [p.focus?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // APEX 2.5 – WASD: held keys pan the camera (while the pointer is over the map or the map has focus)
+  const keys = useRef(new Set<string>());
+  const lastKeyFrame = useRef(0);
+  const lastWeather = useRef(0);
+  const over = useRef(false);
+  useEffect(() => {
+    const typing = (e: KeyboardEvent) => { const el = e.target as HTMLElement | null; return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable); };
+    const down = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (!['w', 'a', 's', 'd'].includes(k) || e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
+      if (!over.current && document.activeElement !== wrap.current) return;
+      e.preventDefault(); keys.current.add(k); dirty.current = true;
+    };
+    const up = (e: KeyboardEvent) => { keys.current.delete(e.key.toLowerCase()); };
+    const blur = () => keys.current.clear();
+    window.addEventListener('keydown', down); window.addEventListener('keyup', up); window.addEventListener('blur', blur);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur); };
+  }, []);
 
   // --- render loop (wind, water, combat effects); pauses while the tab is hidden
   useEffect(() => {
@@ -696,7 +866,7 @@ export default function HexScene3D(p: Props) {
       // APEX 2.1 – render on demand: every frame only while something moves (effects, wind at medium/high, at most
       // the quality's frame rate); a still scene costs nothing
       const cfg = QUALITY[qualityRef.current];
-      const busy = anim.current.fx.length > 0;
+      const busy = anim.current.fx.length > 0 || anim.current.moves.length > 0 || keys.current.size > 0;
       const animate = cfg.fps > 0;
       if (!dirty.current && !busy && !animate) return;
       if (!dirty.current && !busy && now - last < 1000 / cfg.fps) return;
@@ -716,6 +886,17 @@ export default function HexScene3D(p: Props) {
       const camPos = t.camera.position;
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
       a.fx = a.fx.filter((f) => { const age = now - f.born; if (age > f.life) { f.dispose(); return false; } if (age >= 0) f.update(age / f.life); return true; });
+      a.moves = a.moves.filter((m) => stepMove(m, now));
+      const wx = envRef.current.weather;
+      if (wx?.animated) wx.step(Math.min(0.1, (now - (lastWeather.current || now)) / 1000), new THREE.Vector3(cam.current.tx, 0, cam.current.tz));
+      lastWeather.current = now;
+      // APEX 2.5 – WASD pans smoothly while held (speed grows with the zoom)
+      if (keys.current.size) {
+        const c = cam.current, dt = Math.min(0.05, (now - (lastKeyFrame.current || now)) / 1000), sp = c.dist * 0.9 * dt;
+        const fw = (keys.current.has('w') ? 1 : 0) - (keys.current.has('s') ? 1 : 0), rt = (keys.current.has('d') ? 1 : 0) - (keys.current.has('a') ? 1 : 0);
+        c.tx += (-Math.sin(c.yaw) * fw + Math.cos(c.yaw) * rt) * sp; c.tz += (-Math.cos(c.yaw) * fw - Math.sin(c.yaw) * rt) * sp;
+      }
+      lastKeyFrame.current = now;
       const c = cam.current;
       t.camera.position.set(c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist);
       t.camera.lookAt(c.tx, 1, c.tz);
@@ -802,7 +983,7 @@ export default function HexScene3D(p: Props) {
     ray.current.setFromCamera(ndc, t.camera);
     const hitTok = ray.current.intersectObjects(t.tokens.children, true)[0];
     if (hitTok) { let o: THREE.Object3D | null = hitTok.object; while (o && !o.userData.tokenId) o = o.parent; if (o) return { token: o.userData.tokenId as string, hex: hexKey(hexAt(p.map, { x: (o.position.x * HEX_SIZE) + ox, y: (o.position.z * HEX_SIZE) + oy })) }; }
-    const hits = ray.current.intersectObjects(t.ground, false); // props are see-through for picking (merged meshes)
+    const hits = ray.current.intersectObjects(t.ground.filter((g) => !g.userData.noPick), false); // props are see-through for picking (merged meshes)
     const hit = hits[0];
     if (!hit) return {};
     if ((hit.object as THREE.InstancedMesh).isInstancedMesh && hit.object.userData.keys && hit.instanceId !== undefined) return { hex: (hit.object.userData.keys as HexKey[])[hit.instanceId] };
@@ -848,6 +1029,13 @@ export default function HexScene3D(p: Props) {
     if (hit.token && p.onTokenClick) return p.onTokenClick(hit.token);
     if (hit.hex && p.onHexClick) p.onHexClick(hit.hex, scenePoint(hit.hex));
   };
+  const onDouble = (e: React.MouseEvent) => {
+    // APEX 2.5 – double-click any figure (also enemies, also off-turn): centre the camera on it
+    const hit = pick(e);
+    if (!hit.token) return;
+    const o = three.current?.tokens.children.find((c) => c.userData.tokenId === hit.token);
+    if (o) flyTo({ x: o.position.x, z: o.position.z });
+  };
   const onContext = (e: React.MouseEvent) => {
     e.preventDefault();
     const hit = pick(e);
@@ -877,22 +1065,35 @@ export default function HexScene3D(p: Props) {
   return (
     <div className="relative h-full w-full select-none" style={{ minHeight: 360 }}>
       <div ref={wrap} className="absolute inset-0 touch-none outline-none focus-visible:ring-2 focus-visible:ring-gold-400/50" tabIndex={0} role="application" data-testid="hex-scene-3d"
-        aria-label={`${p.label}. 3D map. Hold the middle mouse button to orbit and tilt, drag to pan, mouse wheel zooms, Q/E orbit, R/F tilt.`}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
+        aria-label={`${p.label}. 3D map. WASD or drag to pan, middle mouse button to orbit and tilt, mouse wheel zooms, Q/E orbit, R/F tilt, double-click a figure to centre it.`}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerEnter={() => { over.current = true; }} onPointerLeave={() => { setHover(null); over.current = false; }} onDoubleClick={onDouble} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
       {hover && hoverInfo && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
-          <b>{hoverInfo.label}</b> · height {height(hover) * (p.map.unitsPerCell || 5)} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
+          <b>{hoverInfo.label}</b> · height {Math.round(height(hover) * (p.map.unitsPerCell || 5))} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
         </div>
       )}
       <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">
         <span title="Resolution, shadows, grass and animation – lower is faster on weak devices">⚙ 3D</span>
         {(['low', 'medium', 'high', 'ultra'] as const).map((v) => <button key={v} type="button" aria-pressed={quality === v} className={`rounded px-1 ${quality === v ? 'bg-gold-500/25 text-gold-100' : 'hover:text-gold-200'}`} onClick={() => setQuality(v)} data-testid={`quality-${v}`}>{v}</button>)}
       </div>
-      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">🖱 middle button: orbit / tilt · left drag: pan · wheel: zoom · right-click: act</div>
+      <div className="pointer-events-none absolute bottom-2 left-3 text-[10px] text-marble-500">WASD / left drag: pan · middle button: orbit · wheel: zoom · double-click figure: centre · right-click: act</div>
     </div>
   );
 }
 
+type Move = { id: string; obj: THREE.Object3D; pts: THREE.Vector3[]; born: number; dur: number };
+/** One frame of a figure walking along its path; false when it has arrived. */
+function stepMove(m: Move, now: number): boolean {
+  const e = Math.min(1, (now - m.born) / m.dur);
+  const f = e * (m.pts.length - 1), i = Math.min(m.pts.length - 2, Math.floor(f)), u = f - i;
+  const a = m.pts[i], b = m.pts[i + 1];
+  m.obj.position.lerpVectors(a, b, u);
+  // a little bounce per step, facing the way it walks
+  m.obj.position.y += Math.abs(Math.sin(u * Math.PI)) * 0.12 * (e < 1 ? 1 : 0);
+  if (b.x !== a.x || b.z !== a.z) { m.obj.rotation.y = Math.atan2(b.x - a.x, b.z - a.z); yawMemory.set(m.id, m.obj.rotation.y); }
+  if (e >= 1) { m.obj.position.copy(m.pts[m.pts.length - 1]); m.obj.userData.moving = false; return false; }
+  return true;
+}
 type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null; /** APEX 2.4 – sneaking: 1 = crouched low */ crouch: number; crouchNow: number };
 const ALERT_RANGE = 5 * Math.sqrt(3) * 1.05; // ≈ 5 hexes (25 ft): closer opponents wake resting creatures
 type Critter = { obj: THREE.Object3D; behaviour: string; spots: THREE.Vector3[]; home: THREE.Vector3; target: THREE.Vector3 | null; wait: number; phase: number; wings: THREE.Object3D[]; last?: number };
@@ -948,7 +1149,7 @@ function idleStep(tokens: THREE.Group, sec: number) {
     if (ia.kind === 'still') continue;
     const t = sec + ia.phase;
     // turn (slowly) towards the nearest opponent in sight range
-    if (ia.target !== null && ia.target !== undefined && ia.kind !== 'standee') {
+    if (ia.target !== null && ia.target !== undefined && ia.kind !== 'standee' && !a.userData.moving) {
       let d = ia.target - a.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
       a.rotation.y += d * 0.04;
       yawMemory.set(a.userData.tokenId as string, a.rotation.y);
@@ -1003,7 +1204,11 @@ function groundSurface(m: THREE.MeshStandardMaterial) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vApexW;')
       .replace('#include <uv_vertex>', `#include <uv_vertex>
-        vec4 apexW = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        #ifdef USE_INSTANCING
+          vec4 apexW = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        #else
+          vec4 apexW = modelMatrix * vec4(position, 1.0);
+        #endif
         vApexW = apexW.xyz;
         vec2 apexUv = apexW.xz * 0.33;
         #ifdef USE_MAP
