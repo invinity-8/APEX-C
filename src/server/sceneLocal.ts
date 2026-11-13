@@ -181,7 +181,8 @@ export function fogMap(map: SceneMap, visible: Set<HexKey>, seen: string[]): { h
   const explored = new Set<HexKey>([...seen, ...visible]);
   const fog = fogString(map.hex.radius, visible, explored);
   const heights = map.hex.heights ? map.hex.heights.split('').map((c, i) => (fog[i] === '.' ? '0' : c)).join('') : undefined; // unknown hexes reveal no relief
-  return { hex: { ...map.hex, terrain: maskTerrain(map.hex.terrain, fog), ...(heights ? { heights } : {}) }, fog };
+  const fine = map.hex.fine ? map.hex.fine.split('').map((c, i) => (fog[i] === '.' ? '0' : c)).join('') : undefined;
+  return { hex: { ...map.hex, terrain: maskTerrain(map.hex.terrain, fog), ...(heights ? { heights } : {}), ...(fine ? { fine } : {}) }, fog };
 }
 
 /** APEX 2.5 – the scene clock as the rules see it now (lighting follows the world time unless set by hand). */

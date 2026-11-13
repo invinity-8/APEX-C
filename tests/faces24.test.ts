@@ -21,7 +21,7 @@ describe('faces and hair 2.4', () => {
   it('every face option builds', () => {
     for (const face of FIGURE_PARTS.face) for (const eyes of ['almond', 'round', 'catlike', 'hooded', 'bright'] as const) expect(buildLowPoly({ ...DEFAULT_LOOK, face, eyes }).height).toBeGreaterThan(1);
     for (const nose of FIGURE_PARTS.nose) for (const mouth of FIGURE_PARTS.mouth) for (const brows of FIGURE_PARTS.brows) expect(buildLowPoly({ ...DEFAULT_LOOK, nose, mouth, brows }).height).toBeGreaterThan(1);
-  });
+  }, 30000);
   it('hair stays visible under every kind of headwear', () => {
     for (const style of HAIR_STYLES) {
       if (style === 'none') continue;

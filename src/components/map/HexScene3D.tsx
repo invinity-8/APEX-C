@@ -29,6 +29,7 @@ import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
 import { FX_COLOR } from './CombatFx';
+import { buildTerrain, type Terrain, type TerrainCell } from './terrain3d';
 import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, seasonTint, unknownColour, type Backdrop, type Light, type WeatherFx } from './environment3d';
 import type { Season, Weather } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
@@ -103,6 +104,8 @@ export default function HexScene3D(p: Props) {
   const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }>; moves: Move[] }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [], moves: [] });
   /** APEX 2.5 – where every figure stood last time (to walk it along its path when it moves). */
   const lastPos = useRef(new Map<string, { k: HexKey; alt: number; pos: THREE.Vector3 }>());
+  /** APEX 2.5 – the smooth ground surface (heights inside a hex for grass, markers …). */
+  const terrainRef = useRef<Terrain | null>(null);
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
   useEffect(() => { p.onHoverHex?.(hover); }, [hover]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -303,11 +306,22 @@ export default function HexScene3D(p: Props) {
     const families = new Map<string, HexKey[]>();
     for (const k of keys) { const f = surfaceOf(tiles.get(k)!.id); families.set(f, [...(families.get(f) ?? []), k]); }
     const m4 = new THREE.Matrix4(), col = new THREE.Color();
+    // APEX 2.5 – the visible ground is one smooth surface (terrain3d.ts); the instanced columns stay invisible for picking
+    const pickMat = new THREE.MeshBasicMaterial({ visible: false });
+    const cells = new Map<HexKey, TerrainCell>();
+    const famMats = new Map<string, THREE.Material>();
+    const surfaceMat = (fam: string) => {
+      let m = famMats.get(fam);
+      if (!m) {
+        const tex = surfaceTexture(fam === 'fog' || fam === 'skirt' ? 'earth' : fam);
+        const sm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: fam === 'marble' ? 0.35 : fam === 'smooth' ? 0.6 : 0.92, metalness: 0.02, map: tex, ...(qcfg.shadow ? { bumpMap: tex, bumpScale: fam === 'marble' || fam === 'carpet' ? 0.6 : fam === 'cobbles' || fam === 'flag' ? 3.2 : 2.2 } : {}) });
+        groundSurface(sm);
+        famMats.set(fam, sm); m = sm;
+      }
+      return m;
+    };
     for (const [fam, list] of families) {
-      const top0 = new THREE.MeshStandardMaterial({ roughness: fam === 'marble' ? 0.35 : fam === 'smooth' ? 0.6 : 0.92, metalness: 0.02, map: surfaceTexture(fam), ...(qcfg.shadow ? { bumpMap: surfaceTexture(fam), bumpScale: fam === 'marble' || fam === 'carpet' ? 0.6 : fam === 'cobbles' || fam === 'flag' ? 3.2 : 2.2 } : {}) });
-      groundSurface(top0);
-      const mesh = new THREE.InstancedMesh(geo, [top0, side], list.length);
-      mesh.receiveShadow = true; mesh.castShadow = true;
+      const mesh = new THREE.InstancedMesh(geo, pickMat, list.length);
       list.forEach((k, i) => {
         const tile = tiles.get(k)!;
         const w = toWorld(center(parseKey(k)));
@@ -321,14 +335,65 @@ export default function HexScene3D(p: Props) {
         if (recolor && !pit) recolor.color(col);
         if (fogOf.get(k) === 'e') col.multiplyScalar(0.45); // remembered, not seen now
         else col.offsetHSL(0, 0, (((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) - 2) * 0.008);
-        mesh.setColorAt(i, col);
+        cells.set(k, { top: h, family: fam, color: col.clone(), apart: wallTall > 0 || pit, wavy: fam === 'grass' || fam === 'earth' });
       });
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.userData.keys = list;
       t.scene.add(mesh);
       t.ground.push(mesh);
     }
+    // APEX 2.5 – hexes nobody can see are not an abyss: they continue the land at the height of their known
+    // neighbours, in a plain fog colour (parchment by day, ash at dusk, dark at night). Around the map a skirt of
+    // land rings (the edge's colours, heights fading to the plain) leads into the horizon instead of a cliff edge.
+    const fogMat = surfaceMat('fog') as THREE.MeshStandardMaterial;
+    {
+      const R = p.map.hex.radius;
+      const known = new Map<HexKey, number>();
+      for (const k of keys) known.set(k, height(k));
+      const unknown = hexesInRange(ORIGIN, R).map(hexKey).filter((k) => !known.has(k));
+      const skirt = hexesInRange(ORIGIN, R + 6).filter((h) => distance(h, ORIGIN) > R).map(hexKey);
+      // heights: spread inwards from known hexes ring by ring (unknown), then fade out towards the plain (skirt)
+      const est = new Map<HexKey, number>(known);
+      let open = [...unknown, ...skirt];
+      for (let pass = 0; pass < 40 && open.length; pass++) {
+        const next: HexKey[] = [], found: Array<[HexKey, number]> = [];
+        for (const k of open) {
+          const ns = hexesInRange(parseKey(k), 1).map(hexKey).filter((n) => n !== k && est.has(n));
+          if (!ns.length) { next.push(k); continue; }
+          const avg = ns.reduce((s2, n) => s2 + est.get(n)!, 0) / ns.length;
+          const ring = Math.max(0, distance(parseKey(k), ORIGIN) - R);
+          found.push([k, ring > 0 ? Math.max(0, Math.round(avg * (1 - ring / 6) * 5) / 5) : Math.round(avg * 5) / 5]);
+        }
+        for (const [k, v] of found) est.set(k, v);
+        if (next.length === open.length) break;
+        open = next;
+      }
+      if (unknown.length) {
+        const mesh = new THREE.InstancedMesh(geo, pickMat, unknown.length);
+        unknown.forEach((k, i) => {
+          const w = toWorld(center(parseKey(k))), h = BASE + (est.get(k) ?? 0) * LEVEL;
+          m4.compose(new THREE.Vector3(w.x, 0, w.z), new THREE.Quaternion(), new THREE.Vector3(1, h, 1)); mesh.setMatrixAt(i, m4);
+          cells.set(k, { top: h, family: 'fog', color: new THREE.Color(1, 1, 1).multiplyScalar(0.94 + ((((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) + 5) % 5) * 0.03), wavy: true });
+        });
+        mesh.instanceMatrix.needsUpdate = true; mesh.userData.keys = unknown;
+        t.scene.add(mesh); t.ground.push(mesh);
+      }
+      for (const k of skirt) {
+        const h = parseKey(k), ring = distance(h, ORIGIN) - R;
+        const edge = hexesInRange(h, ring).map(hexKey).find((n) => tiles.has(n) && fogOf.get(n) !== '.');
+        const c = new THREE.Color(edge ? tiles.get(edge)!.fill : '#6a7a48');
+        if (edge && /wall|water|deep|river|lava|pit|chasm/.test(tiles.get(edge)!.id)) c.set(0x6a7048);
+        if (recolor) recolor.color(c);
+        c.offsetHSL(0, 0, (((h.q * 5 + h.r * 11) % 5) - 2) * 0.012 - ring * 0.01);
+        cells.set(k, { top: BASE + (est.get(k) ?? 0) * LEVEL, family: 'skirt', color: c, wavy: true });
+      }
+      envRef.current.recolorFill = (l) => { fogMat.color.copy(unknownColour(l)); };
+      if (envRef.current.light) envRef.current.recolorFill(envRef.current.light);
+    }
+    const wallMat = side.clone(); wallMat.side = THREE.DoubleSide; wallMat.onBeforeCompile = side.onBeforeCompile;
+    const terrain = buildTerrain(cells, LEVEL * 1.01, surfaceMat, wallMat, BASE - 0.6);
+    terrainRef.current = terrain;
+    for (const m of terrain.meshes.values()) t.dynamic.add(m);
     // props of every tile: trees, pines, bushes, rocks, furniture, fires, ruins … (merged below)
     const props = new THREE.Group();
     for (const k of keys) {
@@ -389,14 +454,14 @@ export default function HexScene3D(p: Props) {
       const gm = new THREE.Matrix4(), gc = new THREE.Color(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
       let n = 0;
       for (const k of grassKeys) {
-        const w = toWorld(center(parseKey(k))), y = top(k), seed = parseKey(k).q * 73856093 ^ parseKey(k).r * 19349663;
+        const w = toWorld(center(parseKey(k))), seed = parseKey(k).q * 73856093 ^ parseKey(k).r * 19349663;
         const rnd = (i: number) => { const v = Math.sin(seed + i * 12.9898) * 43758.5453; return v - Math.floor(v); };
         for (let i = 0; i < per; i++) {
           const a = rnd(i) * Math.PI * 2, r = Math.sqrt(rnd(i + 99)) * 0.82;
           q.setFromAxisAngle(up, rnd(i + 7) * Math.PI);
           const tall = /tallgrass|undergrowth/.test(tiles.get(k)!.id) ? 2.6 : 1;
           const hgt = (0.55 + rnd(i + 3) * 0.8) * tall;
-          gm.compose(new THREE.Vector3(w.x + Math.cos(a) * r, y, w.z + Math.sin(a) * r), q, new THREE.Vector3(1, hgt, 1));
+          gm.compose(new THREE.Vector3(w.x + Math.cos(a) * r, terrain.surfaceY(k, Math.cos(a) * r, Math.sin(a) * r) - 0.02, w.z + Math.sin(a) * r), q, new THREE.Vector3(1, hgt, 1));
           grass.setMatrixAt(n, gm);
           gc.set(tiles.get(k)!.fill); if (recolor) recolor.color(gc); gc.offsetHSL(0.01 * (rnd(i + 5) - 0.5), 0.08, (rnd(i + 11) - 0.35) * 0.16);
           grass.setColorAt(n, gc);
@@ -419,65 +484,6 @@ export default function HexScene3D(p: Props) {
       m.position.set(w.x, top(k) - 0.06, w.z); m.userData.phase = (parseKey(k).q + parseKey(k).r) * 0.7;
       wm.userData.phase = m.userData.phase;
       t.dynamic.add(m); anim.current.water.push(wm);
-    }
-    // APEX 2.5 – hexes nobody can see are not an abyss: they continue the land at the height of their known
-    // neighbours, in a plain fog colour (parchment by day, ash at dusk, dark at night). Around the map a skirt of
-    // land rings (biome colour, heights fading to the plain) leads into the horizon instead of a cliff edge.
-    {
-      const R = p.map.hex.radius;
-      const known = new Map<HexKey, number>();
-      for (const k of keys) known.set(k, height(k));
-      const unknown = hexesInRange(ORIGIN, R).map(hexKey).filter((k) => !known.has(k));
-      const skirt = hexesInRange(ORIGIN, R + 6).filter((h) => distance(h, ORIGIN) > R).map(hexKey);
-      // heights: spread inwards from known hexes ring by ring (unknown), then fade out towards the plain (skirt)
-      const est = new Map<HexKey, number>(known);
-      let open = [...unknown, ...skirt];
-      for (let pass = 0; pass < 40 && open.length; pass++) {
-        const next: HexKey[] = [], found: Array<[HexKey, number]> = [];
-        for (const k of open) {
-          const ns = hexesInRange(parseKey(k), 1).map(hexKey).filter((n) => n !== k && est.has(n));
-          if (!ns.length) { next.push(k); continue; }
-          const avg = ns.reduce((s, n) => s + est.get(n)!, 0) / ns.length;
-          const ring = Math.max(0, distance(parseKey(k), ORIGIN) - R);
-          found.push([k, ring > 0 ? Math.max(0, Math.round(avg * (1 - ring / 6) * 2) / 2) : Math.round(avg * 2) / 2]);
-        }
-        for (const [k, v] of found) est.set(k, v);
-        if (next.length === open.length) break;
-        open = next;
-      }
-      const fillMat = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, map: surfaceTexture('earth') });
-      groundSurface(fillMat);
-      const mk = (list: HexKey[], pickable: boolean) => {
-        if (!list.length) return null;
-        const mesh = new THREE.InstancedMesh(geo, [fillMat, side], list.length);
-        mesh.receiveShadow = true;
-        list.forEach((k, i) => { const w = toWorld(center(parseKey(k))); m4.compose(new THREE.Vector3(w.x, 0, w.z), new THREE.Quaternion(), new THREE.Vector3(1, Math.max(0.12, BASE + (est.get(k) ?? 0) * LEVEL), 1)); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, new THREE.Color(0x888888)); });
-        mesh.instanceMatrix.needsUpdate = true;
-        mesh.userData.keys = list;
-        t.scene.add(mesh);
-        t.ground.push(mesh);
-        if (!pickable) mesh.userData.noPick = true;
-        return mesh;
-      };
-      const fogMesh = mk(unknown, true), skirtMesh = mk(skirt, false);
-      envRef.current.recolorFill = (l) => {
-        const fogC = unknownColour(l);
-        if (fogMesh) { unknown.forEach((k, i) => fogMesh.setColorAt(i, fogC.clone().offsetHSL(0, 0, (((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) - 2) * 0.01))); fogMesh.instanceColor!.needsUpdate = true; }
-        if (skirtMesh) {
-          // the skirt takes the colour of the map's edge, fading into the land beyond
-          skirt.forEach((k, i) => {
-            const h = parseKey(k), ring = distance(h, ORIGIN) - R;
-            const edge = hexesInRange(h, ring).map(hexKey).find((n) => tiles.has(n) && fogOf.get(n) !== '.');
-            const c = new THREE.Color(edge ? tiles.get(edge)!.fill : '#6a7a48');
-            if (recolor) recolor.color(c); else if (season || snow) seasonTint(c, season, snow);
-            if (edge && /wall|water|deep|river|lava|pit|chasm/.test(tiles.get(edge)!.id)) c.set(0x6a7048);
-            c.lerp(new THREE.Color(l.fog), Math.min(0.5, ring * 0.07)).offsetHSL(0, 0, (((h.q * 5 + h.r * 11) % 5) - 2) * 0.012);
-            skirtMesh.setColorAt(i, c);
-          });
-          skirtMesh.instanceColor!.needsUpdate = true;
-        }
-      };
-      if (envRef.current.light) envRef.current.recolorFill(envRef.current.light);
     }
     // APEX 2.3 – tiles that burn or glow light their surroundings (the nearest to the middle, as many as the quality allows)
     const glowing = keys.filter((k) => tiles.get(k)!.light && fogOf.get(k) !== 'e').sort((x, y) => distance(parseKey(x), ORIGIN) - distance(parseKey(y), ORIGIN)).slice(0, qcfg.lights);
@@ -674,6 +680,9 @@ export default function HexScene3D(p: Props) {
       // the overlay becomes an opaque hex rim instead – crisp and readable in every light
       if (t.composer) { const inner = Array.from({ length: 6 }, (_, i) => corner(0, 0, scale * (opacity >= 0.4 ? 0.78 : 0.9), i)); s.holes.push(new THREE.Path(inner.map((q) => new THREE.Vector2(q.x, q.y)).reverse())); }
       const g = new THREE.ShapeGeometry(s); g.rotateX(Math.PI / 2);
+      // APEX 2.5 – the marker follows the smooth ground (corners rise and fall with the slope)
+      const terr = terrainRef.current;
+      if (terr && lift < 0.5) { const pa = g.attributes.position as THREE.BufferAttribute; for (let i = 0; i < pa.count; i++) pa.setY(i, terr.surfaceY(k, pa.getX(i), pa.getZ(i)) - top(k)); pa.needsUpdate = true; }
       const m = new THREE.Mesh(g, t.composer ? new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.18 + opacity * 0.9), side: THREE.DoubleSide }) : new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
       const w = toWorld(center(parseKey(k)));
       m.position.set(w.x, top(k) + lift, w.z);
@@ -1060,7 +1069,7 @@ export default function HexScene3D(p: Props) {
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerEnter={() => { over.current = true; }} onPointerLeave={() => { setHover(null); over.current = false; }} onDoubleClick={onDouble} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
       {hover && hoverInfo && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
-          <b>{hoverInfo.label}</b> · height {height(hover) * (p.map.unitsPerCell || 5)} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
+          <b>{hoverInfo.label}</b> · height {Math.round(height(hover) * (p.map.unitsPerCell || 5))} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
         </div>
       )}
       <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">
@@ -1195,7 +1204,11 @@ function groundSurface(m: THREE.MeshStandardMaterial) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vApexW;')
       .replace('#include <uv_vertex>', `#include <uv_vertex>
-        vec4 apexW = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        #ifdef USE_INSTANCING
+          vec4 apexW = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        #else
+          vec4 apexW = modelMatrix * vec4(position, 1.0);
+        #endif
         vApexW = apexW.xyz;
         vec2 apexUv = apexW.xz * 0.33;
         #ifdef USE_MAP

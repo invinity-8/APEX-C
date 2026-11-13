@@ -705,7 +705,7 @@ input[type=text], input[type=search], input:not([type]), textarea { cursor: text
 .time-dial-controls button, .time-dial-controls select { border: 1px solid #5a4a36; border-radius: .35rem; background: #1b1f26; color: #d8cbb0; font-size: .72rem; padding: .15rem .45rem; }
 .time-dial-controls button[aria-pressed=true] { border-color: #d8b56f; background: #c09b5833; color: #f3e1b4; }
 .time-dial-controls input[type=range] { flex: 1; accent-color: #c09b58; }
-.scene-clock-badge { position: absolute; left: .5rem; top: .5rem; z-index: 14; transform: scale(.62); transform-origin: top left; background: rgba(12,10,8,.78); border: 1px solid #6b4a24; border-radius: .6rem; pointer-events: none; }
+.scene-clock-badge { position: absolute; left: .5rem; top: 2.9rem; z-index: 14; transform: scale(.62); transform-origin: top left; background: rgba(12,10,8,.78); border: 1px solid #6b4a24; border-radius: .6rem; pointer-events: none; }
 
 /* APEX 2.5 – what a right-click does, at the pointer; the Dash choice menu */
 .intent-cursor { position: absolute; left: 0; top: 0; z-index: 30; pointer-events: none; display: flex; align-items: center; gap: .35rem; padding: .18rem .5rem .18rem .3rem; border-radius: 999px; border: 1px solid rgba(232,212,166,.55); background: rgba(16,13,10,.86); color: #f3e7c8; font: 600 .72rem/1.2 Inter, sans-serif; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
