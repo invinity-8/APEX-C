@@ -1,3 +1,4 @@
+import { altitudeOf } from '../game/altitude.js';
 import { parseMap, type SceneMap } from '../campaign/maps.js';
 import { emptySheet } from '../game/sheet.js';
 import { npcPassivePerception, pcPassivePerception } from '../game/perception.js';
@@ -83,7 +84,7 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
     let visible: Set<string> | null = null;
     if (full.hex) {
       // Server-side fog: unknown hexes are removed from the map before it leaves the server.
-      visible = await visionFor(ctx, full, clock, positions, carriedLights(ctx.state, s.id, pcs));
+      visible = await visionFor(ctx, full, clock, positions, carriedLights(ctx.state, s.id, pcs), s.id);
       const fogged = fogMap(full, visible, local.seen);
       if (fogged) { map.hex = fogged.hex; extra.fog = fogged.fog; }
     }
@@ -179,16 +180,16 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
           if (map.hex && view !== 'all') {
             const npcs = enemiesOf(stored.state, focus.id).filter((e) => !e.defeated);
             const pcViewers = pcs.map((p) => ({ tokenId: p.tokenId, x: p.x, y: p.y }));
-            const npcViewers = (side: 'enemy' | 'ally' | null, id?: string) => npcs.filter((e) => (id ? e.id === id : (e.side ?? 'enemy') === side)).map((e) => ({ at: { x: e.x, y: e.y }, darkvisionFt: e.darkvisionFt ?? ENEMY_TEMPLATES.find((t) => t.id === e.templateId)?.darkvisionFt ?? 0 }));
+            const npcViewers = (side: 'enemy' | 'ally' | null, id?: string) => npcs.filter((e) => (id ? e.id === id : (e.side ?? 'enemy') === side)).map((e) => ({ at: { x: e.x, y: e.y }, darkvisionFt: e.darkvisionFt ?? ENEMY_TEMPLATES.find((t) => t.id === e.templateId)?.darkvisionFt ?? 0, altFt: altitudeOf(stored.state, focus.id, `npc-${e.id}`) }));
             const clock = clockFor(stored.state, focus.id);
             const lights = carriedLights(stored.state, focus.id, pcs);
-            const partySight = async () => new Set([...await visionFor(ctx, map, clock, pcViewers, lights), ...sceneVision(map, clock, npcViewers('ally'), lights)]);
+            const partySight = async () => new Set([...await visionFor(ctx, map, clock, pcViewers, lights, focus.id), ...sceneVision(map, clock, npcViewers('ally'), lights)]);
             const all = new Set(hexesInRange({ q: 0, r: 0 }, map.hex.radius).map(hexKey));
             // one figure: bright = it sees, grey = its side sees (could call out), dark = nobody on its side sees
             let side: Set<string> = all;
             if (view === 'party') visible = await partySight();
             else if (view === 'enemies') visible = sceneVision(map, clock, npcViewers('enemy'), lights);
-            else if (view.startsWith('pc-')) { visible = await visionFor(ctx, map, clock, pcViewers.filter((p) => `pc-${p.tokenId}` === view), lights); side = await partySight(); }
+            else if (view.startsWith('pc-')) { visible = await visionFor(ctx, map, clock, pcViewers.filter((p) => `pc-${p.tokenId}` === view), lights, focus.id); side = await partySight(); }
             else {
               visible = sceneVision(map, clock, npcViewers(null, view), lights);
               const me = npcs.find((e) => e.id === view);

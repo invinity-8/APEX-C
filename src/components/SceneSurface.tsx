@@ -6,6 +6,7 @@ import type { SceneMap } from '../campaign/maps';
 import { useMapZoom } from './map/MapStage';
 import { HexSceneMap, type SceneToken } from './map/HexSceneMap';
 import { hexReach } from '../campaign/hexScene';
+import { stealthWatch } from '../game/stealth';
 import type { TokenView } from '../game/visibility';
 import { figureIcons } from './map/effectIcons';
 
@@ -87,6 +88,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       view: f.tokenId ? view(f.tokenId) : undefined,
       enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp, size: f.size, build: f.build, look: f.look, breed: f.breed, creature: f.creature } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
+      ...((f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) ?? []).some((e) => e.key === 'hidden') ? { sneaking: true } : {}),
       badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
       icons: figureIcons(f.effects, f.concentration),
       ...(f.alt ? { alt: f.alt } : {}),
@@ -96,6 +98,9 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       const mine = snapshot.self?.[t.tokenId];
       return { ...t, ...(t.tokenId === tokenId && snapshot.movement?.alt ? { alt: snapshot.movement.alt } : {}), ...(mine && !t.icons?.length ? { icons: figureIcons(mine.effects, mine.concentration) } : {}), ...(!t.enemy && !t.vitals && snapshot.vitals?.[t.tokenId] ? { vitals: snapshot.vitals[t.tokenId] } : {}) };
     });
+    // APEX 2.4 – sneaking: awareness rings of the opponents (everyone), spotted / heard marks (GM only)
+    const watch = category === 'battle' && snapshot.clock ? stealthWatch(map, figures.map((f) => ({ ...f, effects: f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) })), snapshot.clock.lighting) : null;
+    const stealth = watch && watch.rings.length ? { rings: watch.rings, ...(gm ? { marks: watch.marks } : {}) } : null;
     const reachOrigin = interaction.reachFrom ?? point;
     const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? hexReach(map, reachOrigin, reachBudget, interaction.moveMode) : null;
     // Scene-local light: region night like the Arena; battle lighting dim/dark.
@@ -104,11 +109,12 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene">{!compact && <><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p></>}
       <div className="hex-scene-frame" ref={frameRef}>
+        {stealth && view3d && <div className="stealth-legend" data-testid="stealth-legend">🥷 Sneaking – rings: how far opponents pay attention. <b style={{ color: '#ff8a7a' }}>red</b> = it would notice your Stealth when it sees you · <b style={{ color: '#f3dc9a' }}>dashed</b> = you beat its passive Perception</div>}
         {category === 'battle' && (aimAlt > 0 || snapshot.movement?.fly) && <div className="aim-level" data-testid="aim-level" title="Shift + mouse wheel: aim height for flying and spell centres">⇕ Aim {aimAlt} ft{aimAlt ? '' : ' (ground)'} <small>Shift+wheel</small>{aimAlt > 0 && <button type="button" onClick={() => setAimAlt(0)} aria-label="Back to the ground">×</button>}</div>}
         {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
         {view3d && category === 'battle' ? (
           <Suspense fallback={<p className="p-4 text-marble-300">Loading 3D view…</p>}>
-            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
+            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
           </Suspense>
         ) : (
           <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} aimAlt={aimAlt} />

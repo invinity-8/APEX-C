@@ -27,6 +27,9 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [sort, setSort] = useState<'newest'|'oldest'>('newest');
   const [tag, setTag] = useState(''), [activeFilters,setActiveFilters] = useState<JournalFilters>({});
+  // APEX 2.4 – the book: read the open page, or write on it; the index can be narrowed by a ribbon (chapter)
+  const [mode, setMode] = useState<'read' | 'write'>('write');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   useEffect(() => { let live=true; setImageUrl(null); if(draft.image_id) api.journalImage(draft.image_id).then(r=>{ if(live) setImageUrl(r.url); }).catch(e=>{ if(live) setError(String(e)); }); return ()=>{ live=false; }; },[draft.image_id]);
   useEffect(() => {
     let live = true;
@@ -53,6 +56,7 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
     const value = entry ?? blank();
     if (newCategory) value.category = newCategory;
     setDraft(value); setEditing({ id: entry?.id ?? crypto.randomUUID(), version: entry?.version ?? 0 }); setDirty(false); setNotice('');
+    setMode(entry ? 'read' : 'write');
   }
   async function openReference(id: string) {
     try {
@@ -104,9 +108,10 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
       setBacklinksNext(p.nextOffset);
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
-  async function searchAll() {
+  async function searchAll(over: { category?: string } = {}) {
     if(busy) return; setBusy(true); setError('');
-    const filters:JournalFilters={search:search.trim()||undefined,category:category||undefined,tag:tag.trim()||undefined,sort};
+    const cat = over.category ?? category;
+    const filters:JournalFilters={search:search.trim()||undefined,category:cat||undefined,tag:tag.trim()||undefined,sort};
     try { const p=await api.journalList(0,false,filters); setEntries(p.entries); setNext(p.nextOffset); setActiveFilters(filters); }
     catch(e) { setError(String(e)); } finally { setBusy(false); }
   }
@@ -135,43 +140,84 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
   }
   const referenceEntries = entries.filter(entry => ['People', 'Places'].includes(entry.category));
   const references = Object.fromEntries(referenceEntries.map(entry => [entry.id, entry.title]));
-  return <section className="journal-panel" aria-label="Campaign journal">
-    <h3>Campaign Journal</h3>
-    <p>Personal notes stay private unless you explicitly share them. Save before changing tabs.</p>
-    {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="journal-toolbar"><button className="btn btn-ghost" disabled={busy} onClick={() => open()}>New entry</button>
-      <button className="btn btn-ghost" disabled={busy} onClick={() => open(undefined, 'People')}>New person</button>
-      <button className="btn btn-ghost" disabled={busy} onClick={() => open(undefined, 'Places')}>New place</button>
-      <button className="btn btn-ghost" disabled={busy} onClick={() => void download()}>Export personal journal (.md)</button></div>
-    <nav aria-label="People and Places references"><h4>People &amp; Places</h4>{referenceEntries.length ? <ul>{referenceEntries.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => open(entry)}>{entry.category}: {entry.title}</button></li>)}</ul> : <p>No references yet. Add a person or place when you need one.</p>}</nav>
-    <label>Search journal <input className="input" maxLength={200} value={search} onChange={e => setSearch(e.target.value)} /></label>
-    <label>Category filter <input className="input" list={categoryList+'-filter'} placeholder="All categories" maxLength={80} value={category} onChange={e=>setCategory(e.target.value)} /></label><datalist id={categoryList+'-filter'}>{[...new Set([...categories,...entries.map(e=>e.category)])].map(c=><option key={c} value={c}/>)}</datalist>
-    <label>Tag filter <input maxLength={40} value={tag} onChange={e=>setTag(e.target.value)} /></label>
-    <label>Sort <select value={sort} onChange={e=>setSort(e.target.value as 'newest'|'oldest')}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
-    <button className="btn btn-ghost" disabled={busy} onClick={()=>void searchAll()}>Search all entries</button>
-    <ul>{entries.map(e => <li key={e.id}>
-      <button className="btn btn-ghost" disabled={busy} onClick={() => open(e)}>{e.pinned ? '★ ' : ''}{e.title}</button> <small>{e.sharing} · {new Date(e.created_at).toLocaleDateString()}</small>
-      {e.owner_id === owner && <button className="btn btn-ghost" disabled={busy} onClick={() => void remove(e)}>Delete</button>}
-    </li>)}</ul>
-    {next !== null && <button className="btn btn-ghost" disabled={busy} onClick={() => void more()}>Load older entries</button>}
-    <form onSubmit={e => { e.preventDefault(); void save(); }}>
-      <fieldset disabled={busy || (!!entries.find(e => e.id === editing.id) && entries.find(e => e.id === editing.id)?.owner_id !== owner)}>
-        <label>Title <input className="input" required maxLength={200} value={draft.title} onChange={e => change({ title: e.target.value })} /></label>
-        <label>Category <input className="input" required list={categoryList} maxLength={80} value={draft.category} onChange={e => change({ category:e.target.value })} /></label><datalist id={categoryList}>{categories.map(c=><option key={c} value={c}/>)}</datalist>
-        <label>Scene reference <select value={draft.scene_id ?? ''} onChange={e=>change({scene_id:e.target.value||null})}><option value="">No scene</option>{sceneReference && <option value={sceneReference.id}>{sceneReference.name}</option>}{draft.scene_id && draft.scene_id!==sceneReference?.id && <option value={draft.scene_id}>Previously recorded scene</option>}</select></label>
-        <label>In-game date <input className="input" maxLength={120} value={draft.game_date} onChange={e => change({ game_date: e.target.value })} /></label>
-        <label>Tags (comma separated) <input className="input" value={draft.tags.join(', ')} onChange={e => change({ tags: e.target.value.split(',').map(t => t.trim()).slice(0, 20) })} /></label>
-        <div className="flex flex-wrap items-end gap-2"><label>Link a person or place <select className="input" aria-label="Link a person or place" value={selectedReference} onChange={e => setSelectedReference(e.target.value)}><option value="">Choose a reference</option>{referenceEntries.map(entry => <option key={entry.id} value={entry.id}>{entry.category}: {entry.title}</option>)}</select></label><button type="button" className="btn btn-ghost" disabled={!selectedReference || busy} onClick={insertReference}>Insert link at cursor</button></div>
-        <label>Notes (Markdown) <textarea id={writingId} aria-label="Notes (Markdown)" className="input journal-writing" required maxLength={100000} value={draft.body} onChange={e => change({ body: e.target.value })} /></label>
-        <label>Visibility <select className="input" value={draft.sharing} onChange={e => change({ sharing: e.target.value as JournalDraft['sharing'] })}><option value="private">Private</option><option value="gm">Shared with GM</option><option value="party">Shared with party</option></select></label>
-        <label><input type="checkbox" checked={draft.pinned} onChange={e => change({ pinned: e.target.checked })} /> Pin entry</label>
-        <label>Image attachment <input type="file" accept="image/png,image/jpeg,image/webp" disabled={editing.version===0} onChange={e=>{ void upload(e.target.files?.[0]); e.target.value=''; }} /></label>
-        {editing.version===0 && <small>Save the entry before uploading a private image.</small>}
-        {draft.image_id && <button type="button" className="btn btn-ghost" onClick={()=>change({image_id:null})}>Remove image attachment</button>}
-        <button className="btn btn-primary" disabled={!dirty || !draft.title.trim()}>{busy ? 'Saving…' : 'Save entry'}</button>
-      </fieldset>
-    </form>
-    {backlinks.length > 0 && <aside aria-label="Journal backlinks"><h4>Referenced by</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" className="btn btn-ghost" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul>{backlinksNext !== null && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void moreBacklinks()}>Load older backlinks</button>}</aside>}
-    <article className="journal-reading" aria-label="Reading preview"><JournalMarkdown body={draft.body} references={references} onReference={id => void openReference(id)}/>{imageUrl && <img src={imageUrl} alt="Journal attachment" loading="lazy" />}</article>
+  const readOnly = !!entries.find(e => e.id === editing.id) && entries.find(e => e.id === editing.id)?.owner_id !== owner;
+  const chapter = (c: string) => { setCategory(c); void searchAll({ category: c }); };
+  const sharingLabel = { private: '🔒 private', gm: '👁 shared with the GM', party: '👥 shared with the party' } as const;
+  return <section className="journal-book" aria-label="Campaign journal" data-testid="journal-book">
+    <header className="journal-book-bar">
+      <h3>📖 Campaign Journal</h3>
+      <span className="journal-book-hint">Personal notes stay private unless you share them. Save before changing tabs.</span>
+      <span className="journal-book-actions">
+        <button type="button" disabled={busy} onClick={() => open()}>✒ New entry</button>
+        <button type="button" disabled={busy} onClick={() => open(undefined, 'People')}>👤 New person</button>
+        <button type="button" disabled={busy} onClick={() => open(undefined, 'Places')}>🏰 New place</button>
+        <button type="button" disabled={busy} onClick={() => void download()} title="Export personal journal (.md)">⤓ Export (.md)</button>
+      </span>
+    </header>
+    {(error || notice) && <div className="journal-book-messages">{error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}</div>}
+    <div className="journal-book-spread">
+      <nav className="journal-ribbons" aria-label="Chapters">
+        {['', ...categories].map(c => <button key={c || 'all'} type="button" aria-pressed={category === c} disabled={busy} onClick={() => chapter(c)} className={`journal-ribbon journal-ribbon-${(c || 'all').split(' ')[0].toLowerCase()}`}>{c || 'All'}</button>)}
+      </nav>
+      {/* left page: the index */}
+      <div className="journal-page journal-page-left" aria-label="Index">
+        <h4 className="journal-page-title">{category || 'Contents'}</h4>
+        <div className="journal-search">
+          <label className="sr-only" htmlFor={categoryList + '-q'}>Search journal</label>
+          <input id={categoryList + '-q'} aria-label="Search journal" placeholder="Search the journal…" maxLength={200} value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void searchAll(); }} />
+          <button type="button" disabled={busy} onClick={() => void searchAll()} aria-label="Search all entries">🔍</button>
+          <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(o => !o)} title="More filters">⋯</button>
+        </div>
+        {filtersOpen && <div className="journal-filters">
+          <label>Category filter <input list={categoryList+'-filter'} placeholder="All categories" maxLength={80} value={category} onChange={e=>setCategory(e.target.value)} /></label><datalist id={categoryList+'-filter'}>{[...new Set([...categories,...entries.map(e=>e.category)])].map(c=><option key={c} value={c}/>)}</datalist>
+          <label>Tag filter <input maxLength={40} value={tag} onChange={e=>setTag(e.target.value)} /></label>
+          <label>Sort <select value={sort} onChange={e=>setSort(e.target.value as 'newest'|'oldest')}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+        </div>}
+        <ol className="journal-toc">
+          {entries.map(e => <li key={e.id} className={e.id === editing.id ? 'is-open' : ''}>
+            <button type="button" disabled={busy} onClick={() => open(e)}><span className="journal-toc-title">{e.pinned ? '★ ' : ''}{e.title}</span><span className="journal-toc-dots" /><span className="journal-toc-date">{e.game_date || new Date(e.created_at).toLocaleDateString()}</span></button>
+            <small>{e.category} · {sharingLabel[e.sharing as keyof typeof sharingLabel] ?? e.sharing}{e.owner_id === owner && <> · <button type="button" className="journal-link" disabled={busy} onClick={() => void remove(e)}>delete</button></>}</small>
+          </li>)}
+          {!entries.length && <li className="journal-empty">No entries yet – the first page is waiting.</li>}
+        </ol>
+        {next !== null && <button type="button" className="journal-link" disabled={busy} onClick={() => void more()}>Load older entries</button>}
+        <section className="journal-refs" aria-label="People and Places references"><h4>People &amp; Places</h4>{referenceEntries.length ? <ul>{referenceEntries.map(entry => <li key={entry.id}><button type="button" disabled={busy} onClick={() => open(entry)}>{entry.category === 'People' ? '👤' : '🏰'} {entry.title}</button></li>)}</ul> : <p>No references yet. Add a person or place when you need one.</p>}</section>
+      </div>
+      {/* right page: the open entry – read or write */}
+      <div className="journal-page journal-page-right" aria-label="Entry">
+        <div className="journal-page-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === 'read'} onClick={() => setMode('read')}>📜 Read</button>
+          <button type="button" role="tab" aria-selected={mode === 'write'} disabled={readOnly} onClick={() => setMode('write')}>✒ Write</button>
+          {dirty && <span className="journal-unsaved">unsaved</span>}
+        </div>
+        {mode === 'read' ? <article className="journal-reading" aria-label="Reading preview">
+          <h2 className="journal-entry-title">{draft.title || 'Untitled page'}</h2>
+          <div className="journal-entry-meta">{draft.category}{draft.game_date ? ` · ${draft.game_date}` : ''}{draft.tags.length ? ` · ${draft.tags.map(t => '#' + t).join(' ')}` : ''} · {sharingLabel[draft.sharing]}</div>
+          {imageUrl && <img src={imageUrl} alt="Journal attachment" loading="lazy" />}
+          <JournalMarkdown body={draft.body} references={references} onReference={id => void openReference(id)}/>
+          {backlinks.length > 0 && <aside aria-label="Journal backlinks" className="journal-backlinks"><h4>Referenced by</h4><ul>{backlinks.map(entry => <li key={entry.id}><button type="button" onClick={() => open(entry)}>{entry.title}</button></li>)}</ul>{backlinksNext !== null && <button type="button" className="journal-link" disabled={busy} onClick={() => void moreBacklinks()}>Load older backlinks</button>}</aside>}
+        </article> : <form className="journal-write" onSubmit={e => { e.preventDefault(); void save(); }}>
+          <fieldset disabled={busy || readOnly}>
+            <input className="journal-title-input" aria-label="Title" placeholder="Title of the page" required maxLength={200} value={draft.title} onChange={e => change({ title: e.target.value })} />
+            <div className="journal-write-meta">
+              <label>Category <input required list={categoryList} maxLength={80} value={draft.category} onChange={e => change({ category:e.target.value })} /></label><datalist id={categoryList}>{categories.map(c=><option key={c} value={c}/>)}</datalist>
+              <label>In-game date <input maxLength={120} value={draft.game_date} onChange={e => change({ game_date: e.target.value })} /></label>
+              <label>Tags (comma separated) <input value={draft.tags.join(', ')} onChange={e => change({ tags: e.target.value.split(',').map(t => t.trim()).slice(0, 20) })} /></label>
+              <label>Scene reference <select value={draft.scene_id ?? ''} onChange={e=>change({scene_id:e.target.value||null})}><option value="">No scene</option>{sceneReference && <option value={sceneReference.id}>{sceneReference.name}</option>}{draft.scene_id && draft.scene_id!==sceneReference?.id && <option value={draft.scene_id}>Previously recorded scene</option>}</select></label>
+              <label>Visibility <select value={draft.sharing} onChange={e => change({ sharing: e.target.value as JournalDraft['sharing'] })}><option value="private">Private</option><option value="gm">Shared with GM</option><option value="party">Shared with party</option></select></label>
+              <label className="journal-check"><input type="checkbox" checked={draft.pinned} onChange={e => change({ pinned: e.target.checked })} /> Pin entry</label>
+            </div>
+            <div className="journal-insert"><select aria-label="Link a person or place" value={selectedReference} onChange={e => setSelectedReference(e.target.value)}><option value="">Link a person or place…</option>{referenceEntries.map(entry => <option key={entry.id} value={entry.id}>{entry.category}: {entry.title}</option>)}</select><button type="button" disabled={!selectedReference || busy} onClick={insertReference}>Insert link at cursor</button></div>
+            <textarea id={writingId} aria-label="Notes (Markdown)" className="journal-writing" placeholder="Write here… (Markdown: # heading, **bold**, - list)" required maxLength={100000} value={draft.body} onChange={e => change({ body: e.target.value })} />
+            <div className="journal-write-foot">
+              <label>Image attachment <input type="file" accept="image/png,image/jpeg,image/webp" disabled={editing.version===0} onChange={e=>{ void upload(e.target.files?.[0]); e.target.value=''; }} /></label>
+              {editing.version===0 && <small>Save the entry before uploading a private image.</small>}
+              {draft.image_id && <button type="button" onClick={()=>change({image_id:null})}>Remove image attachment</button>}
+              <button className="journal-save" disabled={!dirty || !draft.title.trim()}>{busy ? 'Saving…' : 'Save entry'}</button>
+            </div>
+          </fieldset>
+        </form>}
+      </div>
+    </div>
   </section>;
 }

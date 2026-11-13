@@ -23,7 +23,8 @@ interface Line { front: number; side: number; back: number; /** only within |x| 
 
 function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
   const s = SHAPE[c.shape];
-  const geo = new THREE.SphereGeometry(c.hr * r, 18, 12).toNonIndexed();
+  // APEX 2.4 – fuller hair: every shell sits a little further out (more volume), locks are wider
+  const geo = new THREE.SphereGeometry(c.hr * (r + (mat === c.shaved ? 0 : 0.035)), 18, 12).toNonIndexed();
   const pos = geo.attributes.position;
   const keep: number[] = [];
   const v = new THREE.Vector3();
@@ -33,6 +34,7 @@ function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
     if (line.cut !== undefined && v.x < -line.cut) return false;
     if (line.cap !== undefined && v.y > line.cap) return false;
     if (c.cover === 'brim' && v.y > 0.28) return false;
+    if (c.cover === 'full' && (v.y > -0.1 || v.z > -0.2)) return false; // under a hood: only the nape shows
     // hairline: forehead in front, over the ears at the sides, the nape at the back
     const ang = Math.atan2(v.x, v.z); // 0 front, ±π back
     const a = Math.abs(ang) / Math.PI; // 0 front … 1 back
@@ -56,7 +58,7 @@ function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
  */
 function lock(c: Ctx, at: [number, number, number], dir: [number, number, number], len: number, w: number, flat = 0.45, mat = c.hair, sides = 4) {
   const hr = c.hr, s = SHAPE[c.shape];
-  const geo = new THREE.ConeGeometry(w * hr, len * hr, sides);
+  const geo = new THREE.ConeGeometry(w * hr * 1.18, len * hr, sides);
   const y = new THREE.Vector3(...dir).normalize();
   const p = new THREE.Vector3(at[0] * hr * s[0], at[1] * hr * s[1], at[2] * hr * s[2]);
   const out = p.clone().normalize();
@@ -121,15 +123,28 @@ function tail(c: Ctx, at: [number, number, number], segs: number, len: number, w
   return p;
 }
 
+/** Hair showing under a cap, helmet or hood: locks along the forehead under the brim, and over the ears. */
+function peek(c: Ctx, style: string) {
+  const long = ['long', 'flowing', 'wavy', 'bob', 'pageboy', 'shaggy', 'wild', 'mane', 'halfup', 'curly', 'afro'].includes(style);
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1) - 0.5, a = t * 1.7;
+    lock(c, [Math.sin(a) * 1.04, 0.24 - Math.abs(t) * 0.12, Math.cos(a) * 0.98], [Math.sin(a) * 0.4 + 0.15, -1, 0.35], 0.42 * (1 - Math.abs(t) * 0.3), 0.19, 0.4);
+  }
+  if (c.cover === 'full' || long) for (const sx of [-1, 1]) lock(c, [sx * 0.98, 0.05, 0.3], [sx * 0.08, -1, 0.1], long ? 1.1 : 0.55, 0.24, 0.45);
+}
+
 export const HAIR_STYLES = ['none', 'buzz', 'short', 'messy', 'spiky', 'mohawk', 'bob', 'long', 'ponytail', 'bun', 'topknot', 'braids', 'curly', 'wild', 'sidecut', 'pigtails',
-  'slicked', 'undercut', 'afro', 'dreads', 'mullet', 'shaggy', 'flowing', 'tonsure', 'braid', 'crest', 'pageboy', 'swept'] as const;
+  'slicked', 'undercut', 'afro', 'dreads', 'mullet', 'shaggy', 'flowing', 'tonsure', 'braid', 'crest', 'pageboy', 'swept', 'wavy', 'pixie', 'sidepart', 'cornrows', 'highpony', 'spacebuns', 'halfup', 'mane'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 
 /** Builds the hair of a figure into its head group. `cover`: 'brim' under caps/helmets, 'full' under hoods. */
 export function buildHair(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full') {
   const c: Ctx = { head, hr, shape, ...mats, cover };
   const top = cover === 'none';
-  const scalp = (r = 1.08, line: Line = { front: 0.42, side: 0.02, back: -0.42 }, puff = 1.04) => { if (cover !== 'full') shell(c, r, line, c.hair, puff); };
+  const scalp = (r = 1.08, line: Line = { front: 0.42, side: 0.02, back: -0.42 }, puff = 1.04) => shell(c, r, line, c.hair, puff);
+  // APEX 2.4 – under headwear the hair no longer vanishes: a fringe peeks out under the brim or the hood
+  if (cover !== 'none' && !['none', 'buzz', 'tonsure', 'mohawk', 'topknot', 'crest', 'cornrows'].includes(style)) peek(c, style);
   switch (style) {
     case 'none': return;
     case 'buzz': if (cover !== 'full') shell(c, 1.03, { front: 0.5, side: 0.05, back: -0.38 }, c.shaved); return;
@@ -240,6 +255,57 @@ export function buildHair(head: THREE.Group, style: string, hr: number, shape: H
       scalp(1.12, { front: 0.36, side: -0.3, back: -0.6 }, 1.08);
       if (top) spikes(c, 12, 0.7, 0.26, 0.1, 0.5);
       for (let i = 0; i < 12; i++) { const a = Math.PI * 0.35 + (i / 11) * Math.PI * 1.3; lock(c, [Math.sin(a) * 1.05, 0.1 - (i % 3) * 0.12, Math.cos(a)], [Math.sin(a) * 0.9, -0.7, Math.cos(a) * 0.7], 0.95 + (i % 4) * 0.15, 0.3, 0.5); }
+      return;
+    // ---- APEX 2.4 styles
+    case 'wavy': {
+      scalp(1.11, { front: 0.4, side: -0.2, back: -0.55 }, 1.06);
+      if (top) fringe(c, 5, 0.5, 0.4, 0.35, 0.22);
+      for (let i = 0; i < 10; i++) {
+        const a = Math.PI * 0.42 + (i / 9) * Math.PI * 1.16, o = i % 2 ? 0.18 : -0.18;
+        const p: [number, number, number] = [Math.sin(a) * 1.04, 0.0, Math.cos(a) * 0.98];
+        lock(c, p, [Math.sin(a) * 0.25 + o * Math.cos(a), -1, Math.cos(a) * 0.25 - o * Math.sin(a)], 0.85, 0.27, 0.5);
+        lock(c, [p[0] * 1.08, -0.75, p[2] * 1.08], [Math.sin(a) * 0.1 - o * Math.cos(a), -1, Math.cos(a) * 0.1 + o * Math.sin(a)], 0.8, 0.24, 0.5);
+      }
+      return;
+    }
+    case 'pixie':
+      scalp(1.07, { front: 0.42, side: 0.12, back: -0.28 });
+      if (top) { fringe(c, 6, 0.58, 0.42, 0.9, 0.2); spikes(c, 6, 0.3, 0.2, 0.35, 1.1); }
+      sides(c, 0.3, 0.18, 0.3, 1);
+      return;
+    case 'sidepart':
+      scalp(1.09, { front: 0.42, side: -0.05, back: -0.45 });
+      if (top) { for (let i = 0; i < 5; i++) lock(c, [0.3 - i * 0.05, 0.88, 0.45 - i * 0.12], [-1, -0.35, 0.15], 1.0 - i * 0.08, 0.24, 0.35); for (let i = 0; i < 3; i++) lock(c, [0.35, 0.85, 0.4 - i * 0.15], [1, -0.5, 0], 0.65, 0.22, 0.35); }
+      sides(c, 0.5, 0.22, 0.2, 2);
+      return;
+    case 'cornrows':
+      shell(c, 1.02, { front: 0.42, side: 0.0, back: -0.45 }, c.shaved);
+      if (top) for (let row = 0; row < 5; row++) { const x = (row - 2) * 0.24; for (let i = 0; i < 7; i++) { const phi = 0.8 - i * 0.33; const r = Math.sqrt(Math.max(0, 1 - x * x)); lump(c, [x, Math.cos(phi) * r * 1.0, Math.sin(phi) * r * 1.0], 0.08); } }
+      tail(c, [0, -0.35, -1.0], 3, 0.4, 0.12, false, [0, -0.2]);
+      return;
+    case 'highpony': {
+      scalp(1.06, { front: 0.5, side: 0.08, back: -0.3 });
+      if (top) for (let i = 0; i < 5; i++) lock(c, [(i - 2) * 0.24, 0.9, 0.42], [0, 0.35, -1], 0.85, 0.2, 0.3);
+      const at: [number, number, number] = top ? [0, 0.85, -0.72] : [0, 0.25, -1.1];
+      band(c, at, 0.15);
+      tail(c, [at[0], at[1], at[2] - 0.1], 5, 0.6, 0.27, false, [0, -0.7]);
+      return;
+    }
+    case 'spacebuns':
+      scalp(1.06, { front: 0.48, side: 0.05, back: -0.38 });
+      if (top) { fringe(c, 4, 0.35, 0.46, 0, 0.18); for (const sx of [-1, 1]) { lump(c, [sx * 0.6, 0.88, -0.15], 0.34); lump(c, [sx * 0.68, 1.0, -0.25], 0.22); band(c, [sx * 0.55, 0.72, -0.12], 0.17); } }
+      else for (const sx of [-1, 1]) lump(c, [sx * 0.95, 0.0, -0.45], 0.28);
+      return;
+    case 'halfup':
+      scalp(1.1, { front: 0.42, side: -0.15, back: -0.5 }, 1.04);
+      if (top) { fringe(c, 4, 0.45, 0.42, -0.4); lump(c, [0, 0.62, -0.95], 0.24); band(c, [0, 0.55, -0.88], 0.15); }
+      curtain(c, 2.1, 8, 1.9);
+      for (const sx of [-1, 1]) lock(c, [sx * 0.97, 0.15, 0.2], [sx * 0.1, -1, 0.1], 1.6, 0.27, 0.5);
+      return;
+    case 'mane':
+      scalp(1.16, { front: 0.36, side: -0.35, back: -0.65 }, 1.12);
+      if (top) spikes(c, 10, 0.55, 0.28, 0.35, 0.7);
+      for (let i = 0; i < 16; i++) { const a = Math.PI * 0.3 + (i / 15) * Math.PI * 1.4; lock(c, [Math.sin(a) * 1.08, 0.25 - (i % 2) * 0.25, Math.cos(a) * 1.02], [Math.sin(a) * 0.5, -0.8, Math.cos(a) * 0.45], 0.9 + (i % 3) * 0.18, 0.33, 0.55); }
       return;
     case 'braids': case 'braid': case 'pigtails':
       scalp(1.07, { front: 0.48, side: 0.0, back: -0.4 });

@@ -121,7 +121,7 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
   }
   // Exploration: hexes the character sees from start and destination are remembered for its player.
   const clock = clockFor(state!.state, scene.id);
-  const seen = map.hex ? [...await visionFor(ctx, map, clock, [{ tokenId: token.id, ...start }, { tokenId: token.id, ...to }], carriedLights(state!.state, scene.id, pcs.map(p => (p.tokenId === token.id ? { ...p, ...to } : p))))] : [];
+  const seen = map.hex ? [...await visionFor(ctx, map, clock, [{ tokenId: token.id, ...start }, { tokenId: token.id, ...to }], carriedLights(state!.state, scene.id, pcs.map(p => (p.tokenId === token.id ? { ...p, ...to } : p))), scene.id)] : [];
   const seenSet = new Set(seen);
   const observed = map.nodes.filter(n => n.kind !== 'spawn' && (n.visible || (n.discoverable && (map.hex ? seenSet.has(hexKeyAt(map, n)) : Math.hypot(n.x - to.x, n.y - to.y) <= (token.visionRadius + token.visionBonus) * map.cell)))).map(n => ({ ...n, targetScene: null, discoverable: false }));
   const input = { action: v.action, sceneId: scene.id, sceneRevision: v.sceneRevision, tokenId: token.id, tokenVersion: v.tokenVersion, assignmentRevision: v.assignmentRevision, epoch: v.epoch, x: dest.x, y: dest.y, requestId: v.requestId };

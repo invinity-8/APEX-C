@@ -13,7 +13,7 @@ const FigurePreview = lazy(() => import('./FigurePreview'));
 
 const TABS: Array<{ id: string; label: string; parts: FigurePartKey[]; colours: FigureColourKey[] }> = [
   { id: 'body', label: 'Body', parts: ['body', 'sex', 'build', 'head', 'ears', 'horns'], colours: ['skin'] },
-  { id: 'face', label: 'Face', parts: ['eyes', 'brows', 'nose', 'mouth', 'extra'], colours: ['eyeColor'] },
+  { id: 'face', label: 'Face', parts: ['face', 'eyes', 'brows', 'nose', 'mouth', 'extra'], colours: ['eyeColor'] },
   { id: 'hair', label: 'Hair', parts: ['hair', 'beard'], colours: ['hairColor'] },
   { id: 'clothes', label: 'Clothes', parts: ['hat', 'torso', 'shoulders', 'belt', 'legs', 'boots', 'cloak'], colours: ['primary', 'secondary', 'leather'] },
   { id: 'gear', label: 'Gear', parts: ['main', 'off', 'back'], colours: ['metal'] },

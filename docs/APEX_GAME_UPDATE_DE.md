@@ -720,3 +720,70 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 **Tests:** 549 Tests grün.
 - **Neu:** Relief (`relief23`) und Bestiarium (`bestiary23`), außerdem Körpertypen.
 - **Korrektur:** Der Wild-Shape-Test (`battle17`) berücksichtigt jetzt kritische Treffer; er schlug zuvor zufällig etwa jeden sechsten Lauf fehl.
+
+## APEX 2.4 – Gegnerbibliothek, Flug, Schleichen, Gesichter, Journal
+
+**Enemy Library: 150 eingebaute Kreaturen**
+- **Neu:** 135 Stat-Blöcke zusätzlich zu den bisherigen 15, passend zu den 3D-Modellen.
+  - Tiere und Reittiere, Monstrositäten, Drachen (Wyrmlinge bis erwachsener roter Drache, Wyvern, Knochendrache), Riesen, Schleime, Elementare, Konstrukte, Pflanzen, Untote, Unholde, Aberrationen und weitere Humanoide (Wache, Veteran, Ritter, Magier, Priester, Assassine, Hobgoblin, Bugbear, Kobold, Gnoll …).
+- **Zahlen:** SRD 5.1, vereinfacht wie bisher (RK, TP, Bewegung inkl. Fliegen/Klettern, Attribute, HG, Hauptangriffe, Flächenfähigkeiten wie Odem mit Rettungswurf und SG).
+  - Eigenschaften sind kurze eigene Zusammenfassungen. Es wurden keine Beschreibungen übernommen.
+  - Kreaturen ohne SRD-Vorlage (Schaf, Kuh, Bulle, Löwin, Knochendrache, Grell, Nothic, fleischfressende Pflanze, Pirat) sind als „APEX“ markiert.
+- **Modelle:** Jede Kreatur bekommt automatisch das passende 3D-Modell, z. B. Wyrmlinge als junge Drachen in ihrer Farbe. Menschenähnliche Untote (Ghul, Mumie, Skelett …) nutzen den Figurenbaukasten.
+- **Game → Add Enemy:** Statt der Auswahlliste gibt es eine immer sichtbare Liste mit Suche.
+  - Suche nach Name, Typ, „cr 2“ oder „fly“; Filter nach Kreaturtyp; sortiert nach HG.
+  - Die gewählte Kreatur wird mit Größe, Typ, Bewegung und Angriffen angezeigt.
+
+**Fliegen**
+- **Sicht aus der Höhe:** Wer fliegt, schaut über Bäume und Mauern hinweg. Hindernisse verdecken die Sicht nur bis 15 ft über ihrem Boden.
+  - Bei hellem und dämmrigem Licht wächst die Sichtweite mit der Flughöhe (+5 ft pro 5 ft Höhe). Gilt für Spieler-, Gruppen- und Gegnersicht sowie für die Sichtlinien-Vorschau in 3D.
+- **Reichweite in 3D:** Für fliegende Figuren zeigt die 3D-Karte die erreichbaren Punkte als gestufte Glaskuppel rund um die Figur.
+  - Waagerechter Weg plus Steigen oder Sinken muss in die verbleibende Bewegung passen, wie auf dem Server.
+  - Mit Shift + Mausrad die Zielhöhe wählen. Der Pfad steigt bzw. sinkt sichtbar zur Zielhöhe und wird rot, wenn er zu weit ist.
+
+**Schleichen**
+- **Charakterbogen:** Sneak und Wild Shape sind aus dem Charakterbogen entfernt. Sie werden nur noch im Game-Tab benutzt.
+  - Der Bogen zeigt den Wild-Shape-Zustand weiter an, und Font of Magic bleibt dort.
+- **Ducken:** Schleichende (versteckte) Figuren gehen in 3D in die Hocke.
+- **Wahrnehmungsringe:** Solange jemand schleicht, zeigt die 3D-Karte um jeden wachen Gegner einen Ring. Das ist eine APEX-Tischhilfe, keine neue Regel.
+  - **Radius:** 5 ft × passive Wahrnehmung, höchstens bis zur Sichtweite (hell 120 ft, dämmrig 60 ft, dunkel Dunkelsicht bzw. 10 ft).
+  - **Rot:** Der Gegner würde den Stealth-Wert eines Schleichenden erreichen, sobald er ihn sieht.
+  - **Gestrichelt gold:** Der Wurf schlägt seine passive Wahrnehmung.
+  - Eine Legende erklärt die Farben.
+- **GM-Hinweise:** Über Gegnern erscheint „❗“, wenn einer einen Schleichenden im Radius und in Sicht entdecken würde.
+  - „❓“ mit Pfeil zeigt ein Geräusch aus dieser Richtung: im Radius, aber hinter Deckung oder knapp (1–4) über seiner passiven Wahrnehmung.
+  - Die Battle Command listet alle Hinweise mit „Reveal“. Aufgedeckt wird nichts automatisch; die Regeln bleiben SRD.
+
+**Boden und Wasser**
+- **Boden:** Die Oberflächentextur läuft jetzt in Weltkoordinaten über die Hexfelder, ohne Wiederholung pro Feld.
+  - Ab „medium“ gibt ein Bump-Map Relief (Steine, Fugen, Erdklumpen). Großflächige Farbschattierungen brechen gleichförmige Flächen auf.
+  - Regeltechnisch bleibt alles eben.
+- **Wasser:** Zwei Wellenmuster ziehen langsam über die Oberfläche.
+
+**Figuren: Gesichter und Haare**
+- **Augen:** fünf neue Formen (Mandel, rund, Katze, Schlupflid, strahlend), mit Weiß, Iris, Pupille und Lichtpunkt. Auch die einfachen Punktaugen haben jetzt einen Lichtpunkt.
+- **Gesicht:**
+  - Neue Brauen (gebogen, hochgezogen, Monobraue, gespalten), Nasen (klein, Stups, lang, schief, Adler) und Münder (Schmunzeln, Schmollmund, Lippen, Zähne, Fauchen).
+  - Neues Teil „Face sculpt“: Wangenknochen, kantiges oder weiches Kinn, Grübchen, Falten, Eyeliner, Lippenstift, Nasenring, Schönheitsfleck, Gesichtstattoo, Wangennarbe, hager, pausbäckig.
+  - Jedes menschenähnliche Gesicht hat jetzt Kinn und Wangen.
+- **Haare:**
+  - Acht neue Frisuren: wellig, Pixie, Seitenscheitel, Cornrows, hoher Zopf, Space Buns, Half-up, Mähne.
+  - Alle Frisuren sind voller: Haarschale weiter außen, breitere Strähnen.
+- **Kopfbedeckung:** Unter Kappe, Helm, Hut, Kapuze oder Turban verschwinden die Haare nicht mehr. Ein Pony schaut unter der Krempe hervor, an den Seiten hängen Strähnen, lange Haare fallen über den Rücken.
+- **Varianten:** Die zufälligen Varianten der NPC-Vorlagen nutzen die neuen Formen.
+
+**Journal als Buch**
+- **Doppelseite:**
+  - **Links das Inhaltsverzeichnis:** Einträge mit Punktlinie und Datum, Suche, weitere Filter, Personen und Orte.
+  - **Rechts die aufgeschlagene Seite:** Lesen mit Initiale, Metazeile, Bild und Rückverweisen, oder Schreiben auf liniertem Papier.
+- **Lesezeichen:** Kapitelbänder am Buchrand filtern nach Kategorie.
+- **Funktionen:** Alle bisherigen Funktionen bleiben erhalten (Teilen, Anheften, Personen und Orte verlinken, Bild, Export).
+- **Mobil:** Auf dem Handy stehen die Seiten untereinander.
+
+**Scenes-Tab**
+- **Kopfzeile:** Name, Status und Aktionen (Duplizieren, Archivieren, ← Library) in einer Zeile. Karte und Werkzeuge kommen direkt danach.
+- **Einstellungen:** Name, übergeordnete Szene, Standard-Atmosphäre und Standard-Hintergrund liegen eingeklappt unter der Karte („⚙ Scene settings“).
+- **Kachelpalette:** kompakter und scrollbar.
+
+**Tests:** 560 Tests grün.
+- **Neu:** `bestiary24` (Stat-Blöcke gültig, eindeutige IDs, Modelle; Flugsicht), `stealth24` (Radien, ❗/❓, Richtung) und `faces24` (alle Gesichtsteile, Haare unter jeder Kopfbedeckung).

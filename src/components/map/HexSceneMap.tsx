@@ -47,6 +47,8 @@ export interface SceneToken {
   icons?: Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }>;
   /** APEX 1.9 – altitude above the ground in feet (flying). */
   alt?: number;
+  /** APEX 2.4 – hidden / sneaking: the 3D figure crouches. */
+  sneaking?: boolean;
   /** APEX 1.6 – hit points of a character (life bar under the figure). */
   vitals?: { hp: number; maxHp: number; temp: number; form?: string };
 }

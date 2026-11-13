@@ -52,7 +52,8 @@ import { GmLootRolls } from './LootRolls';
 import { SceneLiveControls } from './SceneLiveControls';
 import { WorldTravel } from './WorldTravel';
 import { ENEMY_TEMPLATES, npcAttacks } from '../game/sceneCombat';
-import { bestiary, displayName } from '../game/bestiary';
+import { bestiary } from '../game/bestiary';
+import { EnemyPicker } from './EnemyPicker';
 
 /** Kept for existing callers/tests: a short location label relative to a focused scene. */
 export function assignmentLocation(player: { sceneId: string | null }, focusId: string | null, scenes: Pick<SceneSummary, 'id' | 'name'>[]): string {
@@ -118,6 +119,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [placeMode, setPlaceMode] = useState(false);
   // Enemy tools: place a new enemy / move the selected one by clicking a hex.
   const [enemyTemplate, setEnemyTemplate] = useState(ENEMY_TEMPLATES[0].id);
+  const enemyLibrary = useMemo(() => bestiary(game.gmState ?? {}), [game.gmState]);
   const [enemyMode, setEnemyMode] = useState<null | 'place' | 'move'>(null);
   const [selectedEnemy, setSelectedEnemy] = useState<string | null>(null);
   const [enemyTarget, setEnemyTarget] = useState('');
@@ -697,14 +699,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
           {shownScene.category === 'battle' && shownScene.map.hex && (
             <section className="space-y-1 text-xs" aria-label="Enemies" data-testid="gm-enemies">
               <h3 className="font-bold text-marble-300">Enemies & allies · {enemies.filter((e) => !e.defeated && e.side !== 'ally').length} enemies, {enemies.filter((e) => !e.defeated && e.side === 'ally').length} allies</h3>
+              <EnemyPicker library={enemyLibrary} value={enemyTemplate} onPick={setEnemyTemplate} />
               <div className="flex flex-wrap items-center gap-2">
-                <select aria-label="Enemy type" className="rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs" value={enemyTemplate} onChange={(e) => setEnemyTemplate(e.target.value)}>
-                  {bestiary(game.gmState ?? {}).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.elite ? '🐉 ' : ''}{displayName(t)} · CR {t.cr} · AC {t.ac} · HP {t.hp}
-                    </option>
-                  ))}
-                </select>
                 <select aria-label="Side" className="rounded-md border border-ink-600 bg-ink-900 px-2 py-1 text-xs" value={enemySide} onChange={(e) => setEnemySide(e.target.value as 'enemy' | 'ally')}>
                   <option value="enemy">as enemy</option>
                   <option value="ally">as ally (fights with the party)</option>

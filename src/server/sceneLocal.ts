@@ -2,6 +2,7 @@
  * Scene-local view and movement rules (server only). Shared by the player snapshot, the GM focus and
  * scene movement so that what a player sees and what the server accepts always agree.
  */
+import { npcPassivePerception } from '../game/perception.js';
 import type { FigureLook } from '../game/figure.js';
 import { hexAt, hexCentre, spawnSlots, tileSetOf } from '../campaign/hexScene.js';
 import { CARRIED_LIGHT_FT, enemiesOf, npcReach, torchesOf } from '../game/sceneCombat.js';
@@ -31,7 +32,7 @@ export interface PcPosition { tokenId: string; userId: string; x: number; y: num
 export type FigureBuild = 'humanoid' | 'beast' | 'flyer' | 'undead' | 'spider';
 /** Body shape of a creature for its 3D miniature (from the stat block type). */
 export const buildOf = (type: string, flyFt?: number): FigureBuild => /undead/i.test(type) ? 'undead' : flyFt ? 'flyer' : /spider|insect|vermin/i.test(type) ? 'spider' : /beast|monstrosity/i.test(type) ? 'beast' : 'humanoid';
-export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** Conditions and buffs (name, key). */ effects?: Array<{ id: string; name: string; key: string; mods?: EffectMods }>; concentration?: string; /** APEX 1.9: altitude above the ground (feet). */ alt?: number; /** APEX 2.0: size and body shape for the 3D miniature. */ size?: string; build?: FigureBuild; /** APEX 2.1: a chosen low-poly look, else the creature kind the automatic look is picked from. */ look?: FigureLook; breed?: string; creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' }; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ac?: number; torch?: boolean }
+export interface SceneFigure { id: string; kind: 'pc' | 'enemy'; elite?: boolean; /** Conditions and buffs (name, key). */ effects?: Array<{ id: string; name: string; key: string; mods?: EffectMods; /** Hidden: the Stealth total. */ value?: number }>; /** APEX 2.4 – enemies: passive Perception and darkvision (sneak warnings). */ perception?: number; darkvisionFt?: number; concentration?: string; /** APEX 1.9: altitude above the ground (feet). */ alt?: number; /** APEX 2.0: size and body shape for the 3D miniature. */ size?: string; build?: FigureBuild; /** APEX 2.1: a chosen low-poly look, else the creature kind the automatic look is picked from. */ look?: FigureLook; breed?: string; creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' }; /** NPCs: 'ally' fights with the party. */ side?: 'enemy' | 'ally'; reachFt?: number; tokenId?: string; name: string; color: string; icon?: string; x: number; y: number; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ac?: number; torch?: boolean }
 
 /** Arrival slots for characters without a stored position (no two on the same hex). */
 export function withArrivalSlots(map: SceneMap, spawn: { x: number; y: number } | null, rows: Array<{ tokenId: string; userId: string; stored?: { x: number; y: number } }>, blocked: Array<{ x: number; y: number }>): PcPosition[] {
@@ -58,7 +59,7 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   };
   const seen = (p: { x: number; y: number }) => !visible || visible.has(hexKeyAt(map, p));
   const fx = (actor: string) => {
-    const list = (state.sceneEffects?.[sceneId]?.[actor] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key, mods: e.mods }));
+    const list = (state.sceneEffects?.[sceneId]?.[actor] ?? []).map((e) => ({ id: e.id, name: e.name, key: e.key, mods: e.mods, ...(e.key === 'hidden' && typeof e.value === 'number' ? { value: e.value } : {}) }));
     const c = state.sceneConcentration?.[sceneId]?.[actor];
     const alt = altitudeOf(state, sceneId, actor);
     return { ...(list.length ? { effects: list } : {}), ...(c ? { concentration: c.spell } : {}), ...(alt ? { alt } : {}) };
@@ -72,7 +73,7 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e) || !noticed(`npc-${e.id}`, e.side === 'ally' ? 'party' : 'enemy')) continue;
     const block = statBlock(state, e.templateId);
-    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build: buildOf(`${block.type} ${block.name}`, e.flyFt), ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60), ...(block.creature ? { creature: block.creature } : {}) }) } : {}), reachFt: npcReach(e), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac, ...(e.tempHp ? { tempHp: e.tempHp } : {}) } : {}) });
+    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build: buildOf(`${block.type} ${block.name}`, e.flyFt), ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60), ...(block.creature ? { creature: block.creature } : {}) }) } : {}), reachFt: npcReach(e), perception: npcPassivePerception(state, e), ...((e.darkvisionFt ?? block?.darkvisionFt) ? { darkvisionFt: e.darkvisionFt ?? block?.darkvisionFt } : {}), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac, ...(e.tempHp ? { tempHp: e.tempHp } : {}) } : {}) });
   }
   return out;
 }
@@ -161,9 +162,12 @@ export function motionShape(local: LocalMotionSnapshot, state: GameState | null,
 }
 
 /** Vision of the given characters (positions from the ledger, else the assignment spawn). */
-export async function visionFor(ctx: SceneViewContext, map: SceneMap, clock: SceneClockState, positions: Array<{ tokenId: string; x: number; y: number }>, carried: CarriedLight[] = []): Promise<Set<HexKey>> {
+export async function visionFor(ctx: SceneViewContext, map: SceneMap, clock: SceneClockState, positions: Array<{ tokenId: string; x: number; y: number }>, carried: CarriedLight[] = [], sceneId?: string): Promise<Set<HexKey>> {
   const viewers: Viewer[] = [];
-  for (const p of positions) viewers.push({ at: p, darkvisionFt: sheetDarkvision(await sheetOf(ctx, p.tokenId)) });
+  for (const p of positions) {
+    const altFt = sceneId && ctx.state ? altitudeOf(ctx.state, sceneId, `pc-${p.tokenId}`) : 0;
+    viewers.push({ at: p, darkvisionFt: sheetDarkvision(await sheetOf(ctx, p.tokenId)), ...(altFt ? { altFt } : {}) });
+  }
   return sceneVision(map, clock, viewers, carried);
 }
 
