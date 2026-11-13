@@ -14,12 +14,12 @@ export const FIGURE_PARTS = {
   sex: ['male', 'female'],
   build: ['average', 'slender', 'muscular', 'heavy', 'slim', 'stocky', 'broad'],
   head: ['round', 'square', 'oval', 'long', 'wide', 'pointed'],
-  eyes: ['dots', 'wide', 'narrow', 'angry', 'sleepy', 'happy', 'glowing', 'patch', 'scarred', 'closed', 'hollow'],
-  brows: ['none', 'thin', 'thick', 'angry', 'worried', 'bushy'],
-  mouth: ['none', 'smile', 'flat', 'frown', 'open', 'grin', 'tusks', 'fangs'],
-  nose: ['button', 'pointy', 'broad', 'hooked', 'none'],
+  eyes: ['dots', 'wide', 'narrow', 'angry', 'sleepy', 'happy', 'glowing', 'patch', 'scarred', 'closed', 'hollow', 'almond', 'round', 'catlike', 'hooded', 'bright'],
+  brows: ['none', 'thin', 'thick', 'angry', 'worried', 'bushy', 'arched', 'raised', 'unibrow', 'split'],
+  mouth: ['none', 'smile', 'flat', 'frown', 'open', 'grin', 'tusks', 'fangs', 'smirk', 'pout', 'lips', 'teeth', 'snarl'],
+  nose: ['button', 'pointy', 'broad', 'hooked', 'none', 'small', 'snub', 'long', 'crooked', 'aquiline'],
   ears: ['normal', 'pointed', 'long', 'big', 'none'],
-  hair: ['none', 'buzz', 'short', 'messy', 'spiky', 'mohawk', 'bob', 'long', 'ponytail', 'bun', 'topknot', 'braids', 'curly', 'wild', 'sidecut', 'pigtails', 'slicked', 'undercut', 'afro', 'dreads', 'mullet', 'shaggy', 'flowing', 'tonsure', 'braid', 'crest', 'pageboy', 'swept'],
+  hair: ['none', 'buzz', 'short', 'messy', 'spiky', 'mohawk', 'bob', 'long', 'ponytail', 'bun', 'topknot', 'braids', 'curly', 'wild', 'sidecut', 'pigtails', 'slicked', 'undercut', 'afro', 'dreads', 'mullet', 'shaggy', 'flowing', 'tonsure', 'braid', 'crest', 'pageboy', 'swept', 'wavy', 'pixie', 'sidepart', 'cornrows', 'highpony', 'spacebuns', 'halfup', 'mane'],
   beard: ['none', 'stubble', 'moustache', 'handlebar', 'goatee', 'chin', 'full', 'long', 'forked', 'braided', 'mutton'],
   hat: ['none', 'hood', 'cowl', 'wizard', 'cap', 'bandana', 'headband', 'helmet', 'greathelm', 'horned', 'crown', 'circlet', 'tricorn', 'feathercap', 'strawhat', 'turban', 'skullcap', 'antlers', 'mask'],
   horns: ['none', 'small', 'curled', 'ram', 'long'],
@@ -34,6 +34,8 @@ export const FIGURE_PARTS = {
   off: ['none', 'roundshield', 'kiteshield', 'towershield', 'buckler', 'dagger', 'book', 'lantern', 'orb', 'torch', 'holy', 'potion', 'handaxe', 'skull'],
   mount: ['none', 'horse', 'warhorse', 'pony', 'camel', 'wardog', 'lizard', 'pegasus', 'unicorn', 'nightmare', 'griffon', 'hippogriff', 'roc', 'wyvern', 'drake'],
   extra: ['none', 'necklace', 'scarf', 'amulet', 'earring', 'monocle', 'pipe', 'warpaint', 'tattoos', 'scar', 'freckles', 'blush'],
+  /** APEX 2.4 – face sculpt and make-up (on top of eyes, brows, nose, mouth). */
+  face: ['plain', 'cheekbones', 'strongjaw', 'softjaw', 'dimples', 'wrinkles', 'eyeliner', 'lipstick', 'nosering', 'beautymark', 'facetattoo', 'cheekscar', 'gaunt', 'chubby'],
 } as const;
 
 export type FigurePartKey = keyof typeof FIGURE_PARTS;
@@ -54,7 +56,7 @@ export const EYE_COLOURS = ['#141210', '#3b5a8f', '#2f6b3a', '#6b4224', '#d8b25a
 export const DEFAULT_LOOK: FigureLook = {
   body: 'human', sex: 'male', build: 'average', head: 'round', eyes: 'dots', brows: 'thin', mouth: 'smile', nose: 'button', ears: 'normal',
   hair: 'short', beard: 'none', hat: 'none', horns: 'none', torso: 'tunic', shoulders: 'none', belt: 'belt', legs: 'trousers', boots: 'boots',
-  cloak: 'none', back: 'none', main: 'sword', off: 'none', mount: 'none', extra: 'none',
+  cloak: 'none', back: 'none', main: 'sword', off: 'none', mount: 'none', extra: 'none', face: 'plain',
   skin: '#eebf94', hairColor: '#6b4224', primary: '#2d4f8f', secondary: '#e8d4a6', leather: '#6b4a2b', metal: '#c8ccd2', eyeColor: '#141210',
 };
 
@@ -81,7 +83,7 @@ export function parseLook(v: unknown): FigureLook | null {
 
 export interface FigurePreset { id: string; label: string; group: 'hero' | 'npc' | 'monster'; look: Partial<FigureLook>; /** Parts the variation may swap (per figure). */ vary?: Partial<{ [K in FigurePartKey]: ReadonlyArray<PartValue<K>> }>; colours?: Partial<Record<FigureColourKey, readonly string[]>>; match?: RegExp }
 
-const humanVary = { hair: ['short', 'messy', 'buzz', 'long', 'ponytail', 'bun', 'curly', 'none', 'sidecut', 'braids', 'slicked', 'undercut', 'shaggy', 'mullet', 'swept', 'braid', 'dreads', 'afro'], beard: ['none', 'none', 'stubble', 'moustache', 'goatee', 'full', 'chin'], eyes: ['dots', 'narrow', 'angry', 'wide', 'scarred'], brows: ['thin', 'thick', 'angry', 'bushy'], head: ['round', 'square', 'oval', 'long'], nose: ['button', 'pointy', 'broad', 'hooked'] } as const;
+const humanVary = { hair: ['short', 'messy', 'buzz', 'long', 'ponytail', 'bun', 'curly', 'none', 'sidecut', 'braids', 'slicked', 'undercut', 'shaggy', 'mullet', 'swept', 'braid', 'dreads', 'afro', 'wavy', 'pixie', 'sidepart', 'halfup', 'highpony', 'cornrows'], beard: ['none', 'none', 'stubble', 'moustache', 'goatee', 'full', 'chin'], eyes: ['dots', 'narrow', 'angry', 'wide', 'scarred', 'almond', 'round', 'hooded', 'bright'], brows: ['thin', 'thick', 'angry', 'bushy', 'arched', 'raised'], head: ['round', 'square', 'oval', 'long'], nose: ['button', 'pointy', 'broad', 'hooked', 'small', 'snub', 'aquiline', 'crooked'], mouth: ['smile', 'flat', 'smirk', 'lips', 'frown'], face: ['plain', 'plain', 'cheekbones', 'strongjaw', 'softjaw', 'dimples', 'beautymark', 'wrinkles'] } as const;
 const anyHuman = { skin: SKIN_TONES.slice(0, 7), hairColor: HAIR_COLOURS.slice(0, 9) };
 
 export const FIGURE_PRESETS: FigurePreset[] = [
@@ -186,7 +188,7 @@ export function randomLook(seed: number, heroOnly = true): FigureLook {
 /** Labels for the editor. */
 export const PART_LABELS: Record<FigurePartKey, string> = {
   body: 'Ancestry', sex: 'Body', build: 'Build', head: 'Head shape', eyes: 'Eyes', brows: 'Brows', mouth: 'Mouth', nose: 'Nose', ears: 'Ears', hair: 'Hair', beard: 'Beard', hat: 'Headwear', horns: 'Horns',
-  torso: 'Torso', shoulders: 'Shoulders', belt: 'Belt', legs: 'Legs', boots: 'Feet', cloak: 'Cloak', back: 'On the back', main: 'Main hand', off: 'Off hand', mount: 'Mount', extra: 'Detail',
+  torso: 'Torso', shoulders: 'Shoulders', belt: 'Belt', legs: 'Legs', boots: 'Feet', cloak: 'Cloak', back: 'On the back', main: 'Main hand', off: 'Off hand', mount: 'Mount', extra: 'Detail', face: 'Face sculpt',
 };
 export const COLOUR_LABELS: Record<FigureColourKey, string> = { skin: 'Skin', hairColor: 'Hair', primary: 'Main colour', secondary: 'Trim', leather: 'Leather', metal: 'Metal', eyeColor: 'Eyes' };
 export const partLabel = (v: string) => v.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());

@@ -227,7 +227,20 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
       case 'scarred': add(head, ico(hr * 0.1), eyeM, p); if (sx > 0) add(head, box(hr * 0.05, hr * 0.55, 0.03), M('#8e3b44'), [p[0], p[1], p[2] + 0.01], [0, 0, 0.3]); break;
       case 'closed': add(head, box(hr * 0.24, hr * 0.03, 0.03), dark, p); break;
       case 'hollow': add(head, ico(hr * 0.15), dark, [p[0], p[1], p[2] - 0.02]); break;
+      // APEX 2.4 – detailed eyes: white, iris, pupil and a catch-light
+      case 'almond': case 'hooded': case 'catlike': case 'round': {
+        const big = look.eyes === 'round';
+        add(head, ico(hr * (big ? 0.17 : 0.15), 1), look.eyes === 'catlike' ? eyeM : white, [p[0], p[1], p[2] - 0.015], [0, 0, look.eyes === 'catlike' ? sx * 0.25 : sx * 0.12], big ? [1, 1, 0.42] : [1.45, 0.72, 0.4]);
+        if (look.eyes === 'catlike') add(head, box(hr * 0.035, hr * 0.17, 0.02), dark, [p[0], p[1], p[2] + hr * 0.05]);
+        else { add(head, ico(hr * (big ? 0.1 : 0.085), 1), eyeM, [p[0], p[1], p[2] + hr * 0.04], [0, 0, 0], [1, 1, 0.5]); add(head, ico(hr * 0.045, 0), dark, [p[0], p[1], p[2] + hr * 0.075]); }
+        add(head, ico(hr * 0.025, 0), white, [p[0] + hr * 0.035, p[1] + hr * 0.04, p[2] + hr * 0.095]);
+        if (look.eyes === 'hooded') add(head, box(hr * 0.32, hr * 0.09, hr * 0.08), skinD, [p[0], p[1] + hr * 0.07, p[2] + hr * 0.02], [-0.25, 0, sx * 0.1]);
+        break;
+      }
+      case 'bright': add(head, ico(hr * 0.12, 1), eyeM, p); add(head, ico(hr * 0.035, 0), white, [p[0] + hr * 0.04, p[1] + hr * 0.04, p[2] + hr * 0.08]); add(head, ico(hr * 0.02, 0), white, [p[0] - hr * 0.03, p[1] - hr * 0.03, p[2] + hr * 0.08]); break;
     }
+    if (look.eyes === 'dots') add(head, ico(hr * 0.028, 0), white, [p[0] + hr * 0.03, p[1] + hr * 0.035, p[2] + hr * 0.07]); // a catch-light gives the face life
+    if (look.face === 'eyeliner' && !['patch', 'hollow'].includes(look.eyes)) add(head, box(hr * 0.2, hr * 0.035, 0.03), dark, [sx * (ex + hr * 0.16), ey + hr * 0.02, faceZ - 0.01], [0, 0, sx * 0.35]);
     if (fem && !['patch', 'hollow', 'glowing'].includes(look.eyes)) add(head, box(hr * 0.12, hr * 0.04, 0.03), dark, [sx * (ex + hr * 0.12), ey + hr * 0.08, faceZ - 0.01], [0, 0, sx * 0.5]); // lashes
     // brows
     const bp: [number, number, number] = [sx * ex, ey + hr * 0.24, faceZ - 0.01];
@@ -237,6 +250,10 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     if (look.brows === 'angry') add(head, box(hr * 0.32, hr * 0.09, 0.04), bm, bp, [0, 0, sx * 0.45]);
     if (look.brows === 'worried') add(head, box(hr * 0.3, hr * 0.07, 0.04), bm, bp, [0, 0, -sx * 0.35]);
     if (look.brows === 'bushy') add(head, ico(hr * 0.13, 0), bm, bp, [0, 0, 0], [1.5, 0.7, 0.6]);
+    if (look.brows === 'arched') add(head, tor(hr * 0.15, hr * 0.025, Math.PI * 0.7, 3, 6), bm, [bp[0], bp[1] - hr * 0.09, bp[2]], [0, 0, Math.PI * 0.15]);
+    if (look.brows === 'raised') add(head, box(hr * 0.28, hr * 0.06, 0.03), bm, [bp[0], bp[1] + hr * 0.08, bp[2]], [0, 0, -sx * 0.18]);
+    if (look.brows === 'unibrow' && sx > 0) add(head, box(hr * 0.95, hr * 0.09, 0.04), bm, [0, bp[1], bp[2]]);
+    if (look.brows === 'split') { add(head, box(hr * 0.12, hr * 0.09, 0.04), bm, [bp[0] - sx * hr * 0.09, bp[1], bp[2]]); add(head, box(hr * 0.1, hr * 0.09, 0.04), bm, [bp[0] + sx * hr * 0.11, bp[1] + hr * 0.01, bp[2]]); }
     // ears
     const ears = look.ears === 'normal' && ['elf', 'orc', 'tiefling'].includes(look.body) ? 'pointed' : look.ears === 'normal' && look.body === 'goblin' ? 'big' : look.ears;
     if (!snout && !bone) {
@@ -254,9 +271,16 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     if (look.nose === 'pointy') add(head, cone(hr * 0.1, hr * 0.32, 4), skinD, [0, np[1], np[2] + hr * 0.1], [Math.PI / 2, 0, 0]);
     if (look.nose === 'broad') add(head, box(hr * 0.3, hr * 0.18, hr * 0.15), skinD, np);
     if (look.nose === 'hooked') add(head, cone(hr * 0.1, hr * 0.34, 4), skinD, [0, np[1] - hr * 0.04, np[2] + hr * 0.08], [Math.PI / 2 + 0.6, 0, 0]);
+    if (look.nose === 'small') add(head, ico(hr * 0.075, 0), skinD, np);
+    if (look.nose === 'snub') { add(head, ico(hr * 0.1, 0), skinD, [0, np[1] + hr * 0.02, np[2]], [0, 0, 0], [1, 0.8, 1]); add(head, ico(hr * 0.06, 0), skinD, [0, np[1] - hr * 0.04, np[2] + hr * 0.06]); }
+    if (look.nose === 'long') { add(head, box(hr * 0.12, hr * 0.42, hr * 0.14), skinD, [0, np[1] + hr * 0.08, np[2] + hr * 0.02], [0.25, 0, 0]); add(head, ico(hr * 0.09, 0), skinD, [0, np[1] - hr * 0.12, np[2] + hr * 0.1]); }
+    if (look.nose === 'crooked') add(head, cone(hr * 0.1, hr * 0.3, 4), skinD, [hr * 0.04, np[1], np[2] + hr * 0.09], [Math.PI / 2, 0, 0.35]);
+    if (look.nose === 'aquiline') { add(head, box(hr * 0.1, hr * 0.36, hr * 0.12), skinD, [0, np[1] + hr * 0.1, np[2]], [0.15, 0, 0]); add(head, cone(hr * 0.09, hr * 0.22, 4), skinD, [0, np[1] - hr * 0.06, np[2] + hr * 0.1], [Math.PI / 2 + 0.9, 0, 0]); }
+    if (look.face === 'nosering') add(head, tor(hr * 0.06, 0.008, Math.PI * 2, 3, 8), gold, [hr * 0.07, np[1] - hr * 0.06, np[2] + hr * 0.06], [0, Math.PI / 2, 0]);
   }
   const my = snout ? -hr * 0.45 : -hr * 0.42, mz = snout ? faceZ + hr * 0.82 : faceZ - 0.01;
-  const lipM = fem ? M(mix(look.skin, '#a03a4a', 0.55)) : dark;
+  const lipM = look.face === 'lipstick' ? M('#a3203a', { rough: 0.35 }) : fem ? M(mix(look.skin, '#a03a4a', 0.55)) : dark;
+  const lipSoft = look.face === 'lipstick' ? lipM : M(mix(look.skin, '#a03a4a', fem ? 0.55 : 0.3));
   switch (look.mouth) {
     case 'smile': add(head, tor(hr * 0.17, hr * 0.035, Math.PI, 3, 6), lipM, [0, my + hr * 0.08, mz], [0, 0, Math.PI]); break;
     case 'flat': add(head, box(hr * 0.32, hr * (fem ? 0.07 : 0.05), 0.03), lipM, [0, my, mz]); break;
@@ -265,6 +289,11 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     case 'grin': add(head, box(hr * 0.42, hr * 0.12, 0.03), white, [0, my, mz]); add(head, box(hr * 0.46, hr * 0.02, 0.035), dark, [0, my, mz]); break;
     case 'tusks': add(head, box(hr * 0.3, hr * 0.05, 0.03), dark, [0, my, mz]); for (const sx of [-1, 1]) add(head, cone(hr * 0.07, hr * 0.28, 4), white, [sx * hr * 0.22, my + hr * 0.1, mz + 0.03]); break;
     case 'fangs': add(head, box(hr * 0.3, hr * 0.05, 0.03), dark, [0, my, mz]); for (const sx of [-1, 1]) add(head, cone(hr * 0.05, hr * 0.15, 3), white, [sx * hr * 0.1, my - hr * 0.07, mz + 0.02], [Math.PI, 0, 0]); break;
+    case 'smirk': add(head, tor(hr * 0.13, hr * 0.03, Math.PI * 0.6, 3, 6), lipM, [hr * 0.06, my + hr * 0.06, mz], [0, 0, Math.PI + 0.35]); add(head, box(hr * 0.14, hr * 0.035, 0.03), lipM, [-hr * 0.08, my, mz]); break;
+    case 'pout': add(head, ico(hr * 0.11, 1), lipSoft, [0, my + hr * 0.03, mz], [0, 0, 0], [1.5, 0.55, 0.6]); add(head, ico(hr * 0.1, 1), lipSoft, [0, my - hr * 0.07, mz], [0, 0, 0], [1.3, 0.65, 0.65]); break;
+    case 'lips': add(head, ico(hr * 0.1, 1), lipSoft, [0, my + hr * 0.035, mz], [0, 0, 0], [1.7, 0.4, 0.5]); add(head, ico(hr * 0.1, 1), lipSoft, [0, my - hr * 0.04, mz], [0, 0, 0], [1.5, 0.5, 0.55]); add(head, box(hr * 0.3, hr * 0.015, 0.03), dark, [0, my, mz + 0.01]); break;
+    case 'teeth': add(head, box(hr * 0.36, hr * 0.13, 0.03), dark, [0, my, mz]); add(head, box(hr * 0.32, hr * 0.06, 0.035), white, [0, my + hr * 0.025, mz]); break;
+    case 'snarl': add(head, ico(hr * 0.13, 0), dark, [0, my, mz], [0, 0, 0], [1.4, 0.75, 0.4]); for (const sx of [-1, 1]) add(head, cone(hr * 0.045, hr * 0.14, 3), white, [sx * hr * 0.11, my + hr * 0.05, mz + 0.02], [Math.PI, 0, 0]); add(head, box(hr * 0.3, hr * 0.05, 0.03), skinD, [0, my + hr * 0.15, mz - 0.01], [0, 0, 0]); break;
   }
   // face details
   const ex2 = (fn: (sx: number) => void) => { fn(-1); fn(1); };
@@ -277,6 +306,23 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     case 'pipe': add(head, cyl(0.015, 0.015, hr * 0.5, 4), leatherD, [hr * 0.15, my, mz + hr * 0.2], [Math.PI / 2 - 0.3, 0, 0]); add(head, cyl(0.04, 0.03, 0.08, 5), leatherD, [hr * 0.15, my + hr * 0.05, mz + hr * 0.45]); break;
     case 'earring': add(head, tor(0.035, 0.01, Math.PI * 2, 3, 6), gold, [hr * 0.98, -hr * 0.2, 0]); break;
     case 'tattoos': add(head, box(hr * 0.06, hr * 0.5, 0.02), M(shade(look.skin, 0.45)), [hr * 0.5, 0, faceZ - 0.06], [0, 0.45, 0]); break;
+  }
+  // APEX 2.4 – face sculpt: every human-like face gets a chin and cheeks; the 'face' part shapes them or adds make-up
+  if (!snout && !bone) {
+    const chubby = look.face === 'chubby', gaunt = look.face === 'gaunt';
+    add(head, ico(hr * 0.26, 1), skin, [0, -hr * 0.7, faceZ - hr * 0.42], [0, 0, 0], look.face === 'strongjaw' ? [1.7, 0.7, 0.75] : look.face === 'softjaw' ? [1.3, 0.8, 0.7] : [1.0, 0.6, 0.6]);
+    ex2((sx) => {
+      const cheek = look.face === 'cheekbones' ? 0.17 : chubby ? 0.24 : 0.13;
+      add(head, ico(hr * cheek, 1), chubby ? M(mix(look.skin, '#e07a7a', 0.15)) : skin, [sx * hr * 0.5, -hr * (chubby ? 0.22 : 0.12), faceZ - hr * (chubby ? 0.18 : 0.24)], [0, 0, 0], [1, look.face === 'cheekbones' ? 0.55 : 0.8, 0.7]);
+      if (gaunt) add(head, ico(hr * 0.12, 0), M(shade(look.skin, 0.72)), [sx * hr * 0.48, -hr * 0.33, faceZ - hr * 0.2], [0, 0, 0], [0.8, 1.1, 0.3]);
+      if (look.face === 'strongjaw') add(head, box(hr * 0.26, hr * 0.26, hr * 0.42), skin, [sx * hr * 0.52, -hr * 0.55, faceZ - hr * 0.62], [0, sx * 0.5, sx * 0.2]);
+      if (look.face === 'dimples') add(head, ico(hr * 0.025, 0), M(shade(look.skin, 0.6)), [sx * hr * 0.27, my - hr * 0.01, mz - hr * 0.02]);
+      if (look.face === 'wrinkles') { add(head, box(hr * 0.12, hr * 0.02, 0.02), M(shade(look.skin, 0.62)), [sx * (ex + hr * 0.24), ey - hr * 0.04, faceZ - hr * 0.08], [0, sx * 0.5, sx * 0.3]); add(head, box(hr * 0.02, hr * 0.18, 0.02), M(shade(look.skin, 0.65)), [sx * hr * 0.22, my + hr * 0.12, mz - hr * 0.02], [0, 0, sx * 0.4]); }
+      if (look.face === 'facetattoo' && sx > 0) for (let i = 0; i < 3; i++) add(head, box(hr * 0.05, hr * (0.3 - i * 0.07), 0.02), M('#2a3f7a'), [hr * (0.42 + i * 0.1), -hr * (0.05 + i * 0.06), faceZ - hr * (0.12 + i * 0.07)], [0, 0.5, 0.25 - i * 0.2]);
+    });
+    if (look.face === 'wrinkles') for (let i = 0; i < 2; i++) add(head, box(hr * 0.5, hr * 0.02, 0.02), M(shade(look.skin, 0.66)), [0, hr * (0.5 + i * 0.1), faceZ - hr * 0.12 - i * hr * 0.04]);
+    if (look.face === 'beautymark') add(head, ico(hr * 0.03, 0), dark, [hr * 0.25, my + hr * 0.12, mz - hr * 0.01]);
+    if (look.face === 'cheekscar') add(head, box(hr * 0.05, hr * 0.45, 0.02), M('#9a4a52'), [-hr * 0.45, -hr * 0.2, faceZ - hr * 0.15], [0, -0.45, -0.9]);
   }
   // ---- beard and hair (APEX 2.2: sculpted shells and locks, see hair3d.ts)
   const shape = (bone ? 'round' : look.head) as HeadShape;
