@@ -28,11 +28,15 @@ export const defaultSceneClock = (): SceneClock => ({ day: 1, phase: 'day', ligh
 export const BRIGHT_SIGHT_FT = 120;
 export const DIM_SIGHT_FT = 60;
 export const DEFAULT_LIGHT_FT = 30;
+/** APEX 2.4 – how high (in 5-ft levels) trees and walls block sight for someone looking from the air. */
+export const OBSTACLE_LEVELS = 3;
 
 export interface Viewer {
   at: { x: number; y: number };
   /** Darkvision range in feet (0 = none). */
   darkvisionFt: number;
+  /** APEX 2.4 – flying altitude in feet: sees over trees and walls, and farther in bright and dim light. */
+  altFt?: number;
 }
 
 type Blocks = (k: HexKey) => boolean;
@@ -41,11 +45,18 @@ type Blocks = (k: HexKey) => boolean;
 export function lineOfSight(a: Axial, b: Axial, blocks: Blocks, height?: (k: HexKey) => number, eye = { a: 0, b: 0 }): boolean {
   // APEX 1.8 – heights: eyes one level (5 ft) above the ground (+ flying altitude); ground higher than the line between
   // them blocks (a step of one level doesn't, a cliff or a hill top does)
-  const ha = height ? height(hexKey(a)) + 1 + eye.a : 0, hb = height ? height(hexKey(b)) + 1 + eye.b : 0;
+  const ha = (height ? height(hexKey(a)) : 0) + 1 + eye.a, hb = (height ? height(hexKey(b)) : 0) + 1 + eye.b;
+  // APEX 2.4 – from the air (an eye above the ground) a blocking tile (tree, wall) only blocks up to OBSTACLE_LEVELS
+  // above its ground: a high flyer looks over the forest and walls down onto what lies behind
+  const aloft = eye.a > 0 || eye.b > 0;
   const clear = (nudge: number) => {
     const line = hexLine(a, b, nudge);
     const n = line.length - 1;
-    return line.slice(1, -1).every((h, i) => !blocks(hexKey(h)) && (!height || height(hexKey(h)) <= ha + ((hb - ha) * (i + 1)) / n));
+    return line.slice(1, -1).every((h, i) => {
+      const k = hexKey(h), g = height ? height(k) : 0, at = ha + ((hb - ha) * (i + 1)) / n;
+      if (blocks(k) && (!aloft || at <= g + OBSTACLE_LEVELS)) return false;
+      return !height || g <= at;
+    });
   };
   return clear(1e-6) || clear(-1e-6);
 }
@@ -96,6 +107,7 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
     let viewBlocks = blocks;
     if (battle) {
       radius = clock.lighting === 'bright' ? BRIGHT_SIGHT_FT / 5 : clock.lighting === 'dim' ? DIM_SIGHT_FT / 5 : Math.max(1, Math.round(v.darkvisionFt / 5));
+      if (clock.lighting !== 'dark' && v.altFt) radius += Math.round(v.altFt / 5); // the view widens with height
     } else {
       const day = clock.phase === 'day';
       radius = day ? 2 + (own.id === 'hills' ? 1 : own.id === 'mountain' ? 2 : 0) : 1;
@@ -107,7 +119,8 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
       if (!inMap(k) || seen.has(k)) continue;
       const d = distance(at, h);
       if (d > radius && !lit.has(k)) continue;
-      if (d <= 1 || lineOfSight(at, h, viewBlocks, battle ? heights : undefined)) seen.add(k);
+      const eye = battle && v.altFt ? { a: v.altFt / 5, b: 0 } : undefined;
+      if (d <= 1 || lineOfSight(at, h, viewBlocks, battle ? heights : undefined, eye)) seen.add(k);
     }
   }
   return seen;

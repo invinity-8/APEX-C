@@ -301,7 +301,7 @@ export async function rememberCurrentVision(user: AuthUser, repo: Repo, sceneId:
     const local = await repo.sceneMotion.localSnapshot(user.campaignId, sceneId, p.userId, tokenIds);
     const positions = tokenIds.map((id) => local.tokens.find((t) => t.tokenId === id) ?? (a.spawn_x !== null && a.spawn_y !== null ? { tokenId: id, x: a.spawn_x, y: a.spawn_y } : null)).filter((x): x is { tokenId: string; x: number; y: number } => !!x);
     const pcs = ctx.pcs ? await ctx.pcs(sceneId, map) : [];
-    if (positions.length) await repo.sceneMotion.rememberVision(user.campaignId, sceneId, p.userId, [...(await visionFor(ctx, map, clock, positions.map((x) => pcs.find((q) => q.tokenId === x.tokenId) ?? x), ctx.state ? carriedLights(ctx.state, sceneId, pcs) : []))]);
+    if (positions.length) await repo.sceneMotion.rememberVision(user.campaignId, sceneId, p.userId, [...(await visionFor(ctx, map, clock, positions.map((x) => pcs.find((q) => q.tokenId === x.tokenId) ?? x), ctx.state ? carriedLights(ctx.state, sceneId, pcs) : [], sceneId))]);
   }
 }
 

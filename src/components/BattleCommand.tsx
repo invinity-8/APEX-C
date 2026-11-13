@@ -12,6 +12,7 @@ import { npcAttacks, type SceneEnemy } from '../game/sceneCombat';
 import { CONDITIONS, CONDITION_TEXT, type ConditionId } from '../game/combatEffects';
 import { STANDARD_ACTIONS, budgetOf, isActiveActor, npcActor, pcActor, reactionUsed } from '../game/sceneActions';
 import type { SheetAttack } from '../game/sheet';
+import { bearingArrow, stealthWatch } from '../game/stealth';
 
 export type FigureRef = { kind: 'pc'; id: string } | { kind: 'npc'; id: string };
 export type BattleMode = null | 'move' | 'attack';
@@ -99,6 +100,8 @@ export function BattleCommand(p: Props) {
         {p.view !== 'all' && <span className="text-marble-500">grey hexes are out of sight{p.view.startsWith('pc-') || !VIEW_LABEL[p.view] ? '' : ' for everyone in this group'}</span>}
       </div>
 
+      <StealthAlerts snapshot={snapshot} busy={p.busy} act={p.act} />
+
       {!!reactions.length && (
         <ul className="space-y-1" aria-label="Reaction prompts" data-testid="gm-reactions">
           {reactions.map((r) => (
@@ -183,5 +186,29 @@ export function BattleCommand(p: Props) {
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * APEX 2.4 – GM sneak alerts: which opponent would spot (❗) or hear (❓ + direction) a sneaking creature right now.
+ * A table aid only (APEX awareness radius, see game/stealth.ts) – the GM decides: reveal, call for a Search, or ignore.
+ */
+function StealthAlerts({ snapshot, busy, act }: { snapshot: SceneSnapshot; busy: boolean; act: (body: Record<string, unknown>) => void }) {
+  const map = snapshot.scene?.map;
+  if (!map?.hex || !snapshot.clock) return null;
+  const watch = stealthWatch(map, snapshot.figures ?? [], snapshot.clock.lighting);
+  if (!watch.sneakers.length) return null;
+  const actorOf = (id: string) => (id.startsWith('pc-') ? { kind: 'pc', tokenId: id.slice(3) } : { kind: 'npc', id });
+  return (
+    <div className="space-y-1 rounded border border-arcane-400/40 bg-arcane-500/10 px-2 py-1" data-testid="stealth-alerts" aria-label="Sneak alerts">
+      <div className="text-marble-300">🥷 Sneaking: {watch.sneakers.map((s) => s.name).join(', ')} · {watch.marks.length ? `${watch.marks.length} alert${watch.marks.length === 1 ? '' : 's'}` : 'nobody notices anything'}</div>
+      {watch.marks.map((m) => (
+        <div key={m.watcherId} className="flex flex-wrap items-center gap-2">
+          <span className={m.kind === 'spotted' ? 'font-bold text-red-300' : 'text-amber-200'}>{m.kind === 'spotted' ? '❗' : `❓${bearingArrow(m.bearing)}`} {m.watcherName}</span>
+          <span className="text-marble-400">{m.kind === 'spotted' ? `sees ${m.targetName} (passive Perception reaches the Stealth)` : `hears something (${m.targetName})`}</span>
+          {m.kind === 'spotted' && <button type="button" className="btn btn-ghost px-1.5 py-0" disabled={busy} onClick={() => act({ action: 'hide', actor: actorOf(m.targetId), off: true })}>Reveal {m.targetName}</button>}
+        </div>
+      ))}
+    </div>
   );
 }

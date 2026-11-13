@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
-import { decodeTiles, heightLookup, hexAt, hexMovementCost, type TileDef } from '../../campaign/hexScene';
+import { decodeTiles, heightLookup, hexAt, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
+import { MAX_ALTITUDE_FT } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
@@ -28,6 +29,8 @@ import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
 import { FX_COLOR } from './CombatFx';
+import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
+import { fromPixel } from '../../game/hex';
 
 /** World units: a hex has corner radius 1; one 5-ft level = one hex width high (true scale, LEVEL from world3d). */
 const BASE = 0.35;
@@ -59,6 +62,10 @@ interface Props {
   /** APEX 1.9 – aim height (Shift + wheel) and combat events to animate. */
   aimAlt?: number;
   fx?: SceneFx[];
+  /** APEX 2.4 – the moving figure can fly: its current altitude (ft). Shows the reach as a 3D volume around it. */
+  flyAlt?: number | null;
+  /** APEX 2.4 – sneaking: awareness rings of the opponents and (GM) spotted / heard marks. */
+  stealth?: { rings: AwarenessRing[]; marks?: StealthMark[] } | null;
 }
 
 /** APEX 2.1 – 3D quality (per device): resolution, shadows, grass and animation. 'auto' picks by the device. */
@@ -425,7 +432,7 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -446,7 +453,9 @@ export default function HexScene3D(p: Props) {
         const g = fig.group;
         g.position.set(w.x + off.x, y + lift, w.z + off.z);
         g.rotation.y = yawMemory.get(tk.tokenId) ?? (enemy ? Math.PI : 0); // keeps the direction it last turned to
-        g.userData = { tokenId: tk.tokenId, idle: { kind: fig.animKind, body: fig.body, head: fig.head, baseY: fig.body.position.y, phase: (tk.tokenId.charCodeAt(0) * 13 + tk.tokenId.length * 7) % 100 / 10, hostile: !!enemy && !enemy.ally, yaw: g.rotation.y, rest: 0, height: fig.height, wings: fig.wings ?? [] } };
+        g.userData = { tokenId: tk.tokenId, idle: { kind: fig.animKind, body: fig.body, head: fig.head, baseY: fig.body.position.y, phase: (tk.tokenId.charCodeAt(0) * 13 + tk.tokenId.length * 7) % 100 / 10, hostile: !!enemy && !enemy.ally, yaw: g.rotation.y, rest: 0, height: fig.height, wings: fig.wings ?? [], crouch: tk.sneaking ? 1 : 0, crouchNow: tk.sneaking ? 1 : 0 } };
+        // APEX 2.4 – sneaking figures crouch (also without the idle animation); a portrait standee ducks lower
+        if (tk.sneaking) { if (fig.animKind === 'still') g.scale.y *= 0.74; else { fig.body.scale.y = 0.7; fig.body.scale.x = fig.body.scale.z = 1.08; if (fig.animKind === 'humanoid') fig.body.rotation.x = 0.2; } }
         if (fig.card) anim.current.cards.push(fig.card);
         if (fig.wings) anim.current.wings.push(...fig.wings);
         if (lift > 0) {
@@ -461,6 +470,61 @@ export default function HexScene3D(p: Props) {
       });
     }
   }, [tokenKey, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  // --- APEX 2.4 sneaking: awareness rings on the ground (following the relief) and “!” / “?” above the watchers
+  const stealthGroup = useRef<THREE.Group | null>(null);
+  const stealthKey = JSON.stringify(p.stealth ?? null);
+  useEffect(() => {
+    const t = three.current;
+    if (!t) return;
+    if (!stealthGroup.current) { stealthGroup.current = new THREE.Group(); t.scene.add(stealthGroup.current); }
+    const grp = stealthGroup.current;
+    grp.children.forEach((o) => { o.traverse((c) => { const m = c as THREE.Mesh; m.geometry?.dispose(); const mat = m.material as THREE.Material & { map?: THREE.Texture | null }; mat?.map?.dispose(); mat?.dispose?.(); }); });
+    grp.clear();
+    const st = p.stealth;
+    if (st) {
+      const unit = p.map.unitsPerCell || 5;
+      const groundAt = (x: number, z: number) => { const k = hexKey(fromPixel(x * HEX_SIZE, z * HEX_SIZE, HEX_SIZE)); return tiles.has(k) ? top(k) : BASE; };
+      for (const r of st.rings) {
+        const k = hexKey(hexAt(p.map, r)); const c = toWorld(center(parseKey(k)));
+        const rad = (r.ft / unit) * Math.sqrt(3);
+        const pts: THREE.Vector3[] = [];
+        for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2; const x = c.x + Math.cos(a) * rad, z = c.z + Math.sin(a) * rad; pts.push(new THREE.Vector3(x, groundAt(x, z) + 0.12, z)); }
+        const col = r.danger ? 0xff5a4a : 0xf3c86a;
+        // a solid band (red) or a dashed band (gold): flat tube pieces following the ground
+        const band = new THREE.MeshBasicMaterial({ color: col });
+        const pieces: THREE.BufferGeometry[] = [];
+        const step = r.danger ? 1 : 2;
+        for (let i = 0; i + 1 < pts.length; i += step) {
+          const seg = new THREE.TubeGeometry(new THREE.LineCurve3(pts[i], pts[i + 1]), 1, 0.07, 4, false);
+          pieces.push(seg);
+        }
+        const ring = new THREE.Mesh(mergeGeometries(pieces), band); pieces.forEach((g) => g.dispose());
+        ring.renderOrder = 6;
+        grp.add(ring);
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(`👁 ${r.passive} · ${r.ft} ft`, r.danger ? '#ff9a8a' : '#f3dc9a', false), transparent: true, depthTest: false }));
+        sp.scale.set(2.4, 0.6, 1); sp.position.set(c.x + rad * 0.7, groundAt(c.x + rad * 0.7, c.z - rad * 0.7) + 0.6, c.z - rad * 0.7); sp.renderOrder = 8;
+        grp.add(sp);
+      }
+      for (const m of st.marks ?? []) {
+        const k = hexKey(hexAt(p.map, m)); const c = toWorld(center(parseKey(k)));
+        const y = top(k) + ((m.alt ?? 0) / 5) * LEVEL + 3.1;
+        const text = m.kind === 'spotted' ? '❗' : `❓${bearingArrow(m.bearing)}`;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(text, m.kind === 'spotted' ? '#ff4a3a' : '#ffd36a', true), transparent: true, depthTest: false }));
+        sp.scale.set(m.kind === 'spotted' ? 2.6 : 3, 0.7, 1); sp.position.set(c.x, y, c.z); sp.renderOrder = 9;
+        sp.userData.pulse = m.kind;
+        grp.add(sp);
+        if (m.kind === 'heard') {
+          // a short arrow on the ground towards the noise (bearing 0 = up on the map = −z)
+          const a = (m.bearing * Math.PI) / 180, dx = Math.sin(a), dz = -Math.cos(a);
+          const from = new THREE.Vector3(c.x + dx * 0.9, top(k) + 0.2, c.z + dz * 0.9), to = new THREE.Vector3(c.x + dx * 2.6, top(k) + 0.2, c.z + dz * 2.6);
+          const arrow = new THREE.ArrowHelper(to.clone().sub(from).normalize(), from, 1.7, 0xffd36a, 0.6, 0.4);
+          grp.add(arrow);
+        }
+      }
+    }
+    dirty.current = true;
+  }, [stealthKey, tiles, height]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // shadows are baked, not drawn every frame: re-bake when terrain, figures, phase or quality change
   useEffect(() => { if (three.current) three.current.renderer.shadowMap.needsUpdate = true; }, [tokenKey, tiles, height, p.phase, quality]);
 
@@ -483,6 +547,43 @@ export default function HexScene3D(p: Props) {
       t.overlay.add(m);
     };
     if (p.reach) for (const k of p.reach.keys()) if (tiles.has(k)) disc(k, 0xf3dc9a, 0.22);
+    // APEX 2.4 – flying reach: every point with horizontal path cost + climb/descent ≤ the movement left – a
+    // glassy volume (a lens, widest at the current height) to aim into with Shift + wheel
+    const flyAlt = p.flyAlt ?? null;
+    if (flyAlt !== null && p.pathFrom && p.pathBudget && p.pathBudget > 0) {
+      const unit = p.map.unitsPerCell || 5;
+      const air = hexReach(p.map, p.pathFrom, p.pathBudget, { fly: true });
+      const startK = hexKey(hexAt(p.map, p.pathFrom));
+      air.set(startK, { cost: 0, prev: null });
+      const z0 = height(startK) * unit + flyAlt;
+      // a stepped dome: one glassy lid per hex at the highest reachable point, its outline, and a lower lid where the
+      // reach does not go down to the ground – reads like a sphere around the figure without fogging the map
+      const caps: THREE.BufferGeometry[] = [], edges: number[] = [];
+      const lid = (x: number, y: number, z: number) => {
+        const cap = new THREE.CircleGeometry(0.9, 6); cap.rotateX(-Math.PI / 2); cap.rotateY(Math.PI / 6); cap.translate(x, y, z); caps.push(cap);
+        for (let i = 0; i < 6; i++) { const a0 = (Math.PI / 3) * i + Math.PI / 6, a1 = a0 + Math.PI / 3; edges.push(x + Math.cos(a0) * 0.9, y, z - Math.sin(a0) * 0.9, x + Math.cos(a1) * 0.9, y, z - Math.sin(a1) * 0.9); }
+      };
+      for (const [k, { cost }] of air) {
+        if (!tiles.has(k)) continue;
+        const left = p.pathBudget - cost * unit;
+        if (left < 0) continue;
+        const g = height(k) * unit;
+        const lo = Math.max(g, z0 - left), hi = Math.min(g + MAX_ALTITUDE_FT, z0 + left);
+        if (hi - lo < 1) continue;
+        const w = toWorld(center(parseKey(k)));
+        lid(w.x, top(k) + ((hi - g) / 5) * LEVEL, w.z);
+        if (lo > g + 1) lid(w.x, top(k) + ((lo - g) / 5) * LEVEL, w.z);
+      }
+      if (caps.length) {
+        const glass = new THREE.MeshBasicMaterial({ color: 0x7fd6ff, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide });
+        const m1 = new THREE.Mesh(mergeGeometries(caps), glass);
+        const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.Float32BufferAttribute(edges, 3));
+        const m2 = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.55 }));
+        m1.renderOrder = 3; m2.renderOrder = 4;
+        caps.forEach((g) => g.dispose());
+        t.overlay.add(m1, m2);
+      }
+    }
     // APEX 2.0 – sight preview: from the hovered hex (where the figure could stand) to every opponent in sight –
     // white within the readied range, gold beyond it; hovering an opponent shows the line from the figure to it
     if (hover && p.sightSide && (p.sightFrom ?? null)) {
@@ -492,12 +593,14 @@ export default function HexScene3D(p: Props) {
       const label = (text: string, at: THREE.Vector3, color: string) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTexture(text, color, false), transparent: true, depthTest: false })); sp.scale.set(2.2, 0.55, 1); sp.position.copy(at); sp.renderOrder = 8; t.overlay.add(sp); };
       const segment = (a: THREE.Vector3, b: THREE.Vector3, color: number, dashed: boolean) => { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), dashed ? new THREE.LineDashedMaterial({ color, dashSize: 0.35, gapSize: 0.25, depthTest: false, transparent: true }) : new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true })); if (dashed) l.computeLineDistances(); l.renderOrder = 7; t.overlay.add(l); };
       const self = hexKey(hexAt(p.map, p.sightFrom!));
+      // APEX 2.4 – a flyer looks from its altitude (at the hovered hex: the aim height while it can fly)
+      const myAlt = p.flyAlt ?? 0, hoverAlt = p.flyAlt !== null && p.flyAlt !== undefined ? (p.aimAlt ?? 0) || myAlt : 0;
       const onOpp = opp.find((tk) => hexKey(hexAt(p.map, tk)) === hover);
       const unit = p.map.unitsPerCell || 5;
       if (onOpp && p.lineRangeFt) {
         const ft = Math.max(distance(parseKey(self), parseKey(hover)) * unit, Math.abs((height(hover) * 5 + (onOpp.alt ?? 0)) - height(self) * 5));
-        const ok = ft <= p.lineRangeFt && lineOfSight(parseKey(self), parseKey(hover), rules.blocks, rules.height, { a: 0, b: (onOpp.alt ?? 0) / 5 });
-        const a = eyeOf(self), b = eyeOf(hover, onOpp.alt);
+        const ok = ft <= p.lineRangeFt && lineOfSight(parseKey(self), parseKey(hover), rules.blocks, rules.height, { a: myAlt / 5, b: (onOpp.alt ?? 0) / 5 });
+        const a = eyeOf(self, myAlt), b = eyeOf(hover, onOpp.alt);
         segment(a, b, ok ? 0xffffff : 0xff6b5a, !ok);
         label(`${ft} ft${ok ? '' : ' ✕'}`, a.clone().lerp(b, 0.5).add(new THREE.Vector3(0, 0.5, 0)), ok ? '#ffffff' : '#ff9a8a');
       } else if (hover !== self) {
@@ -505,10 +608,10 @@ export default function HexScene3D(p: Props) {
         for (const tk of opp) {
           const k = hexKey(hexAt(p.map, tk));
           const ft = Math.max(distance(parseKey(hover), parseKey(k)) * unit, Math.abs((height(k) * 5 + (tk.alt ?? 0)) - height(hover) * 5));
-          if (ft > 40 * unit || !lineOfSight(parseKey(hover), parseKey(k), rules.blocks, rules.height, { a: 0, b: (tk.alt ?? 0) / 5 })) continue;
+          if (ft > 40 * unit || !lineOfSight(parseKey(hover), parseKey(k), rules.blocks, rules.height, { a: hoverAlt / 5, b: (tk.alt ?? 0) / 5 })) continue;
           seen++;
           const ok = !p.lineRangeFt || ft <= p.lineRangeFt;
-          const a = eyeOf(hover), b = eyeOf(k, tk.alt);
+          const a = eyeOf(hover, hoverAlt), b = eyeOf(k, tk.alt);
           segment(a, b, ok ? 0xffffff : 0xf3c86a, !ok);
           label(`${ft} ft`, a.clone().lerp(b, 0.55).add(new THREE.Vector3(0, 0.4, 0)), ok ? '#ffffff' : '#f3dc9a');
         }
@@ -531,10 +634,22 @@ export default function HexScene3D(p: Props) {
       const area = p.areaAt ? p.areaAt(scenePoint(hover)) : null;
       if (area) for (const k of area) disc(k, 0xff7828, 0.5, 0.05);
       if (p.pathFrom && !area) {
-        const r = hexMovementCost(p.map, p.pathFrom, scenePoint(hover), p.pathMode);
+        const flying = p.flyAlt !== null && p.flyAlt !== undefined && (p.flyAlt > 0 || (p.aimAlt ?? 0) > 0);
+        const r = hexMovementCost(p.map, p.pathFrom, scenePoint(hover), flying ? { ...p.pathMode, fly: true } : p.pathMode);
         if (r.ok && r.steps.length) {
-          const ok = p.pathBudget === null || p.pathBudget === undefined || r.cost <= p.pathBudget + 1e-9;
-          const pts = [p.pathFrom, ...r.steps].map((q) => { const k = hexKey(hexAt(p.map, q)); const w = toWorld(center(parseKey(k))); return new THREE.Vector3(w.x, top(k) + 0.15, w.z); });
+          // flying: the path rises / sinks from the current altitude to the aim height; climbing costs feet too
+          const unit = p.map.unitsPerCell || 5;
+          const fromK = hexKey(hexAt(p.map, p.pathFrom));
+          const z0 = height(fromK) * unit + (p.flyAlt ?? 0), z1 = height(hover) * unit + (p.aimAlt ?? 0);
+          const vertical = flying ? Math.abs(z1 - z0) : 0;
+          const ok = p.pathBudget === null || p.pathBudget === undefined || r.cost + vertical <= p.pathBudget + 1e-9;
+          const all = [p.pathFrom, ...r.steps];
+          const pts = all.map((q, i) => {
+            const k = hexKey(hexAt(p.map, q)); const w = toWorld(center(parseKey(k)));
+            if (!flying) return new THREE.Vector3(w.x, top(k) + 0.15, w.z);
+            const z = z0 + ((z1 - z0) * i) / Math.max(1, all.length - 1);
+            return new THREE.Vector3(w.x, Math.max(top(k), BASE + (z / 5) * LEVEL) + 0.15, w.z);
+          });
           const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.2);
           const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(8, pts.length * 6), 0.07, 6, false), new THREE.MeshBasicMaterial({ color: ok ? 0xf3dc9a : 0xff6b5a }));
           t.overlay.add(tube);
@@ -542,7 +657,7 @@ export default function HexScene3D(p: Props) {
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {
@@ -777,7 +892,7 @@ export default function HexScene3D(p: Props) {
   );
 }
 
-type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null };
+type Idle = { kind: string; body: THREE.Object3D; head?: THREE.Object3D; baseY: number; phase: number; hostile: boolean; yaw: number; rest: number; height: number; wings: THREE.Object3D[]; target?: number | null; /** APEX 2.4 – sneaking: 1 = crouched low */ crouch: number; crouchNow: number };
 const ALERT_RANGE = 5 * Math.sqrt(3) * 1.05; // ≈ 5 hexes (25 ft): closer opponents wake resting creatures
 type Critter = { obj: THREE.Object3D; behaviour: string; spots: THREE.Vector3[]; home: THREE.Vector3; target: THREE.Vector3 | null; wait: number; phase: number; wings: THREE.Object3D[]; last?: number };
 /** Ambient animals: walk between spots and graze, hop, peck, prowl – or circle in the sky; shy away from figures. */
@@ -841,11 +956,13 @@ function idleStep(tokens: THREE.Group, sec: number) {
     const restGoal = (ia.kind === 'creature' || ia.kind === 'flyer') && (ia.near ?? Infinity) > ALERT_RANGE ? 1 : 0;
     ia.rest += (restGoal - ia.rest) * 0.03;
     const breathe = Math.sin(t * (ia.kind === 'humanoid' ? 2.1 : 1.5)) * (ia.kind === 'humanoid' ? 0.012 : 0.025);
-    ia.body.scale.y = (1 + breathe) * (1 - ia.rest * 0.28);
-    ia.body.scale.x = ia.body.scale.z = 1 - breathe * 0.4 + ia.rest * 0.05;
+    ia.crouchNow += (ia.crouch - ia.crouchNow) * 0.08;
+    const c = ia.crouchNow;
+    ia.body.scale.y = (1 + breathe) * (1 - ia.rest * 0.28) * (1 - c * 0.3);
+    ia.body.scale.x = ia.body.scale.z = (1 - breathe * 0.4 + ia.rest * 0.05) * (1 + c * 0.08);
     ia.body.position.y = ia.baseY;
-    ia.body.rotation.z = ia.kind === 'humanoid' ? Math.sin(t * 0.7) * 0.018 : 0;
-    ia.body.rotation.x = ia.kind === 'humanoid' ? 0 : -ia.rest * 0.05 + Math.sin(t * 0.9) * 0.01;
+    ia.body.rotation.z = ia.kind === 'humanoid' ? Math.sin(t * 0.7) * 0.018 * (1 - c) : 0;
+    ia.body.rotation.x = ia.kind === 'humanoid' ? c * 0.2 : -ia.rest * 0.05 + Math.sin(t * 0.9) * 0.01;
     for (const w of ia.wings) w.userData.amp = ia.rest > 0.5 ? 0.04 : w.userData.amp0 ?? (w.userData.amp0 = w.userData.amp ?? 0.15);
     if (ia.head) {
       // the head looks around a little, or at the opponent (relative to the body)

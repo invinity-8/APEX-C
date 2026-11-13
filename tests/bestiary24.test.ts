@@ -21,3 +21,24 @@ describe('extended bestiary', () => {
     expect(missing).toEqual([]);
   });
 });
+
+import { sceneVision, lineOfSight } from '../src/campaign/hexVision';
+import { generateBattleScene, hexCentre, hexSceneMap } from '../src/campaign/hexScene';
+import { emptyMap } from '../src/campaign/maps';
+describe('flying vision', () => {
+  it('a high flyer looks over a tree line; on the ground it blocks', () => {
+    const blocks = (k: string) => k === '1,0';
+    expect(lineOfSight({ q: 0, r: 0 }, { q: 2, r: 0 }, blocks)).toBe(false);
+    expect(lineOfSight({ q: 0, r: 0 }, { q: 2, r: 0 }, blocks, () => 0, { a: 1, b: 0 })).toBe(false); // 5 ft: still below the crowns
+    expect(lineOfSight({ q: 0, r: 0 }, { q: 2, r: 0 }, blocks, () => 0, { a: 8, b: 0 })).toBe(true); // 40 ft up
+  });
+  it('sees more of a forest map from 60 ft than on the ground', () => {
+    const map = hexSceneMap(emptyMap('battle'), generateBattleScene('forest', 10, 7));
+    const at = hexCentre(map, { q: 0, r: 0 });
+    const clock = { day: 1, phase: 'day' as const, lighting: 'dim' as const, version: 0 };
+    const ground = sceneVision(map, clock, [{ at, darkvisionFt: 0 }]);
+    const air = sceneVision(map, clock, [{ at, darkvisionFt: 0, altFt: 60 }]);
+    expect(air.size).toBeGreaterThan(ground.size * 1.3);
+    for (const k of ground) expect(air.has(k)).toBe(true);
+  });
+});
