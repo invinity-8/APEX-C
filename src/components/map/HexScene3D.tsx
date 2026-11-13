@@ -247,7 +247,8 @@ export default function HexScene3D(p: Props) {
     for (const k of keys) { const f = surfaceOf(tiles.get(k)!.id); families.set(f, [...(families.get(f) ?? []), k]); }
     const m4 = new THREE.Matrix4(), col = new THREE.Color();
     for (const [fam, list] of families) {
-      const top0 = new THREE.MeshStandardMaterial({ roughness: fam === 'marble' ? 0.35 : fam === 'smooth' ? 0.6 : 0.92, metalness: 0.02, map: surfaceTexture(fam) });
+      const top0 = new THREE.MeshStandardMaterial({ roughness: fam === 'marble' ? 0.35 : fam === 'smooth' ? 0.6 : 0.92, metalness: 0.02, map: surfaceTexture(fam), ...(qcfg.shadow ? { bumpMap: surfaceTexture(fam), bumpScale: fam === 'marble' || fam === 'carpet' ? 0.6 : fam === 'cobbles' || fam === 'flag' ? 3.2 : 2.2 } : {}) });
+      groundSurface(top0);
       const mesh = new THREE.InstancedMesh(geo, [top0, side], list.length);
       mesh.receiveShadow = true; mesh.castShadow = true;
       list.forEach((k, i) => {
@@ -354,7 +355,7 @@ export default function HexScene3D(p: Props) {
       if (!/deep|shallow|water|river/.test(tile.id)) continue;
       const pts = Array.from({ length: 6 }, (_, i) => corner(0, 0, 1, i));
       const g = new THREE.ShapeGeometry(new THREE.Shape(pts.map((v) => new THREE.Vector2(v.x, v.y)))); g.rotateX(Math.PI / 2);
-      const wm = new THREE.MeshStandardMaterial({ color: new THREE.Color(tile.fill).offsetHSL(0, 0.1, 0.08), transparent: true, opacity: 0.72, roughness: 0.15, metalness: 0.3, side: THREE.DoubleSide });
+      const wm = waterMaterial(new THREE.Color(tile.fill).offsetHSL(0, 0.1, 0.08), anim.current.time);
       const m = new THREE.Mesh(g, wm); const w = toWorld(center(parseKey(k)));
       m.position.set(w.x, top(k) - 0.06, w.z); m.userData.phase = (parseKey(k).q + parseKey(k).r) * 0.7;
       wm.userData.phase = m.userData.phase;
@@ -705,7 +706,7 @@ export default function HexScene3D(p: Props) {
       const a = anim.current;
       a.time.value = sec;
       for (const c of a.crowns) { c.rotation.z = Math.sin(sec * 0.9 + c.userData.phase) * 0.035; c.rotation.x = Math.sin(sec * 0.7 + c.userData.phase * 1.3) * 0.025; }
-      for (const w of a.water) w.opacity = 0.66 + Math.sin(sec * 1.3 + (w.userData.phase as number)) * 0.06;
+      for (const w of a.water) w.opacity = 0.7 + Math.sin(sec * 1.3 + (w.userData.phase as number)) * 0.05;
       for (const f of a.flames) { f.scale.y = 0.85 + Math.sin(sec * 9 + f.id) * 0.12 + Math.sin(sec * 23 + f.id * 2) * 0.05; f.rotation.y = sec * 0.6; }
       for (const w of a.wings) { if (w.userData.flapZ) w.rotation.z = Math.sin(sec * 6 + w.id) * (w.userData.amp as number) * (w.userData.side as number); else w.rotation.x = Math.sin(sec * 7 + w.id) * 0.6 * (w.userData.side as number); }
       // APEX 2.3 – idle life: breathing, weight shift, turning to the nearest opponent, creatures resting until approached
@@ -990,6 +991,72 @@ function rockTexture(): THREE.Texture {
   rockTex.wrapS = rockTex.wrapT = THREE.RepeatWrapping;
   rockTex.colorSpace = THREE.SRGBColorSpace;
   return rockTex;
+}
+
+/**
+ * APEX 2.4 – ground surface: the texture runs in world space across the hexes (no repeating tile per hex), a bump
+ * map gives it relief (stones, joints, clods – the rules stay flat), and a slow large-scale mottling breaks up
+ * uniform colour.
+ */
+function groundSurface(m: THREE.MeshStandardMaterial) {
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vApexW;')
+      .replace('#include <uv_vertex>', `#include <uv_vertex>
+        vec4 apexW = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vApexW = apexW.xyz;
+        vec2 apexUv = apexW.xz * 0.33;
+        #ifdef USE_MAP
+          vMapUv = apexUv;
+        #endif
+        #ifdef USE_BUMPMAP
+          vBumpMapUv = apexUv;
+        #endif`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vApexW;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float apexN = sin(vApexW.x * 0.41 + 1.7) * sin(vApexW.z * 0.37 + 0.4) + 0.6 * sin(vApexW.x * 0.13 - vApexW.z * 0.17);
+        diffuseColor.rgb *= 1.0 + apexN * 0.055;`);
+  };
+  m.customProgramCacheKey = () => 'apex-ground';
+}
+let rippleTex: THREE.Texture | null = null;
+/** A soft ripple pattern for water (tiles seamlessly). */
+function rippleTexture(): THREE.Texture {
+  if (rippleTex) return rippleTex;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#d8d8d8'; g.fillRect(0, 0, 256, 256);
+  let s = 4242; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  for (let i = 0; i < 70; i++) {
+    const x = rnd() * 256, y = rnd() * 256, len = 20 + rnd() * 50, a = 0.25 + rnd() * 0.35;
+    for (const dx of [-256, 0, 256]) for (const dy of [-256, 0, 256]) {
+      g.strokeStyle = `rgba(255,255,255,${a})`; g.lineWidth = 1.5 + rnd() * 2; g.beginPath();
+      g.moveTo(x + dx, y + dy); g.quadraticCurveTo(x + dx + len / 2, y + dy - 4 - rnd() * 4, x + dx + len, y + dy); g.stroke();
+    }
+  }
+  rippleTex = new THREE.CanvasTexture(cv); rippleTex.wrapS = rippleTex.wrapT = THREE.RepeatWrapping; rippleTex.colorSpace = THREE.SRGBColorSpace;
+  return rippleTex;
+}
+/** APEX 2.4 – water that flows: two ripple layers drift across the surface in world space. */
+function waterMaterial(color: THREE.Color, time: { value: number }): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.74, roughness: 0.12, metalness: 0.3, side: THREE.DoubleSide, map: rippleTexture() });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uApexTime = time;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vApexXZ;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvApexXZ = (modelMatrix * vec4(position, 1.0)).xz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vApexXZ;\nuniform float uApexTime;')
+      .replace('#include <map_fragment>', `
+        vec2 apexA = vApexXZ * 0.22 + vec2(uApexTime * 0.045, uApexTime * 0.018);
+        vec2 apexB = vApexXZ * 0.31 + vec2(-uApexTime * 0.02, uApexTime * 0.037);
+        float apexTa = texture2D(map, apexA).r, apexTb = texture2D(map, apexB).r;
+        float apexHl = smoothstep(0.88, 1.0, apexTa) * 0.7 + smoothstep(0.88, 1.0, apexTb) * 0.55;
+        diffuseColor.rgb = diffuseColor.rgb * (0.9 + (apexTa + apexTb - 1.7) * 0.5) + vec3(apexHl * 0.28);`);
+  };
+  m.customProgramCacheKey = () => 'apex-water';
+  return m;
 }
 
 /** Floating text as a sprite texture (combat numbers, distances). */
