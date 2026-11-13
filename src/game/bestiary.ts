@@ -11,6 +11,7 @@
  */
 import { parseLook, type FigureLook } from './figure.js';
 import { parseCreature, type CreatureChoice } from './creatures.js';
+import { EXTRA_BESTIARY } from './bestiaryExtra.js';
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export const ABILITY_KEYS: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
@@ -129,6 +130,8 @@ export const BUILTIN_BESTIARY: StatBlock[] = [
     buffs: [{ name: 'Blood war cry', radiusFt: 30, toHit: 2, self: false, uses: 2, cost: 'bonus' }],
     traits: [{ name: 'Elite', text: 'An APEX elite shaman: war cry (+2 to hit for allies within 30 ft until its next turn), roots that restrain, fire.' }], color: '#8a2a2a', icon: 'Bc', source: 'APEX',
   },
+  // APEX 2.4: the extended library (beasts, mounts, monstrosities, dragons, giants, undead, aberrations, humanoids …)
+  ...EXTRA_BESTIARY,
 ];
 
 /** The library of a campaign: built-in creatures plus the GM's own (same id replaces a built-in). */
