@@ -110,20 +110,27 @@ export function SceneDirector() {
     {offset !== null && <button disabled={busy || libraryLoading} onClick={() => void more()}>Load more scenes</button>}
     </aside>
     <main className="scene-director-detail" aria-label="Scene editing workspace">
-    {preview ? <section className="scene-private-editor"><h2>{preview.name}</h2>
-      <p>GM-only editor. Players only see the published version, once you switch to it in Game.</p>
-      <p>{labels[preview.category]} · {preview.is_draft ? 'Draft' : 'Published'}</p>
+    {preview ? <section className="scene-private-editor">
+      {/* APEX 2.4 – compact head: name, status and the scene actions in one row; the map and its tools follow at once */}
+      <div className="scene-editor-head">
+        <h2>{preview.name}</h2>
+        <span className="chip">{labels[preview.category]} · {preview.is_draft ? 'Draft' : 'Published'}</span>
+        <span className="scene-editor-head-actions">
+          {!preview.is_legacy_arena && <button disabled={busy} onClick={() => void action('duplicate')}>Duplicate as draft</button>}
+          {!preview.is_legacy_arena && <button disabled={busy} onClick={() => void action(preview.archived ? 'restore' : 'archive')}>{preview.archived ? 'Restore scene' : 'Archive scene'}</button>}
+          <button className="btn btn-ghost" onClick={() => { generation.current++; setPreview(null); }}>← Library</button>
+        </span>
+      </div>
       {preview.is_legacy_arena && <p>This scene references the existing saved Arena. Its terrain and progress are preserved.</p>}
-      <SanctuarySettingsPanel candidateAsset={parseMap(preview.metadata)?.playerBackgroundAsset} candidateName={preview.name} />
-      <label>Associated parent scene <select disabled={busy} value={preview.parent_scene_id ?? ''} onChange={e => void action('parent', { parentId: e.target.value || null })}><option value="">Campaign root</option>{scenes.filter(s => !s.archived && s.category === ({ world: 'celestial', region: 'world', battle: 'region', celestial: null }[preview.category])).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      {parentOffset!==null && <button disabled={busy} onClick={()=>{const parent=({world:'celestial',region:'world',battle:'region',celestial:null} as const)[preview.category];if(parent){setBusy(true);api.sceneList(parentOffset,{category:parent,archived:false,sort:'name'}).then(page=>{cache(page.scenes);setParentOffset(page.nextOffset);}).catch(e=>setError(String(e))).finally(()=>setBusy(false));}}}>Load more parent locations</button>}
-      {!preview.is_legacy_arena && <>
-        <form key={preview.id + preview.name} onSubmit={e => { e.preventDefault(); void action('rename', { name: new FormData(e.currentTarget).get('name') }); }}><label>Rename scene <input name="name" defaultValue={preview.name} maxLength={120} required /></label><button disabled={busy}>Rename</button></form>
-        <button disabled={busy} onClick={() => void action('duplicate')}>Duplicate as draft</button>
-        <button disabled={busy} onClick={() => void action(preview.archived ? 'restore' : 'archive')}>{preview.archived ? 'Restore scene' : 'Archive scene'}</button>
-        <SceneMapEditor key={`map-${preview.id}`} scene={preview} onSaved={saved} />
-      </>}
-      <button className="btn btn-ghost" onClick={() => { generation.current++; setPreview(null); }}>Back to scene library</button>
+      {!preview.is_legacy_arena && <SceneMapEditor key={`map-${preview.id}`} scene={preview} onSaved={saved} />}
+      <details className="scene-settings" data-testid="scene-settings">
+        <summary>⚙ Scene settings – name, parent scene, default atmosphere and background</summary>
+        <p className="scene-settings-note">GM-only editor. Players only see the published version, once you switch to it in Game.</p>
+        {!preview.is_legacy_arena && <form key={preview.id + preview.name} onSubmit={e => { e.preventDefault(); void action('rename', { name: new FormData(e.currentTarget).get('name') }); }}><label>Rename scene <input name="name" defaultValue={preview.name} maxLength={120} required /></label><button disabled={busy}>Rename</button></form>}
+        <label>Associated parent scene <select disabled={busy} value={preview.parent_scene_id ?? ''} onChange={e => void action('parent', { parentId: e.target.value || null })}><option value="">Campaign root</option>{scenes.filter(s => !s.archived && s.category === ({ world: 'celestial', region: 'world', battle: 'region', celestial: null }[preview.category])).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+        {parentOffset!==null && <button disabled={busy} onClick={()=>{const parent=({world:'celestial',region:'world',battle:'region',celestial:null} as const)[preview.category];if(parent){setBusy(true);api.sceneList(parentOffset,{category:parent,archived:false,sort:'name'}).then(page=>{cache(page.scenes);setParentOffset(page.nextOffset);}).catch(e=>setError(String(e))).finally(()=>setBusy(false));}}}>Load more parent locations</button>}
+        <SanctuarySettingsPanel candidateAsset={parseMap(preview.metadata)?.playerBackgroundAsset} candidateName={preview.name} />
+      </details>
     </section> : <div className="scene-editor-empty"><span aria-hidden="true">🗺</span><h2>Select a scene to edit</h2><p>Create a draft or open a scene from the library. Upload a PNG background in the map editor, set a spawn point and publish.</p></div>}
     </main>
     </div>
