@@ -7,6 +7,8 @@ import { useMapZoom } from './map/MapStage';
 import { HexSceneMap, type SceneToken } from './map/HexSceneMap';
 import { hexReach } from '../campaign/hexScene';
 import { stealthWatch } from '../game/stealth';
+import { TimeDial, useWorldMinute } from './TimeDial';
+import { hourOf } from '../game/worldTime';
 import type { TokenView } from '../game/visibility';
 import { figureIcons } from './map/effectIcons';
 
@@ -37,7 +39,15 @@ export interface SceneInteraction {
   moveMode?: { fly?: boolean; climb?: boolean };
   /** Reach area origin (default: the viewer's own token). */
   reachFrom?: { x: number; y: number } | null;
+  /** APEX 2.5 – feet a Dash would add this turn (the path turns orange there, red beyond). */
+  pathDash?: number | null;
+  /** APEX 2.5 – what a right-click on this hex would do (shown at the mouse pointer). */
+  intentAt?: (hex: string) => MapIntent | null;
+  /** APEX 2.5 – a right-click that needs a choice (too far: as far as possible, Dash …); a second right-click takes the first. */
+  menuAt?: (hex: string, point: { x: number; y: number; alt?: number }) => MapMenuItem[] | null;
 }
+export interface MapIntent { icon: string; label: string; tone?: 'move' | 'attack' | 'spell' | 'dash' | 'bad' | 'menu' }
+export interface MapMenuItem { icon: string; label: string; run: () => void }
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
 export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets, selectedId = null, interaction = {}, compact = false }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted figure ids (attack mode). */ targets?: string[]; /** GM: the selected figure (token or NPC id). */ selectedId?: string | null; /** APEX 1.2 right-click, previews, camera focus. */ interaction?: SceneInteraction; /** APEX 1.9: inside the battle layout – the map only, no title. */ compact?: boolean }) {
@@ -48,6 +58,8 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   const [view3d, setView3dState] = useState(() => { try { return localStorage.getItem('apex.map.view3d') === '1'; } catch { return false; } });
   // APEX 1.9: aim height (Shift + mouse wheel) – where a flyer moves to, where a sphere's centre lies
   const [aimAlt, setAimAlt] = useState(0);
+  // APEX 2.5 – campaign time (ticks locally while it runs), weather and season for the 3D world
+  const worldMinute = useWorldMinute(snapshot.clock?.world);
   const frameRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = frameRef.current;
@@ -109,12 +121,13 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene">{!compact && <><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p></>}
       <div className="hex-scene-frame" ref={frameRef}>
+        {category === 'battle' && snapshot.clock?.world && <div className="scene-clock-badge" data-testid="scene-clock"><TimeDial world={snapshot.clock.world} weather={snapshot.clock.weather} size={96} /></div>}
         {stealth && view3d && <div className="stealth-legend" data-testid="stealth-legend">🥷 Sneaking – rings: how far opponents pay attention. <b style={{ color: '#ff8a7a' }}>red</b> = it would notice your Stealth when it sees you · <b style={{ color: '#f3dc9a' }}>dashed</b> = you beat its passive Perception</div>}
         {category === 'battle' && (aimAlt > 0 || snapshot.movement?.fly) && <div className="aim-level" data-testid="aim-level" title="Shift + mouse wheel: aim height for flying and spell centres">⇕ Aim {aimAlt} ft{aimAlt ? '' : ' (ground)'} <small>Shift+wheel</small>{aimAlt > 0 && <button type="button" onClick={() => setAimAlt(0)} aria-label="Back to the ground">×</button>}</div>}
         {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
         {view3d && category === 'battle' ? (
           <Suspense fallback={<p className="p-4 text-marble-300">Loading 3D view…</p>}>
-            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
+            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} env={{ ...(worldMinute !== null ? { hour: hourOf(worldMinute) } : {}), weather: snapshot.clock?.weather, season: snapshot.clock?.world?.season, snow: snapshot.clock?.world?.snow }} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
           </Suspense>
         ) : (
           <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} aimAlt={aimAlt} />

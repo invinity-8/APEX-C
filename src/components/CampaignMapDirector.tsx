@@ -54,6 +54,7 @@ import { WorldTravel } from './WorldTravel';
 import { ENEMY_TEMPLATES, npcAttacks } from '../game/sceneCombat';
 import { bestiary } from '../game/bestiary';
 import { EnemyPicker } from './EnemyPicker';
+import { TimeDial } from './TimeDial';
 
 /** Kept for existing callers/tests: a short location label relative to a focused scene. */
 export function assignmentLocation(player: { sceneId: string | null }, focusId: string | null, scenes: Pick<SceneSummary, 'id' | 'name'>[]): string {
@@ -685,6 +686,14 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
                 </button>
               )}
             </div>
+          )}
+          {clock && (
+            <details className="text-xs" open data-testid="world-clock">
+              <summary className="cursor-pointer font-bold text-marble-300">🕰 Time, season and weather</summary>
+              <TimeDial world={clock.world} weather={clock.weather} followTime={clock.followTime !== false} gm busy={busy}
+                onTime={(c) => sceneTurn({ action: 'time', ...c })}
+                onScene={(c) => sceneTurn({ action: 'clock', expectedVersion: clock.version, ...c })} />
+            </details>
           )}
           {clock && shownScene.category === 'battle' && (
             <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Battle lighting" data-testid="scene-lighting">

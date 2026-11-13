@@ -29,6 +29,8 @@ import { LEVEL, buildFigure, surfaceOf, surfaceTexture, tileProp } from './world
 import { lineOfSight, sightRules } from '../../campaign/hexVision';
 import type { SceneFx } from '../../game/sceneFx';
 import { FX_COLOR } from './CombatFx';
+import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, seasonTint, unknownColour, type Backdrop, type Light, type WeatherFx } from './environment3d';
+import type { Season, Weather } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
 import { fromPixel } from '../../game/hex';
 
@@ -64,6 +66,8 @@ interface Props {
   fx?: SceneFx[];
   /** APEX 2.4 – the moving figure can fly: its current altitude (ft). Shows the reach as a 3D volume around it. */
   flyAlt?: number | null;
+  /** APEX 2.5 – time of day (hours), weather, season and snow of the scene. */
+  env?: { hour?: number; weather?: Weather; season?: Season; snow?: number };
   /** APEX 2.4 – sneaking: awareness rings of the opponents and (GM) spotted / heard marks. */
   stealth?: { rings: AwarenessRing[]; marks?: StealthMark[] } | null;
 }
@@ -119,11 +123,14 @@ export default function HexScene3D(p: Props) {
   // APEX 2.1 – the map's colour scheme recolours ground, props and grass in 3D like on the 2D map
   const nodesKey = p.map.nodes.map((n) => `${n.id}:${Math.round(n.x)}:${Math.round(n.y)}:${n.kind}:${n.lightFt ?? ''}`).join('|');
   const pKey = paletteKey(p.map.palette);
+  // APEX 2.5 – season and snow tint the map like a colour scheme does
+  const season = p.env?.season, snow = Math.round((p.env?.snow ?? 0) * 20) / 20;
+  const seasonal = (season && season !== 'summer') || snow > 0;
   const recolor = useMemo(() => {
-    if (!p.map.palette) return null;
-    const fn = gradientMap(p.map.palette);
+    if (!p.map.palette && !seasonal) return null;
+    const fn = p.map.palette ? gradientMap(p.map.palette) : null;
     const mats = new Map<THREE.Material, THREE.Material>();
-    const color = (c: THREE.Color) => { const [r, g, b] = fn([Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]); return c.setRGB(r / 255, g / 255, b / 255); };
+    const color = (c: THREE.Color) => { if (fn) { const [r, g, b] = fn([Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]); c.setRGB(r / 255, g / 255, b / 255); } return seasonal ? seasonTint(c, season, snow) : c; };
     const material = (m: THREE.Material) => {
       const std = m as THREE.MeshStandardMaterial;
       if (!std.isMeshStandardMaterial || (std.emissiveIntensity > 0 && std.emissive.getHex() !== 0)) return m;
@@ -132,7 +139,7 @@ export default function HexScene3D(p: Props) {
       return hit;
     };
     return { color, material };
-  }, [pKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pKey, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
   const scenePoint = (k: HexKey) => { const c = center(parseKey(k)); return { x: c.x + ox, y: c.y + oy }; };
 
   // --- renderer, lights, camera (once)
@@ -170,31 +177,74 @@ export default function HexScene3D(p: Props) {
     return () => { ro.disconnect(); renderer.dispose(); el.removeChild(renderer.domElement); three.current = null; };
   }, []);
 
-  // --- background and light by phase, or the map's 3D mood (APEX 2.1)
+  // --- APEX 2.5: sky, sun and fog from the time of day and the weather (or the map's 3D mood, APEX 2.1)
+  const biome = useMemo(() => biomeOf(tiles), [tiles]);
+  const envRef = useRef<{ sky?: ReturnType<typeof buildSky>; backdrop?: Backdrop; weather?: WeatherFx; light?: Light; recolorFill?: (l: Light) => void }>({});
+  const hourNow = p.env?.hour ?? (p.phase === 'night' ? 0.5 : p.phase === 'dusk' ? 19.2 : 12);
+  const hourKey = Math.round(hourNow * 4) / 4; // re-light every quarter hour
+  const weather = p.env?.weather ?? 'clear';
   useEffect(() => {
     const t = three.current;
     if (!t) return;
-    const mood = p.map.mood ?? (p.phase === 'night' ? 'night' : p.phase === 'dusk' ? 'dusk' : 'day');
     const M: Record<string, { bg: number; sky: number; ground: number; hemi: number; sun: number; sunI: number; pos: [number, number, number]; fog?: [number, number]; exp?: number }> = {
-      day: { bg: 0x1b2027, sky: 0xfff4dd, ground: 0x2a2f2a, hemi: 0.9, sun: 0xfff0d0, sunI: 1.6, pos: [-30, 60, 20] },
       golden: { bg: 0x3a2a22, sky: 0xffe0b0, ground: 0x4a3a2a, hemi: 1.0, sun: 0xffb46a, sunI: 1.9, pos: [-50, 28, 15], exp: 1.1 },
       overcast: { bg: 0x4a5058, sky: 0xd8e0e8, ground: 0x3a3e40, hemi: 1.25, sun: 0xdfe6ee, sunI: 0.7, pos: [-20, 70, 30], fog: [40, 130] },
-      dusk: { bg: 0x2a2230, sky: 0x9a7ab0, ground: 0x2a1e2a, hemi: 0.6, sun: 0xff8a5a, sunI: 0.95, pos: [-55, 20, 10] },
-      night: { bg: 0x0b0f17, sky: 0x3a4a7a, ground: 0x0a0c12, hemi: 0.35, sun: 0x8fa8ff, sunI: 0.3, pos: [30, 60, -20] },
       misty: { bg: 0x8a9298, sky: 0xe0e6ea, ground: 0x4a5048, hemi: 1.1, sun: 0xeef2f4, sunI: 0.75, pos: [-20, 60, 30], fog: [18, 75] },
       storybook: { bg: 0x2b3a4a, sky: 0xfff8e8, ground: 0x3a4a2a, hemi: 1.1, sun: 0xfff2d0, sunI: 1.95, pos: [-35, 55, 25], exp: 1.15 },
       gloom: { bg: 0x161c16, sky: 0x8a9a7a, ground: 0x10140e, hemi: 0.5, sun: 0x9ab08a, sunI: 0.55, pos: [-25, 50, 25], fog: [28, 110] },
     };
-    const m = M[mood] ?? M.day;
-    t.scene.background = new THREE.Color(m.bg);
-    t.scene.fog = new THREE.Fog(m.bg, m.fog?.[0] ?? 60, m.fog?.[1] ?? 160);
+    const base = lightFor(hourKey, weather);
+    const m = p.map.mood ? M[p.map.mood] : undefined;
+    // a designed mood keeps its look; the sky colours still come from the time of day
+    const l: Light = m ? { ...base, hemiSky: m.sky, hemiGround: m.ground, hemi: m.hemi, sun: m.sun, sunI: m.sunI * (base.sunI / 1.6), sunPos: m.pos, exposure: m.exp ?? base.exposure, ...(m.fog ? { fogNear: m.fog[0], fogFar: m.fog[1], fog: m.bg, horizon: m.bg } : {}) } : base;
+    const e = envRef.current;
+    e.light = l;
+    const sky = biomeHasSky(biome);
+    if (!e.sky) { e.sky = buildSky(); t.scene.add(e.sky.mesh, e.sky.stars); }
+    e.sky.mesh.visible = sky; e.sky.stars.visible = sky && l.stars > 0.02;
+    e.sky.set(l);
+    t.scene.background = sky ? null : new THREE.Color(0x0a0908);
+    t.scene.fog = new THREE.Fog(sky ? l.fog : 0x0a0908, l.fogNear, l.fogFar);
     const [hemi, sun] = t.scene.children as [THREE.HemisphereLight, THREE.DirectionalLight];
-    hemi.color.setHex(m.sky); hemi.groundColor.setHex(m.ground); hemi.intensity = m.hemi;
-    sun.color.setHex(m.sun); sun.intensity = m.sunI; sun.position.set(...m.pos);
-    t.renderer.toneMappingExposure = m.exp ?? 1.05;
+    hemi.color.setHex(l.hemiSky); hemi.groundColor.setHex(l.hemiGround); hemi.intensity = l.hemi;
+    sun.color.setHex(l.sun); sun.intensity = l.sunI; sun.position.set(...l.sunPos);
+    t.renderer.toneMappingExposure = l.exposure;
+    e.backdrop?.set(l, season, snow);
+    e.recolorFill?.(l);
     t.renderer.shadowMap.needsUpdate = true;
+    dirty.current = true;
     setTick((x) => x + 1);
-  }, [p.phase, p.map.mood]);
+  }, [hourKey, weather, p.map.mood, biome, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- APEX 2.5: the land beyond the map's edge and the horizon (per biome)
+  useEffect(() => {
+    const t = three.current;
+    if (!t || !p.map.hex) return;
+    const e = envRef.current;
+    if (e.backdrop) { t.scene.remove(e.backdrop.group); e.backdrop.dispose(); }
+    const R = p.map.hex.radius;
+    e.backdrop = buildBackdrop(biome, (R + 5) * 1.5, BASE - 0.04, (R * 7 + tiles.size) % 97 + 1);
+    // the plain starts inside the skirt of hexes around the map (see the terrain effect), so there is no gap
+    const ringGeo = new THREE.RingGeometry((R + 5) * 1.5, (R + 5) * 1.5 + 420, 64, 1);
+    const plain = e.backdrop.group.children[0] as THREE.Mesh;
+    plain.geometry.dispose(); plain.geometry = ringGeo;
+    t.scene.add(e.backdrop.group);
+    if (e.light) e.backdrop.set(e.light, season, snow);
+    dirty.current = true;
+    return () => { if (e.backdrop) { t.scene.remove(e.backdrop.group); e.backdrop.dispose(); e.backdrop = undefined; } };
+  }, [biome, p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- APEX 2.5: clouds, rain and snow
+  useEffect(() => {
+    const t = three.current;
+    if (!t || !p.map.hex) return;
+    const e = envRef.current;
+    const fx = buildWeather(weather, e.light ?? lightFor(hourKey, weather), p.map.hex.radius * 1.8);
+    e.weather = fx;
+    t.scene.add(fx.group);
+    dirty.current = true;
+    return () => { t.scene.remove(fx.group); fx.dispose(); if (e.weather === fx) e.weather = undefined; };
+  }, [weather, p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- quality: resolution and shadows follow the setting
   useEffect(() => {
@@ -293,6 +343,8 @@ export default function HexScene3D(p: Props) {
     props.updateMatrixWorld(true);
     const animated = new Set<THREE.Object3D>([...anim.current.crowns, ...anim.current.flames]);
     for (const o of animated) t.dynamic.attach(o);
+    // APEX 2.5 – colour scheme / season also on the swaying crowns
+    if (recolor) for (const o of anim.current.crowns) o.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh && m.material) m.material = Array.isArray(m.material) ? m.material.map((x) => recolor.material(x)) : recolor.material(m.material); });
     const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
     props.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -362,6 +414,65 @@ export default function HexScene3D(p: Props) {
       m.position.set(w.x, top(k) - 0.06, w.z); m.userData.phase = (parseKey(k).q + parseKey(k).r) * 0.7;
       wm.userData.phase = m.userData.phase;
       t.dynamic.add(m); anim.current.water.push(wm);
+    }
+    // APEX 2.5 – hexes nobody can see are not an abyss: they continue the land at the height of their known
+    // neighbours, in a plain fog colour (parchment by day, ash at dusk, dark at night). Around the map a skirt of
+    // land rings (biome colour, heights fading to the plain) leads into the horizon instead of a cliff edge.
+    {
+      const R = p.map.hex.radius;
+      const known = new Map<HexKey, number>();
+      for (const k of keys) known.set(k, height(k));
+      const unknown = hexesInRange(ORIGIN, R).map(hexKey).filter((k) => !known.has(k));
+      const skirt = hexesInRange(ORIGIN, R + 6).filter((h) => distance(h, ORIGIN) > R).map(hexKey);
+      // heights: spread inwards from known hexes ring by ring (unknown), then fade out towards the plain (skirt)
+      const est = new Map<HexKey, number>(known);
+      let open = [...unknown, ...skirt];
+      for (let pass = 0; pass < 40 && open.length; pass++) {
+        const next: HexKey[] = [], found: Array<[HexKey, number]> = [];
+        for (const k of open) {
+          const ns = hexesInRange(parseKey(k), 1).map(hexKey).filter((n) => n !== k && est.has(n));
+          if (!ns.length) { next.push(k); continue; }
+          const avg = ns.reduce((s, n) => s + est.get(n)!, 0) / ns.length;
+          const ring = Math.max(0, distance(parseKey(k), ORIGIN) - R);
+          found.push([k, ring > 0 ? Math.max(0, Math.round(avg * (1 - ring / 6) * 2) / 2) : Math.round(avg * 2) / 2]);
+        }
+        for (const [k, v] of found) est.set(k, v);
+        if (next.length === open.length) break;
+        open = next;
+      }
+      const fillMat = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0, map: surfaceTexture('earth') });
+      groundSurface(fillMat);
+      const mk = (list: HexKey[], pickable: boolean) => {
+        if (!list.length) return null;
+        const mesh = new THREE.InstancedMesh(geo, [fillMat, side], list.length);
+        mesh.receiveShadow = true;
+        list.forEach((k, i) => { const w = toWorld(center(parseKey(k))); m4.compose(new THREE.Vector3(w.x, 0, w.z), new THREE.Quaternion(), new THREE.Vector3(1, Math.max(0.12, BASE + (est.get(k) ?? 0) * LEVEL), 1)); mesh.setMatrixAt(i, m4); mesh.setColorAt(i, new THREE.Color(0x888888)); });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.userData.keys = list;
+        t.scene.add(mesh);
+        t.ground.push(mesh);
+        if (!pickable) mesh.userData.noPick = true;
+        return mesh;
+      };
+      const fogMesh = mk(unknown, true), skirtMesh = mk(skirt, false);
+      envRef.current.recolorFill = (l) => {
+        const fogC = unknownColour(l);
+        if (fogMesh) { unknown.forEach((k, i) => fogMesh.setColorAt(i, fogC.clone().offsetHSL(0, 0, (((parseKey(k).q * 7 + parseKey(k).r * 13) % 5) - 2) * 0.01))); fogMesh.instanceColor!.needsUpdate = true; }
+        if (skirtMesh) {
+          // the skirt takes the colour of the map's edge, fading into the land beyond
+          skirt.forEach((k, i) => {
+            const h = parseKey(k), ring = distance(h, ORIGIN) - R;
+            const edge = hexesInRange(h, ring).map(hexKey).find((n) => tiles.has(n) && fogOf.get(n) !== '.');
+            const c = new THREE.Color(edge ? tiles.get(edge)!.fill : '#6a7a48');
+            if (recolor) recolor.color(c); else if (season || snow) seasonTint(c, season, snow);
+            if (edge && /wall|water|deep|river|lava|pit|chasm/.test(tiles.get(edge)!.id)) c.set(0x6a7048);
+            c.lerp(new THREE.Color(l.fog), Math.min(0.5, ring * 0.07)).offsetHSL(0, 0, (((h.q * 5 + h.r * 11) % 5) - 2) * 0.012);
+            skirtMesh.setColorAt(i, c);
+          });
+          skirtMesh.instanceColor!.needsUpdate = true;
+        }
+      };
+      if (envRef.current.light) envRef.current.recolorFill(envRef.current.light);
     }
     // APEX 2.3 – tiles that burn or glow light their surroundings (the nearest to the middle, as many as the quality allows)
     const glowing = keys.filter((k) => tiles.get(k)!.light && fogOf.get(k) !== 'e').sort((x, y) => distance(parseKey(x), ORIGIN) - distance(parseKey(y), ORIGIN)).slice(0, qcfg.lights);
@@ -704,6 +815,7 @@ export default function HexScene3D(p: Props) {
   // APEX 2.5 – WASD: held keys pan the camera (while the pointer is over the map or the map has focus)
   const keys = useRef(new Set<string>());
   const lastKeyFrame = useRef(0);
+  const lastWeather = useRef(0);
   const over = useRef(false);
   useEffect(() => {
     const typing = (e: KeyboardEvent) => { const el = e.target as HTMLElement | null; return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable); };
@@ -752,6 +864,9 @@ export default function HexScene3D(p: Props) {
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
       a.fx = a.fx.filter((f) => { const age = now - f.born; if (age > f.life) { f.dispose(); return false; } if (age >= 0) f.update(age / f.life); return true; });
       a.moves = a.moves.filter((m) => stepMove(m, now));
+      const wx = envRef.current.weather;
+      if (wx?.animated) wx.step(Math.min(0.1, (now - (lastWeather.current || now)) / 1000), new THREE.Vector3(cam.current.tx, 0, cam.current.tz));
+      lastWeather.current = now;
       // APEX 2.5 – WASD pans smoothly while held (speed grows with the zoom)
       if (keys.current.size) {
         const c = cam.current, dt = Math.min(0.05, (now - (lastKeyFrame.current || now)) / 1000), sp = c.dist * 0.9 * dt;
@@ -845,7 +960,7 @@ export default function HexScene3D(p: Props) {
     ray.current.setFromCamera(ndc, t.camera);
     const hitTok = ray.current.intersectObjects(t.tokens.children, true)[0];
     if (hitTok) { let o: THREE.Object3D | null = hitTok.object; while (o && !o.userData.tokenId) o = o.parent; if (o) return { token: o.userData.tokenId as string, hex: hexKey(hexAt(p.map, { x: (o.position.x * HEX_SIZE) + ox, y: (o.position.z * HEX_SIZE) + oy })) }; }
-    const hits = ray.current.intersectObjects(t.ground, false); // props are see-through for picking (merged meshes)
+    const hits = ray.current.intersectObjects(t.ground.filter((g) => !g.userData.noPick), false); // props are see-through for picking (merged meshes)
     const hit = hits[0];
     if (!hit) return {};
     if ((hit.object as THREE.InstancedMesh).isInstancedMesh && hit.object.userData.keys && hit.instanceId !== undefined) return { hex: (hit.object.userData.keys as HexKey[])[hit.instanceId] };

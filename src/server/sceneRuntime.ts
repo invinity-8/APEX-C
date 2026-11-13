@@ -1,5 +1,6 @@
 import { altitudeOf } from '../game/altitude.js';
 import { sensesFromText } from '../game/senses.js';
+import type { WorldTime } from '../game/worldTime.js';
 import { statBlock } from '../game/bestiary.js';
 import { parseMap, type SceneMap } from '../campaign/maps.js';
 import { emptySheet } from '../game/sheet.js';
@@ -23,7 +24,8 @@ export interface SceneSnapshot {
   motion?: import('./sceneMotion.js').MotionSnapshot;
   travel?: import('./sceneTravel.js').TravelSnapshot;
   /** Scene-local time and light (battle/region). */
-  clock?: SceneClockState;
+  /** APEX 2.5: with the campaign time (`world`) when it is set. */
+  clock?: SceneClockState & { world?: WorldTime & { now: number } };
   /** Player fog per hex: 'v' visible, 'e' remembered, '.' unknown (terrain of unknown hexes is not sent). */
   fog?: string;
   /** The viewer's movement budget (turn / free / day). */

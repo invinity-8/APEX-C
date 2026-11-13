@@ -4,6 +4,7 @@
  */
 import { npcPassivePerception } from '../game/perception.js';
 import { sheetSenses } from '../game/senses.js';
+import { effectiveClock } from '../game/worldTime.js';
 import type { FigureLook } from '../game/figure.js';
 import { hexAt, hexCentre, spawnSlots, tileSetOf } from '../campaign/hexScene.js';
 import { CARRIED_LIGHT_FT, enemiesOf, npcReach, torchesOf } from '../game/sceneCombat.js';
@@ -183,7 +184,8 @@ export function fogMap(map: SceneMap, visible: Set<HexKey>, seen: string[]): { h
   return { hex: { ...map.hex, terrain: maskTerrain(map.hex.terrain, fog), ...(heights ? { heights } : {}) }, fog };
 }
 
-export const clockFor = (state: GameState | null, sceneId: string) => clockOf(state ?? {}, sceneId);
+/** APEX 2.5 – the scene clock as the rules see it now (lighting follows the world time unless set by hand). */
+export const clockFor = (state: GameState | null, sceneId: string) => effectiveClock(state ?? {}, clockOf(state ?? {}, sceneId));
 export const isHexBattle = (map: SceneMap) => tileSetOf(map.hex) === 'battle';
 export const hexKeyAt = (map: SceneMap, p: { x: number; y: number }) => hexKey(hexAt(map, p));
 export const parseStoredSheet = (data: unknown) => { const p = parseSheet(data ?? emptySheet()); return p.ok ? p.sheet : emptySheet(); };

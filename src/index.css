@@ -696,3 +696,13 @@ html, body { cursor: url('/cursors/apex.svg') 2 2, auto; }
 button:not(:disabled), a[href], [role=button], [role=tab], [role=option], [role=radio], summary, label:has(input[type=checkbox]), select { cursor: url('/cursors/apex-pointer.svg') 2 2, pointer; }
 input[type=text], input[type=search], input:not([type]), textarea { cursor: text; }
 [data-testid=hex-scene-3d], [data-testid=hex-scene-map] { cursor: url('/cursors/apex.svg') 2 2, crosshair; }
+
+/* APEX 2.5 – the day/night dial */
+.time-dial { display: grid; grid-template-columns: auto 1fr; gap: .4rem .8rem; align-items: center; padding: .4rem; }
+.time-dial-info { display: grid; gap: .1rem; color: #d8cbb0; font-size: .75rem; }
+.time-dial-info b { font: 700 1.4rem/1 Cinzel, Georgia, serif; color: #f3dc9a; }
+.time-dial-controls { grid-column: 1 / -1; display: grid; gap: .35rem; }
+.time-dial-controls button, .time-dial-controls select { border: 1px solid #5a4a36; border-radius: .35rem; background: #1b1f26; color: #d8cbb0; font-size: .72rem; padding: .15rem .45rem; }
+.time-dial-controls button[aria-pressed=true] { border-color: #d8b56f; background: #c09b5833; color: #f3e1b4; }
+.time-dial-controls input[type=range] { flex: 1; accent-color: #c09b58; }
+.scene-clock-badge { position: absolute; left: .5rem; top: .5rem; z-index: 14; transform: scale(.62); transform-origin: top left; background: rgba(12,10,8,.78); border: 1px solid #6b4a24; border-radius: .6rem; pointer-events: none; }

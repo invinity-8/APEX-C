@@ -14,6 +14,7 @@
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type Axial, type HexKey } from '../game/hex.js';
 import { decodeTiles, heightLookup, hexAt, hexLine, tileLookup, tileSetOf } from './hexScene.js';
 import type { SceneMap } from './maps.js';
+import { FOG_SIGHT_FT } from '../game/worldTime.js';
 
 export type Lighting = 'bright' | 'dim' | 'dark';
 /** Scene-local time and light – independent of the Arena's day/night. */
@@ -22,6 +23,8 @@ export interface SceneClock {
   phase: 'day' | 'night';
   lighting: Lighting;
   version: number;
+  /** APEX 2.5 – fog limits sight to 30 ft (blindsight still works). */
+  weather?: string;
 }
 export const defaultSceneClock = (): SceneClock => ({ day: 1, phase: 'day', lighting: 'bright', version: 0 });
 
@@ -112,6 +115,7 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
       const sense = Math.max(v.darkvisionFt, v.blindFt ?? 0);
       radius = clock.lighting === 'bright' ? BRIGHT_SIGHT_FT / 5 : clock.lighting === 'dim' ? Math.max(DIM_SIGHT_FT, sense) / 5 : Math.max(1, Math.round(sense / 5));
       if (clock.lighting !== 'dark' && v.altFt) radius += Math.round(v.altFt / 5); // the view widens with height
+      if (clock.weather === 'fog') radius = Math.min(radius, Math.max(FOG_SIGHT_FT, v.blindFt ?? 0) / 5);
     } else {
       const day = clock.phase === 'day';
       radius = day ? 2 + (own.id === 'hills' ? 1 : own.id === 'mountain' ? 2 : 0) : 1;
