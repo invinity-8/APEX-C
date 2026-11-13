@@ -37,6 +37,8 @@ export interface Viewer {
   darkvisionFt: number;
   /** APEX 2.4 – flying altitude in feet: sees over trees and walls, and farther in bright and dim light. */
   altFt?: number;
+  /** APEX 2.5 – blindsight / tremorsense / truesight range in feet: perceives without any light. */
+  blindFt?: number;
 }
 
 type Blocks = (k: HexKey) => boolean;
@@ -106,7 +108,9 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
     let radius: number;
     let viewBlocks = blocks;
     if (battle) {
-      radius = clock.lighting === 'bright' ? BRIGHT_SIGHT_FT / 5 : clock.lighting === 'dim' ? DIM_SIGHT_FT / 5 : Math.max(1, Math.round(v.darkvisionFt / 5));
+      // darkvision: darkness like dim light, dim light like bright light (within its range); blindsight needs no light
+      const sense = Math.max(v.darkvisionFt, v.blindFt ?? 0);
+      radius = clock.lighting === 'bright' ? BRIGHT_SIGHT_FT / 5 : clock.lighting === 'dim' ? Math.max(DIM_SIGHT_FT, sense) / 5 : Math.max(1, Math.round(sense / 5));
       if (clock.lighting !== 'dark' && v.altFt) radius += Math.round(v.altFt / 5); // the view widens with height
     } else {
       const day = clock.phase === 'day';

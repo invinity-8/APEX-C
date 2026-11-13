@@ -3,19 +3,20 @@
  * scene movement so that what a player sees and what the server accepts always agree.
  */
 import { npcPassivePerception } from '../game/perception.js';
+import { sheetSenses } from '../game/senses.js';
 import type { FigureLook } from '../game/figure.js';
 import { hexAt, hexCentre, spawnSlots, tileSetOf } from '../campaign/hexScene.js';
 import { CARRIED_LIGHT_FT, enemiesOf, npcReach, torchesOf } from '../game/sceneCombat.js';
-import { darkvisionFeet, fogString, maskTerrain, sceneVision, type CarriedLight, type Viewer } from '../campaign/hexVision.js';
+import { fogString, maskTerrain, sceneVision, type CarriedLight, type Viewer } from '../campaign/hexVision.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { hexKey, type HexKey } from '../game/hex.js';
 import { characterMovementLoad } from '../game/items/weight.js';
 import { emptySheet, parseSheet, type CharacterSheet } from '../game/sheet.js';
 import { budgetOf, pcActor } from '../game/sceneActions.js';
 import { statBlock } from '../game/bestiary.js';
+import { findBeast } from '../game/beastCatalog.js';
 import { effectiveSpeed, effectsOf, speedZero, type EffectMods } from '../game/combatEffects.js';
 import { altitudeOf, pcSpeeds } from '../game/altitude.js';
-import { findBeast } from '../game/beastCatalog.js';
 import { activeEncounter, clockOf, epochAllowance, movementEpoch, type MovementMode } from '../game/sceneTurns.js';
 import type { GameState, SceneClockState } from '../game/types.js';
 import type { LocalMotionSnapshot, MotionSnapshot } from './sceneMotion.js';
@@ -104,8 +105,7 @@ export const sheetOf = async (ctx: SceneViewContext, tokenId: string) => (await 
 
 /** Darkvision from the character sheet ("Vision / senses": "Darkvision 60 ft."). */
 export function sheetDarkvision(sheet: CharacterSheet): number {
-  const texts = [...sheet.combat.map((c) => `${c.label} ${c.value}`), ...sheet.abilities.map((a) => `${a.name} ${a.text.slice(0, 200)}`)];
-  return Math.max(0, ...texts.map(darkvisionFeet));
+  return sheetSenses(sheet).darkvisionFt;
 }
 
 /** Character speed for scene movement: sheet/items encumbrance only – the Arena's sneaking and MP do not apply. */
@@ -166,7 +166,10 @@ export async function visionFor(ctx: SceneViewContext, map: SceneMap, clock: Sce
   const viewers: Viewer[] = [];
   for (const p of positions) {
     const altFt = sceneId && ctx.state ? altitudeOf(ctx.state, sceneId, `pc-${p.tokenId}`) : 0;
-    viewers.push({ at: p, darkvisionFt: sheetDarkvision(await sheetOf(ctx, p.tokenId)), ...(altFt ? { altFt } : {}) });
+    const sheet = await sheetOf(ctx, p.tokenId);
+    const form = sheet.wildShape ? findBeast(ctx.state?.customBeasts, sheet.wildShape.formId)?.senses : undefined;
+    const s = sheetSenses(sheet, form);
+    viewers.push({ at: p, darkvisionFt: s.darkvisionFt, ...(s.blindFt ? { blindFt: s.blindFt } : {}), ...(altFt ? { altFt } : {}) });
   }
   return sceneVision(map, clock, viewers, carried);
 }

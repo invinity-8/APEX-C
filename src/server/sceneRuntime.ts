@@ -1,4 +1,6 @@
 import { altitudeOf } from '../game/altitude.js';
+import { sensesFromText } from '../game/senses.js';
+import { statBlock } from '../game/bestiary.js';
 import { parseMap, type SceneMap } from '../campaign/maps.js';
 import { emptySheet } from '../game/sheet.js';
 import { npcPassivePerception, pcPassivePerception } from '../game/perception.js';
@@ -180,7 +182,7 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
           if (map.hex && view !== 'all') {
             const npcs = enemiesOf(stored.state, focus.id).filter((e) => !e.defeated);
             const pcViewers = pcs.map((p) => ({ tokenId: p.tokenId, x: p.x, y: p.y }));
-            const npcViewers = (side: 'enemy' | 'ally' | null, id?: string) => npcs.filter((e) => (id ? e.id === id : (e.side ?? 'enemy') === side)).map((e) => ({ at: { x: e.x, y: e.y }, darkvisionFt: e.darkvisionFt ?? ENEMY_TEMPLATES.find((t) => t.id === e.templateId)?.darkvisionFt ?? 0, altFt: altitudeOf(stored.state, focus.id, `npc-${e.id}`) }));
+            const npcViewers = (side: 'enemy' | 'ally' | null, id?: string) => npcs.filter((e) => (id ? e.id === id : (e.side ?? 'enemy') === side)).map((e) => ({ at: { x: e.x, y: e.y }, darkvisionFt: Math.max(e.darkvisionFt ?? ENEMY_TEMPLATES.find((t) => t.id === e.templateId)?.darkvisionFt ?? 0, sensesFromText(statBlock(stored.state, e.templateId)?.senses).darkvisionFt), blindFt: sensesFromText(statBlock(stored.state, e.templateId)?.senses).blindFt, altFt: altitudeOf(stored.state, focus.id, `npc-${e.id}`) }));
             const clock = clockFor(stored.state, focus.id);
             const lights = carriedLights(stored.state, focus.id, pcs);
             const partySight = async () => new Set([...await visionFor(ctx, map, clock, pcViewers, lights, focus.id), ...sceneVision(map, clock, npcViewers('ally'), lights)]);
