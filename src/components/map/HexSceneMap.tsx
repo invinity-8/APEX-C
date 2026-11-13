@@ -80,6 +80,10 @@ interface Props {
   /** Path preview while hovering: from this figure, gold within the budget (feet), red beyond. */
   pathFrom?: { x: number; y: number } | null;
   pathBudget?: number | null;
+  /** APEX 2.5 – feet a Dash would add (orange part of the path). */
+  pathDash?: number | null;
+  /** APEX 2.5 – the hovered hex (for the action shown at the pointer). */
+  onHoverHex?: (k: HexKey | null) => void;
   /** APEX 1.9 – flying / climbing for the path preview. */
   pathMode?: { fly?: boolean; climb?: boolean };
   /** Line of sight / range while hovering: white line within range and in sight, plus the reachable area. */
@@ -102,7 +106,7 @@ interface Props {
 const MAX_K = 3.5;
 const NO_TEAMS = new Set<string>();
 
-export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, onDropHex, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, pathMode, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [], aimAlt = 0 }: Props) {
+export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false, phase = 'day', fog, selectedTokenId = null, reach, onHexClick, onTokenClick, onPaint, onDropHex, selectedHex, onHexContext, onTokenContext, pathFrom = null, pathBudget = null, pathDash = 0, onHoverHex, pathMode, lineFrom = null, lineRangeFt = null, sightFrom = null, sightSide = null, areaAt = null, focus = null, fx = [], aimAlt = 0 }: Props) {
   const { tokens, moving } = useAnimatedTokens(targetTokens, map);
   const reducedMotion = usePrefersReducedMotion();
   const [hover, setHover] = useState<HexKey | null>(null);
@@ -182,8 +186,14 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
     const r = hexMovementCost(map, pathFrom, { x: c.x + ox, y: c.y + oy }, pathMode);
     if (!r.ok || !r.steps.length) return null;
     const pts = [toWorld(pathFrom), ...r.steps.map((p) => toWorld(p))];
-    return { d: `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`, cost: r.cost, end: pts[pts.length - 1], ok: pathBudget === null || r.cost <= pathBudget + 1e-9 };
-  }, [pathFrom?.x, pathFrom?.y, hover, pathBudget, map.hex, pathMode?.fly, pathMode?.climb]); // eslint-disable-line react-hooks/exhaustive-deps
+    // APEX 2.5 – white within the movement left, orange where only a Dash gets there, red beyond
+    const band = (cost: number) => (pathBudget === null || cost <= pathBudget + 1e-9 ? 0 : cost <= pathBudget + (pathDash ?? 0) + 1e-9 ? 1 : 2);
+    const parts: string[] = ['', '', ''];
+    r.steps.forEach((s, i) => { const b = band(s.cost); parts[b] += `M${pts[i].x},${pts[i].y}L${pts[i + 1].x},${pts[i + 1].y}`; });
+    const level = band(r.cost);
+    return { d: `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`, parts, cost: r.cost, end: pts[pts.length - 1], ok: level === 0, level };
+  }, [pathFrom?.x, pathFrom?.y, hover, pathBudget, pathDash, map.hex, pathMode?.fly, pathMode?.climb]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onHoverHex?.(hover); }, [hover]); // eslint-disable-line react-hooks/exhaustive-deps
   const blocksSight = useMemo(() => { const look = tileLookup(map); return (k: HexKey) => !!look(k)?.blocksSight; }, [map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
   const groundHeight = useMemo(() => sightRules(map).height, [map.hex]); // eslint-disable-line react-hooks/exhaustive-deps
   const rangeArea = useMemo(() => {
@@ -389,8 +399,8 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
             {pathPreview && (
               <g pointerEvents="none" data-testid="path-preview">
                 <path d={pathPreview.d} fill="none" stroke="#000" strokeOpacity={0.55} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" />
-                <path d={pathPreview.d} fill="none" stroke={pathPreview.ok ? '#f3dc9a' : '#ff6b5a'} strokeWidth={3} strokeDasharray="7 5" strokeLinecap="round" strokeLinejoin="round" />
-                <text x={pathPreview.end.x} y={pathPreview.end.y - HEX_SIZE * 0.7} textAnchor="middle" fontSize={12} fontWeight={700} fill={pathPreview.ok ? '#f3dc9a' : '#ff9a8a'} stroke="#000" strokeWidth={3} paintOrder="stroke">{fmt(pathPreview.cost)} {unit}{pathPreview.ok ? '' : ' – too far'}</text>
+                {pathPreview.parts.map((d, i) => d && <path key={i} d={d} fill="none" stroke={['#f6f1e2', '#ffa040', '#ff5a4a'][i]} strokeWidth={3} strokeDasharray="7 5" strokeLinecap="round" strokeLinejoin="round" data-testid={`path-${['move', 'dash', 'far'][i]}`} />)}
+                <text x={pathPreview.end.x} y={pathPreview.end.y - HEX_SIZE * 0.7} textAnchor="middle" fontSize={12} fontWeight={700} fill={['#f6f1e2', '#ffb870', '#ff9a8a'][pathPreview.level]} stroke="#000" strokeWidth={3} paintOrder="stroke">{fmt(pathPreview.cost)} {unit}{pathPreview.level === 1 ? ' – Dash' : pathPreview.level === 2 ? ' – too far' : ''}</text>
               </g>
             )}
             {sight && (

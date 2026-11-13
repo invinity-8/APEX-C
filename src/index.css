@@ -706,3 +706,17 @@ input[type=text], input[type=search], input:not([type]), textarea { cursor: text
 .time-dial-controls button[aria-pressed=true] { border-color: #d8b56f; background: #c09b5833; color: #f3e1b4; }
 .time-dial-controls input[type=range] { flex: 1; accent-color: #c09b58; }
 .scene-clock-badge { position: absolute; left: .5rem; top: .5rem; z-index: 14; transform: scale(.62); transform-origin: top left; background: rgba(12,10,8,.78); border: 1px solid #6b4a24; border-radius: .6rem; pointer-events: none; }
+
+/* APEX 2.5 – what a right-click does, at the pointer; the Dash choice menu */
+.intent-cursor { position: absolute; left: 0; top: 0; z-index: 30; pointer-events: none; display: flex; align-items: center; gap: .35rem; padding: .18rem .5rem .18rem .3rem; border-radius: 999px; border: 1px solid rgba(232,212,166,.55); background: rgba(16,13,10,.86); color: #f3e7c8; font: 600 .72rem/1.2 Inter, sans-serif; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+.intent-cursor .intent-icon { font-size: 1rem; }
+.intent-attack { border-color: rgba(255,120,100,.8); }
+.intent-spell { border-color: rgba(190,150,255,.85); color: #eadcff; }
+.intent-dash { border-color: rgba(255,160,64,.9); color: #ffd7a8; }
+.intent-bad { border-color: rgba(255,90,74,.85); color: #ffb0a6; }
+.map-menu { position: absolute; z-index: 31; display: grid; gap: 2px; min-width: 15rem; padding: .3rem; border-radius: .5rem; border: 1px solid #c09b58; background: rgba(20,16,12,.96); box-shadow: 0 6px 18px rgba(0,0,0,.6); }
+.map-menu button { display: flex; align-items: center; gap: .45rem; text-align: left; padding: .3rem .5rem; border-radius: .3rem; color: #f0e2c0; font-size: .78rem; }
+.map-menu button:hover { background: #c09b5833; }
+.map-menu button.is-default { background: #c09b5826; outline: 1px solid #c09b5899; }
+.map-menu button small { margin-left: auto; color: #a8936a; font-size: .65rem; }
+.map-menu .map-menu-cancel { color: #a8a090; }

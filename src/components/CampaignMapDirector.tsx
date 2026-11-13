@@ -13,7 +13,7 @@ import { activeActors, budgetOf, isActiveActor } from '../game/sceneActions';
 import { InitiativeBar } from './PlayerScene';
 import type { SceneInteraction } from './SceneSurface';
 import { areaHexes } from '../campaign/hexArea';
-import { approachHex, pcInteraction, type SpellTarget } from './pcInteraction';
+import { approachHex, dashOptions, moveMenu, pcInteraction, type SpellTarget } from './pcInteraction';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
 import { NpcBar } from './NpcBar';
@@ -21,8 +21,8 @@ import { EncounterPanel, SpawnMarkers } from './EncounterPanel';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
-import { hexAt } from '../campaign/hexScene';
-import { distance, hexKey } from '../game/hex';
+import { hexAt, hexCentre, hexMovementCost } from '../campaign/hexScene';
+import { distance, hexKey, parseKey } from '../game/hex';
 import { combatAttacks } from '../game/effectiveStats';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { GameApi, DispatchResult } from '../state/gameApi';
@@ -850,6 +850,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
         act: async (input) => (await sceneTurnP(input)).ok, move: (x, y, alt) => moveCharacterP(selected.id, x, y, alt),
         openTargetMenu: (id) => setPcMenu(id), notify: setNotice,
         focusKey: gmEncounter && active ? `${turnKey}:${actor}` : null,
+        dash: dashOptions(gmEncounter, actor, mv, pcSheet, active),
       });
       return { reach: active && !free && left !== null ? left : null, interaction };
     }
@@ -859,7 +860,37 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     const attack = npc ? npcAttacks(npc)[npcAttack] : undefined;
     const range = attack ? (attack.kind === 'melee' ? attack.reachFt : attack.rangeFt ?? attack.reachFt) : null;
     const area = npc && areaMode !== null ? npc.areas?.[areaMode] : undefined;
+    // APEX 2.5 – the same pointer hints, path colours and Dash choice as for characters
+    const baseSpeed = npc ? speedWith((fig.effects ?? []).map((x) => ({ mods: x.mods ?? {} })), npc.speedFt) : 0;
+    const npcDash = npc && gmEncounter && active && !b.dash && !b.action ? { action: true, bonus: false, speedFt: baseSpeed } : null;
+    const figAtHex = (k: string) => (snapshot.figures ?? []).find((f) => f !== fig && f.condition !== 'down' && hexKey(hexAt(map, f)) === k);
+    const npcMove = (x: number, y: number, alt?: number) => battleMove(x, y, alt);
+    const npcDashThen = (_bonus: boolean, x: number, y: number) => { void sceneTurnP({ action: 'standard', actor: { kind: 'npc', id: npc!.id }, act: 'dash' }).then((r) => { if (r.ok) battleMove(x, y); }); };
     const interaction: SceneInteraction = {
+      pathDash: npcDash ? npcDash.speedFt : 0,
+      intentAt: (k) => {
+        if (!active || !npc) return null;
+        const tf = figAtHex(k);
+        if (area) return { icon: '✨', label: `${area.name} here`, tone: 'spell' };
+        if (tf) {
+          const foe = (tf.kind === 'pc' || tf.side === 'ally') !== (npc.side === 'ally');
+          if (!foe || !attack) return null;
+          const dist = distance(hexAt(map, fig), hexAt(map, tf)) * 5;
+          if (attack.kind !== 'melee') return dist <= (attack.longRangeFt ?? attack.rangeFt ?? attack.reachFt) ? { icon: attack.kind === 'spell' ? '✨' : '🏹', label: `${attack.name} → ${tf.name}`, tone: attack.kind === 'spell' ? 'spell' : 'attack' } : { icon: '⛔', label: `${tf.name} is out of range (${dist} ft)`, tone: 'bad' };
+          return dist <= attack.reachFt ? { icon: '🗡️', label: `${attack.name} → ${tf.name}`, tone: 'attack' } : { icon: '👣🗡️', label: `Walk up and ${attack.name} → ${tf.name}`, tone: 'attack' };
+        }
+        const r = hexMovementCost(map, fig, hexCentre(map, parseKey(k)));
+        if (!r.ok) return { icon: '⛔', label: 'No way there', tone: 'bad' };
+        if (left === null || r.cost <= left + 1e-9) return { icon: '👣', label: `Move ${r.cost} ft`, tone: 'move' };
+        if (npcDash && r.cost <= left + npcDash.speedFt + 1e-9) return { icon: '💨', label: `${r.cost} ft – needs a Dash (right-click to choose)`, tone: 'dash' };
+        return { icon: '👣', label: `${r.cost} ft – too far: as far as possible`, tone: 'bad' };
+      },
+      menuAt: (k, p) => {
+        if (!active || !npc || area || left === null || figAtHex(k)) return null;
+        const r = hexMovementCost(map, fig, p);
+        if (!r.ok || r.cost <= left + 1e-9) return null;
+        return moveMenu(r.steps, r.cost, left, npcDash, (x, y) => npcMove(x, y, p.alt), npcDashThen, p);
+      },
       reachFrom: fig,
       pathFrom: active && !area ? fig : null,
       pathBudget: left,

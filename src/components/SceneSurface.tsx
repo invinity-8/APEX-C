@@ -60,6 +60,32 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   const [aimAlt, setAimAlt] = useState(0);
   // APEX 2.5 – campaign time (ticks locally while it runs), weather and season for the 3D world
   const worldMinute = useWorldMinute(snapshot.clock?.world);
+  // APEX 2.5 – what a right-click would do, shown at the pointer; a choice menu when it needs one (Dash …)
+  const [hoverHex, setHoverHex] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ items: MapMenuItem[]; x: number; y: number } | null>(null);
+  const mouse = useRef({ x: 0, y: 0 });
+  const cursorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const move = (e: globalThis.PointerEvent) => {
+      const r = el.getBoundingClientRect();
+      mouse.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+      if (cursorRef.current) cursorRef.current.style.transform = `translate(${mouse.current.x + 18}px, ${mouse.current.y + 16}px)`;
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null); };
+    el.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key);
+    return () => { el.removeEventListener('pointermove', move); window.removeEventListener('keydown', key); };
+  });
+  const hexContext = (k: string, p: { x: number; y: number }) => {
+    const pt = { ...p, alt: aimAlt };
+    if (menu) { const first = menu.items[0]; setMenu(null); first?.run(); return; } // a second right-click takes the first choice
+    const items = interaction.menuAt?.(k, pt);
+    if (items?.length) { setMenu({ items, ...mouse.current }); return; }
+    interaction.onHexContext?.(k, pt);
+  };
+  const tokenContext = (id: string) => { setMenu(null); interaction.onTokenContext?.(id); };
   const frameRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = frameRef.current;
@@ -121,16 +147,21 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const lightLabel = !clock ? '' : category === 'battle' ? ` · ${clock.lighting} light` : ` · day ${clock.day}, ${clock.phase}`;
     return <section className="player-scene hex-scene" aria-label="Assigned campaign scene">{!compact && <><h2>{title}</h2><p>{category} · {map.unitsPerCell} {map.unit === 'feet' ? 'ft' : 'mi'} per hex{lightLabel} · mouse wheel zooms, drag pans</p></>}
       <div className="hex-scene-frame" ref={frameRef}>
+        {(() => { const it = !menu && hoverHex && interaction.intentAt ? interaction.intentAt(hoverHex) : null; return it ? <div ref={cursorRef} className={`intent-cursor intent-${it.tone ?? 'move'}`} style={{ transform: `translate(${mouse.current.x + 18}px, ${mouse.current.y + 16}px)` }} data-testid="intent-cursor"><span className="intent-icon">{it.icon}</span><span>{it.label}</span></div> : null; })()}
+        {menu && <div className="map-menu" style={{ left: menu.x + 8, top: menu.y + 8 }} role="menu" data-testid="move-menu" onContextMenu={(e) => { e.preventDefault(); const f = menu.items[0]; setMenu(null); f?.run(); }}>
+          {menu.items.map((it, i) => <button key={i} type="button" role="menuitem" className={i === 0 ? 'is-default' : ''} onClick={() => { setMenu(null); it.run(); }}><span>{it.icon}</span>{it.label}{i === 0 && <small>right-click again</small>}</button>)}
+          <button type="button" role="menuitem" className="map-menu-cancel" onClick={() => setMenu(null)}>✕ Cancel (Esc)</button>
+        </div>}
         {category === 'battle' && snapshot.clock?.world && <div className="scene-clock-badge" data-testid="scene-clock"><TimeDial world={snapshot.clock.world} weather={snapshot.clock.weather} size={96} /></div>}
         {stealth && view3d && <div className="stealth-legend" data-testid="stealth-legend">🥷 Sneaking – rings: how far opponents pay attention. <b style={{ color: '#ff8a7a' }}>red</b> = it would notice your Stealth when it sees you · <b style={{ color: '#f3dc9a' }}>dashed</b> = you beat its passive Perception</div>}
         {category === 'battle' && (aimAlt > 0 || snapshot.movement?.fly) && <div className="aim-level" data-testid="aim-level" title="Shift + mouse wheel: aim height for flying and spell centres">⇕ Aim {aimAlt} ft{aimAlt ? '' : ' (ground)'} <small>Shift+wheel</small>{aimAlt > 0 && <button type="button" onClick={() => setAimAlt(0)} aria-label="Back to the ground">×</button>}</div>}
         {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
         {view3d && category === 'battle' ? (
           <Suspense fallback={<p className="p-4 text-marble-300">Loading 3D view…</p>}>
-            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} env={{ ...(worldMinute !== null ? { hour: hourOf(worldMinute) } : {}), weather: snapshot.clock?.weather, season: snapshot.clock?.world?.season, snow: snapshot.clock?.world?.snow }} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
+            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext || interaction.menuAt ? hexContext : undefined} onTokenContext={interaction.onTokenContext ? tokenContext : undefined} pathDash={interaction.pathDash} onHoverHex={interaction.intentAt ? setHoverHex : undefined} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} env={{ ...(worldMinute !== null ? { hour: hourOf(worldMinute) } : {}), weather: snapshot.clock?.weather, season: snapshot.clock?.world?.season, snow: snapshot.clock?.world?.snow }} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
           </Suspense>
         ) : (
-          <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext ? (k, p) => interaction.onHexContext!(k, { ...p, alt: aimAlt }) : undefined} onTokenContext={interaction.onTokenContext} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} aimAlt={aimAlt} />
+          <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext || interaction.menuAt ? hexContext : undefined} onTokenContext={interaction.onTokenContext ? tokenContext : undefined} pathDash={interaction.pathDash} onHoverHex={interaction.intentAt ? setHoverHex : undefined} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} aimAlt={aimAlt} />
         )}
       </div>
     </section>;

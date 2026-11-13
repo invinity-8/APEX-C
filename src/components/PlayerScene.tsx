@@ -2,7 +2,7 @@ import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
 import type { SceneInteraction } from './SceneSurface';
-import { pcInteraction } from './pcInteraction';
+import { dashOptions, pcInteraction } from './pcInteraction';
 import { activeActors, blockOf, pcActor, withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import { useEffect, useRef, useState } from 'react';
@@ -108,6 +108,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     ready, setReady, setSpellTargets, act: (input) => sceneAction(input), move: (x, y, alt) => move(x, y, true, alt),
     openTargetMenu: (id) => setTarget(id), notify: setMessage,
     focusKey: myTurn && liveEncounter ? `${liveEncounter.id}:${liveEncounter.turnSerial ?? 0}` : null,
+    dash: dashOptions(liveEncounter, pcActor(me.id), mv, mySheet, myTurn),
   });
 
   const canAttack = category === 'battle' && (free || myTurn) && attacks.length > 0;

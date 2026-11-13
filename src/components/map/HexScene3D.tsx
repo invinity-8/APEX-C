@@ -53,6 +53,10 @@ interface Props {
   onTokenContext?: (tokenId: string) => void;
   pathFrom?: { x: number; y: number } | null;
   pathBudget?: number | null;
+  /** APEX 2.5 – feet a Dash would add (orange part of the path). */
+  pathDash?: number | null;
+  /** APEX 2.5 – the hovered hex (for the action shown at the pointer). */
+  onHoverHex?: (k: HexKey | null) => void;
   /** APEX 1.9 – flying / climbing for the path preview. */
   pathMode?: { fly?: boolean; climb?: boolean };
   areaAt?: ((point: { x: number; y: number }) => HexKey[]) | null;
@@ -101,6 +105,7 @@ export default function HexScene3D(p: Props) {
   const lastPos = useRef(new Map<string, { k: HexKey; alt: number; pos: THREE.Vector3 }>());
   const cam = useRef<Cam>({ tx: 0, tz: 0, yaw: 0.6, pitch: 0.95, dist: 26 });
   const [hover, setHover] = useState<HexKey | null>(null);
+  useEffect(() => { p.onHoverHex?.(hover); }, [hover]); // eslint-disable-line react-hooks/exhaustive-deps
   const [quality, setQualityState] = useState<Quality3D>(readQuality);
   const qcfg = QUALITY[quality];
   const setQuality = (v: Quality3D) => { setQualityState(v); try { localStorage.setItem(QUALITY_KEY, v); } catch { /* private mode */ } };
@@ -770,7 +775,8 @@ export default function HexScene3D(p: Props) {
           const fromK = hexKey(hexAt(p.map, p.pathFrom));
           const z0 = height(fromK) * unit + (p.flyAlt ?? 0), z1 = height(hover) * unit + (p.aimAlt ?? 0);
           const vertical = flying ? Math.abs(z1 - z0) : 0;
-          const ok = p.pathBudget === null || p.pathBudget === undefined || r.cost + vertical <= p.pathBudget + 1e-9;
+          const budget = p.pathBudget ?? null, dashFt = p.pathDash ?? 0;
+          const band = (cost: number) => (budget === null || cost <= budget + 1e-9 ? 0 : cost <= budget + dashFt + 1e-9 ? 1 : 2);
           const all = [p.pathFrom, ...r.steps];
           const pts = all.map((q, i) => {
             const k = hexKey(hexAt(p.map, q)); const w = toWorld(center(parseKey(k)));
@@ -778,14 +784,22 @@ export default function HexScene3D(p: Props) {
             const z = z0 + ((z1 - z0) * i) / Math.max(1, all.length - 1);
             return new THREE.Vector3(w.x, Math.max(top(k), BASE + (z / 5) * LEVEL) + 0.15, w.z);
           });
-          const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.2);
-          const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(8, pts.length * 6), 0.07, 6, false), new THREE.MeshBasicMaterial({ color: ok ? 0xf3dc9a : 0xff6b5a }));
-          t.overlay.add(tube);
+          // APEX 2.5 – white within the movement left, orange where only a Dash gets there, red beyond (+ climbing)
+          const costs = [0, ...r.steps.map((st, n) => st.cost + (flying ? (vertical * (n + 1)) / r.steps.length : 0))];
+          let from = 0;
+          const runEnd = (n: number) => { let e = n; while (e + 1 < pts.length - 1 && band(costs[e + 2]) === band(costs[n + 1])) e++; return e + 1; };
+          while (from < pts.length - 1) {
+            const to = runEnd(from), seg = pts.slice(from, to + 1);
+            const col = [0xf6f1e2, 0xffa040, 0xff5a4a][band(costs[from + 1])];
+            const curve = seg.length > 2 ? new THREE.CatmullRomCurve3(seg, false, 'centripetal', 0.2) : new THREE.LineCurve3(seg[0], seg[1]);
+            t.overlay.add(new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(4, seg.length * 6), 0.07, 6, false), new THREE.MeshBasicMaterial({ color: col })));
+            from = to;
+          }
         }
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.pathDash, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {
