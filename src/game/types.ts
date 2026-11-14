@@ -431,6 +431,8 @@ export interface GameState {
   sceneEncounters?: Record<string, SceneEncounter>;
   /** Scene-local clocks (region day/night, battle lighting). Never touched by the Arena. */
   sceneClocks?: Record<string, SceneClockState>;
+  /** APEX 2.7 – enemy AI per scene: on/off and a step counter per turn (runaway guard). */
+  sceneAi?: Record<string, { on: boolean; turn?: string; steps?: number }>;
   /** APEX 2.5 – campaign time of day, season and snow. */
   worldTime?: import('./worldTime.js').WorldTime;
   /** Scene enemies (GM-placed), carried lights and the bounded combat log, per scene. */

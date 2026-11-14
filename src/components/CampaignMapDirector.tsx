@@ -480,6 +480,34 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     </>
   );
 
+  // APEX 2.7 – enemy AI: while it is on, this (the GM's) client asks the server for one AI step after the other –
+  // an NPC's turn, or an opportunity attack offered to an NPC. Every step is a normal, rule-checked scene action.
+  const aiOn = !!(shownScene && game.gmState?.sceneAi?.[shownScene.id]?.on);
+  const aiControlled = (id: string) => { const e = (shownScene ? game.gmState?.sceneEnemies?.[shownScene.id] ?? [] : []).find((x) => x.id === id); return !!e && !e.defeated && !e.ai?.off; };
+  const aiEncounter = shownScene && game.gmState?.sceneEncounters?.[shownScene.id]?.status === 'active' ? game.gmState.sceneEncounters[shownScene.id] : null;
+  const aiActor = aiOn && aiEncounter ? activeActors(aiEncounter).find((a) => a.startsWith('npc-') && aiControlled(a.slice(4))) : undefined;
+  const aiReaction = aiOn && (snapshot?.reactions ?? []).some((r) => r.reactor.kind === 'npc' && aiControlled(r.reactor.id));
+  const [aiTick, setAiTick] = useState(0);
+  const aiSceneId = shownScene?.id;
+  useEffect(() => {
+    if (!aiSceneId || shown === ARENA_ID || (!aiActor && !aiReaction)) return;
+    let live = true;
+    const timer = window.setTimeout(async () => {
+      if (!live) return;
+      if (busyRef.current) { setAiTick((n) => n + 1); return; }
+      let wait = false;
+      await guarded(async () => {
+        const r = (await api.sceneTurn({ sceneId: aiSceneId, action: 'aiStep' })) as { message?: string; ai?: { wait?: boolean; idle?: boolean } };
+        wait = !!r.ai?.wait || !!r.ai?.idle;
+        if (r.message) setNotice(`🤖 ${r.message}`);
+        game.online?.refresh();
+        setSnapshot(await api.sceneFocus(aiSceneId, viewRef.current));
+      });
+      // nothing to do yet (a player still decides a reaction): look again in a moment
+      if (live) window.setTimeout(() => live && setAiTick((n) => n + 1), wait ? 2000 : 150);
+    }, 950);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [aiSceneId, aiActor, aiReaction, aiTick, shown]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!online) return { enabled: false, arenaShown: true, zoomable: false, widgets: [], renderMap: (arena) => arena };
 
   const previewing = state.selected !== state.current;
@@ -967,9 +995,9 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               dock={(bar) => <>
                 <SpawnMarkers sceneId={shownScene.id} markers={shownScene.map.nodes.filter((n) => n.kind === 'enemies')} busy={busy} onSpawned={(m) => { setNotice(m); game.online?.refresh(); void api.sceneFocus(shownScene.id, viewRef.current).then(setSnapshot); }} />
                 <EncounterPanel sceneId={shownScene.id} partySizeDefault={Object.keys(snapshot.pcMovement ?? {}).length} library={[]} busy={busy} onPlaced={(m) => { setNotice(m); game.online?.refresh(); void api.sceneFocus(shownScene.id, viewRef.current).then(setSnapshot); }} />
-                {selected?.kind === 'npc' && (() => { const npc = gmEnemies.find((e) => e.id === selected.id); return npc ? <NpcBar target={bar} snapshot={snapshot} encounter={gmEncounter} npc={npc} busy={busy} act={sceneTurn} attack={npcAttack} setAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} onTarget={(id) => battle.interaction.onTokenContext?.(id)} /> : null; })()}
+                {selected?.kind === 'npc' && (() => { const npc = gmEnemies.find((e) => e.id === selected.id); return npc ? <NpcBar target={bar} snapshot={snapshot} encounter={gmEncounter} npc={npc} busy={busy} act={sceneTurn} aiOn={aiOn} library={enemyLibrary} attack={npcAttack} setAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} onTarget={(id) => battle.interaction.onTokenContext?.(id)} /> : null; })()}
                 {shownScene.category === 'battle' && shownScene.map.hex && (
-              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} adv={gmAdv} setAdv={setGmAdv} />
+              <BattleCommand snapshot={snapshot} encounter={gmEncounter} enemies={gmEnemies} view={view} setView={setView} selected={selected} setSelected={(r) => (setSelected(r), setAreaMode(null), setNpcAttack(0))} mode={battleMode} setMode={setBattleMode} busy={busy} act={sceneTurn} aiOn={aiOn} loadAttacks={loadAttacks} pcAttack={pcAttack} setPcAttack={setPcAttack} npcAttack={npcAttack} setNpcAttack={setNpcAttack} areaMode={areaMode} setAreaMode={setAreaMode} adv={gmAdv} setAdv={setGmAdv} />
             )}
                 {shownScene.category === 'battle' && selected?.kind === 'pc' && (() => {
               const fig = (snapshot.figures ?? []).find((f) => f.kind === 'pc' && f.tokenId === selected.id);

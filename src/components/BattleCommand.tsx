@@ -55,6 +55,8 @@ interface Props {
   busy: boolean;
   /** POST scene-turn with the scene id added. */
   act: (input: Record<string, unknown>) => void;
+  /** APEX 2.7 – the enemy AI runs on this scene. */
+  aiOn?: boolean;
   /** Sheet attacks of a character (equipment first) for GM attacks with a character. */
   loadAttacks: (tokenId: string) => Promise<SheetAttack[]>;
   pcAttack: number;
@@ -97,6 +99,8 @@ export function BattleCommand(p: Props) {
         <span className="ml-2 border-l border-ink-700 pl-2" />
         <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy} title="Every character rolls Stealth; opponents notice them only with enough passive Perception" onClick={() => p.act({ action: 'partySneak', on: true })} data-testid="party-sneak">🥷 Party sneak</button>
         <button type="button" className="btn btn-ghost px-2 py-0.5" disabled={p.busy} onClick={() => p.act({ action: 'partySneak', on: false })}>Stop sneaking</button>
+        <span className="ml-2 border-l border-ink-700 pl-2" />
+        <button type="button" className={`btn px-2 py-0.5 ${p.aiOn ? 'btn-gold' : 'btn-ghost'}`} aria-pressed={!!p.aiOn} disabled={p.busy} title="Enemy AI: NPCs move, attack and end their turns by themselves (each by its tactic and mood – set per creature in its bar). Off: you steer them." onClick={() => p.act({ action: 'ai', on: !p.aiOn })} data-testid="ai-toggle">🤖 Enemy AI: {p.aiOn ? 'on' : 'off'}</button>
         {p.view !== 'all' && <span className="text-marble-500">grey hexes are out of sight{p.view.startsWith('pc-') || !VIEW_LABEL[p.view] ? '' : ' for everyone in this group'}</span>}
       </div>
 

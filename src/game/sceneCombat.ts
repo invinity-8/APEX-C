@@ -56,6 +56,8 @@ export interface SceneEnemy {
   climbFt?: number;
   /** APEX 1.6 – temporary hit points (spent before hit points, never stack: the higher value stays). */
   tempHp?: number;
+  /** APEX 2.7 – enemy AI: this creature's own tactic / mood (else the stat block's default); `off`: the GM steers it by hand. */
+  ai?: { off?: boolean; tactic?: import('./enemyAi.js').Tactic; mood?: import('./enemyAi.js').Mood };
   /** APEX 2.6 – carries a light (torch, lantern); unset: humanoids and giants without darkvision carry one, others don't. */
   light?: boolean;
 }

@@ -4,6 +4,8 @@
  * Dash / Disengage / Dodge / Hide, the target strip and End turn.
  */
 import { speedWith } from '../game/combatEffects';
+import { MOODS, MOOD_LABEL, TACTICS, TACTIC_LABEL, defaultProfile } from '../game/enemyAi';
+import type { StatBlock } from '../game/bestiary';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SceneSnapshot } from '../server/sceneRuntime';
@@ -13,8 +15,8 @@ import { npcAttacks } from '../game/sceneCombat';
 import { budgetOf, isActiveActor, reactionUsed } from '../game/sceneActions';
 import { TargetStrip } from './TargetStrip';
 
-export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, setAttack, areaMode, setAreaMode, onTarget }: {
-  target: HTMLElement | null; snapshot: SceneSnapshot; encounter: SceneEncounter | null; npc: SceneEnemy; busy: boolean;
+export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, setAttack, areaMode, setAreaMode, onTarget, aiOn = false, library = [] }: {
+  target: HTMLElement | null; snapshot: SceneSnapshot; encounter: SceneEncounter | null; npc: SceneEnemy; busy: boolean; /** APEX 2.7 – enemy AI on this scene, and the stat blocks (default behaviour). */ aiOn?: boolean; library?: StatBlock[];
   act: (input: Record<string, unknown>) => void; attack: number; setAttack: (i: number) => void; areaMode: number | null; setAreaMode: (i: number | null) => void; onTarget: (id: string) => void;
 }) {
   const [shove, setShove] = useState<'push' | 'prone' | null>(null);
@@ -72,6 +74,20 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
             })()}
           </>}
           {!myTurn && <span className="text-amber-300">not its turn</span>}
+          {(() => {
+            // APEX 2.7 – this creature's behaviour for the enemy AI
+            const block = library.find((b) => b.id === npc.templateId);
+            const base = defaultProfile(block ?? { name: npc.name, type: '', attacks, areas: npc.areas, buffs: npc.buffs });
+            const tactic = npc.ai?.tactic ?? base.tactic, mood = npc.ai?.mood ?? base.mood;
+            return (
+              <span className="ml-auto flex flex-wrap items-center gap-1" data-testid="npc-ai">
+                <span title={aiOn ? 'The enemy AI is on for this scene' : 'The enemy AI is off for this scene (switch it on in the battle command)'} className={aiOn && !npc.ai?.off ? 'text-emerald-300' : 'text-marble-500'}>🤖</span>
+                <select aria-label="AI tactic" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={tactic} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, profile: { tactic: e.target.value } })}>{TACTICS.map((t) => <option key={t} value={t}>{TACTIC_LABEL[t]}{t === base.tactic ? ' (default)' : ''}</option>)}</select>
+                <select aria-label="AI mood" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={mood} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, profile: { mood: e.target.value } })}>{MOODS.map((m) => <option key={m} value={m}>{MOOD_LABEL[m]}{m === base.mood ? ' (default)' : ''}</option>)}</select>
+                <label className="flex items-center gap-1 text-marble-300" title="Unticked: you steer this creature yourself even while the AI is on"><input type="checkbox" checked={!npc.ai?.off} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, off: !e.target.checked })} /> AI</label>
+              </span>
+            );
+          })()}
         </div>
         <div className="flex items-end gap-2">
           <div className="hotbar-slots">
