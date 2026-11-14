@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
 import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
-import { MAX_ALTITUDE_FT } from '../../game/altitude';
+import { MAX_ALTITUDE_FT, flightCost } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
@@ -31,7 +31,7 @@ import type { SceneFx } from '../../game/sceneFx';
 import { FX_COLOR } from './CombatFx';
 import { buildTerrain, type Terrain, type TerrainCell } from './terrain3d';
 import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, seasonTint, unknownColour, type Backdrop, type Light, type WeatherFx } from './environment3d';
-import type { Season, Weather } from '../../game/worldTime';
+import type { Season, Weather, WeatherMix } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
 import { fromPixel } from '../../game/hex';
 
@@ -72,7 +72,7 @@ interface Props {
   /** APEX 2.4 – the moving figure can fly: its current altitude (ft). Shows the reach as a 3D volume around it. */
   flyAlt?: number | null;
   /** APEX 2.5 – time of day (hours), weather, season and snow of the scene. */
-  env?: { hour?: number; weather?: Weather; season?: Season; snow?: number };
+  env?: { hour?: number; weather?: Weather | WeatherMix; season?: Season; snow?: number };
   /** APEX 2.4 – sneaking: awareness rings of the opponents and (GM) spotted / heard marks. */
   stealth?: { rings: AwarenessRing[]; marks?: StealthMark[] } | null;
 }
@@ -191,6 +191,7 @@ export default function HexScene3D(p: Props) {
   const hourNow = p.env?.hour ?? (p.phase === 'night' ? 0.5 : p.phase === 'dusk' ? 19.2 : 12);
   const hourKey = Math.round(hourNow * 4) / 4; // re-light every quarter hour
   const weather = p.env?.weather ?? 'clear';
+  const weatherKey = JSON.stringify(weather);
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -222,7 +223,7 @@ export default function HexScene3D(p: Props) {
     t.renderer.shadowMap.needsUpdate = true;
     dirty.current = true;
     setTick((x) => x + 1);
-  }, [hourKey, weather, p.map.mood, biome, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hourKey, weatherKey, p.map.mood, biome, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- APEX 2.5: the land beyond the map's edge and the horizon (per biome)
   useEffect(() => {
@@ -247,12 +248,12 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t || !p.map.hex) return;
     const e = envRef.current;
-    const fx = buildWeather(weather, e.light ?? lightFor(hourKey, weather), p.map.hex.radius * 1.8);
+    const fx = buildWeather(weather, e.light ?? lightFor(hourKey, weather), p.map.hex.radius * 1.8, quality === 'low' ? 0.4 : quality === 'medium' ? 0.7 : 1);
     e.weather = fx;
     t.scene.add(fx.group);
     dirty.current = true;
     return () => { t.scene.remove(fx.group); fx.dispose(); if (e.weather === fx) e.weather = undefined; };
-  }, [weather, p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [weatherKey, p.map.hex?.radius, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- quality: resolution and shadows follow the setting
   useEffect(() => {
@@ -557,7 +558,7 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -566,6 +567,7 @@ export default function HexScene3D(p: Props) {
     anim.current.cards = []; anim.current.wings = [];
     const stacks = new Map<HexKey, SceneToken[]>();
     for (const tk of p.tokens ?? []) { const k = hexKey(hexAt(p.map, tk)); stacks.set(k, [...(stacks.get(k) ?? []), tk]); }
+    let torchLights = 0;
     for (const [k, group] of stacks) {
       group.forEach((tk, i) => {
         const w = toWorld(center(parseKey(k)));
@@ -592,6 +594,20 @@ export default function HexScene3D(p: Props) {
           g.add(shadow, line);
         }
         t.tokens.add(g);
+        // APEX 2.6 – a carried light (torch, lantern) in 3D too: a flame at the figure and a warm light around it
+        if (tk.torch) {
+          const flame = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 6), new THREE.MeshBasicMaterial({ color: 0xffc35a }));
+          const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.55, 5), new THREE.MeshStandardMaterial({ color: 0x5a3a1a }));
+          stick.position.set(0.42, fig.height * 0.55, 0.15); flame.position.set(0.42, fig.height * 0.55 + 0.38, 0.15);
+          g.add(stick, flame);
+          if (torchLights < Math.max(1, QUALITY[quality].lights)) {
+            torchLights++;
+            const night = p.phase === 'night' ? 1 : p.phase === 'dusk' ? 0.6 : 0.15;
+            const light = new THREE.PointLight(0xffa64a, 0.6 + night * 2.6, 12, 1.6);
+            light.position.copy(flame.position).add(new THREE.Vector3(0, 0.2, 0));
+            g.add(light);
+          }
+        }
         // APEX 2.5 – movement animation: walk (or fly) the figure along its path from where it stood before
         const prev = lastPos.current.get(tk.tokenId);
         const final = g.position.clone();
@@ -608,7 +624,7 @@ export default function HexScene3D(p: Props) {
         }
       });
     }
-  }, [tokenKey, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tokenKey, height, p.phase, quality]); // eslint-disable-line react-hooks/exhaustive-deps
   // --- APEX 2.4 sneaking: awareness rings on the ground (following the relief) and “!” / “?” above the watchers
   const stealthGroup = useRef<THREE.Group | null>(null);
   const stealthKey = JSON.stringify(p.stealth ?? null);
@@ -707,8 +723,10 @@ export default function HexScene3D(p: Props) {
       };
       for (const [k, { cost }] of air) {
         if (!tiles.has(k)) continue;
-        const left = p.pathBudget - cost * unit;
-        if (left < 0) continue;
+        // APEX 2.6 – flying cost is slanted (√(across² + up/down²)): the reach is a sphere around the figure
+        const across = cost * unit;
+        if (across > p.pathBudget + 1e-9) continue;
+        const left = Math.sqrt(Math.max(0, p.pathBudget ** 2 - across ** 2));
         const g = height(k) * unit;
         const lo = Math.max(g, z0 - left), hi = Math.min(g + MAX_ALTITUDE_FT, z0 + left);
         if (hi - lo < 1) continue;
@@ -794,7 +812,7 @@ export default function HexScene3D(p: Props) {
             return new THREE.Vector3(w.x, Math.max(top(k), BASE + (z / 5) * LEVEL) + 0.15, w.z);
           });
           // APEX 2.5 – white within the movement left, orange where only a Dash gets there, red beyond (+ climbing)
-          const costs = [0, ...r.steps.map((st, n) => st.cost + (flying ? (vertical * (n + 1)) / r.steps.length : 0))];
+          const costs = [0, ...r.steps.map((st, n) => (flying ? flightCost(st.cost, (vertical * (n + 1)) / r.steps.length) : st.cost))];
           let from = 0;
           const runEnd = (n: number) => { let e = n; while (e + 1 < pts.length - 1 && band(costs[e + 2]) === band(costs[n + 1])) e++; return e + 1; };
           while (from < pts.length - 1) {
@@ -808,7 +826,8 @@ export default function HexScene3D(p: Props) {
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.pathDash, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
+    // APEX 2.6 – performance: rebuilt only when something it shows changes (not on every parent render)
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.pathDash, !!p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, tokenKey, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {
@@ -839,6 +858,7 @@ export default function HexScene3D(p: Props) {
   const keys = useRef(new Set<string>());
   const lastKeyFrame = useRef(0);
   const lastWeather = useRef(0);
+  const camY = useRef(BASE);
   const over = useRef(false);
   useEffect(() => {
     const typing = (e: KeyboardEvent) => { const el = e.target as HTMLElement | null; return !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable); };
@@ -898,8 +918,17 @@ export default function HexScene3D(p: Props) {
       }
       lastKeyFrame.current = now;
       const c = cam.current;
-      t.camera.position.set(c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, Math.sin(c.pitch) * c.dist, c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist);
-      t.camera.lookAt(c.tx, 1, c.tz);
+      // APEX 2.6 – the camera looks at the ground under its target and never dips below the terrain (no see-through ground)
+      const groundAt = (x: number, z: number) => { const terr = terrainRef.current; if (!terr) return BASE; const h = fromPixel(x * HEX_SIZE, z * HEX_SIZE, HEX_SIZE); const k = hexKey(h); const cw = center(h); return terr.surfaceY(k, x - cw.x / HEX_SIZE, z - cw.y / HEX_SIZE) || BASE; };
+      const ty = groundAt(c.tx, c.tz);
+      camY.current += (ty - camY.current) * (Math.abs(ty - camY.current) > 30 ? 1 : 0.15);
+      const cx = c.tx + Math.sin(c.yaw) * Math.cos(c.pitch) * c.dist, cz = c.tz + Math.cos(c.yaw) * Math.cos(c.pitch) * c.dist;
+      let cy = camY.current + Math.sin(c.pitch) * c.dist;
+      const floor = Math.max(groundAt(cx, cz), groundAt((cx + c.tx) / 2, (cz + c.tz) / 2) - 1) + 1.6;
+      if (cy < floor) cy = floor;
+      t.camera.position.set(cx, cy, cz);
+      t.camera.lookAt(c.tx, camY.current + 1, c.tz);
+      if (Math.abs(ty - camY.current) > 0.01) dirty.current = true;
       for (const l of a.lights) if (l.userData.flicker) l.intensity = (l.userData.base as number) * (0.8 + 0.2 * Math.sin(sec * 11 + (l.userData.phase as number)) * Math.sin(sec * 6.7 + (l.userData.phase as number) * 1.7));
       if (t.composer) t.composer.render(); else t.renderer.render(t.scene, t.camera);
       t.renderer.shadowMap.needsUpdate = false;
@@ -994,12 +1023,33 @@ export default function HexScene3D(p: Props) {
 
   // --- controls
   const drag = useRef<{ button: number; x: number; y: number; moved: boolean } | null>(null);
+  // APEX 2.6 – touch: one finger pans, two fingers pinch to zoom, twist to orbit and move up/down to tilt
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; a: number; my: number } | null>(null);
+  const twoFinger = () => { const [a, b] = [...touches.current.values()]; return { d: Math.hypot(b.x - a.x, b.y - a.y), a: Math.atan2(b.y - a.y, b.x - a.x), my: (a.y + b.y) / 2 }; };
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.current.size === 2) { pinch.current = twoFinger(); if (drag.current) drag.current.moved = true; return; }
+    }
     drag.current = { button: e.button, x: e.clientX, y: e.clientY, moved: false };
     if (e.button === 1) e.preventDefault();
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) {
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.current.size >= 2 && pinch.current) {
+        const now = twoFinger(), c = cam.current, was = pinch.current;
+        if (now.d > 10 && was.d > 10) c.dist = Math.max(5, Math.min(140, c.dist * (was.d / now.d)));
+        let da = now.a - was.a; da = Math.atan2(Math.sin(da), Math.cos(da));
+        c.yaw -= da;
+        c.pitch = Math.max(0.12, Math.min(1.5, c.pitch + (now.my - was.my) * 0.004));
+        pinch.current = now;
+        setTick((x) => x + 1);
+        return;
+      }
+    }
     const d = drag.current;
     if (d && (d.button === 0 || d.button === 1)) {
       const dx = e.clientX - d.x, dy = e.clientY - d.y;
@@ -1022,6 +1072,12 @@ export default function HexScene3D(p: Props) {
     if (k !== hover) setHover(k);
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      const wasPinch = touches.current.size >= 2;
+      touches.current.delete(e.pointerId);
+      if (touches.current.size < 2) pinch.current = null;
+      if (wasPinch || touches.current.size) { drag.current = null; return; } // ending a pinch is no tap
+    }
     const d = drag.current;
     drag.current = null;
     if (!d || d.moved || d.button !== 0) return;
@@ -1066,7 +1122,7 @@ export default function HexScene3D(p: Props) {
     <div className="relative h-full w-full select-none" style={{ minHeight: 360 }}>
       <div ref={wrap} className="absolute inset-0 touch-none outline-none focus-visible:ring-2 focus-visible:ring-gold-400/50" tabIndex={0} role="application" data-testid="hex-scene-3d"
         aria-label={`${p.label}. 3D map. WASD or drag to pan, middle mouse button to orbit and tilt, mouse wheel zooms, Q/E orbit, R/F tilt, double-click a figure to centre it.`}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerEnter={() => { over.current = true; }} onPointerLeave={() => { setHover(null); over.current = false; }} onDoubleClick={onDouble} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={(e) => { touches.current.delete(e.pointerId); pinch.current = null; drag.current = null; }} onPointerEnter={() => { over.current = true; }} onPointerLeave={() => { setHover(null); over.current = false; }} onDoubleClick={onDouble} onContextMenu={onContext} onAuxClick={(e) => e.preventDefault()} onKeyDown={onKey} />
       {hover && hoverInfo && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
           <b>{hoverInfo.label}</b> · height {Math.round(height(hover) * (p.map.unitsPerCell || 5))} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}

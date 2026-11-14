@@ -12,7 +12,7 @@ import type { MapIntent, MapMenuItem, SceneInteraction } from './SceneSurface';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
 import type { ReadyAction } from './PlayerCombat';
 import { areaHexes, parseArea } from '../campaign/hexArea';
-import { hexAt, hexCentre, hexMovementCost, tileLookup } from '../campaign/hexScene';
+import { hexAt, hexCentre, hexMovementCost, pathChecks, tileLookup } from '../campaign/hexScene';
 import { distance, hexKey, hexesInRange, parseKey } from '../game/hex';
 import { parseRangeFt } from '../game/sceneCombat';
 import { budgetOf, characterLevel, spellRangeFt } from '../game/sceneActions';
@@ -109,7 +109,7 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
   const figOf = (id: string) => figures.find((x) => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
   // APEX 1.9: flying while in the air, climbing with a climb speed (the player's own movement or the GM's view of it)
   const mv = i.snapshot.movement?.tokenId === i.tokenId ? i.snapshot.movement : i.snapshot.pcMovement?.[i.tokenId];
-  const moveMode = { ...(mv?.fly && (mv.alt ?? 0) > 0 ? { fly: true } : {}), ...(mv?.climb ? { climb: true } : {}) };
+  const moveMode = { ...(mv?.fly && (mv.alt ?? 0) > 0 ? { fly: true } : { athletics: true }), ...(mv?.climb ? { climb: true } : {}) };
   const me = hexKey(hexAt(map, pos));
   const figAt = (k: string) => figures.find((x) => x.condition !== 'down' && hexKey(hexAt(map, x)) === k && !(x.kind === 'pc' && x.tokenId === i.tokenId));
   const remaining = i.remaining;
@@ -137,8 +137,13 @@ export function pcInteraction(i: PcInteractionInput): SceneInteraction {
     if (readyArea && readySpell) return { icon: '✨', label: `${readySpell.name} here`, tone: 'spell' };
     if (!i.canMove) return null;
     const r = pathTo(hexCentre(map, parseKey(k)));
-    if (!r.ok) return { icon: '⛔', label: 'No way there', tone: 'bad' };
-    if (remaining === null || r.cost <= remaining + 1e-9) return { icon: '👣', label: `Move ${r.cost} ft`, tone: 'move' };
+    if (!r.ok) return { icon: '⛔', label: r.error.includes('cannot be entered') ? r.error : 'No way there', tone: 'bad' };
+    // APEX 2.6 – a climb or a jump on the way: say which Athletics check it takes
+    const checks = pathChecks(map, r.path, hexAt(map, pos), moveMode);
+    if (typeof checks === 'string') return { icon: '⛔', label: checks, tone: 'bad' };
+    const extra = checks.length ? ` – Athletics ${checks.map((c) => `${c.kind === 'climb' ? 'climb' : 'jump'} ${c.ft} ft DC ${c.dc}`).join(', ')}` : '';
+    const icon = checks.some((c) => c.kind === 'jump') ? '🤸' : checks.length ? '🧗' : '👣';
+    if (remaining === null || r.cost <= remaining + 1e-9) return { icon, label: `Move ${r.cost} ft${extra}`, tone: 'move' };
     if (i.dash && (i.dash.action || i.dash.bonus) && r.cost <= remaining + i.dash.speedFt + 1e-9) return { icon: '💨', label: `${r.cost} ft – needs a Dash (right-click to choose)`, tone: 'dash' };
     return { icon: '👣', label: `${r.cost} ft – too far: as far as possible`, tone: 'bad' };
   };

@@ -399,7 +399,7 @@ export interface SceneEncounter {
 }
 
 /** Scene-local time and light (independent of the Arena day/night). */
-export interface SceneClockState { day: number; phase: 'day' | 'night'; lighting: 'bright' | 'dim' | 'dark'; version: number; /** APEX 2.5 – weather of the scene. */ weather?: import('./worldTime.js').Weather; /** APEX 2.5 – false: the GM set the lighting by hand (it no longer follows the world time). */ followTime?: boolean }
+export interface SceneClockState { day: number; phase: 'day' | 'night'; lighting: 'bright' | 'dim' | 'dark'; version: number; /** APEX 2.5 – weather of the scene (APEX 2.6: the sky). */ weather?: import('./worldTime.js').Weather; /** APEX 2.6 – rain, fog and snow on top of the sky (any combination). */ weatherFx?: import('./worldTime.js').WeatherFx[]; /** APEX 2.5 – false: the GM set the lighting by hand (it no longer follows the world time). */ followTime?: boolean }
 
 export interface GameState {
   version: number;

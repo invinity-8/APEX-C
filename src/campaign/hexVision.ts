@@ -25,6 +25,8 @@ export interface SceneClock {
   version: number;
   /** APEX 2.5 – fog limits sight to 30 ft (blindsight still works). */
   weather?: string;
+  /** APEX 2.6 – rain / fog / snow on top of the sky. */
+  weatherFx?: readonly string[];
 }
 export const defaultSceneClock = (): SceneClock => ({ day: 1, phase: 'day', lighting: 'bright', version: 0 });
 
@@ -115,7 +117,7 @@ export function sceneVision(map: Pick<SceneMap, 'width' | 'height' | 'hex' | 'no
       const sense = Math.max(v.darkvisionFt, v.blindFt ?? 0);
       radius = clock.lighting === 'bright' ? BRIGHT_SIGHT_FT / 5 : clock.lighting === 'dim' ? Math.max(DIM_SIGHT_FT, sense) / 5 : Math.max(1, Math.round(sense / 5));
       if (clock.lighting !== 'dark' && v.altFt) radius += Math.round(v.altFt / 5); // the view widens with height
-      if (clock.weather === 'fog') radius = Math.min(radius, Math.max(FOG_SIGHT_FT, v.blindFt ?? 0) / 5);
+      if (clock.weather === 'fog' || clock.weatherFx?.includes('fog')) radius = Math.min(radius, Math.max(FOG_SIGHT_FT, v.blindFt ?? 0) / 5);
     } else {
       const day = clock.phase === 'day';
       radius = day ? 2 + (own.id === 'hills' ? 1 : own.id === 'mountain' ? 2 : 0) : 1;

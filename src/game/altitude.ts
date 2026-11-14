@@ -51,6 +51,11 @@ export function npcSpeeds(e: { flyFt?: number; climbFt?: number }, effects: Arra
 
 /** 3D distance in feet: the larger of horizontal and vertical (5e grid). */
 export const distance3d = (horizontalFt: number, za: number, zb: number) => Math.max(horizontalFt, Math.abs(za - zb));
+/**
+ * APEX 2.6 – feet a flight costs: straight and slanted through the air (√(across² + up/down²), rounded to whole
+ * feet) instead of across + up/down. The reach of a flyer is a sphere around it.
+ */
+export const flightCost = (horizontalFt: number, verticalFt: number) => Math.round(Math.hypot(horizontalFt, verticalFt));
 
 /** Falling damage dice for a drop (1d6 per full 10 ft, at most 20d6); null below 10 ft. */
 export function fallDice(ft: number): string | null {

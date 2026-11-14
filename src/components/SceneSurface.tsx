@@ -8,7 +8,7 @@ import { HexSceneMap, type SceneToken } from './map/HexSceneMap';
 import { hexReach } from '../campaign/hexScene';
 import { stealthWatch } from '../game/stealth';
 import { TimeDial, useWorldMinute } from './TimeDial';
-import { hourOf } from '../game/worldTime';
+import { hourOf, weatherMix } from '../game/worldTime';
 import type { TokenView } from '../game/visibility';
 import { figureIcons } from './map/effectIcons';
 
@@ -48,6 +48,15 @@ export interface SceneInteraction {
 }
 export interface MapIntent { icon: string; label: string; tone?: 'move' | 'attack' | 'spell' | 'dash' | 'bad' | 'menu' }
 export interface MapMenuItem { icon: string; label: string; run: () => void }
+
+/** APEX 2.6 – performance: the reach area and the sneak watch are recomputed only when their inputs change. */
+function memoLast<A extends unknown[], R>(key: (...a: A) => string, fn: (...a: A) => R): (...a: A) => R {
+  let last: { k: string; r: R } | null = null;
+  return (...a: A) => { const k = key(...a); if (last && last.k === k) return last.r; const r = fn(...a); last = { k, r }; return r; };
+}
+const mapSig = (m: { hex?: { terrain: string; heights?: string; fine?: string } }) => `${m.hex?.terrain.length}:${m.hex?.terrain}:${m.hex?.heights ?? ''}:${m.hex?.fine ?? ''}`;
+const memoReach = memoLast((m: Parameters<typeof hexReach>[0], o: { x: number; y: number }, b: number, mode?: { fly?: boolean; climb?: boolean }) => `${mapSig(m as never)}|${o.x},${o.y}|${b}|${mode?.fly ? 1 : 0}${mode?.climb ? 1 : 0}`, hexReach);
+const memoWatch = memoLast((m: Parameters<typeof stealthWatch>[0], f: Parameters<typeof stealthWatch>[1], l: Parameters<typeof stealthWatch>[2]) => `${mapSig(m as never)}|${l}|${JSON.stringify(f.map((x) => [x.id, x.x, x.y, x.alt, x.condition, x.perception, (x.effects ?? []).filter((e) => e.key === 'hidden').map((e) => e.value ?? e.name)]))}`, stealthWatch);
 
 /** The same filtered renderer is used by assigned players and exact GM player previews. */
 export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc', tokenLabels, onDestination, tokenViews = [], reachBudget = null, gm = false, onFigureClick, targets, selectedId = null, interaction = {}, compact = false }: { snapshot: SceneSnapshot; tokenId?: string; name?: string; color?: string; tokenLabels?: Array<{ tokenId: string; name: string; color: string }>; onDestination?: (x: number, y: number) => void; tokenViews?: TokenView[]; /** Remaining movement (feet/miles) – shows the gold reach area on hex scenes. */ reachBudget?: number | null; gm?: boolean; /** Click on another character or an enemy (id: token id or enemy id). */ onFigureClick?: (id: string) => void; /** Highlighted figure ids (attack mode). */ targets?: string[]; /** GM: the selected figure (token or NPC id). */ selectedId?: string | null; /** APEX 1.2 right-click, previews, camera focus. */ interaction?: SceneInteraction; /** APEX 1.9: inside the battle layout – the map only, no title. */ compact?: boolean }) {
@@ -137,10 +146,10 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       return { ...t, ...(t.tokenId === tokenId && snapshot.movement?.alt ? { alt: snapshot.movement.alt } : {}), ...(mine && !t.icons?.length ? { icons: figureIcons(mine.effects, mine.concentration) } : {}), ...(!t.enemy && !t.vitals && snapshot.vitals?.[t.tokenId] ? { vitals: snapshot.vitals[t.tokenId] } : {}) };
     });
     // APEX 2.4 – sneaking: awareness rings of the opponents (everyone), spotted / heard marks (GM only)
-    const watch = category === 'battle' && snapshot.clock ? stealthWatch(map, figures.map((f) => ({ ...f, effects: f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) })), snapshot.clock.lighting) : null;
+    const watch = category === 'battle' && snapshot.clock ? memoWatch(map, figures.map((f) => ({ ...f, effects: f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) })), snapshot.clock.lighting) : null;
     const stealth = watch && watch.rings.length ? { rings: watch.rings, ...(gm ? { marks: watch.marks } : {}) } : null;
     const reachOrigin = interaction.reachFrom ?? point;
-    const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? hexReach(map, reachOrigin, reachBudget, interaction.moveMode) : null;
+    const reachArea = reachOrigin && reachBudget !== null && reachBudget > 0 ? memoReach(map, reachOrigin, reachBudget, interaction.moveMode) : null;
     // Scene-local light: region night like the Arena; battle lighting dim/dark.
     const clock = snapshot.clock;
     const phase = !clock ? 'day' : category === 'battle' ? (clock.lighting === 'dark' ? 'night' : clock.lighting === 'dim' ? 'dusk' : 'day') : clock.phase === 'night' ? 'night' : 'day';
@@ -152,13 +161,13 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
           {menu.items.map((it, i) => <button key={i} type="button" role="menuitem" className={i === 0 ? 'is-default' : ''} onClick={() => { setMenu(null); it.run(); }}><span>{it.icon}</span>{it.label}{i === 0 && <small>right-click again</small>}</button>)}
           <button type="button" role="menuitem" className="map-menu-cancel" onClick={() => setMenu(null)}>✕ Cancel (Esc)</button>
         </div>}
-        {category === 'battle' && snapshot.clock?.world && <div className="scene-clock-badge" data-testid="scene-clock"><TimeDial world={snapshot.clock.world} weather={snapshot.clock.weather} size={96} /></div>}
+        {category === 'battle' && snapshot.clock?.world && <div className="scene-clock-badge" data-testid="scene-clock"><TimeDial world={snapshot.clock.world} weather={snapshot.clock.weather} weatherFx={snapshot.clock.weatherFx} size={96} /></div>}
         {stealth && view3d && <div className="stealth-legend" data-testid="stealth-legend">🥷 Sneaking – rings: how far opponents pay attention. <b style={{ color: '#ff8a7a' }}>red</b> = it would notice your Stealth when it sees you · <b style={{ color: '#f3dc9a' }}>dashed</b> = you beat its passive Perception</div>}
         {category === 'battle' && (aimAlt > 0 || snapshot.movement?.fly) && <div className="aim-level" data-testid="aim-level" title="Shift + mouse wheel: aim height for flying and spell centres">⇕ Aim {aimAlt} ft{aimAlt ? '' : ' (ground)'} <small>Shift+wheel</small>{aimAlt > 0 && <button type="button" onClick={() => setAimAlt(0)} aria-label="Back to the ground">×</button>}</div>}
         {category === 'battle' && <button type="button" className="map-view-toggle" aria-pressed={view3d} onClick={() => setView3d(!view3d)} data-testid="toggle-3d" title={view3d ? 'Back to the 2D map' : '3D view: hold the middle mouse button to orbit and tilt'}>{view3d ? '⬢ 2D' : '⛰ 3D'}</button>}
         {view3d && category === 'battle' ? (
           <Suspense fallback={<p className="p-4 text-marble-300">Loading 3D view…</p>}>
-            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext || interaction.menuAt ? hexContext : undefined} onTokenContext={interaction.onTokenContext ? tokenContext : undefined} pathDash={interaction.pathDash} onHoverHex={interaction.intentAt ? setHoverHex : undefined} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} env={{ ...(worldMinute !== null ? { hour: hourOf(worldMinute) } : {}), weather: snapshot.clock?.weather, season: snapshot.clock?.world?.season, snow: snapshot.clock?.world?.snow }} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
+            <HexScene3D map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext || interaction.menuAt ? hexContext : undefined} onTokenContext={interaction.onTokenContext ? tokenContext : undefined} pathDash={interaction.pathDash} onHoverHex={interaction.intentAt ? setHoverHex : undefined} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} areaAt={interaction.areaAt} focus={interaction.focus} aimAlt={aimAlt} flyAlt={snapshot.movement?.fly ? snapshot.movement.alt ?? 0 : null} stealth={stealth} env={{ ...(worldMinute !== null ? { hour: hourOf(worldMinute) } : {}), weather: weatherMix(snapshot.clock?.weather, snapshot.clock?.weatherFx), season: snapshot.clock?.world?.season, snow: snapshot.clock?.world?.snow }} fx={snapshot.fx} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} lineRangeFt={interaction.lineRangeFt} />
           </Suspense>
         ) : (
           <HexSceneMap map={map} label={title} tokens={tokens} gm={gm} fog={snapshot.fog} phase={phase} selectedTokenId={selectedId ?? tokenId ?? null} reach={reachArea} onTokenClick={onFigureClick} onHexClick={onDestination ? (_k, p) => onDestination(p.x, p.y) : undefined} onHexContext={interaction.onHexContext || interaction.menuAt ? hexContext : undefined} onTokenContext={interaction.onTokenContext ? tokenContext : undefined} pathDash={interaction.pathDash} onHoverHex={interaction.intentAt ? setHoverHex : undefined} pathFrom={interaction.pathFrom} pathBudget={interaction.pathBudget} pathMode={interaction.moveMode} lineFrom={interaction.lineFrom} lineRangeFt={interaction.lineRangeFt} sightFrom={interaction.sightFrom} sightSide={interaction.sightSide} areaAt={interaction.areaAt} focus={interaction.focus} fx={snapshot.fx} aimAlt={aimAlt} />

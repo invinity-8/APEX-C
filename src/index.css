@@ -540,7 +540,7 @@
 }
 
 /* APEX 1.8 – 2D / 3D switch on battle maps */
-.map-view-toggle { position: absolute; top: .5rem; right: .5rem; z-index: 15; padding: .25rem .6rem; border-radius: .45rem; border: 1px solid rgba(192,155,88,.6); background: rgba(14,17,22,.88); color: #e8d4a6; font: 600 .75rem/1.2 Inter, sans-serif; }
+.map-view-toggle { position: absolute; top: .5rem; right: .5rem; z-index: 40; padding: .25rem .6rem; border-radius: .45rem; border: 1px solid rgba(192,155,88,.6); background: rgba(14,17,22,.88); color: #e8d4a6; font: 600 .75rem/1.2 Inter, sans-serif; }
 .map-view-toggle:hover { border-color: #e8d4a6; }
 .map-view-toggle[aria-pressed="true"] { background: rgba(192,155,88,.25); }
 

@@ -84,3 +84,26 @@ describe('1-ft slopes', () => {
     expect(cost('01', '01')).toBeNull(); // 6 ft up: a cliff
   });
 });
+
+import { enemyCarriesLight } from '../src/game/sceneCombat';
+import { flightCost } from '../src/game/altitude';
+import { weatherMix } from '../src/game/worldTime';
+describe('APEX 2.6', () => {
+  it('flying costs the slanted distance', () => {
+    expect(flightCost(30, 40)).toBe(50);
+    expect(flightCost(5, 20)).toBe(21);
+    expect(flightCost(30, 0)).toBe(30);
+  });
+  it('NPC lights: humanoids without darkvision carry one, beasts and darkvision do not; the GM decides', () => {
+    expect(enemyCarriesLight({ darkvisionFt: 0 }, 'humanoid')).toBe(true);
+    expect(enemyCarriesLight({ darkvisionFt: 60 }, 'humanoid (goblinoid)')).toBe(false);
+    expect(enemyCarriesLight({ darkvisionFt: 0 }, 'beast')).toBe(false);
+    expect(enemyCarriesLight({ darkvisionFt: 60, light: true }, 'humanoid')).toBe(true);
+    expect(enemyCarriesLight({ darkvisionFt: 0, light: true, defeated: true }, 'humanoid')).toBe(false);
+  });
+  it('weather combines a sky with rain, fog and snow; older single weathers still read', () => {
+    expect(weatherMix('dark', ['rain', 'fog'])).toEqual({ sky: 'dark', rain: true, fog: true, snow: false });
+    expect(weatherMix('rain')).toEqual({ sky: 'dark', rain: true, fog: false, snow: false });
+    expect(weatherMix(undefined)).toEqual({ sky: 'clear', rain: false, fog: false, snow: false });
+  });
+});

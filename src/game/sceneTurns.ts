@@ -14,7 +14,7 @@ import { activeActors, blockOf } from './sceneActions.js';
 import { onTurnStart } from './combatEffects.js';
 import type { GameState, SceneClockState, SceneEncounter, SceneEncounterParticipant } from './types.js';
 
-import { WEATHER_LABEL, type Weather } from './worldTime.js';
+import { SKIES, WEATHER_FX, weatherMix, weatherText, type Weather, type WeatherFx } from './worldTime.js';
 export const defaultClock = (): SceneClockState => ({ day: 1, phase: 'day', lighting: 'bright', version: 0 });
 export const clockOf = (state: Pick<GameState, 'sceneClocks'>, sceneId: string): SceneClockState => ({ ...defaultClock(), ...(state.sceneClocks?.[sceneId] ?? {}) });
 export const activeEncounter = (state: Pick<GameState, 'sceneEncounters'>, sceneId: string): SceneEncounter | null => {
@@ -24,7 +24,7 @@ export const activeEncounter = (state: Pick<GameState, 'sceneEncounters'>, scene
 
 type Result = { ok: true; state: GameState; message?: string } | { ok: false; error: string };
 
-export function setClock(prev: GameState, sceneId: string, expectedVersion: number, change: { phase?: 'day' | 'night'; nextDay?: boolean; lighting?: SceneClockState['lighting']; weather?: Weather; followTime?: boolean }): Result {
+export function setClock(prev: GameState, sceneId: string, expectedVersion: number, change: { phase?: 'day' | 'night'; nextDay?: boolean; lighting?: SceneClockState['lighting']; weather?: Weather; weatherFx?: WeatherFx[]; followTime?: boolean }): Result {
   const clock = clockOf(prev, sceneId);
   if (clock.version !== expectedVersion) return { ok: false, error: 'The scene time changed. Refresh and try again.' };
   const next: SceneClockState = { ...clock, version: clock.version + 1 };
@@ -32,10 +32,14 @@ export function setClock(prev: GameState, sceneId: string, expectedVersion: numb
   else if (change.phase) next.phase = change.phase;
   if (change.lighting) { next.lighting = change.lighting; next.followTime = false; }
   if (change.followTime !== undefined) next.followTime = change.followTime;
-  if (change.weather) next.weather = change.weather;
+  if (change.weather || change.weatherFx) {
+    // APEX 2.6 – a sky plus any rain / fog / snow; an old single weather is split into both
+    const mix = weatherMix(change.weather ?? clock.weather, change.weatherFx ?? (change.weather && !SKIES.includes(change.weather as never) ? undefined : clock.weatherFx));
+    next.weather = mix.sky; next.weatherFx = WEATHER_FX.filter((k) => mix[k]);
+  }
   const state = structuredClone(prev);
   state.sceneClocks = { ...(state.sceneClocks ?? {}), [sceneId]: next };
-  return { ok: true, state, message: change.nextDay ? `Day ${next.day} begins – travel is restored.` : change.phase ? `${next.phase === 'night' ? 'Night' : 'Day'} falls on the scene.` : change.weather ? `Weather: ${WEATHER_LABEL[change.weather]}.` : change.followTime ? 'Lighting follows the time of day.' : `Lighting: ${next.lighting}.` };
+  return { ok: true, state, message: change.nextDay ? `Day ${next.day} begins – travel is restored.` : change.phase ? `${next.phase === 'night' ? 'Night' : 'Day'} falls on the scene.` : change.weather || change.weatherFx ? `Weather: ${weatherText(weatherMix(next.weather, next.weatherFx))}.` : change.followTime ? 'Lighting follows the time of day.' : `Lighting: ${next.lighting}.` };
 }
 
 export interface InitiativeEntry { tokenId: string; name: string; roll: number; bonus: number }

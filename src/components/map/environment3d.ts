@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { HexKey } from '../../game/hex';
 import type { TileDef } from '../../campaign/hexScene';
-import type { Season, Weather } from '../../game/worldTime';
+import { weatherMix, type Season, type Weather, type WeatherMix } from '../../game/worldTime';
 
 export type Biome = 'plains' | 'forest' | 'swamp' | 'desert' | 'snow' | 'cave' | 'town' | 'coast' | 'highland';
 
@@ -55,7 +55,8 @@ const KEYS: Array<[number, number, number, number, number, number, number]> = [
   [24, 0x05070f, 0x141a2c, 0x8fa8ff, 0.28, 0.32, 1.0],
 ];
 /** Sky, sun and fog for an hour of the day and the weather. */
-export function lightFor(hour: number, weather: Weather = 'clear'): Light {
+export function lightFor(hour: number, weatherIn: Weather | WeatherMix = 'clear'): Light {
+  const mix = typeof weatherIn === 'string' ? weatherMix(weatherIn) : weatherIn;
   const h = ((hour % 24) + 24) % 24;
   let i = 0;
   while (i < KEYS.length - 2 && KEYS[i + 1][0] <= h) i++;
@@ -72,14 +73,16 @@ export function lightFor(hour: number, weather: Weather = 'clear'): Light {
   let fogNear = 70, fogFar = 220;
   // weather: clouds swallow the sun, rain darkens, fog closes in
   const grey = (amount: number, to = 0x9aa2aa) => { const g = mixHex(to, 0x1a1e24, night * 0.85); zenith = mixHex(zenith, g, amount); horizon = mixHex(horizon, g, amount * 0.9); };
-  if (weather === 'fleecy') { sunI *= 0.92; }
-  if (weather === 'cloudy') { grey(0.55); sunI *= 0.55; hemi *= 1.15; fogFar = 180; }
-  if (weather === 'dark') { grey(0.75, 0x4a5058); sunI *= 0.3; hemi *= 0.85; fogNear = 50; fogFar = 160; }
-  if (weather === 'rain') { grey(0.8, 0x5a6068); sunI *= 0.28; hemi *= 0.9; fogNear = 30; fogFar = 120; }
-  if (weather === 'snow') { grey(0.7, 0xc8ced6); sunI *= 0.45; hemi *= 1.15; fogNear = 25; fogFar = 110; }
-  if (weather === 'fog') { grey(0.85, 0xb8c0c4); sunI *= 0.4; hemi *= 1.1; fogNear = 6; fogFar = 48; }
-  const fog = weather === 'fog' || weather === 'snow' ? mixHex(horizon, 0xc8ced2, 0.4 * (1 - night)) : horizon;
-  return { zenith, horizon, fog, fogNear, fogFar, hemiSky: mixHex(0xfff4dd, zenith, 0.35 + night * 0.4), hemiGround: mixHex(0x2a2f2a, 0x0a0c12, night), hemi, sun: sunC, sunI, sunPos, exposure: lerp(a[6], b[6]), stars: weather === 'clear' || weather === 'fleecy' ? night : night * 0.15, night };
+  // APEX 2.6 – a sky plus any rain / fog / snow, applied one after the other
+  if (mix.sky === 'fleecy') { sunI *= 0.92; }
+  if (mix.sky === 'cloudy') { grey(0.55); sunI *= 0.55; hemi *= 1.15; fogFar = 180; }
+  if (mix.sky === 'dark') { grey(0.75, 0x4a5058); sunI *= 0.3; hemi *= 0.85; fogNear = 50; fogFar = 160; }
+  if (mix.rain) { grey(0.5, 0x5a6068); sunI *= 0.6; hemi *= 0.95; fogNear = Math.min(fogNear, 30); fogFar = Math.min(fogFar, 120); }
+  if (mix.snow) { grey(0.45, 0xc8ced6); sunI *= 0.7; hemi *= 1.1; fogNear = Math.min(fogNear, 25); fogFar = Math.min(fogFar, 110); }
+  if (mix.fog) { grey(0.8, 0xb8c0c4); sunI *= 0.5; hemi *= 1.08; fogNear = 6; fogFar = 48; }
+  const fog = mix.fog || mix.snow ? mixHex(horizon, 0xc8ced2, 0.4 * (1 - night)) : horizon;
+  const clearSky = mix.sky === 'clear' || mix.sky === 'fleecy';
+  return { zenith, horizon, fog, fogNear, fogFar, hemiSky: mixHex(0xfff4dd, zenith, 0.35 + night * 0.4), hemiGround: mixHex(0x2a2f2a, 0x0a0c12, night), hemi, sun: sunC, sunI, sunPos, exposure: lerp(a[6], b[6]), stars: clearSky && !mix.fog ? night : night * 0.15, night };
 }
 
 /** Season and snow applied to a colour (ground tiles, plant materials): greens shift, snow whitens. */
@@ -214,20 +217,25 @@ function cloudTexture(): THREE.Texture {
 let cloudTex: THREE.Texture | null = null;
 
 export interface WeatherFx { group: THREE.Group; step: (dt: number, centre: THREE.Vector3) => void; dispose: () => void; animated: boolean }
-export function buildWeather(weather: Weather, l: Light, extent: number): WeatherFx {
+/**
+ * Clouds, rain and snow. APEX 2.6: any combination at once, and the drops / flakes fall on the GPU (a time uniform
+ * in the vertex shader, wrapped in a box around the camera target) – the CPU touches no particle per frame.
+ */
+export function buildWeather(weatherIn: Weather | WeatherMix, l: Light, extent: number, quality = 1): WeatherFx {
+  const mix = typeof weatherIn === 'string' ? weatherMix(weatherIn) : weatherIn;
   const group = new THREE.Group();
   const disposers: Array<() => void> = [];
   let s = 31; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   // clouds: soft sprites high above, drifting
   const clouds: THREE.Sprite[] = [];
-  const nClouds = { clear: 0, fleecy: 26, cloudy: 40, dark: 46, rain: 40, fog: 0, snow: 34 }[weather];
+  const nClouds = { clear: 0, fleecy: 26, cloudy: 40, dark: 46 }[mix.sky] + (mix.rain && mix.sky === 'clear' ? 30 : 0) + (mix.snow && mix.sky === 'clear' ? 24 : 0);
   if (nClouds) {
     cloudTex ??= cloudTexture();
-    const tint = weather === 'fleecy' ? 0xffffff : weather === 'cloudy' ? 0xdfe3e8 : weather === 'snow' ? 0xd8dde4 : 0x6a7078;
-    const mat = new THREE.SpriteMaterial({ map: cloudTex, color: C(tint).lerp(C(0x1a1e28), l.night * 0.8), transparent: true, depthWrite: false, fog: false, opacity: weather === 'fleecy' ? 0.85 : 0.95 });
+    const tint = mix.sky === 'fleecy' ? 0xffffff : mix.sky === 'cloudy' ? 0xdfe3e8 : mix.snow ? 0xd8dde4 : 0x6a7078;
+    const mat = new THREE.SpriteMaterial({ map: cloudTex, color: C(tint).lerp(C(0x1a1e28), l.night * 0.8), transparent: true, depthWrite: false, fog: false, opacity: mix.sky === 'fleecy' ? 0.85 : 0.95 });
     for (let i = 0; i < nClouds; i++) {
       const sp = new THREE.Sprite(mat);
-      const big = weather === 'fleecy' ? 14 + rnd() * 12 : 30 + rnd() * 30;
+      const big = mix.sky === 'fleecy' ? 14 + rnd() * 12 : 30 + rnd() * 30;
       sp.scale.set(big * 2, big, 1);
       const a = rnd() * Math.PI * 2, d = extent * (0.3 + rnd() * 2.4);
       sp.position.set(Math.cos(a) * d, 38 + rnd() * 26, Math.sin(a) * d);
@@ -236,46 +244,53 @@ export function buildWeather(weather: Weather, l: Light, extent: number): Weathe
     }
     disposers.push(() => mat.dispose());
   }
-  // precipitation in a box that follows the camera target
-  let drops: THREE.LineSegments | THREE.Points | null = null;
   const BOX = 60, H = 40;
-  let vel: Float32Array | null = null;
-  if (weather === 'rain' || weather === 'snow') {
-    const n = weather === 'rain' ? 2600 : 1800;
-    const pos = new Float32Array(n * (weather === 'rain' ? 6 : 3));
-    vel = new Float32Array(n);
+  const time = { value: 0 }, centre = { value: new THREE.Vector3() };
+  const particles = (kind: 'rain' | 'snow') => {
+    const n = Math.round((kind === 'rain' ? 2400 : 1600) * quality);
+    const rain = kind === 'rain';
+    const verts = rain ? 2 : 1;
+    const pos = new Float32Array(n * verts * 3), speed = new Float32Array(n * verts), tip = new Float32Array(n * verts);
     for (let i = 0; i < n; i++) {
-      const x = (rnd() - 0.5) * BOX, y = rnd() * H, z = (rnd() - 0.5) * BOX;
-      if (weather === 'rain') pos.set([x, y, z, x + 0.08, y + 0.9, z], i * 6); else pos.set([x, y, z], i * 3);
-      vel[i] = weather === 'rain' ? 34 + rnd() * 10 : 2.2 + rnd() * 1.6;
+      const x = (rnd() - 0.5) * BOX, y = rnd() * H, z = (rnd() - 0.5) * BOX, v = rain ? 34 + rnd() * 10 : 2.2 + rnd() * 1.6;
+      for (let j = 0; j < verts; j++) { pos.set([x + j * 0.08, y, z], (i * verts + j) * 3); speed[i * verts + j] = v; tip[i * verts + j] = j; }
     }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    drops = weather === 'rain'
-      ? new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xaec4d8, transparent: true, opacity: 0.55, depthWrite: false }))
-      : new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 0.14, transparent: true, opacity: 0.85, depthWrite: false }));
-    drops.frustumCulled = false;
-    group.add(drops);
-    disposers.push(() => { g.dispose(); (drops!.material as THREE.Material).dispose(); });
-  }
-  let time = 0;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aSpeed', new THREE.BufferAttribute(speed, 1));
+    g.setAttribute('aTip', new THREE.BufferAttribute(tip, 1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uCentre: centre, uColor: { value: C(rain ? 0xaec4d8 : 0xffffff) }, uAlpha: { value: rain ? 0.5 : 0.85 } },
+      transparent: true, depthWrite: false,
+      vertexShader: `uniform float uTime; uniform vec3 uCentre; attribute float aSpeed; attribute float aTip; varying float vA;
+        void main() {
+          vec3 p = position;
+          p.y = mod(p.y - uTime * aSpeed, ${H.toFixed(1)}) + aTip * 0.9;
+          ${rain ? '' : 'p.x += sin(uTime * 0.8 + position.z) * 0.6; p.z += cos(uTime * 0.6 + position.x) * 0.6;'}
+          // wrap the box around the camera target so it never runs out
+          p.x = mod(p.x - uCentre.x + ${(BOX / 2).toFixed(1)}, ${BOX.toFixed(1)}) - ${(BOX / 2).toFixed(1)} + uCentre.x;
+          p.z = mod(p.z - uCentre.z + ${(BOX / 2).toFixed(1)}, ${BOX.toFixed(1)}) - ${(BOX / 2).toFixed(1)} + uCentre.z;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mv;
+          ${rain ? '' : 'gl_PointSize = clamp(90.0 / -mv.z, 1.5, 6.0);'}
+          vA = smoothstep(0.0, 4.0, p.y);
+        }`,
+      fragmentShader: `uniform vec3 uColor; uniform float uAlpha; varying float vA;
+        void main() { ${rain ? '' : 'vec2 d = gl_PointCoord - 0.5; if (dot(d, d) > 0.25) discard;'} gl_FragColor = vec4(uColor, uAlpha * vA); }`,
+    });
+    const obj = rain ? new THREE.LineSegments(g, mat) : new THREE.Points(g, mat);
+    obj.frustumCulled = false;
+    group.add(obj);
+    disposers.push(() => { g.dispose(); mat.dispose(); });
+  };
+  if (mix.rain) particles('rain');
+  if (mix.snow) particles('snow');
   return {
-    group, animated: !!drops || clouds.length > 0,
-    step: (dt, centre) => {
-      time += dt;
-      for (const [i, c] of clouds.entries()) { c.position.x += dt * (0.8 + (i % 5) * 0.15); if (c.position.x > extent * 1.6) c.position.x -= extent * 3.2; }
-      if (drops && vel) {
-        drops.position.set(centre.x, 0, centre.z);
-        const p = drops.geometry.attributes.position as THREE.BufferAttribute;
-        const arr = p.array as Float32Array;
-        const rain = weather === 'rain';
-        for (let i = 0; i < vel.length; i++) {
-          const o = rain ? i * 6 : i * 3;
-          arr[o + 1] -= vel[i] * dt; if (rain) arr[o + 4] -= vel[i] * dt;
-          if (!rain) { arr[o] += Math.sin(time * 0.8 + i) * dt * 0.4; arr[o + 2] += Math.cos(time * 0.6 + i * 1.3) * dt * 0.4; }
-          if (arr[o + 1] < 0) { arr[o + 1] += H; if (rain) arr[o + 4] += H; }
-        }
-        p.needsUpdate = true;
-      }
+    group, animated: mix.rain || mix.snow || clouds.length > 0,
+    step: (dt, c) => {
+      time.value += dt;
+      centre.value.copy(c);
+      for (const [i, cl] of clouds.entries()) { cl.position.x += dt * (0.8 + (i % 5) * 0.15); if (cl.position.x > extent * 1.6) cl.position.x -= extent * 3.2; }
     },
     dispose: () => disposers.forEach((d) => d()),
   };

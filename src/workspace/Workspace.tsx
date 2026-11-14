@@ -161,7 +161,10 @@ export function Workspace({ widgets, defaults, storageKey, center }: { widgets: 
     );
   };
 
-  const hiddenDefs = layout.hidden.map((id) => byId.get(id)).filter((w): w is WidgetDef => !!w && !w.inactive);
+  // APEX 2.6 – no floating “Widgets” button over the map any more (it covered the 2D/3D switch); widgets are not
+  // closed, only collapsed – any widget hidden in an older layout comes back on its own
+  const hiddenIds = layout.hidden.filter((id) => byId.get(id) && !byId.get(id)!.inactive).join('|');
+  useEffect(() => { if (hiddenIds) hiddenIds.split('|').forEach((id) => reveal(id)); }, [hiddenIds]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <WorkspaceContext.Provider value={api}>
       <div className="ws-root">
@@ -169,7 +172,6 @@ export function Workspace({ widgets, defaults, storageKey, center }: { widgets: 
         <div className="ws-center">
           <div className="ws-map">
             {center}
-            <WidgetMenu hidden={hiddenDefs} onAdd={(id) => reveal(id)} onReset={() => setLayout(normalizeLayout(null, metas, defaults))} />
           </div>
           {renderDock('bottom')}
         </div>
@@ -242,13 +244,9 @@ function WidgetFrame(props: {
                 ))}
                 <MenuItem onClick={() => (props.onToggle(), setMenu(false))}>{collapsed ? 'Expand' : 'Collapse'}</MenuItem>
                 <MenuItem onClick={() => (props.onReset(), setMenu(false))}>↺ Reset to default position</MenuItem>
-                <MenuItem onClick={() => (props.onHide(), setMenu(false))}>Close (restore via “Widgets”)</MenuItem>
               </div>
             )}
           </div>
-          <button className="ws-icon" aria-label={`Close ${def.title}`} title="Close – restore it via “Widgets”" onClick={props.onHide}>
-            ×
-          </button>
         </div>
         {!collapsed && (
           <div className="ws-body">
@@ -265,33 +263,6 @@ function MenuItem({ children, onClick, disabled }: { children: ReactNode; onClic
     <button role="menuitem" className="ws-menu-item" disabled={disabled} onClick={onClick}>
       {children}
     </button>
-  );
-}
-
-function WidgetMenu({ hidden, onAdd, onReset }: { hidden: WidgetDef[]; onAdd: (id: string) => void; onReset: () => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="ws-widget-menu">
-      <button className="btn btn-ghost px-2 py-1 text-[11px]" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        ☰ Widgets{hidden.length ? ` (${hidden.length} hidden)` : ''}
-      </button>
-      {open && (
-        <div role="menu" className="ws-menu right-0 left-auto w-60" onMouseLeave={() => setOpen(false)}>
-          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-marble-500">Add widget</div>
-          {hidden.length ? (
-            hidden.map((w) => (
-              <MenuItem key={w.id} onClick={() => (onAdd(w.id), setOpen(false))}>
-                {w.icon} {w.title}
-              </MenuItem>
-            ))
-          ) : (
-            <div className="px-2 py-1 text-[11px] text-marble-500">All widgets are shown.</div>
-          )}
-          <div className="imperial-rule my-1" />
-          <MenuItem onClick={() => (onReset(), setOpen(false))}>↺ Reset Layout to Default</MenuItem>
-        </div>
-      )}
-    </div>
   );
 }
 

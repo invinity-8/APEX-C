@@ -1052,11 +1052,17 @@ export function stepCost(map: Pick<SceneMap, 'hex'>, lookup = tileLookup(map), o
     if (!tile) return null;
     // APEX 1.9 – flying: over difficult ground, water, trees and boulders, steps and cliffs; walls still block
     if (opts.fly) return tile.id === 'wall' ? null : 1;
+    // APEX 2.6 – a climbing speed climbs trees and walls (in the branches / on the wall: like difficult ground)
+    if (tile.cost === null && opts.climb && CLIMBABLE.test(tile.id)) return 2;
+    // APEX 2.6 – walkers may jump over lava, a pit or deep water (up to 10 ft, Athletics check on the move)
+    if (tile.cost === null && opts.athletics && HAZARD.test(tile.id)) return 1;
     const c = tile.cost;
     if (c === null || !height || from === undefined) return c;
     const dh = height(k) - height(from);
     // climbing speed: cliffs are climbable at normal cost (going up and down)
     if (opts.climb) return c;
+    // APEX 2.6 – without a climbing speed a cliff can be climbed: double the height (Athletics check on the move)
+    if (dh > 1 + 1e-9 && opts.athletics) return c + Math.ceil(dh * 2 - 1e-9);
     // APEX 2.0: jumping down a cliff is possible (falling damage from 10 ft); paths prefer stairs (+1 per jump)
     // APEX 2.5 – heights in 1-ft steps: up to 2 ft is walked freely, 3–5 ft up counts as climbing (double), more is a cliff
     if (dh <= -2 + 1e-9) return c + 1;
@@ -1073,8 +1079,42 @@ export function pathDrops(map: Pick<SceneMap, 'hex'>, path: Axial[], from?: Axia
   for (let i = 1; i < pts.length; i++) { const d = h(hexKey(pts[i - 1])) - h(hexKey(pts[i])); if (d >= 2 - 1e-9) out.push(Math.round(d * 5)); }
   return out;
 }
-/** How a creature moves: flying (in the air) or with a climbing speed. */
-export interface MoveMode { fly?: boolean; climb?: boolean }
+/** How a creature moves: flying (in the air) or with a climbing speed; `athletics` – may climb cliffs and jump hazards with a check (APEX 2.6). */
+export interface MoveMode { fly?: boolean; climb?: boolean; athletics?: boolean }
+/** APEX 2.6 – tiles a walker can jump over (lava, pits, chasms, deep water) and that a climbing speed climbs (trees, walls). */
+export const HAZARD = /^(lava|lavafield|pit|deep|chasm)$/;
+export const CLIMBABLE = /^(tree|pine|birch|deadtree|fruittree|wall|cavewall|rockwall|boulder|palisade)$/;
+/** Feet a hazard tile does to a creature that falls in (APEX: lava 4d10 fire; a pit 2d6 falling, SRD 1d6 per 10 ft). */
+export const HAZARD_HARM: Record<string, { dice: string; type: string; prone?: boolean; text: string }> = {
+  lava: { dice: '4d10', type: 'fire', text: 'falls into the lava' }, lavafield: { dice: '4d10', type: 'fire', text: 'falls into the lava' },
+  pit: { dice: '2d6', type: 'bludgeoning', prone: true, text: 'falls into the pit' }, chasm: { dice: '2d6', type: 'bludgeoning', prone: true, text: 'falls into the chasm' },
+  deep: { dice: '0', type: 'none', text: 'lands in the deep water' },
+};
+
+/**
+ * APEX 2.6 – Athletics checks a walked path needs: climbing a cliff without a climbing speed (DC 10, 15 above
+ * 15 ft) and jumping over a hazard (DC 10 for 5 ft, 15 for 10 ft; wider gaps cannot be jumped). `at` is the index
+ * in the path where the check happens (the cliff top / the first hazard hex).
+ */
+export function pathChecks(map: Pick<SceneMap, 'hex'>, path: Axial[], from: Axial, mode: MoveMode): Array<{ at: number; kind: 'climb' | 'jump'; dc: number; ft: number; tile?: string }> | string {
+  if (mode.fly) return [];
+  const look = tileLookup(map), h = map.hex?.heights ? heightLookup(map) : () => 0;
+  const out: Array<{ at: number; kind: 'climb' | 'jump'; dc: number; ft: number; tile?: string }> = [];
+  const pts = [from, ...path];
+  for (let i = 1; i < pts.length; i++) {
+    const k = hexKey(pts[i]), prev = hexKey(pts[i - 1]), t = look(k);
+    if (!t) continue;
+    if (t.cost === null && HAZARD.test(t.id) && !HAZARD.test(look(prev)?.id ?? '')) {
+      let n = 0; while (i + n < pts.length && look(hexKey(pts[i + n]))?.cost === null && HAZARD.test(look(hexKey(pts[i + n]))?.id ?? '')) n++;
+      if (i + n >= pts.length) return `You cannot end your move in ${t.label.toLowerCase()}.`;
+      if (n > 2) return `${t.label} too wide to jump (${n * 5} ft – at most 10 ft).`;
+      out.push({ at: i - 1, kind: 'jump', dc: n === 1 ? 10 : 15, ft: n * 5, tile: t.id });
+    }
+    const dh = h(k) - h(prev);
+    if (!mode.climb && dh > 1 + 1e-9 && t.cost !== null) out.push({ at: i - 1, kind: 'climb', dc: dh > 3 + 1e-9 ? 15 : 10, ft: Math.round(dh * 5) });
+  }
+  return out;
+}
 
 /** Movement on a hex scene: cheapest path by tile costs × units per hex (5 ft or 3 mi). */
 export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }, end: { x: number; y: number }, mode: MoveMode = {}): { ok: true; cost: number; to: { x: number; y: number }; path: Axial[]; steps: Array<{ x: number; y: number; cost: number }> } | { ok: false; error: string } {
@@ -1082,7 +1122,7 @@ export function hexMovementCost(map: HexMapLike, start: { x: number; y: number }
   const goal = hexAt(map, end);
   const goalTile = lookup(hexKey(goal));
   if (!goalTile) return { ok: false, error: 'Destination is outside the map.' };
-  if (goalTile.cost === null && !(mode.fly && goalTile.id !== 'wall')) return { ok: false, error: `${goalTile.label} cannot be entered.` };
+  if (goalTile.cost === null && !(mode.fly && goalTile.id !== 'wall') && !(mode.climb && CLIMBABLE.test(goalTile.id))) return { ok: false, error: `${goalTile.label} cannot be entered.` };
   const from = hexAt(map, start);
   const reach = dijkstra(hexKey(from), stepCost(map, lookup, mode), Infinity, hexKey(goal));
   const info = reach.get(hexKey(goal));

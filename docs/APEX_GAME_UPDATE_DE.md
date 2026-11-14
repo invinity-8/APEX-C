@@ -845,3 +845,47 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tests:** 569 Tests grün.
 - **Neu:** `senses25` (Dunkelsicht, Blindsicht, Abstammung) und `world25` (Weltzeit, Nebelsicht, Dash-Auswahl, 1-ft-Stufen).
+
+## APEX 2.6 – Flugdistanz, Haare, Wetter-Kombinationen, Klettern und Springen, Licht, Touch
+
+**Fliegen schräg**
+- **Kosten:** Ein Flug kostet die schräge Strecke durch die Luft, √(quer² + hoch/runter²), auf ganze Fuß gerundet, statt quer + hoch/runter. Beispiel: 30 ft quer und 40 ft hoch kosten 50 ft.
+- **Reichweite:** Die 3D-Reichweite ist dadurch eine echte Kugel um die Figur.
+
+**Haare**
+- **Strähnen:** dicker und breiter.
+- **Volumen:** Über der Kopfhaut liegt eine Lage abgerundeter Büschel (mit dunklerer Tiefe), lange Haare haben hinten Volumen bis über die Schultern.
+- **Lesbarkeit:** Das wirkt deutlich voller und ist auch aus der Kartenentfernung erkennbar.
+
+**Wetter kombinierbar**
+- **Aufbau:** ein Himmel (klar, Schäfchenwolken, bewölkt, dunkle Wolken) plus beliebig Regen, Nebel und Schnee, z. B. dunkle Wolken mit Regen und Nebel.
+- **Bedienung:** Im Zifferblatt sind Regen, Nebel und Schnee Schalter. Ältere Szenen mit einem einzelnen Wetter werden weiter gelesen.
+
+**Performance**
+- **Regen und Schnee:** fallen auf der Grafikkarte; der Prozessor rechnet pro Bild keine Partikel mehr. Auf „low“ und „medium“ gibt es weniger Partikel.
+- **Neuberechnung:** Markierungen, Reichweite und die Schleich-Prüfung werden nur noch neu berechnet, wenn sich ihre Eingaben ändern (nicht bei jedem Neuzeichnen der Seite).
+
+**Aktionsleiste**
+- **Verbrauchte Aktionen:** Im eigenen Zug verschwinden Knöpfe, deren Aktion oder Bonusaktion verbraucht ist, statt ausgegraut zu bleiben. Gilt für Spieler und für die Gegnerleiste des GM. Angriffe bleiben, solange der Angriff noch weitere Angriffe erlaubt.
+- **Widgets-Knopf entfernt:** Der schwebende „☰ Widgets (… hidden)“-Knopf über der Karte ist weg. Er lag über dem 2D/3D-Knopf, der jetzt immer erreichbar ist. Früher geschlossene Widgets kommen automatisch zurück.
+
+**Klettern und Springen (Athletik)**
+- **Klippen ohne Klettergeschwindigkeit:** Man kann hinaufklettern (Kosten: doppelte Höhe). Athletik-Wurf SG 10, über 15 ft SG 15. Misslingt er, bleibt die Figur am Fuß der Klippe stehen.
+- **Kletterbegabte (Klettergeschwindigkeit):** klettern Klippen ohne Wurf und können durch Bäume und an Wänden klettern (wie schwieriges Gelände).
+- **Sprünge über Lava, Grube/Abgrund oder tiefes Wasser:** bis 10 ft Breite, Athletik SG 10 (5 ft) bzw. SG 15 (10 ft). Breiter geht nicht, und man kann eine Bewegung nicht in der Gefahr beenden.
+  - **Misslingt der Sprung, landet man darin:** Lava 4d10 Feuer (APEX-Wert), Grube 2d6 Fallschaden und liegend, tiefes Wasser ohne Schaden.
+- **Würfe:** würfelt der Server beim Ziehen, mit Athletik vom Charakterbogen bzw. Stärke des Gegners. Sie stehen im Kampflog.
+- **Anzeige:** Das Symbol am Mauszeiger zeigt 🧗 bzw. 🤸 mit dem nötigen SG.
+
+**Licht**
+- **Fackeln in 3D:** Getragene Lichter erscheinen jetzt auch in 3D: eine Flamme an der Figur und warmes Licht drumherum, nachts stärker.
+- **Gegner mit Licht:** Gegner können ein Licht tragen. Standard: Humanoide und Riesen ohne Dunkelsicht tragen eines, Tiere und Kreaturen mit Dunkelsicht nicht.
+  - **GM:** schaltet es in der Gegnerleiste um („Carry light“ / „Light out“).
+  - **Sicht:** Gegnerlicht erhellt die Umgebung auch für die Sicht der Spieler.
+
+**3D-Kamera**
+- **Touch:** zwei Finger zoomen (auseinander/zusammen), drehen (verdrehen) und neigen (gemeinsam hoch/runter); ein Finger schiebt.
+- **Kein Boden mehr durchsichtig:** Die Kamera folgt dem Gelände unter ihrem Ziel und taucht nie unter die Oberfläche.
+
+**Tests:** 576 Tests grün.
+- **Neu:** `climb26` (Klippen, Bäume, Lava-Sprünge, Würfe) und Ergänzungen in `world25` (Flugkosten, Gegnerlicht, Wetter-Kombination).

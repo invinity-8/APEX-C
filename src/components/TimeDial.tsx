@@ -4,7 +4,7 @@
  * the dial read-only.
  */
 import { useEffect, useRef, useState } from 'react';
-import { DAY_MIN, SEASONS, SEASON_LABEL, WEATHERS, WEATHER_LABEL, clockText, dayOf, hourOf, nowMinute, type Season, type Weather, type WorldTime } from '../game/worldTime';
+import { DAY_MIN, SEASONS, SEASON_LABEL, SKIES, WEATHER_FX, WEATHER_LABEL, clockText, dayOf, hourOf, nowMinute, weatherMix, weatherText, type Season, type Weather, type WeatherFx, type WorldTime } from '../game/worldTime';
 
 /** The world minute now, ticking locally while the time runs. */
 export function useWorldMinute(world: WorldTime | undefined): number | null {
@@ -19,11 +19,12 @@ export function useWorldMinute(world: WorldTime | undefined): number | null {
 
 const RATES: Array<[number, string]> = [[1, '×1 real time'], [6, '×6'], [60, '×60 (1 h/min)'], [360, '×360']];
 
-export function TimeDial({ world, weather, followTime = true, gm = false, busy = false, size = 132, onTime, onScene }: {
-  world: WorldTime | undefined; weather?: Weather; followTime?: boolean; gm?: boolean; busy?: boolean; size?: number;
-  onTime?: (change: Record<string, unknown>) => void; onScene?: (change: { weather?: Weather; followTime?: boolean }) => void;
+export function TimeDial({ world, weather, weatherFx, followTime = true, gm = false, busy = false, size = 132, onTime, onScene }: {
+  world: WorldTime | undefined; weather?: Weather; weatherFx?: readonly WeatherFx[]; followTime?: boolean; gm?: boolean; busy?: boolean; size?: number;
+  onTime?: (change: Record<string, unknown>) => void; onScene?: (change: { weather?: Weather; weatherFx?: WeatherFx[]; followTime?: boolean }) => void;
 }) {
   const minute = useWorldMinute(world) ?? 8 * 60;
+  const mix = weatherMix(weather, weatherFx);
   const [drag, setDrag] = useState<number | null>(null);
   const svg = useRef<SVGSVGElement>(null);
   const hour = drag ?? hourOf(minute);
@@ -67,7 +68,7 @@ export function TimeDial({ world, weather, followTime = true, gm = false, busy =
       <div className="time-dial-info">
         <b>{drag !== null ? clockText(Math.floor(minute / DAY_MIN) * DAY_MIN + drag * 60) : clockText(minute)}</b>
         <span>Day {dayOf(minute)}{world?.season ? ` · ${SEASON_LABEL[world.season]}` : ''}{world?.runningSince ? ` · ▶ ×${world.rate ?? 1}` : ''}</span>
-        {weather && <span>{WEATHER_LABEL[weather]}</span>}
+        {(weather || weatherFx?.length) && <span>{weatherText(mix)}</span>}
       </div>
       {gm && (
         <div className="time-dial-controls">
@@ -90,7 +91,9 @@ export function TimeDial({ world, weather, followTime = true, gm = false, busy =
             <span>{Math.round((world?.snow ?? 0) * 100)} %</span>
           </label>
           {onScene && <div className="flex flex-wrap gap-1" role="group" aria-label="Weather of this scene" data-testid="weather">
-            {WEATHERS.map((w) => <button key={w} type="button" disabled={busy} aria-pressed={(weather ?? 'clear') === w} onClick={() => onScene({ weather: w })}>{WEATHER_LABEL[w]}</button>)}
+            {SKIES.map((w) => <button key={w} type="button" disabled={busy} aria-pressed={mix.sky === w} onClick={() => onScene({ weather: w })}>{WEATHER_LABEL[w]}</button>)}
+            <span className="w-full" />
+            {WEATHER_FX.map((w) => <button key={w} type="button" disabled={busy} aria-pressed={mix[w]} title="Combine freely with the sky and the other effects" onClick={() => onScene({ weatherFx: WEATHER_FX.filter((k) => (k === w ? !mix[w] : mix[k])) })} data-testid={`weather-${w}`}>{WEATHER_LABEL[w]}</button>)}
           </div>}
           {onScene && <label className="flex items-center gap-1"><input type="checkbox" checked={followTime} disabled={busy} onChange={(e) => onScene({ followTime: e.target.checked })} /> Scene lighting follows the time of day</label>}
         </div>
