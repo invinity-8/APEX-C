@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
 import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
-import { MAX_ALTITUDE_FT } from '../../game/altitude';
+import { MAX_ALTITUDE_FT, flightCost } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
 import type { SceneToken } from './HexSceneMap';
@@ -707,8 +707,10 @@ export default function HexScene3D(p: Props) {
       };
       for (const [k, { cost }] of air) {
         if (!tiles.has(k)) continue;
-        const left = p.pathBudget - cost * unit;
-        if (left < 0) continue;
+        // APEX 2.6 – flying cost is slanted (√(across² + up/down²)): the reach is a sphere around the figure
+        const across = cost * unit;
+        if (across > p.pathBudget + 1e-9) continue;
+        const left = Math.sqrt(Math.max(0, p.pathBudget ** 2 - across ** 2));
         const g = height(k) * unit;
         const lo = Math.max(g, z0 - left), hi = Math.min(g + MAX_ALTITUDE_FT, z0 + left);
         if (hi - lo < 1) continue;
@@ -794,7 +796,7 @@ export default function HexScene3D(p: Props) {
             return new THREE.Vector3(w.x, Math.max(top(k), BASE + (z / 5) * LEVEL) + 0.15, w.z);
           });
           // APEX 2.5 – white within the movement left, orange where only a Dash gets there, red beyond (+ climbing)
-          const costs = [0, ...r.steps.map((st, n) => st.cost + (flying ? (vertical * (n + 1)) / r.steps.length : 0))];
+          const costs = [0, ...r.steps.map((st, n) => (flying ? flightCost(st.cost, (vertical * (n + 1)) / r.steps.length) : st.cost))];
           let from = 0;
           const runEnd = (n: number) => { let e = n; while (e + 1 < pts.length - 1 && band(costs[e + 2]) === band(costs[n + 1])) e++; return e + 1; };
           while (from < pts.length - 1) {

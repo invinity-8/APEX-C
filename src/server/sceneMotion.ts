@@ -8,7 +8,7 @@ import { fallDamage, pausedMoveOf, planAltitude, planInterruption, registerInter
 import { heightLookup, hexAt, hexMovementCost, pathDrops } from '../campaign/hexScene.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { effectsOf } from '../game/combatEffects.js';
-import { altitudeOf, pcSpeeds, setAltitude } from '../game/altitude.js';
+import { altitudeOf, flightCost, pcSpeeds, setAltitude } from '../game/altitude.js';
 import type { SceneResult } from './scenes.js';
 export interface SceneTokenPosition { tokenId: string; x: number; y: number; version: number; tacticalSpent: number; regionSpent: number }
 export interface MotionSnapshot { tokens: SceneTokenPosition[]; round: number; hour: number; known: MapNode[]; budgets: Record<string, { tacticalSpent: number; regionSpent: number }> }
@@ -89,7 +89,7 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
     if (occupied) return { status: 409, body: { error: 'Another figure is at that spot.' } };
   }
   const checked = battleHex && air
-    ? (() => { const r = hexMovementCost(map, v.action === 'place' ? to : start, to, air.mode); return r.ok ? { ok: true as const, cost: r.cost + (v.action === 'place' ? 0 : air.verticalFt) } : r; })()
+    ? (() => { const r = hexMovementCost(map, v.action === 'place' ? to : start, to, air.mode); return r.ok ? { ok: true as const, cost: v.action === 'place' ? r.cost : air.mode.fly ? flightCost(r.cost, air.verticalFt) : r.cost + air.verticalFt } : r; })()
     : movementCost(map, v.action === 'place' ? to : start, to);
   if (!checked.ok) return { status: 422, body: { error: checked.error } };
   if (v.action === 'move' && !internal && pausedMoveOf(state!.state, scene.id, { kind: 'pc', tokenId: token.id })) return { status: 409, body: { error: 'Movement is paused for an opportunity attack – wait for the decision.' } };

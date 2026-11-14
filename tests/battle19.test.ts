@@ -111,7 +111,7 @@ describe('API: flying, falling, 3D reach, spheres in the air', () => {
     npcTurn(bat.id);
     const up = await turn(scene.id, { action: 'enemyMove', id: bat.id, x: me.x + step, y: me.y, alt: 20 });
     expect(up.status, JSON.stringify(up.body)).toBe(200);
-    expect((up.body as { message: string }).message).toMatch(/flies 25 ft \(20 ft above the ground\)/);
+    expect((up.body as { message: string }).message).toMatch(/flies 21 ft \(20 ft above the ground\)/) // APEX 2.6: slanted √(5² + 20²);
     expect(altitudeOf(st(), scene.id, `npc-${bat.id}`)).toBe(20);
     const snap = ((await request('hannah', 'state')).body as PlayerPayload).scene!;
     expect(snap.figures?.find((f) => f.id === bat.id)?.alt).toBe(20);
@@ -144,7 +144,7 @@ describe('API: flying, falling, 3D reach, spheres in the air', () => {
     const r = await request('hannah', 'scene-motion', { action: 'move', sceneId: scene.id, tokenId: sinna, x: me.x + step, y: me.y, alt: 15, sceneRevision: st0.scene!.scene!.revision, assignmentRevision: st0.scene!.assignmentRevision, tokenVersion: tok.version, epoch: 0, requestId: crypto.randomUUID() });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(altitudeOf(st(), scene.id, `pc-${sinna}`)).toBe(15);
-    expect((r.body as { spent: number }).spent).toBe(20); // 5 ft across + 15 ft up
+    expect((r.body as { spent: number }).spent).toBe(16); // APEX 2.6: slanted √(5² + 15²) ≈ 16 ft
     const fly = effectsOf(st(), scene.id, `pc-${sinna}`).find((e) => e.key === 'fly')!;
     const end = await turn(scene.id, { action: 'condition', target: self, effectId: fly.id, add: false });
     expect((end.body as { message: string }).message).toMatch(/falls 15 ft \(the flight spell ended\): \d+ bludgeoning damage \(1d6\)/);
