@@ -56,11 +56,11 @@ export interface SceneEnemy {
   climbFt?: number;
   /** APEX 1.6 – temporary hit points (spent before hit points, never stack: the higher value stays). */
   tempHp?: number;
-  /** APEX 2.6 – carries a light (torch, lantern); unset: creatures without darkvision carry one, others don't. */
+  /** APEX 2.6 – carries a light (torch, lantern); unset: humanoids and giants without darkvision carry one, others don't. */
   light?: boolean;
 }
 /** APEX 2.6 – whether an NPC carries a light now. */
-export const enemyCarriesLight = (e: Pick<SceneEnemy, 'light' | 'darkvisionFt' | 'defeated'>) => !e.defeated && (e.light ?? !((e.darkvisionFt ?? 0) > 0));
+export const enemyCarriesLight = (e: Pick<SceneEnemy, 'light' | 'darkvisionFt' | 'defeated'>, type = '') => !e.defeated && (e.light ?? (/humanoid|giant/i.test(type) && !((e.darkvisionFt ?? 0) > 0)));
 /** APEX 2.6 – the GM lights or puts out an NPC's light. */
 export function setEnemyLight(prev: GameState, sceneId: string, id: string, on: boolean): Result {
   const e = enemiesOf(prev, sceneId).find((x) => x.id === id);

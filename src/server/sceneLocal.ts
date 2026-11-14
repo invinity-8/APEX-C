@@ -75,14 +75,14 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e) || !noticed(`npc-${e.id}`, e.side === 'ally' ? 'party' : 'enemy')) continue;
     const block = statBlock(state, e.templateId);
-    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build: buildOf(`${block.type} ${block.name}`, e.flyFt), ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60), ...(block.creature ? { creature: block.creature } : {}) }) } : {}), reachFt: npcReach(e), ...(enemyCarriesLight(e) ? { torch: true } : {}), perception: npcPassivePerception(state, e), ...((e.darkvisionFt ?? block?.darkvisionFt) ? { darkvisionFt: e.darkvisionFt ?? block?.darkvisionFt } : {}), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac, ...(e.tempHp ? { tempHp: e.tempHp } : {}) } : {}) });
+    out.push({ ...fx(`npc-${e.id}`), id: e.id, kind: 'enemy', side: e.side ?? 'enemy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build: buildOf(`${block.type} ${block.name}`, e.flyFt), ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60), ...(block.creature ? { creature: block.creature } : {}) }) } : {}), reachFt: npcReach(e), ...(enemyCarriesLight(e, block?.type) ? { torch: true } : {}), perception: npcPassivePerception(state, e), ...((e.darkvisionFt ?? block?.darkvisionFt) ? { darkvisionFt: e.darkvisionFt ?? block?.darkvisionFt } : {}), name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: condition(e.hp, e.maxHp), ...(gm ? { hp: e.hp, maxHp: e.maxHp, ac: e.ac, ...(e.tempHp ? { tempHp: e.tempHp } : {}) } : {}) });
   }
   return out;
 }
 
 /** Carried lights of the characters on the scene. */
 /** Carried lights on the scene: characters' torches and (APEX 2.6) NPCs carrying a light. */
-export const carriedLights = (state: GameState, sceneId: string, pcs: PcPosition[]) => { const on = new Set(torchesOf(state, sceneId)); return [...pcs.filter((p) => on.has(p.tokenId)).map((p) => ({ x: p.x, y: p.y, ft: CARRIED_LIGHT_FT })), ...enemiesOf(state, sceneId).filter(enemyCarriesLight).map((e) => ({ x: e.x, y: e.y, ft: CARRIED_LIGHT_FT }))]; };
+export const carriedLights = (state: GameState, sceneId: string, pcs: PcPosition[]) => { const on = new Set(torchesOf(state, sceneId)); return [...pcs.filter((p) => on.has(p.tokenId)).map((p) => ({ x: p.x, y: p.y, ft: CARRIED_LIGHT_FT })), ...enemiesOf(state, sceneId).filter((e) => enemyCarriesLight(e, statBlock(state, e.templateId)?.type)).map((e) => ({ x: e.x, y: e.y, ft: CARRIED_LIGHT_FT }))]; };
 
 export interface ViewerMovement {
   tokenId: string;

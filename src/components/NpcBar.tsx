@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import type { SceneEncounter } from '../game/types';
 import type { SceneEnemy } from '../game/sceneCombat';
-import { enemyCarriesLight, npcAttacks } from '../game/sceneCombat';
+import { npcAttacks } from '../game/sceneCombat';
 import { budgetOf, isActiveActor, reactionUsed } from '../game/sceneActions';
 import { TargetStrip } from './TargetStrip';
 
@@ -81,7 +81,7 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
             {(['dash', 'disengage', 'dodge'] as const).map((id) => slot(id, id === 'dash' ? '🏃' : id === 'disengage' ? '↩' : '🛡', id[0].toUpperCase() + id.slice(1), { cost: 'action', gone: actionGone, on: id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge, disabled: !encounter || !myTurn || !!b.action, onClick: () => act({ action: 'standard', actor: { kind: 'npc', id: npc.id }, act: id }) }))}
             {slot('push', '✋', 'Shove push', { on: shove === 'push', cost: 'action', gone: !attacksLeft, disabled: !myTurn, title: 'Then pick the target in the strip above: Athletics contest, push 5 ft (off an edge: it falls)', onClick: () => setShove(shove === 'push' ? null : 'push') })}
             {slot('prone', '⤓', 'Shove prone', { on: shove === 'prone', cost: 'action', gone: !attacksLeft, disabled: !myTurn, title: 'Then pick the target in the strip above: Athletics contest, knock prone', onClick: () => setShove(shove === 'prone' ? null : 'prone') })}
-            {slot('light', enemyCarriesLight(npc) ? '🔥' : '🕯', enemyCarriesLight(npc) ? 'Light out' : 'Carry light', { on: enemyCarriesLight(npc), title: `${npc.darkvisionFt ? `Darkvision ${npc.darkvisionFt} ft` : 'No darkvision'} – a carried light shows 30 ft around it (and shows it to others)`, onClick: () => act({ action: 'torch', enemyId: npc.id, on: !enemyCarriesLight(npc) }) })}
+            {slot('light', !!fig?.torch ? '🔥' : '🕯', !!fig?.torch ? 'Light out' : 'Carry light', { on: !!fig?.torch, title: `${npc.darkvisionFt ? `Darkvision ${npc.darkvisionFt} ft` : 'No darkvision'} – a carried light shows 30 ft around it (and shows it to others)`, onClick: () => act({ action: 'torch', enemyId: npc.id, on: !!!fig?.torch }) })}
             {slot('hide', '🥷', 'Hide', { cost: 'action', gone: actionGone, disabled: !!encounter && !myTurn, onClick: () => act({ action: 'hide', actor: { kind: 'npc', id: npc.id } }) })}
           </div>
           {encounter && myTurn && <button type="button" className="hotbar-end" disabled={busy} onClick={() => act({ action: 'endTurn', encounterId: encounter.id, turnSerial: encounter.turnSerial ?? 0, actor })} data-testid="npc-end-turn">End<br />turn</button>}
