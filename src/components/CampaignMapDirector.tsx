@@ -690,7 +690,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
           {clock && (
             <details className="text-xs" open data-testid="world-clock">
               <summary className="cursor-pointer font-bold text-marble-300">🕰 Time, season and weather</summary>
-              <TimeDial world={clock.world} weather={clock.weather} followTime={clock.followTime !== false} gm busy={busy}
+              <TimeDial world={clock.world} weather={clock.weather} weatherFx={clock.weatherFx} followTime={clock.followTime !== false} gm busy={busy}
                 onTime={(c) => sceneTurn({ action: 'time', ...c })}
                 onScene={(c) => sceneTurn({ action: 'clock', expectedVersion: clock.version, ...c })} />
             </details>

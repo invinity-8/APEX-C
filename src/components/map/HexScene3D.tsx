@@ -31,7 +31,7 @@ import type { SceneFx } from '../../game/sceneFx';
 import { FX_COLOR } from './CombatFx';
 import { buildTerrain, type Terrain, type TerrainCell } from './terrain3d';
 import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, seasonTint, unknownColour, type Backdrop, type Light, type WeatherFx } from './environment3d';
-import type { Season, Weather } from '../../game/worldTime';
+import type { Season, Weather, WeatherMix } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
 import { fromPixel } from '../../game/hex';
 
@@ -72,7 +72,7 @@ interface Props {
   /** APEX 2.4 – the moving figure can fly: its current altitude (ft). Shows the reach as a 3D volume around it. */
   flyAlt?: number | null;
   /** APEX 2.5 – time of day (hours), weather, season and snow of the scene. */
-  env?: { hour?: number; weather?: Weather; season?: Season; snow?: number };
+  env?: { hour?: number; weather?: Weather | WeatherMix; season?: Season; snow?: number };
   /** APEX 2.4 – sneaking: awareness rings of the opponents and (GM) spotted / heard marks. */
   stealth?: { rings: AwarenessRing[]; marks?: StealthMark[] } | null;
 }
@@ -191,6 +191,7 @@ export default function HexScene3D(p: Props) {
   const hourNow = p.env?.hour ?? (p.phase === 'night' ? 0.5 : p.phase === 'dusk' ? 19.2 : 12);
   const hourKey = Math.round(hourNow * 4) / 4; // re-light every quarter hour
   const weather = p.env?.weather ?? 'clear';
+  const weatherKey = JSON.stringify(weather);
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -222,7 +223,7 @@ export default function HexScene3D(p: Props) {
     t.renderer.shadowMap.needsUpdate = true;
     dirty.current = true;
     setTick((x) => x + 1);
-  }, [hourKey, weather, p.map.mood, biome, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hourKey, weatherKey, p.map.mood, biome, season, snow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- APEX 2.5: the land beyond the map's edge and the horizon (per biome)
   useEffect(() => {
@@ -247,12 +248,12 @@ export default function HexScene3D(p: Props) {
     const t = three.current;
     if (!t || !p.map.hex) return;
     const e = envRef.current;
-    const fx = buildWeather(weather, e.light ?? lightFor(hourKey, weather), p.map.hex.radius * 1.8);
+    const fx = buildWeather(weather, e.light ?? lightFor(hourKey, weather), p.map.hex.radius * 1.8, quality === 'low' ? 0.4 : quality === 'medium' ? 0.7 : 1);
     e.weather = fx;
     t.scene.add(fx.group);
     dirty.current = true;
     return () => { t.scene.remove(fx.group); fx.dispose(); if (e.weather === fx) e.weather = undefined; };
-  }, [weather, p.map.hex?.radius]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [weatherKey, p.map.hex?.radius, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- quality: resolution and shadows follow the setting
   useEffect(() => {
@@ -810,7 +811,8 @@ export default function HexScene3D(p: Props) {
       }
     }
     setTick((x) => x + 1);
-  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.pathDash, p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, p.tokens, quality]); // eslint-disable-line react-hooks/exhaustive-deps
+    // APEX 2.6 – performance: rebuilt only when something it shows changes (not on every parent render)
+  }, [hover, p.reach, p.pathFrom?.x, p.pathFrom?.y, p.pathBudget, p.pathDash, !!p.areaAt, tiles, height, p.aimAlt, p.flyAlt, p.sightFrom?.x, p.sightFrom?.y, p.sightSide, p.lineRangeFt, tokenKey, quality]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- camera focus (active turn) and first framing
   useEffect(() => {

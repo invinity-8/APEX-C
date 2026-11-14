@@ -18,6 +18,21 @@ export const WEATHER_LABEL: Record<Weather, string> = { clear: '☀ Clear', flee
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'] as const;
 export type Season = (typeof SEASONS)[number];
 export const SEASON_LABEL: Record<Season, string> = { spring: '🌸 Spring', summer: '☀ Summer', autumn: '🍂 Autumn', winter: '❄ Winter' };
+/** APEX 2.6 – weather can combine: one sky plus any of rain, fog and snow (e.g. dark clouds + rain + fog). */
+export const SKIES = ['clear', 'fleecy', 'cloudy', 'dark'] as const;
+export type Sky = (typeof SKIES)[number];
+export const WEATHER_FX = ['rain', 'fog', 'snow'] as const;
+export type WeatherFx = (typeof WEATHER_FX)[number];
+export interface WeatherMix { sky: Sky; rain: boolean; fog: boolean; snow: boolean }
+/** The weather of a scene from its stored fields (older scenes stored one of the seven weathers). */
+export function weatherMix(weather?: string, fx?: readonly string[]): WeatherMix {
+  const list = new Set(fx ?? []);
+  const legacy = weather === 'rain' || weather === 'fog' || weather === 'snow';
+  if (legacy) list.add(weather!);
+  const sky: Sky = (SKIES as readonly string[]).includes(weather ?? '') ? (weather as Sky) : weather === 'rain' ? 'dark' : weather === 'snow' ? 'cloudy' : weather === 'fog' ? 'cloudy' : 'clear';
+  return { sky, rain: list.has('rain'), fog: list.has('fog'), snow: list.has('snow') };
+}
+export const weatherText = (m: WeatherMix) => [WEATHER_LABEL[m.sky], ...(['rain', 'fog', 'snow'] as const).filter((k) => m[k]).map((k) => WEATHER_LABEL[k])].join(' + ');
 /** Sight limit in fog (ft). */
 export const FOG_SIGHT_FT = 30;
 
