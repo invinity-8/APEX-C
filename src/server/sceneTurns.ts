@@ -27,7 +27,7 @@ import { attackExtras } from './combatFeatures.js';
 import { areaHexes, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
-import { addEnemy, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
+import { addEnemy, setEnemyLight, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathDrops, tileLookup } from '../campaign/hexScene.js';
 import { continuePcMove, placePc } from './sceneMotion.js';
@@ -363,6 +363,13 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     });
     if (res.status === 200) await turnStartSheets(user, repo, sceneId, v.turnSerial as number);
     return res;
+  }
+  if (v.action === 'torch' && typeof v.enemyId === 'string') {
+    // APEX 2.6 – the GM lights or puts out an NPC's light
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM controls NPC lights.' } };
+    if (typeof v.on !== 'boolean') return { status: 400, body: { error: 'Invalid light.' } };
+    await rememberCurrentVision(user, repo, sceneId).catch(() => undefined);
+    return mutate(user, repo, (s) => setEnemyLight(s, sceneId, v.enemyId as string, v.on as boolean));
   }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).

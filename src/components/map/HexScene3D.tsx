@@ -558,7 +558,7 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : ''])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -567,6 +567,7 @@ export default function HexScene3D(p: Props) {
     anim.current.cards = []; anim.current.wings = [];
     const stacks = new Map<HexKey, SceneToken[]>();
     for (const tk of p.tokens ?? []) { const k = hexKey(hexAt(p.map, tk)); stacks.set(k, [...(stacks.get(k) ?? []), tk]); }
+    let torchLights = 0;
     for (const [k, group] of stacks) {
       group.forEach((tk, i) => {
         const w = toWorld(center(parseKey(k)));
@@ -593,6 +594,20 @@ export default function HexScene3D(p: Props) {
           g.add(shadow, line);
         }
         t.tokens.add(g);
+        // APEX 2.6 – a carried light (torch, lantern) in 3D too: a flame at the figure and a warm light around it
+        if (tk.torch) {
+          const flame = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 6), new THREE.MeshBasicMaterial({ color: 0xffc35a }));
+          const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.55, 5), new THREE.MeshStandardMaterial({ color: 0x5a3a1a }));
+          stick.position.set(0.42, fig.height * 0.55, 0.15); flame.position.set(0.42, fig.height * 0.55 + 0.38, 0.15);
+          g.add(stick, flame);
+          if (torchLights < Math.max(1, QUALITY[quality].lights)) {
+            torchLights++;
+            const night = p.phase === 'night' ? 1 : p.phase === 'dusk' ? 0.6 : 0.15;
+            const light = new THREE.PointLight(0xffa64a, 0.6 + night * 2.6, 12, 1.6);
+            light.position.copy(flame.position).add(new THREE.Vector3(0, 0.2, 0));
+            g.add(light);
+          }
+        }
         // APEX 2.5 – movement animation: walk (or fly) the figure along its path from where it stood before
         const prev = lastPos.current.get(tk.tokenId);
         const final = g.position.clone();
@@ -609,7 +624,7 @@ export default function HexScene3D(p: Props) {
         }
       });
     }
-  }, [tokenKey, height]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tokenKey, height, p.phase, quality]); // eslint-disable-line react-hooks/exhaustive-deps
   // --- APEX 2.4 sneaking: awareness rings on the ground (following the relief) and “!” / “?” above the watchers
   const stealthGroup = useRef<THREE.Group | null>(null);
   const stealthKey = JSON.stringify(p.stealth ?? null);
