@@ -58,7 +58,8 @@ function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
  */
 function lock(c: Ctx, at: [number, number, number], dir: [number, number, number], len: number, w: number, flat = 0.45, mat = c.hair, sides = 4) {
   const hr = c.hr, s = SHAPE[c.shape];
-  const geo = new THREE.ConeGeometry(w * hr * 1.18, len * hr, sides);
+  // APEX 2.6 – fuller: wider and thicker strands
+  const geo = new THREE.ConeGeometry(w * hr * 1.4, len * hr, sides);
   const y = new THREE.Vector3(...dir).normalize();
   const p = new THREE.Vector3(at[0] * hr * s[0], at[1] * hr * s[1], at[2] * hr * s[2]);
   const out = p.clone().normalize();
@@ -68,7 +69,7 @@ function lock(c: Ctx, at: [number, number, number], dir: [number, number, number
   const x = new THREE.Vector3().crossVectors(y, z).normalize();
   const m = new THREE.Mesh(geo, mat);
   m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-  m.scale.set(1, 1, flat);
+  m.scale.set(1, 1, Math.min(1, flat * 1.7));
   m.position.copy(p).add(y.clone().multiplyScalar((len * hr) / 2));
   c.head.add(m);
   return m;
@@ -138,8 +139,52 @@ export const HAIR_STYLES = ['none', 'buzz', 'short', 'messy', 'spiky', 'mohawk',
   'slicked', 'undercut', 'afro', 'dreads', 'mullet', 'shaggy', 'flowing', 'tonsure', 'braid', 'crest', 'pageboy', 'swept', 'wavy', 'pixie', 'sidepart', 'cornrows', 'highpony', 'spacebuns', 'halfup', 'mane'] as const;
 export type HairStyle = (typeof HAIR_STYLES)[number];
 
-/** Builds the hair of a figure into its head group. `cover`: 'brim' under caps/helmets, 'full' under hoods. */
+/**
+ * Builds the hair of a figure into its head group. `cover`: 'brim' under caps/helmets, 'full' under hoods.
+ * APEX 2.6 – on top of each style's shell and strands, a layer of rounded clumps gives the hair real volume (a
+ * chunky, sculpted look that reads from the battle-map camera), with a darker under-layer for depth.
+ */
 export function buildHair(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full') {
+  hairStyle(head, style, hr, shape, mats, cover);
+  volume({ head, hr, shape, ...mats, cover }, style);
+}
+const CLUMPY: Record<string, { n: number; r: number; back: number }> = {
+  short: { n: 9, r: 0.3, back: 0 }, messy: { n: 12, r: 0.32, back: 0 }, spiky: { n: 6, r: 0.26, back: 0 }, bob: { n: 12, r: 0.36, back: 0.9 }, pageboy: { n: 12, r: 0.36, back: 0.8 },
+  long: { n: 12, r: 0.34, back: 1.3 }, flowing: { n: 12, r: 0.34, back: 1.5 }, wavy: { n: 14, r: 0.36, back: 1.3 }, mullet: { n: 9, r: 0.3, back: 0.9 }, shaggy: { n: 14, r: 0.36, back: 0.8 },
+  ponytail: { n: 8, r: 0.26, back: 0 }, bun: { n: 8, r: 0.26, back: 0 }, braids: { n: 8, r: 0.26, back: 0 }, braid: { n: 8, r: 0.26, back: 0 }, pigtails: { n: 8, r: 0.26, back: 0 },
+  slicked: { n: 7, r: 0.26, back: 0 }, swept: { n: 10, r: 0.3, back: 0 }, sidepart: { n: 10, r: 0.32, back: 0 }, pixie: { n: 9, r: 0.28, back: 0 }, halfup: { n: 12, r: 0.34, back: 1.2 },
+  highpony: { n: 7, r: 0.26, back: 0 }, spacebuns: { n: 8, r: 0.26, back: 0 }, wild: { n: 14, r: 0.38, back: 1.0 }, mane: { n: 16, r: 0.42, back: 1.4 }, dreads: { n: 8, r: 0.28, back: 0.6 }, undercut: { n: 5, r: 0.28, back: 0 }, sidecut: { n: 5, r: 0.28, back: 0 },
+};
+/** Rounded clumps over the scalp (golden-angle spread over the upper head, the face kept free) and, for long hair, a full back. */
+function volume(c: Ctx, style: string) {
+  const v = CLUMPY[style];
+  if (!v || c.cover === 'full') return;
+  const s = SHAPE[c.shape];
+  for (let i = 0; i < v.n; i++) {
+    const y = 0.95 - (i + 0.5) / v.n * 1.05, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996 + 0.4;
+    const p = new THREE.Vector3(Math.sin(a) * r, y, Math.cos(a) * r);
+    if (p.z > 0.45 && p.y < 0.55) continue; // forehead and face stay free
+    if (c.cover === 'brim' && p.y > 0.25) continue;
+    if ((style === 'undercut' || style === 'sidecut') && p.y < 0.45) continue;
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r * c.hr, 0), i % 3 === 2 ? c.dark : c.hair);
+    m.position.set(p.x * c.hr * 1.02 * s[0], p.y * c.hr * 1.04 * s[1], p.z * c.hr * 1.02 * s[2]);
+    m.lookAt(0, 0, 0);
+    m.scale.set(1.25, 1.1, 0.62); // flattened against the head
+    c.head.add(m);
+  }
+  if (v.back > 0) {
+    // the mass of long hair behind the head and over the shoulders
+    const len = v.back;
+    for (const [x, y, sc] of [[0, -0.25, 1], [-0.55, -0.35, 0.75], [0.55, -0.35, 0.75], [0, -0.25 - len * 0.55, 0.8]] as Array<[number, number, number]>) {
+      if (c.cover === 'brim' && y > 0.25) continue;
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62 * c.hr * sc, 1), c.hair);
+      m.position.set(x * c.hr * s[0], y * c.hr, -0.72 * c.hr * s[2]);
+      m.scale.set(1.25, 1 + len * 0.35, 0.55);
+      c.head.add(m);
+    }
+  }
+}
+function hairStyle(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full') {
   const c: Ctx = { head, hr, shape, ...mats, cover };
   const top = cover === 'none';
   const scalp = (r = 1.08, line: Line = { front: 0.42, side: 0.02, back: -0.42 }, puff = 1.04) => shell(c, r, line, c.hair, puff);
