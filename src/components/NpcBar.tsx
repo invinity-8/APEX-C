@@ -26,7 +26,11 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
   const fig = (snapshot.figures ?? []).find((f) => f.kind === 'enemy' && f.id === npc.id);
   const chosen = attacks[attack];
   const rangeFt = chosen ? (chosen.kind === 'melee' ? chosen.reachFt : chosen.longRangeFt ?? chosen.rangeFt ?? chosen.reachFt) : null;
-  const slot = (key: string, icon: string, label: string, opts: { on?: boolean; disabled?: boolean; title?: string; onClick: () => void; badge?: string | number; cost?: 'action' | 'bonus'; tone?: string }) => (
+  // APEX 2.6 – in its turn, slots whose action / bonus action is spent disappear
+  const live = !!encounter && myTurn;
+  const actionGone = live && !!b.action, bonusGone = live && !!b.bonus;
+  const attacksLeft = !actionGone || (!!b.attackAction && (b.attacks ?? 0) < Math.max(1, npc.multiattack ?? 1));
+  const slot = (key: string, icon: string, label: string, opts: { on?: boolean; disabled?: boolean; title?: string; onClick: () => void; badge?: string | number; cost?: 'action' | 'bonus'; tone?: string; gone?: boolean }) => opts.gone && !opts.on ? null : (
     <button key={key} type="button" className={`hotbar-slot${opts.on ? ' is-on' : ''}${opts.tone ? ` tone-${opts.tone}` : ''}`} disabled={busy || opts.disabled} title={opts.title} aria-pressed={opts.on} onClick={opts.onClick} data-testid="npc-slot">
       <span className="hotbar-icon" aria-hidden>{icon}</span>
       <span className="hotbar-label">{label}</span>
@@ -71,13 +75,13 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
         </div>
         <div className="flex items-end gap-2">
           <div className="hotbar-slots">
-            {attacks.map((a, i) => slot(`a${i}`, a.kind === 'melee' ? '⚔' : '🏹', a.name, { on: attack === i && areaMode === null, cost: 'action', title: `${a.name} +${a.bonus} · ${a.damage} ${a.damageType} · ${a.kind === 'melee' ? `reach ${a.reachFt} ft` : `range ${a.rangeFt}/${a.longRangeFt} ft`} – right-click a target (or pick it above)`, onClick: () => { setAttack(i); setAreaMode(null); } }))}
-            {(npc.areas ?? []).map((a, i) => { const left = a.uses ? a.uses - (npc.areaUsed?.[a.name] ?? 0) : undefined; return slot(`ar${i}`, '🔥', a.name, { on: areaMode === i, cost: 'action', badge: left, disabled: left === 0 || !myTurn, tone: 'spell', title: `${a.sizeFt}-ft ${a.shape} · DC ${a.dc} ${a.save.toUpperCase()} · ${a.damage} ${a.damageType} – hover the map, right-click to use`, onClick: () => setAreaMode(areaMode === i ? null : i) }); })}
-            {(npc.buffs ?? []).map((bf, i) => slot(`b${i}`, '📯', bf.name, { cost: bf.cost === 'bonus' ? 'bonus' : 'action', disabled: !myTurn, tone: 'feature', title: `allies within ${bf.radiusFt} ft`, onClick: () => act({ action: 'npcBuff', id: npc.id, buff: i }) }))}
-            {(['dash', 'disengage', 'dodge'] as const).map((id) => slot(id, id === 'dash' ? '🏃' : id === 'disengage' ? '↩' : '🛡', id[0].toUpperCase() + id.slice(1), { cost: 'action', on: id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge, disabled: !encounter || !myTurn || !!b.action, onClick: () => act({ action: 'standard', actor: { kind: 'npc', id: npc.id }, act: id }) }))}
-            {slot('push', '✋', 'Shove push', { on: shove === 'push', cost: 'action', disabled: !myTurn, title: 'Then pick the target in the strip above: Athletics contest, push 5 ft (off an edge: it falls)', onClick: () => setShove(shove === 'push' ? null : 'push') })}
-            {slot('prone', '⤓', 'Shove prone', { on: shove === 'prone', cost: 'action', disabled: !myTurn, title: 'Then pick the target in the strip above: Athletics contest, knock prone', onClick: () => setShove(shove === 'prone' ? null : 'prone') })}
-            {slot('hide', '🥷', 'Hide', { cost: 'action', disabled: !!encounter && !myTurn, onClick: () => act({ action: 'hide', actor: { kind: 'npc', id: npc.id } }) })}
+            {attacks.map((a, i) => slot(`a${i}`, a.kind === 'melee' ? '⚔' : '🏹', a.name, { on: attack === i && areaMode === null, cost: 'action', gone: !attacksLeft, title: `${a.name} +${a.bonus} · ${a.damage} ${a.damageType} · ${a.kind === 'melee' ? `reach ${a.reachFt} ft` : `range ${a.rangeFt}/${a.longRangeFt} ft`} – right-click a target (or pick it above)`, onClick: () => { setAttack(i); setAreaMode(null); } }))}
+            {(npc.areas ?? []).map((a, i) => { const left = a.uses ? a.uses - (npc.areaUsed?.[a.name] ?? 0) : undefined; return slot(`ar${i}`, '🔥', a.name, { on: areaMode === i, cost: 'action', gone: actionGone, badge: left, disabled: left === 0 || !myTurn, tone: 'spell', title: `${a.sizeFt}-ft ${a.shape} · DC ${a.dc} ${a.save.toUpperCase()} · ${a.damage} ${a.damageType} – hover the map, right-click to use`, onClick: () => setAreaMode(areaMode === i ? null : i) }); })}
+            {(npc.buffs ?? []).map((bf, i) => slot(`b${i}`, '📯', bf.name, { cost: bf.cost === 'bonus' ? 'bonus' : 'action', gone: bf.cost === 'bonus' ? bonusGone : actionGone, disabled: !myTurn, tone: 'feature', title: `allies within ${bf.radiusFt} ft`, onClick: () => act({ action: 'npcBuff', id: npc.id, buff: i }) }))}
+            {(['dash', 'disengage', 'dodge'] as const).map((id) => slot(id, id === 'dash' ? '🏃' : id === 'disengage' ? '↩' : '🛡', id[0].toUpperCase() + id.slice(1), { cost: 'action', gone: actionGone, on: id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge, disabled: !encounter || !myTurn || !!b.action, onClick: () => act({ action: 'standard', actor: { kind: 'npc', id: npc.id }, act: id }) }))}
+            {slot('push', '✋', 'Shove push', { on: shove === 'push', cost: 'action', gone: !attacksLeft, disabled: !myTurn, title: 'Then pick the target in the strip above: Athletics contest, push 5 ft (off an edge: it falls)', onClick: () => setShove(shove === 'push' ? null : 'push') })}
+            {slot('prone', '⤓', 'Shove prone', { on: shove === 'prone', cost: 'action', gone: !attacksLeft, disabled: !myTurn, title: 'Then pick the target in the strip above: Athletics contest, knock prone', onClick: () => setShove(shove === 'prone' ? null : 'prone') })}
+            {slot('hide', '🥷', 'Hide', { cost: 'action', gone: actionGone, disabled: !!encounter && !myTurn, onClick: () => act({ action: 'hide', actor: { kind: 'npc', id: npc.id } }) })}
           </div>
           {encounter && myTurn && <button type="button" className="hotbar-end" disabled={busy} onClick={() => act({ action: 'endTurn', encounterId: encounter.id, turnSerial: encounter.turnSerial ?? 0, actor })} data-testid="npc-end-turn">End<br />turn</button>}
         </div>

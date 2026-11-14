@@ -94,6 +94,10 @@ export function PlayerCombat(p: Props) {
   const spentCost = bonus ? !!b.bonus : !!b.action;
   /** Dash, Disengage, Hide, Use an Object: also possible with the extra action of Haste. */
   const spentHaste = bonus ? !!b.bonus : !!b.action && !hastedNow;
+  // APEX 2.6 – in your turn, buttons whose action / bonus action is spent disappear (instead of greying out)
+  const turnLive = !!encounter && p.myTurn;
+  const actionGone = turnLive && !!b.action && !hastedNow;
+  const bonusGone = turnLive && !!b.bonus;
   const standard = (id: string) => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: id, viaBonus: bonus });
   const readySpellNow = p.ready?.kind === 'spell' ? spells.find((x) => x.id === (p.ready as { spellId: string }).spellId) : undefined;
   const defaultAttack = p.attacks.length ? 0 : -1;
@@ -276,22 +280,22 @@ export function PlayerCombat(p: Props) {
 
       {/* action tiles */}
       <div className="flex flex-wrap items-stretch gap-1.5" role="group" aria-label="Standard actions">
-        <Tile icon="⚔" label="Attack" cost="action" on={p.ready?.kind === 'attack'} disabled={!p.attacks.length || !canAct} title="Ready your first weapon – right-click an enemy to attack (walking into reach first)" onClick={() => p.setReady(p.ready?.kind === 'attack' ? null : { kind: 'attack', index: defaultAttack })} />
-        <Tile icon="✦" label="Cast spell" cost="action" on={spellOpen} disabled={!(sheet?.spells.length) || !!beast} title={beast ? `No spellcasting in Wild Shape (${beast.formName})` : 'Open the spellbook'} onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
+        <Tile icon="⚔" label="Attack" cost="action" gone={actionGone && !b.attackAction} on={p.ready?.kind === 'attack'} disabled={!p.attacks.length || !canAct} title="Ready your first weapon – right-click an enemy to attack (walking into reach first)" onClick={() => p.setReady(p.ready?.kind === 'attack' ? null : { kind: 'attack', index: defaultAttack })} />
+        <Tile icon="✦" label="Cast spell" cost="action" gone={actionGone && bonusGone} on={spellOpen} disabled={!(sheet?.spells.length) || !!beast} title={beast ? `No spellcasting in Wild Shape (${beast.formName})` : 'Open the spellbook'} onClick={() => setSpellOpen((v) => !v)} testid="open-spells" badge={spells.length || undefined} />
         {encounter && (['dash', 'disengage', 'dodge'] as const).map((id) => {
           const a = STANDARD_ACTIONS.find((x) => x.id === id)!;
           const active = id === 'dash' ? !!b.dash : id === 'disengage' ? !!b.disengage : !!b.dodge;
-          return <Tile key={id} drag={dragQuick({ k: 'act', id })} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} on={active} disabled={p.pending || !p.myTurn || (id === 'dodge' ? spentCost : spentHaste)} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
+          return <Tile key={id} drag={dragQuick({ k: 'act', id })} icon={ACTION_ICONS[id]} label={a.label} cost={actionCost} gone={turnLive && (id === 'dodge' ? spentCost : spentHaste)} on={active} disabled={p.pending || !p.myTurn || (id === 'dodge' ? spentCost : spentHaste)} title={a.text} onClick={() => standard(id)} testid={`act-${id}`} />;
         })}
-        <Tile drag={dragQuick({ k: 'act', id: 'hide' })} icon="🥷" label={hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'} cost={encounter && !hidden ? actionCost : undefined} on={hidden} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) })} testid={encounter ? 'hide' : 'sneak'} />
-        <Tile drag={dragQuick({ k: 'act', id: 'search' })} icon="🔎" label="Search" cost={encounter ? actionCost : undefined} disabled={p.pending || (!!encounter && (!p.myTurn || spentCost))} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => standard('search')} />
+        <Tile drag={dragQuick({ k: 'act', id: 'hide' })} icon="🥷" label={hidden ? 'Stop sneaking' : encounter ? 'Hide' : 'Sneak'} cost={encounter && !hidden ? actionCost : undefined} gone={turnLive && !hidden && spentCost} on={hidden} disabled={p.pending || (!!encounter && !hidden && !p.myTurn)} title={hidden ? 'Stop sneaking (you stay where you are)' : 'Stealth check; opponents notice you if their passive Perception reaches it. Attacking or casting reveals you.'} onClick={() => p.act({ action: 'hide', actor: { kind: 'pc', tokenId }, ...(hidden ? { off: true } : encounter ? { viaBonus: bonus } : {}) })} testid={encounter ? 'hide' : 'sneak'} />
+        <Tile drag={dragQuick({ k: 'act', id: 'search' })} icon="🔎" label="Search" cost={encounter ? actionCost : undefined} gone={turnLive && spentCost} disabled={p.pending || (!!encounter && (!p.myTurn || spentCost))} title="Wisdom (Perception) check against hidden creatures in sight" onClick={() => standard('search')} />
         {encounter && <>
-          <Tile drag={dragQuick({ k: 'act', id: 'help' })} icon="🤝" label="Help" cost={actionCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'help')!.text} onClick={() => standard('help')} />
-          <Tile drag={dragQuick({ k: 'act', id: 'useObject' })} icon="🧪" label="Use object" cost={actionCost} disabled={p.pending || !p.myTurn || spentHaste} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
-          <Tile icon="⏳" label="Ready" cost="action" on={readyOpen} disabled={p.pending || !p.myTurn || !!b.action} title="Prepare the chosen attack with a trigger; it uses your reaction" onClick={() => setReadyOpen((v) => !v)} />
+          <Tile drag={dragQuick({ k: 'act', id: 'help' })} icon="🤝" label="Help" cost={actionCost} gone={turnLive && spentCost} disabled={p.pending || !p.myTurn || spentCost} title={STANDARD_ACTIONS.find((x) => x.id === 'help')!.text} onClick={() => standard('help')} />
+          <Tile drag={dragQuick({ k: 'act', id: 'useObject' })} icon="🧪" label="Use object" cost={actionCost} gone={turnLive && spentHaste} disabled={p.pending || !p.myTurn || spentHaste} title={STANDARD_ACTIONS.find((x) => x.id === 'useObject')!.text} onClick={() => standard('useObject')} />
+          <Tile icon="⏳" label="Ready" cost="action" gone={actionGone} on={readyOpen} disabled={p.pending || !p.myTurn || !!b.action} title="Prepare the chosen attack with a trigger; it uses your reaction" onClick={() => setReadyOpen((v) => !v)} />
           <span className="mx-0.5 w-px self-stretch bg-ink-700" aria-hidden />
-          <Tile icon="◆" label="Bonus mode" on={bonus} title="Take the next standard action as a bonus action (Cunning Action, off-hand attack …) – only if a feature allows it" onClick={() => setBonus((v) => !v)} />
-          <Tile icon="✧" label="Other bonus" cost="bonus" disabled={p.pending || !p.myTurn || !!b.bonus} title="Mark the bonus action as used (feature, off-hand attack …)" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'bonusOther' })} />
+          <Tile icon="◆" label="Bonus mode" gone={bonusGone} on={bonus} title="Take the next standard action as a bonus action (Cunning Action, off-hand attack …) – only if a feature allows it" onClick={() => setBonus((v) => !v)} />
+          <Tile icon="✧" label="Other bonus" cost="bonus" gone={bonusGone} disabled={p.pending || !p.myTurn || !!b.bonus} title="Mark the bonus action as used (feature, off-hand attack …)" onClick={() => p.act({ action: 'standard', actor: { kind: 'pc', tokenId }, act: 'bonusOther' })} />
         </>}
       </div>
       {readyOpen && encounter && p.myTurn && !b.action && (
@@ -401,7 +405,8 @@ const FEATURE_ICONS: Record<string, string> = { actionSurge: '⚡', secondWind: 
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 
 /** One big action button (icon, label, cost marker: ● action, ◆ bonus action). */
-function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, tone, drag }: { icon: string; label: string; cost?: 'action' | 'bonus'; on?: boolean; disabled?: boolean; title?: string; onClick: () => void; testid?: string; badge?: number; tone?: 'forest'; drag?: { draggable: boolean; onDragStart: (e: DragEvent) => void } }) {
+function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, tone, drag, gone }: { icon: string; label: string; cost?: 'action' | 'bonus'; on?: boolean; disabled?: boolean; /** APEX 2.6 – the action / bonus action it needs is spent this turn: not shown at all */ gone?: boolean; title?: string; onClick: () => void; testid?: string; badge?: number; tone?: 'forest'; drag?: { draggable: boolean; onDragStart: (e: DragEvent) => void } }) {
+  if (gone && !on) return null;
   return (
     <button type="button" title={title} disabled={disabled} aria-pressed={on} onClick={onClick} data-testid={testid} {...drag}
       className={`relative flex h-14 w-[4.6rem] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-center text-[10px] leading-tight transition disabled:cursor-not-allowed disabled:opacity-35 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_10px_rgba(192,155,88,0.45)]' : tone === 'forest' ? 'border-forest-400/60 bg-forest-700/30 text-forest-300 hover:border-forest-300' : 'border-ink-600 bg-ink-850 text-marble-100 hover:border-gold-500 hover:bg-ink-800'}`}>
