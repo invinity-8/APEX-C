@@ -21,7 +21,7 @@ import { EncounterPanel, SpawnMarkers } from './EncounterPanel';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
-import { hexAt, hexCentre, hexMovementCost } from '../campaign/hexScene';
+import { hexAt, hexCentre, hexMovementCost, pathChecks } from '../campaign/hexScene';
 import { distance, hexKey, parseKey } from '../game/hex';
 import { combatAttacks } from '../game/effectiveStats';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -866,7 +866,9 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     const figAtHex = (k: string) => (snapshot.figures ?? []).find((f) => f !== fig && f.condition !== 'down' && hexKey(hexAt(map, f)) === k);
     const npcMove = (x: number, y: number, alt?: number) => battleMove(x, y, alt);
     const npcDashThen = (_bonus: boolean, x: number, y: number) => { void sceneTurnP({ action: 'standard', actor: { kind: 'npc', id: npc!.id }, act: 'dash' }).then((r) => { if (r.ok) battleMove(x, y); }); };
+    const npcMode = { ...((fig.alt ?? 0) > 0 && npc?.flyFt ? { fly: true } : { athletics: true }), ...(npc?.climbFt ? { climb: true } : {}) };
     const interaction: SceneInteraction = {
+      moveMode: npcMode,
       pathDash: npcDash ? npcDash.speedFt : 0,
       intentAt: (k) => {
         if (!active || !npc) return null;
@@ -879,15 +881,18 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
           if (attack.kind !== 'melee') return dist <= (attack.longRangeFt ?? attack.rangeFt ?? attack.reachFt) ? { icon: attack.kind === 'spell' ? '✨' : '🏹', label: `${attack.name} → ${tf.name}`, tone: attack.kind === 'spell' ? 'spell' : 'attack' } : { icon: '⛔', label: `${tf.name} is out of range (${dist} ft)`, tone: 'bad' };
           return dist <= attack.reachFt ? { icon: '🗡️', label: `${attack.name} → ${tf.name}`, tone: 'attack' } : { icon: '👣🗡️', label: `Walk up and ${attack.name} → ${tf.name}`, tone: 'attack' };
         }
-        const r = hexMovementCost(map, fig, hexCentre(map, parseKey(k)));
+        const r = hexMovementCost(map, fig, hexCentre(map, parseKey(k)), npcMode);
         if (!r.ok) return { icon: '⛔', label: 'No way there', tone: 'bad' };
+        const checks = pathChecks(map, r.path, hexAt(map, fig), npcMode);
+        if (typeof checks === 'string') return { icon: '⛔', label: checks, tone: 'bad' };
+        if (checks.length && (left === null || r.cost <= left + 1e-9)) return { icon: checks.some((c) => c.kind === 'jump') ? '🤸' : '🧗', label: `Move ${r.cost} ft – Athletics ${checks.map((c) => `${c.kind} ${c.ft} ft DC ${c.dc}`).join(', ')}`, tone: 'move' };
         if (left === null || r.cost <= left + 1e-9) return { icon: '👣', label: `Move ${r.cost} ft`, tone: 'move' };
         if (npcDash && r.cost <= left + npcDash.speedFt + 1e-9) return { icon: '💨', label: `${r.cost} ft – needs a Dash (right-click to choose)`, tone: 'dash' };
         return { icon: '👣', label: `${r.cost} ft – too far: as far as possible`, tone: 'bad' };
       },
       menuAt: (k, p) => {
         if (!active || !npc || area || left === null || figAtHex(k)) return null;
-        const r = hexMovementCost(map, fig, p);
+        const r = hexMovementCost(map, fig, p, npcMode);
         if (!r.ok || r.cost <= left + 1e-9) return null;
         return moveMenu(r.steps, r.cost, left, npcDash, (x, y) => npcMove(x, y, p.alt), npcDashThen, p);
       },

@@ -29,7 +29,7 @@ import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
 import { addEnemy, setEnemyLight, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
-import { heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathDrops, tileLookup } from '../campaign/hexScene.js';
+import { HAZARD_HARM, heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathChecks, pathDrops, tileLookup } from '../campaign/hexScene.js';
 import { continuePcMove, placePc } from './sceneMotion.js';
 import { lineOfSight, sightRules } from '../campaign/hexVision.js';
 import { distance, hexKey } from '../game/hex.js';
@@ -95,6 +95,41 @@ export async function fallDamage(user: AuthUser, repo: Repo, sceneId: string, wh
     return { ok: true, state: st, message: text };
   });
   return text;
+}
+
+/** APEX 2.6 – harm from falling into a hazard after a failed jump (lava, a pit, deep water). Returns the log text. */
+export async function hazardHarm(user: AuthUser, repo: Repo, sceneId: string, who: Side, tile: string): Promise<string> {
+  const h = HAZARD_HARM[tile];
+  if (!h) return '';
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
+  const name = ctx.state ? nameOf(ctx.state, sceneId, who) : 'A creature';
+  const r = h.dice === '0' ? { total: 0 } : rollDice(parseDamage(h.dice)!);
+  let text = `${name} ${h.text}${r.total ? `: ${r.total} ${h.type} damage (${h.dice})${h.prone ? ' and lands prone' : ''}` : ''}.`;
+  if (who.kind === 'pc' && r.total) text += await damagePc(user, repo, ctx, who.tokenId, r.total);
+  await mutate(user, repo, (s) => {
+    let st = structuredClone(s);
+    if (who.kind === 'npc' && r.total) { const u = updateEnemy(st, sceneId, who.id, { hpDelta: -r.total }); if (u.ok) st = u.state; }
+    if (h.prone && r.total && !effectsOf(st, sceneId, actorOf(who)).some((e) => e.key === 'prone')) addEffect(st, sceneId, actorOf(who), conditionEffect('prone', undefined, () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+    if (r.total) pushFx(st, sceneId, [{ kind: 'hit', to: actorOf(who), amount: r.total, label: h.type === 'fire' ? 'Lava' : 'Fall', element: h.type === 'fire' ? 'fire' : 'physical' }]);
+    logCombat(st, sceneId, text);
+    return { ok: true, state: st, message: text };
+  });
+  return text;
+}
+
+/**
+ * APEX 2.6 – rolls the Athletics checks a path needs (climbing a cliff, jumping a hazard), in order. Returns where the
+ * move ends when one fails (`stop`: index into [start, ...steps]; `fell`: the hazard tile it landed in) and the log.
+ */
+export function rollPathChecks(checks: Array<{ at: number; kind: 'climb' | 'jump'; dc: number; ft: number; tile?: string }>, bonus: number, name: string, limit = Infinity): { stop: number | null; fell?: string; lines: string[] } {
+  const lines: string[] = [];
+  for (const c of checks) {
+    if (c.at >= limit) break;
+    const d = die(20), total = d + bonus, ok = total >= c.dc;
+    lines.push(`${name} ${c.kind === 'climb' ? `climbs ${c.ft} ft` : `jumps ${c.ft} ft`}: Athletics d20 ${d} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${total} vs DC ${c.dc} – ${ok ? 'success' : 'fails'}.`);
+    if (!ok) return c.kind === 'climb' ? { stop: c.at, lines } : { stop: c.at + 1, fell: c.tile, lines };
+  }
+  return { stop: null, lines };
 }
 
 /**
@@ -613,7 +648,7 @@ export function planAltitude(map: SceneMap, from: { x: number; y: number }, to: 
   const flying = speeds.fly > 0 && (current > 0 || target > 0);
   const ground = groundFt(map);
   const verticalFt = flying ? Math.abs(ground(to) + target - (ground(from) + current)) : 0;
-  return { from: current, to: flying ? target : 0, verticalFt, mode: { ...(flying ? { fly: true } : {}), ...(speeds.climb ? { climb: true } : {}) }, verb: flying ? (target === 0 ? 'lands after flying' : 'flies') : 'moves' };
+  return { from: current, to: flying ? target : 0, verticalFt, mode: { ...(flying ? { fly: true } : { athletics: true }), ...(speeds.climb ? { climb: true } : {}) }, verb: flying ? (target === 0 ? 'lands after flying' : 'flies') : 'moves' };
 }
 
 /** Ground height in feet under a point (5-ft levels). */
@@ -1204,12 +1239,18 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
   if (e && (b.moved ?? 0) + total > allowance + 1e-9) return { status: 422, body: { error: `${npc.name} has only ${Math.max(0, allowance - (b.moved ?? 0))} ft of movement left this turn${air.verticalFt ? ` (this move: ${total} ft – ${path.cost} ft across, ${air.verticalFt} ft up/down)` : ''}.` } };
   const ground = groundFt(map);
   const points = [{ x: npc.x, y: npc.y, z: ground(npc) + air.from }, ...path.steps.map((p) => ({ ...p, z: ground(p) + air.to }))];
-  const stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'npc', id: npc.id }, points, declined);
-  const dest = stop ? points[stop.stop] : path.to;
-  const cost = stop ? (stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost) : total;
+  let stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'npc', id: npc.id }, points, declined);
+  // APEX 2.6 – climbing a cliff or jumping a hazard on the way: Athletics checks (Strength)
+  const checks = pathChecks(map, path.path, hexAt(map, npc), air.mode);
+  if (typeof checks === 'string') return { status: 422, body: { error: checks } };
+  const athletics = rollPathChecks(checks, npc.abilities ? Math.floor((npc.abilities.str - 10) / 2) : 0, npc.name, stop ? stop.stop : Infinity);
+  if (athletics.stop !== null) stop = null;
+  const dest = athletics.stop !== null ? points[athletics.stop] : stop ? points[stop.stop] : path.to;
+  const cost = athletics.stop !== null ? (athletics.stop === 0 ? 0 : path.steps[athletics.stop - 1].cost) : stop ? (stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost) : total;
   const endAlt = stop && stop.stop === 0 ? air.from : air.to;
   // APEX 2.0: jumping down cliffs on the way (walking only)
-  const drops = air.mode.fly || air.mode.climb ? [] : pathDrops(map, stop ? path.path.slice(0, stop.stop) : path.path, hexAt(map, npc));
+  const walkedTo = athletics.stop !== null ? athletics.stop : stop ? stop.stop : path.path.length;
+  const drops = air.mode.fly || air.mode.climb ? [] : pathDrops(map, path.path.slice(0, walkedTo), hexAt(map, npc));
   const moved = await mutate(user, repo, (s) => {
     let st = structuredClone(s);
     if (cost > 0 || !stop) {
@@ -1221,8 +1262,11 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
     if (enc?.status === 'active') spend(enc, actor, { moved: (budgetOf(enc, actor).moved ?? 0) + cost });
     setAltitude(st, scene.id, actor, endAlt, speeds.flySource);
     if (stop) st = registerInterruption(st, scene.id, { kind: 'npc', id: npc.id }, npc.name, dest, path.to, stop.reactors, declined);
-    return { ok: true, state: st, message: stop ? `${npc.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack.` : `${npc.name} ${air.verb} ${cost} ft${endAlt ? ` (${endAlt} ft above the ground)` : ''}.` };
+    for (const l of athletics.lines) logCombat(st, scene.id, l);
+    const climbText = athletics.lines.length ? ` ${athletics.lines.join(' ')}` : '';
+    return { ok: true, state: st, message: stop ? `${npc.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack.${climbText}` : `${npc.name} ${air.verb} ${cost} ft${endAlt ? ` (${endAlt} ft above the ground)` : ''}.${climbText}` };
   });
+  if (moved.status === 200 && athletics.fell) { const t = await hazardHarm(user, repo, scene.id, { kind: 'npc', id: npc.id }, athletics.fell); if (t) (moved.body as { message?: string }).message = `${(moved.body as { message?: string }).message ?? ''} ${t}`; }
   if (moved.status === 200) for (const ft of drops) { const t = await fallDamage(user, repo, scene.id, { kind: 'npc', id: npc.id }, ft, 'jumps down a cliff'); if (t) (moved.body as { message?: string }).message = `${(moved.body as { message?: string }).message ?? ''} ${t}`; }
   return moved;
 }

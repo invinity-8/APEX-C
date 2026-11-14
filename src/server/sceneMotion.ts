@@ -2,10 +2,11 @@ import { parseMap, regionMilesPerHour, type MapNode } from '../campaign/maps.js'
 import { movementCost, snappedPoint } from '../campaign/sceneMovement.js';
 import type { AuthUser, Repo } from './repo.js';
 import { carriedLights, clockFor, hexKeyAt, movementFor, sheetOf, visionFor } from './sceneLocal.js';
-import { enemiesOf } from '../game/sceneCombat.js';
+import { enemiesOf, logCombat } from '../game/sceneCombat.js';
+import { pcAthletics } from '../game/perception.js';
 import { sceneContext } from './sceneRuntime.js';
-import { fallDamage, pausedMoveOf, planAltitude, planInterruption, registerInterruption } from './sceneTurns.js';
-import { heightLookup, hexAt, hexMovementCost, pathDrops } from '../campaign/hexScene.js';
+import { fallDamage, hazardHarm, pausedMoveOf, planAltitude, planInterruption, registerInterruption, rollPathChecks } from './sceneTurns.js';
+import { heightLookup, hexAt, hexMovementCost, pathChecks, pathDrops } from '../campaign/hexScene.js';
 import { findBeast } from '../game/beastCatalog.js';
 import { effectsOf } from '../game/combatEffects.js';
 import { altitudeOf, flightCost, pcSpeeds, setAltitude } from '../game/altitude.js';
@@ -109,6 +110,8 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
   let dest = to;
   let cost = v.action === 'place' ? 0 : checked.cost;
   let stop: Awaited<ReturnType<typeof planInterruption>> = null;
+  // APEX 2.6 – Athletics on the way: climbing a cliff without a climbing speed, jumping over lava / a pit / deep water
+  let athletics: ReturnType<typeof rollPathChecks> = { stop: null, lines: [] };
   if (v.action === 'move' && category === 'battle' && map.hex) {
     const path = hexMovementCost(map, start, to, air?.mode);
     if (path.ok) {
@@ -117,6 +120,12 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
       const points = [{ x: start.x, y: start.y, z: z(start, air?.from ?? 0) }, ...path.steps.map((p) => ({ ...p, z: z(p, endAltWanted) }))];
       stop = await planInterruption(repo, user.campaignId, scene.id, map, { kind: 'pc', tokenId: token.id }, points, declined);
       if (stop) { dest = points[stop.stop]; cost = stop.stop === 0 ? 0 : path.steps[stop.stop - 1].cost; }
+      if (air && !air.mode.fly) {
+        const checks = pathChecks(map, path.path, hexAt(map, start), air.mode);
+        if (typeof checks === 'string') return { status: 422, body: { error: checks } };
+        athletics = rollPathChecks(checks, pcAthletics(sheet), token.name, stop ? stop.stop : Infinity);
+        if (athletics.stop !== null) { stop = null; dest = points[athletics.stop]; cost = athletics.stop === 0 ? 0 : path.steps[athletics.stop - 1].cost; }
+      }
     }
   }
   // Exploration: hexes the character sees from start and destination are remembered for its player.
@@ -137,9 +146,12 @@ async function performMove(user: AuthUser, repo: Repo, v: MoveInput, declined: s
   let jumped = '';
   if (result.ok && battleHex && v.action === 'move' && air && !air.mode.fly && !air.mode.climb) {
     const walked = hexMovementCost(map, start, to, air.mode);
-    if (walked.ok) for (const ft of pathDrops(map, stop ? walked.path.slice(0, stop.stop) : walked.path, hexAt(map, start))) jumped += ' ' + await fallDamage(user, repo, scene.id, { kind: 'pc', tokenId: token.id }, ft, 'jumps down a cliff');
+    if (walked.ok) for (const ft of pathDrops(map, athletics.stop !== null ? walked.path.slice(0, athletics.stop) : stop ? walked.path.slice(0, stop.stop) : walked.path, hexAt(map, start))) jumped += ' ' + await fallDamage(user, repo, scene.id, { kind: 'pc', tokenId: token.id }, ft, 'jumps down a cliff');
   }
-  const message = stop ? `${token.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack. The move continues after the decision.` : jumped ? `Movement saved.${jumped}` : undefined;
+  if (result.ok && athletics.lines.length) await mutateState(user, repo, (s) => { const st = structuredClone(s); for (const l of athletics.lines) logCombat(st, scene.id, l); return st; });
+  const fell = result.ok && athletics.fell ? ' ' + await hazardHarm(user, repo, scene.id, { kind: 'pc', tokenId: token.id }, athletics.fell) : '';
+  const checksText = athletics.lines.length ? ` ${athletics.lines.join(' ')}${fell}` : '';
+  const message = stop ? `${token.name} stops – ${stop.reactors.map((r) => r.name).join(', ')} may make an opportunity attack. The move continues after the decision.${checksText}` : jumped || checksText ? `Movement saved.${checksText}${jumped}` : undefined;
   return { status: result.ok ? 200 : 409, body: { ...result, ...(message ? { message, ...(stop ? { paused: true } : {}) } : {}), ...(result.ok ? { position: dest, spent: mv.spent + cost, allowance: mv.allowance, hourlyMilesAtBaseSpeed: scene.category === 'region' ? regionMilesPerHour(token.speedFt ?? 30) : undefined } : {}) } };
 }
 
