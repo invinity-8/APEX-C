@@ -27,7 +27,7 @@ import { attackExtras } from './combatFeatures.js';
 import { areaHexes, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
-import { addEnemy, setEnemyLight, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
+import { addEnemy, setEnemyLight, setEnemySex, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { HAZARD_HARM, heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathChecks, pathDrops, tileLookup } from '../campaign/hexScene.js';
 import { continuePcMove, placePc } from './sceneMotion.js';
@@ -406,6 +406,12 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     if (typeof v.on !== 'boolean') return { status: 400, body: { error: 'Invalid light.' } };
     await rememberCurrentVision(user, repo, sceneId).catch(() => undefined);
     return mutate(user, repo, (s) => setEnemyLight(s, sceneId, v.enemyId as string, v.on as boolean));
+  }
+  if (v.action === 'npcSex') {
+    // APEX 2.8 – the GM shows one creature as a man or a woman
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM changes NPC figures.' } };
+    if (typeof v.enemyId !== 'string' || !(v.sex === null || v.sex === 'male' || v.sex === 'female')) return { status: 400, body: { error: 'Invalid figure.' } };
+    return mutate(user, repo, (s) => setEnemySex(s, sceneId, v.enemyId as string, v.sex as 'male' | 'female' | null));
   }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).

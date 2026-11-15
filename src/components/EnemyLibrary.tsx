@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react';
 import { FigureEditor } from './FigureEditor';
 import { GroupLibrary } from './GroupLibrary';
-import { autoLook, type FigureLook } from '../game/figure';
+import { autoLook, FIGURE_SEXES, SEX_LABEL, type FigureLook, type FigureSex } from '../game/figure';
 import { CreaturePicker } from './CreaturePicker';
 import type { CreatureChoice } from '../game/creatures';
 import type { Command } from '../game/commands';
@@ -147,6 +147,13 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
     if (look) { next.look = look; delete next.creature; } else delete next.look;
     if ((await run({ type: 'enemyLibrarySave', block: next })).ok) setFigure(false);
   };
+  // APEX 2.8: the figures as men, women or mixed (humanoid figures and creature models)
+  const saveSex = async (sex: FigureSex | null) => {
+    if (!sel) return;
+    const next: StatBlock = { ...structuredClone(sel), source: 'custom' };
+    if (sex) next.sex = sex; else delete next.sex;
+    await run({ type: 'enemyLibrarySave', block: next });
+  };
   // APEX 2.2: or a creature model (beasts, dragons, aberrations …)
   const saveCreature = async (creature: CreatureChoice | null) => {
     if (!sel) return;
@@ -190,10 +197,13 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
               <button type="button" className="btn btn-ghost" onClick={() => setEditing(own(sel.id) ? sel : { ...structuredClone(sel), source: 'custom' })}>{own(sel.id) ? 'Edit' : BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Adjust for this campaign' : 'Edit'}</button>
               <button type="button" className="btn btn-ghost" onClick={() => setEditing({ ...structuredClone(sel), id: `${sel.id}-elite`.slice(0, 40), elite: true, title: 'the Elite', hp: Math.round(sel.hp * 2), source: 'custom' })}>Make an elite from it</button>
               <button type="button" className="btn btn-ghost" aria-pressed={figure} onClick={() => setFigure(!figure)} data-testid="enemy-figure">🧍 3D figure{sel.look ? ' ✓' : ''}</button>
+              <span className="flex items-center gap-0.5 rounded-md border border-ink-700 p-0.5 text-xs" role="radiogroup" aria-label="Figures as men or women" title="3D figures of this creature: men / male animals, women / female animals, or mixed (each figure on its own)" data-testid="enemy-sex">
+                {([null, ...FIGURE_SEXES] as const).map((v) => <button key={v ?? 'auto'} type="button" role="radio" aria-checked={(sel.sex ?? null) === v} disabled={busy} className={`rounded px-1.5 py-0.5 ${(sel.sex ?? null) === v ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => void saveSex(v)} data-testid={`enemy-sex-${v ?? 'auto'}`}>{v ? SEX_LABEL[v] : 'Auto'}</button>)}
+              </span>
               {own(sel.id) && <button type="button" className="btn btn-ghost hover:text-blood-400" onClick={() => void run({ type: 'enemyLibraryRemove', id: sel.id })}>{BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Restore the SRD version' : 'Delete'}</button>}
             </div>
             {figure && <CreaturePicker key={`c-${sel.id}`} block={sel} busy={busy} onSave={saveCreature} />}
-            {figure && <FigureEditor key={sel.id} gm value={sel.look ?? autoLook(`${sel.name} ${sel.type}`, sel.id, sel.color)} onSave={saveLook} onCancel={() => setFigure(false)} busy={busy} title={`Humanoid figure – ${displayName(sel)}`} ring={sel.color} />}
+            {figure && <FigureEditor key={sel.id} gm value={sel.look ?? autoLook(`${sel.name} ${sel.type}`, sel.id, sel.color, sel.sex)} onSave={saveLook} onCancel={() => setFigure(false)} busy={busy} title={`Humanoid figure – ${displayName(sel)}`} ring={sel.color} />}
             {figure && !sel.look && !sel.creature && <p className="text-[11px] text-marble-500">Without a saved figure every {sel.name} gets its own variation of the matching preset (bandits, cultists, guards, orcs …). Saving one fixes this look for all of them.</p>}
           </>
         ) : (
