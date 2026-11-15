@@ -387,7 +387,8 @@ export function sceneElevation(h: Axial, terrain: TerrainType): number {
 // ---------------------------------------------------------------- creation
 
 export type HexPreset = 'blank' | 'wilderness' | 'forest' | 'river' | 'ruins' | 'dungeon' | 'camp' | 'cave' | 'highlands' | 'village' | 'swamp' | 'temple' | 'chasm' | 'desert' | 'winter'
-  | 'farmstead' | 'hamlet' | 'orchard' | 'graveyard' | 'manor' | 'market' | 'streets' | 'docks' | 'citygate' | 'tavern' | 'crypt';
+  | 'farmstead' | 'hamlet' | 'orchard' | 'graveyard' | 'manor' | 'market' | 'streets' | 'docks' | 'citygate' | 'tavern' | 'crypt'
+  | 'bridge' | 'gorge' | 'tradingpost' | 'crossroads' | 'watchtower' | 'mine' | 'battlefield' | 'stonecircle' | 'shipwreck' | 'lavafield' | 'waterfall' | 'caravan' | 'lakeshore' | 'spiderlair';
 export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> = {
   region: [
     { id: 'wilderness', label: 'Wilderness (Arena generator)' },
@@ -422,6 +423,21 @@ export const PRESETS: Record<TileSet, Array<{ id: HexPreset; label: string }>> =
     { id: 'citygate', label: 'City · City wall, towers and gate' },
     { id: 'tavern', label: 'Interior · Tavern (taproom, hearth, rooms)' },
     { id: 'crypt', label: 'Interior · Crypt (sarcophagi, bones, cages)' },
+    // APEX 2.7 – encounter sites
+    { id: 'bridge', label: 'Site · Stone bridge over a river' },
+    { id: 'gorge', label: 'Site · Gorge between cliffs (rockfall, a way up)' },
+    { id: 'tradingpost', label: 'Site · Abandoned trading post' },
+    { id: 'crossroads', label: 'Site · Crossroads with a wayside shrine' },
+    { id: 'watchtower', label: 'Site · Ruined watchtower on a hill' },
+    { id: 'mine', label: 'Site · Mine entrance in a rock face' },
+    { id: 'battlefield', label: 'Site · Old battlefield (trenches, stakes, bones)' },
+    { id: 'stonecircle', label: 'Site · Standing stones on a mound' },
+    { id: 'shipwreck', label: 'Site · Shipwreck on a beach' },
+    { id: 'lavafield', label: 'Site · Lava field with basalt paths' },
+    { id: 'waterfall', label: 'Site · Waterfall, pool and stream' },
+    { id: 'caravan', label: 'Site · Ambushed caravan on a forest road' },
+    { id: 'lakeshore', label: 'Site · Lake shore with a pier and a hut' },
+    { id: 'spiderlair', label: 'Site · Webbed hollow (spider lair)' },
     { id: 'blank', label: 'Open field' },
   ],
 };
@@ -517,6 +533,8 @@ function generateBattleSceneFlat(preset: HexPreset, radius: number, seed: number
   if (settled) return settled;
   const themed = themedBattleScene(preset, r, seed, rnd, ground);
   if (themed) return themed;
+  const site = siteScene(preset, r, seed, rnd, ground);
+  if (site) return site;
   return encodeTiles(r, 'battle', (h) => (rnd(h, 11) > 0.97 ? 'boulder' : rnd(h, 12) > 0.93 ? 'undergrowth' : ground(h)));
 }
 
@@ -525,6 +543,226 @@ function withLevels(data: HexSceneData, level: (h: Axial) => number): HexSceneDa
   const heights = hexesInRange(ORIGIN, data.radius).map((h) => levelCode(level(h))).join('');
   const { fine: _f, ...rest } = data; void _f;
   return /^0+$/.test(heights) ? rest : { ...rest, heights };
+}
+
+/**
+ * APEX 2.7 – encounter sites: places a random encounter happens at (a bridge, a gorge, an abandoned trading post …).
+ * `row` runs north–south (0 = the middle band), `h.q` west–east. Same seed → same map.
+ */
+function siteScene(preset: HexPreset, r: number, seed: number, rnd: (h: Axial, salt: number) => number, ground: (h: Axial) => BattleTile): HexSceneData | null {
+  const noise = (h: Axial, sx: number, salt = 0) => valueNoise(h.q / sx + salt, h.r / sx - salt, seed);
+  const d0 = (h: Axial) => distance(h, ORIGIN);
+  const row = (h: Axial) => h.r + Math.round(h.q / 2);
+  const wild = (h: Axial, salt: number, trees = 0.9): TileId => { const x = rnd(h, salt); return x > trees ? (noise(h, 5, 3) > 0.5 ? 'pine' : 'tree') : x > trees - 0.08 ? 'bush' : x > trees - 0.2 ? 'tallgrass' : x < 0.03 ? 'rocks' : ground(h); };
+  switch (preset) {
+    case 'bridge': {
+      // a wide river from west to east, a stone bridge three hexes wide in the middle, a road over it
+      const data = encodeTiles(r, 'battle', (h) => {
+        const y = row(h) - Math.round(Math.sin((h.q + (seed % 5)) / 4) * 1), ay = Math.abs(y);
+        if (Math.abs(h.q) <= 1 && ay <= 2) return h.q === 0 ? 'cobbles' : 'bridge';
+        if (ay <= 1) return 'deep';
+        if (ay === 2) return rnd(h, 2) > 0.8 ? 'lilies' : 'shallow';
+        if (h.q === 0) return 'dirt';
+        if (ay === 3 && Math.abs(h.q) === 2) return y < 0 ? 'lamppost' : 'signpost';
+        if (ay === 3 && rnd(h, 3) > 0.85) return 'rocks';
+        return wild(h, 4, 0.88);
+      });
+      return withLevels(data, (h) => { const ay = Math.abs(row(h) - Math.round(Math.sin((h.q + (seed % 5)) / 4) * 1)); return ay <= 2 && Math.abs(h.q) > 1 ? 0 : 1; });
+    }
+    case 'gorge': {
+      // a narrow canyon floor between two rims; a rockfall half-way, stairs up the southern rim
+      const fall = Math.round((hash2(1, 2, seed) - 0.5) * r);
+      const up = -fall >= 0 ? Math.max(2, -fall) : Math.min(-2, -fall);
+      const data = encodeTiles(r, 'battle', (h) => {
+        const y = row(h), ay = Math.abs(y), roll = rnd(h, 5);
+        if (ay <= 1) return Math.abs(h.q - fall) <= 1 && roll > 0.35 ? (roll > 0.75 ? 'boulder' : 'rubble') : roll > 0.9 ? 'rocks' : roll > 0.55 ? 'dirt' : 'stone';
+        if (y >= 2 && y <= 3 && h.q === up) return 'stairs';
+        if (ay === 2) return roll > 0.6 ? 'rocks' : 'stone';
+        return roll > 0.9 ? 'pine' : roll > 0.84 ? 'boulder' : roll > 0.7 ? 'tallgrass' : ground(h);
+      });
+      return withLevels(data, (h) => { const y = row(h), ay = Math.abs(y); if (ay <= 1) return 0; if (h.q === up && y === 2) return 1; if (h.q === up && y === 3) return 2; return 3; });
+    }
+    case 'tradingpost': {
+      // a palisade with gaps, a gate on the road, shop, stalls, carts, crates, a well – overgrown
+      const ring = Math.max(3, Math.round(r * 0.5));
+      const sx = Math.round((hash2(3, 4, seed) - 0.5) * 2) || 1;
+      const shop = (h: Axial) => distance(h, { q: sx * 2, r: -1 }) <= 1 && h.r <= -1;
+      return encodeTiles(r, 'battle', (h) => {
+        const d = d0(h), roll = rnd(h, 6);
+        if (row(h) === 0 && d >= ring - 0) return d === ring ? 'gate' : 'dirt';
+        if (d === ring) return roll > 0.8 ? 'ruinwall' : roll > 0.68 ? 'rubble' : 'palisade';
+        if (d < ring) {
+          if (d === 0) return 'well';
+          if (shop(h)) return 'shop';
+          if (row(h) === 0) return 'dirt';
+          if (d === 2 && roll > 0.72) return roll > 0.86 ? 'stall' : 'cart';
+          if (d === ring - 1 && roll > 0.7) return roll > 0.9 ? 'barrels' : roll > 0.8 ? 'crates' : 'woodpile';
+          return roll > 0.55 ? 'tallgrass' : roll > 0.45 ? 'bush' : roll > 0.25 ? 'dirt' : 'grass';
+        }
+        return wild(h, 7, 0.87);
+      });
+    }
+    case 'crossroads': {
+      // two roads crossing, a signpost, a wayside shrine, a broken cart, low field walls
+      return encodeTiles(r, 'battle', (h) => {
+        const y = row(h), roll = rnd(h, 8);
+        if (h.q === 1 && y === -1) return 'signpost';
+        if (h.q === -2 && y === -2) return 'shrine';
+        if (h.q === 2 && y === 1) return 'cart';
+        if (h.q === -2 && y === 2) return 'well';
+        if (y === 0 || h.q === 0) return roll > 0.92 ? 'rocks' : 'dirt';
+        if ((Math.abs(y) === 3 && Math.abs(h.q) > 3) || (Math.abs(h.q) === 3 && Math.abs(y) > 3)) return roll > 0.25 ? 'stonewall' : 'grass';
+        if (Math.abs(y) > 3 && Math.abs(h.q) > 3) return h.q > 0 === y > 0 ? (roll > 0.5 ? 'wheat' : 'grass') : wild(h, 9, 0.8);
+        return roll > 0.93 ? 'tree' : roll > 0.85 ? 'flowers' : ground(h);
+      });
+    }
+    case 'watchtower': {
+      // a hill with a ruined tower: broken wall ring, stairs up, an old campfire
+      const data = encodeTiles(r, 'battle', (h) => {
+        const d = d0(h), roll = rnd(h, 10);
+        if (d === 0) return 'tower';
+        if (d === 1) return h.q === 1 && h.r === 0 ? 'campfire' : roll > 0.7 ? 'rubble' : 'stone';
+        if (d === 2) return row(h) === 2 && h.q === 0 ? 'stairs' : roll > 0.45 ? 'ruinwall' : roll > 0.3 ? 'rubble' : 'stone';
+        if (d === 3) return h.q === 0 && h.r > 0 ? 'stairs' : roll > 0.85 ? 'boulder' : roll > 0.7 ? 'rocks' : 'grass';
+        return wild(h, 11, 0.9);
+      });
+      return withLevels(data, (h) => { const d = d0(h); return d <= 2 ? 3 : d === 3 ? 2 : d === 4 ? 1 : 0; });
+    }
+    case 'mine': {
+      // a rock face in the north with a tunnel, a cart track, crates, a tent and a forge outside
+      const face = -Math.max(2, Math.round(r * 0.3));
+      const data = encodeTiles(r, 'battle', (h) => {
+        const y = row(h), roll = rnd(h, 12);
+        if (y < face) return Math.abs(h.q) <= 1 ? (roll > 0.9 ? 'rubble' : 'cavefloor') : Math.abs(h.q) === 2 && y === face - 2 ? 'cavefloor' : 'cavewall';
+        if (y === face) return Math.abs(h.q) <= 1 ? (h.q === 1 ? 'ladder' : 'cavefloor') : 'cavewall';
+        if (h.q === 0) return y === face + 2 ? 'cart' : 'dirt';
+        if (y === face + 1 && Math.abs(h.q) === 2) return 'lamppost';
+        if (h.q === -3 && y === face + 2) return 'forge';
+        if (h.q === 3 && y === face + 2) return 'tent';
+        if (y <= face + 3 && roll > 0.8) return roll > 0.93 ? 'barrels' : roll > 0.86 ? 'crates' : 'woodpile';
+        if (y <= face + 3) return roll > 0.4 ? 'dirt' : 'rocks';
+        return wild(h, 13, 0.9);
+      });
+      return withLevels(data, (h) => { const y = row(h); return y <= face && Math.abs(h.q) > 1 ? 4 : 0; });
+    }
+    case 'battlefield': {
+      // trenches of mud, broken stakes, bones, banners and racks, dead trees, a wrecked cart
+      return encodeTiles(r, 'battle', (h) => {
+        const y = row(h), roll = rnd(h, 14);
+        const trench = Math.abs(y - Math.round(Math.sin(h.q / 2 + seed) * 1) - 3) === 0 || Math.abs(y + Math.round(Math.cos(h.q / 2.5 + seed) * 1) + 3) === 0;
+        if (d0(h) === 0) return 'banner';
+        if (trench) return roll > 0.85 ? 'palisade' : 'mud';
+        if (roll > 0.955) return 'bones';
+        if (roll > 0.93) return 'weaponrack';
+        if (roll > 0.905) return 'deadtree';
+        if (roll > 0.88) return 'rubble';
+        if (roll < 0.012) return 'cart';
+        if (roll < 0.03) return 'banner';
+        return roll < 0.3 ? 'mud' : roll < 0.6 ? 'dirt' : 'grass';
+      });
+    }
+    case 'stonecircle': {
+      // a mound with a ring of standing stones, an altar on a magic circle in the middle
+      const ring = Math.max(3, Math.round(r * 0.4));
+      const data = encodeTiles(r, 'battle', (h) => {
+        const d = d0(h), roll = rnd(h, 15);
+        if (d === 0) return 'altar';
+        if (d === 1) return 'circle';
+        if (d === ring) return (h.q + h.r * 2 + ring * 4) % 2 === 0 ? 'pillar' : roll > 0.85 ? 'rubble' : 'grass';
+        if (d < ring) return roll > 0.85 ? 'flowers' : roll > 0.75 ? 'mushrooms' : 'grass';
+        return wild(h, 16, 0.9);
+      });
+      return withLevels(data, (h) => { const d = d0(h); return d <= ring - 2 ? 2 : d <= ring ? 1 : 0; });
+    }
+    case 'shipwreck': {
+      // a beach: sea in the south, a wreck on the sand, cargo washed ashore, dunes with grass in the north
+      const shore = Math.max(1, Math.round(r * 0.25));
+      const wx = Math.round((hash2(5, 6, seed) - 0.5) * 3);
+      return encodeTiles(r, 'battle', (h) => {
+        const y = row(h) - Math.round(noise(h, 4, 5) * 1.5), roll = rnd(h, 17);
+        const hull = distance(h, { q: wx, r: shore - Math.round(wx / 2) }) <= 1 || distance(h, { q: wx + 2, r: shore - Math.round((wx + 2) / 2) }) <= 1;
+        if (hull) return roll > 0.75 ? 'crates' : roll > 0.55 ? 'log' : 'boat';
+        if (y > shore + 2) return 'deep';
+        if (y > shore) return 'shallow';
+        if (y >= shore - 3) return roll > 0.93 ? 'barrels' : roll > 0.88 ? 'crates' : roll > 0.82 ? 'rocks' : roll > 0.78 ? 'log' : 'sand';
+        return roll > 0.9 ? 'bush' : roll > 0.6 ? 'tallgrass' : roll > 0.3 ? 'sand' : 'grass';
+      });
+    }
+    case 'lavafield': {
+      // streams of lava between basalt; the middle and wide paths stay safe
+      const data = encodeTiles(r, 'battle', (h) => {
+        const n = noise(h, 3.2, 9), roll = rnd(h, 18), d = d0(h);
+        if (d > 1 && Math.abs(n - 0.5) < 0.055) return 'lava';
+        if (roll > 0.93) return 'boulder';
+        if (roll > 0.86) return 'rubble';
+        if (roll > 0.8) return 'rocks';
+        return roll > 0.4 ? 'stone' : 'dirt';
+      });
+      return withLevels(data, (h) => (Math.abs(noise(h, 3.2, 9) - 0.5) < 0.055 && d0(h) > 1 ? 0 : noise(h, 3.2, 9) > 0.62 ? 1 : 0));
+    }
+    case 'waterfall': {
+      // a cliff in the north with a fall into a pool; the stream runs south, a log lies across it
+      const face = -Math.max(2, Math.round(r * 0.35));
+      const pool = { q: 0, r: face + 2 };
+      const data = encodeTiles(r, 'battle', (h) => {
+        const y = row(h), roll = rnd(h, 19), dp = distance(h, pool);
+        if (y <= face) return h.q === 0 ? 'deep' : roll > 0.85 ? 'pine' : roll > 0.7 ? 'rocks' : 'stone';
+        if (dp <= 1) return 'deep';
+        if (dp === 2) return roll > 0.75 ? 'rocks' : 'shallow';
+        const sx = Math.round(Math.sin(y / 2 + seed) * 1.2);
+        if (h.q === sx && y > face + 2) return y === face + 6 ? 'log' : 'shallow';
+        if (Math.abs(h.q - sx) === 1 && y > face + 3 && roll > 0.6) return roll > 0.85 ? 'lilies' : 'rocks';
+        return wild(h, 20, 0.86);
+      });
+      return withLevels(data, (h) => (row(h) <= face ? 4 : distance(h, pool) <= 2 ? 0 : 0));
+    }
+    case 'caravan': {
+      // a forest road with three stopped carts, cargo on the ground, a log across the road, thick cover both sides
+      return encodeTiles(r, 'battle', (h) => {
+        const y = row(h) - Math.round(Math.sin(h.q / 4 + seed) * 1), roll = rnd(h, 21);
+        if (y === 0 || y === 1) {
+          if (y === 0 && (h.q === -3 || h.q === 0 || h.q === 3)) return 'cart';
+          if (h.q === Math.min(r - 2, 6)) return 'log';
+          return roll > 0.9 ? 'crates' : roll > 0.84 ? 'barrels' : 'dirt';
+        }
+        if (Math.abs(y) <= 2 || y === 3) return roll > 0.7 ? 'bush' : roll > 0.5 ? 'tallgrass' : roll > 0.44 ? 'stump' : ground(h);
+        return wild(h, 22, 0.72);
+      });
+    }
+    case 'lakeshore': {
+      // a lake in the east, reeds along the shore, a pier with a boat, a fisher's hut and nets
+      const data = encodeTiles(r, 'battle', (h) => {
+        const x = h.q + Math.round(noise(h, 4, 7) * 2) - 1, roll = rnd(h, 23), y = row(h);
+        if (y === 0 && h.q >= 1 && h.q <= 4) return 'pier';
+        if (y === 1 && h.q === 4) return 'boat';
+        if (h.q === -2 && y === -1) return 'cottage';
+        if (h.q === -3 && y === 1) return 'tent';
+        if (h.q === -1 && y === 1) return 'campfire';
+        if (x > 3) return 'deep';
+        if (x > 1) return roll > 0.7 ? 'lilies' : 'shallow';
+        if (x === 1) return roll > 0.5 ? 'tallgrass' : 'sand';
+        if (x >= -1 && roll > 0.88) return roll > 0.94 ? 'crates' : 'log';
+        return wild(h, 24, 0.86);
+      });
+      return withLevels(data, (h) => (h.q + Math.round(noise(h, 4, 7) * 2) - 1 > 0 ? 0 : h.q < -3 ? 1 : 0));
+    }
+    case 'spiderlair': {
+      // a dim hollow: webs between dead trees, bones of earlier prey, a burrow in the middle
+      const data = encodeTiles(r, 'battle', (h) => {
+        const d = d0(h), roll = rnd(h, 25), n = noise(h, 3, 11);
+        if (d === 0) return 'pit';
+        if (d <= 2) return roll > 0.6 ? 'web' : roll > 0.45 ? 'bones' : 'dirt';
+        if (roll > 0.86 - n * 0.2) return n > 0.5 ? 'deadtree' : 'tree';
+        if (roll > 0.62) return 'web';
+        if (roll > 0.56) return 'bones';
+        if (roll > 0.5) return 'mushrooms';
+        return roll > 0.25 ? 'undergrowth' : 'dirt';
+      });
+      return withLevels(data, (h) => (d0(h) <= 2 ? 0 : d0(h) <= 4 ? 1 : 1 + Math.round(noise(h, 4, 2))));
+    }
+    default:
+      return null;
+  }
 }
 
 /**
