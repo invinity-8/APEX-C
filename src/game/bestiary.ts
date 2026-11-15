@@ -9,7 +9,7 @@
  * attacks (melee, ranged, spell attacks with reach / range), Multiattack (attacks per Attack action), area
  * abilities (saving throw, damage, area) and darkvision (GM vision modes).
  */
-import { parseLook, type FigureLook } from './figure.js';
+import { parseLook, parseSex, type FigureLook, type FigureSex } from './figure.js';
 import { parseCreature, type CreatureChoice } from './creatures.js';
 import { EXTRA_BESTIARY } from './bestiaryExtra.js';
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
@@ -95,6 +95,8 @@ export interface StatBlock {
   look?: FigureLook;
   /** APEX 2.2 – a creature model of the 3D kit (beast, dragon, aberration …) instead of a humanoid figure. */
   creature?: CreatureChoice;
+  /** APEX 2.8 – the figures as men, women or mixed (absent: automatic from the preset / the name). */
+  sex?: FigureSex;
 }
 
 export const mod = (score: number) => Math.floor((score - 10) / 2);
@@ -198,7 +200,7 @@ export function parseStatBlock(raw: unknown): { ok: true; block: StatBlock } | {
       id, name, ...(o.elite === true ? { elite: true } : {}), ...(str(o.title, 40) ? { title: str(o.title, 40) } : {}),
       size: str(o.size, 20) || 'Medium', type: str(o.type, 40) || 'humanoid', ac, ...(str(o.acNote, 40) ? { acNote: str(o.acNote, 40) } : {}), hp, ...(str(o.hitDice, 20) ? { hitDice: str(o.hitDice, 20) } : {}),
       speedFt, ...(int(o.flyFt ?? 0, 0, 240) ? { flyFt: int(o.flyFt, 0, 240)! } : {}), ...(int(o.climbFt ?? 0, 0, 120) ? { climbFt: int(o.climbFt, 0, 120)! } : {}), abilities, ...(Object.keys(saves).length ? { saves } : {}), senses: str(o.senses, 80), darkvisionFt, languages: str(o.languages, 80), cr: str(o.cr, 6) || '?',
-      attacks, multiattack, ...(areas.length ? { areas } : {}), ...(buffs.length ? { buffs } : {}), traits, color, icon, source: 'custom', ...(o.look && parseLook(o.look) ? { look: parseLook(o.look)! } : {}), ...(o.creature && parseCreature(o.creature) ? { creature: parseCreature(o.creature)! } : {}),
+      attacks, multiattack, ...(areas.length ? { areas } : {}), ...(buffs.length ? { buffs } : {}), traits, color, icon, source: 'custom', ...(o.look && parseLook(o.look) ? { look: parseLook(o.look)! } : {}), ...(o.creature && parseCreature(o.creature) ? { creature: parseCreature(o.creature)! } : {}), ...(parseSex(o.sex) ? { sex: parseSex(o.sex)! } : {}),
     },
   };
 }

@@ -6,7 +6,7 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   BODY_TYPES_3D, CLOTH_COLOURS, COLOUR_LABELS, DEFAULT_LOOK, EYE_COLOURS, FIGURE_PARTS, FIGURE_PRESETS, HAIR_COLOURS, lookFromPreset, METAL_COLOURS, PART_LABELS, partLabel, randomLook, SKIN_TONES,
-  type FigureColourKey, type FigureLook, type FigurePartKey,
+  type FigureColourKey, type FigureLook, type FigurePartKey, type FigurePreset,
 } from '../game/figure';
 
 const FigurePreview = lazy(() => import('./FigurePreview'));
@@ -27,6 +27,11 @@ export function FigureEditor({ value, onSave, onCancel, gm = false, busy = false
   const [look, setLook] = useState<FigureLook>(() => ({ ...DEFAULT_LOOK, ...(value ?? {}) }));
   const [tab, setTab] = useState(TABS[0].id);
   const [group, setGroup] = useState<'hero' | 'npc' | 'monster'>('hero');
+  // APEX 2.8 – every preset as a man or a woman: the last preset and its seed, so switching re-dresses it
+  const [presetSex, setPresetSex] = useState<'male' | 'female' | null>(null);
+  const [lastPreset, setLastPreset] = useState<{ preset: FigurePreset; seed: number } | null>(null);
+  const usePreset = (preset: FigurePreset, seed: number, sex: 'male' | 'female' | null) => { setLastPreset({ preset, seed }); setLook(lookFromPreset(preset, seed, sex ?? undefined)); };
+  const chooseSex = (sex: 'male' | 'female' | null) => { setPresetSex(sex); if (lastPreset) usePreset(lastPreset.preset, lastPreset.seed, sex); };
   const dirty = useMemo(() => JSON.stringify(look) !== JSON.stringify({ ...DEFAULT_LOOK, ...(value ?? {}) }), [look, value]);
   const set = <K extends keyof FigureLook>(k: K, v: FigureLook[K]) => setLook((l) => ({ ...l, [k]: v }));
   const flip = (k: FigurePartKey, dir: 1 | -1) => { const list = FIGURE_PARTS[k] as readonly string[]; const i = list.indexOf(look[k] as string); set(k, list[(i + dir + list.length) % list.length] as never); };
@@ -54,10 +59,13 @@ export function FigureEditor({ value, onSave, onCancel, gm = false, busy = false
             <div className="flex items-center gap-1">
               <span className="text-marble-400">Presets</span>
               {gm && (['hero', 'npc', 'monster'] as const).map((g) => <button key={g} type="button" aria-pressed={group === g} className={`rounded px-1.5 ${group === g ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => setGroup(g)}>{g === 'hero' ? 'Heroes' : g === 'npc' ? 'NPCs' : 'Monsters'}</button>)}
+              <span className="ml-auto flex items-center gap-0.5 rounded-md border border-ink-700 p-px" role="radiogroup" aria-label="Presets as" data-testid="preset-sex">
+                {([[null, 'As preset'], ['male', '♂ Man'], ['female', '♀ Woman']] as const).map(([v, l]) => <button key={l} type="button" role="radio" aria-checked={presetSex === v} className={`rounded px-1.5 ${presetSex === v ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => chooseSex(v)} data-testid={`preset-sex-${v ?? 'auto'}`}>{l}</button>)}
+              </span>
             </div>
             <div className="flex flex-wrap gap-1" data-testid="figure-presets">
               {FIGURE_PRESETS.filter((p) => p.group === (gm ? group : 'hero')).map((p) => (
-                <button key={p.id} type="button" className="rounded-md border border-ink-600 bg-ink-900 px-1.5 py-0.5 hover:border-gold-400/60" title={p.vary ? 'Click again for a variation' : undefined} onClick={() => setLook(lookFromPreset(p, Math.floor(Math.random() * 1e9)))}>{p.label}</button>
+                <button key={p.id} type="button" aria-pressed={lastPreset?.preset.id === p.id} className={`rounded-md border bg-ink-900 px-1.5 py-0.5 hover:border-gold-400/60 ${lastPreset?.preset.id === p.id ? 'border-gold-400/70 text-gold-100' : 'border-ink-600'}`} title={p.vary ? 'Click again for a variation' : undefined} onClick={() => usePreset(p, Math.floor(Math.random() * 1e9), presetSex)}>{p.label}</button>
               ))}
             </div>
           </div>

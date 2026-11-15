@@ -402,7 +402,8 @@ function tentacled(g: THREE.Group, kind: 'aboleth' | 'otyugh' | 'octopus' | 'mou
 }
 
 /** Bipedal brutes: apes, demons, minotaurs, yetis. */
-function brute(g: THREE.Group, o: { c: string; c2?: string; horns?: 'bull' | 'demon' | 'none'; tail?: boolean; fur?: boolean; head?: 'ape' | 'bull' | 'beast'; eye?: string; eyeGlow?: number }) {
+function brute(g: THREE.Group, o: { c: string; c2?: string; horns?: 'bull' | 'demon' | 'none'; tail?: boolean; fur?: boolean; head?: 'ape' | 'bull' | 'beast'; eye?: string; eyeGlow?: number; female?: boolean }) {
+  const hs = o.female ? 0.62 : 1;
   const b = M(o.c), d = M(o.c2 ?? shade(o.c, 0.6));
   for (const x of [-1, 1]) { limb(g, [x * 0.22, 0.75, -0.05], [x * 0.25, 0.4, 0.05], 0.13, 0.11, b); limb(g, [x * 0.25, 0.4, 0.05], [x * 0.25, 0.06, -0.05], 0.11, 0.09, b); blob(g, 0.12, d, [x * 0.25, 0.06, 0.05], [1, 0.6, 1.4], 0); }
   blob(g, 0.45, b, [0, 1.15, 0], [1.2, 1, 0.85]);
@@ -415,8 +416,8 @@ function brute(g: THREE.Group, o: { c: string; c2?: string; horns?: 'bull' | 'de
   else { put(g, box(0.25, 0.12, 0.25), d, [0, head[1] - 0.12, head[2] + 0.2]); for (const x of [-1, 1]) spike(g, [x * 0.08, head[1] - 0.12, head[2] + 0.3], [0, 1, 0.2], 0.08, 0.025, M('#f2ecdc'), 3); }
   eyes(g, [0, head[1] + 0.06, head[2] + 0.2], 0.09, 0.04, o.eye ?? '#141210', o.eyeGlow);
   for (const x of [-1, 1]) {
-    if (o.horns === 'bull') spike(g, [x * 0.2, head[1] + 0.12, head[2]], [x * 1, 0.6, 0.2], 0.35, 0.06, M('#e8dcc0'));
-    if (o.horns === 'demon') spike(g, [x * 0.12, head[1] + 0.2, head[2]], [x * 0.3, 1, -0.5], 0.45, 0.07, M('#2a1a1a'));
+    if (o.horns === 'bull') spike(g, [x * 0.2, head[1] + 0.12, head[2]], [x * 1, o.female ? 0.9 : 0.6, 0.2], 0.35 * hs, 0.06 * hs, M('#e8dcc0'));
+    if (o.horns === 'demon') spike(g, [x * 0.12, head[1] + 0.2, head[2]], [x * 0.3, 1, -0.5], 0.45 * hs, 0.07 * hs, M('#2a1a1a'));
     const sh: V3 = [x * 0.55, 1.35, 0], el: V3 = [x * 0.7, 0.95, 0.15], hand: V3 = [x * 0.65, 0.45, 0.2];
     limb(g, sh, el, 0.14, 0.12, b); limb(g, el, hand, 0.12, 0.1, b); blob(g, 0.13, d, hand, [1, 1, 1], 0);
     for (let k = -1; k <= 1; k++) spike(g, [hand[0] + k * 0.05, hand[1] - 0.08, hand[2] + 0.05], [0, -1, 0.4], 0.1, 0.025, M('#e8dcc0'), 3);
@@ -465,7 +466,7 @@ function hydra(g: THREE.Group, c: string, c2: string) {
 // ---------------------------------------------------------------- APEX 2.3: more archetypes
 
 /** Poultry and water birds standing on the ground (chicken, duck, goose, swan, cockatrice …). */
-function fowl(g: THREE.Group, o: { c: string; c2: string; beak: string; neck: number; comb?: boolean; size?: number }): THREE.Group[] {
+function fowl(g: THREE.Group, o: { c: string; c2: string; beak: string; neck: number; comb?: boolean; size?: number; hen?: boolean }): THREE.Group[] {
   const s = o.size ?? 1, b = M(o.c), l = M(o.c2), bk = M(o.beak);
   blob(g, 0.3 * s, b, [0, 0.42 * s, 0], [0.9, 0.85, 1.2]);
   blob(g, 0.2 * s, l, [0, 0.36 * s, 0.12 * s], [0.8, 0.7, 0.8]);
@@ -474,8 +475,9 @@ function fowl(g: THREE.Group, o: { c: string; c2: string; beak: string; neck: nu
   blob(g, 0.11 * s, b, head, [1, 1, 1.1]);
   spike(g, [0, head[1] - 0.02 * s, head[2] + 0.08 * s], [0, -0.2, 1], 0.12 * s, 0.04 * s, bk, 4);
   eyes(g, [0, head[1] + 0.03 * s, head[2] + 0.06 * s], 0.06 * s, 0.018 * s);
-  if (o.comb) { for (let i = 0; i < 3; i++) spike(g, [0, head[1] + 0.08 * s, head[2] - 0.03 * s + i * 0.03 * s], [0, 1, 0.1], 0.08 * s, 0.03 * s, M('#c0392b'), 3); blob(g, 0.035 * s, M('#c0392b'), [0, head[1] - 0.09 * s, head[2] + 0.06 * s], [1, 1.4, 1], 0); }
-  for (let i = 0; i < 4; i++) spike(g, [(i - 1.5) * 0.05 * s, 0.5 * s, -0.3 * s], [(i - 1.5) * 0.2, 0.6, -1], 0.22 * s, 0.05 * s, i % 2 ? b : l, 3);
+  const cs = o.hen ? 0.45 : 1;
+  if (o.comb) { for (let i = 0; i < 3; i++) spike(g, [0, head[1] + 0.08 * s * (o.hen ? 0.8 : 1), head[2] - 0.03 * s + i * 0.03 * s], [0, 1, 0.1], 0.08 * s * cs, 0.03 * s * cs, M('#c0392b'), 3); if (!o.hen) blob(g, 0.035 * s, M('#c0392b'), [0, head[1] - 0.09 * s, head[2] + 0.06 * s], [1, 1.4, 1], 0); }
+  for (let i = 0; i < 4; i++) spike(g, [(i - 1.5) * 0.05 * s, 0.5 * s, -0.3 * s], [(i - 1.5) * 0.2, o.hen || !o.comb ? 0.6 : 1.1, -1], (o.hen || !o.comb ? 0.22 : 0.34) * s, 0.05 * s, i % 2 ? b : l, 3);
   for (const x of [-1, 1]) { limb(g, [x * 0.1 * s, 0.22 * s, 0], [x * 0.1 * s, 0.03, 0.02], 0.025 * s, 0.022 * s, bk, 4); for (const k of [-1, 0, 1]) spike(g, [x * 0.1 * s, 0.02, 0.02], [k * 0.5, 0, 1], 0.08 * s, 0.015 * s, bk, 3); }
   return [wing([0.24 * s, 0.48 * s, 0.02], 1, 0.4 * s, 'feather', o.c, o.c2, 0.25), wing([-0.24 * s, 0.48 * s, 0.02], -1, 0.4 * s, 'feather', o.c, o.c2, 0.25)];
 }
@@ -647,8 +649,8 @@ export const CREATURES: Record<string, { label: string; group: 'Beasts' | 'Mount
   // undead & spirits
   ghost: { label: 'Ghost / specter / wraith', group: 'Undead & spirits', size: 'medium', flies: true, build: (g, tint) => { ghost(g, tint ?? '#bfd8e8'); return { height: 2.2 }; } },
   // fiends
-  demon: { label: 'Demon / devil (large)', group: 'Fiends', size: 'large', flies: true, build: (g) => { brute(g, { c: '#8a2a1a', c2: '#3a1010', horns: 'demon', tail: true, head: 'beast', eye: '#ffcf3a', eyeGlow: 1.2 }); return { wings: [wing([0.22, 1.4, -0.2], 1, 1.2, 'membrane', '#5a1a10', '#7a2a1a', 0.3), wing([-0.22, 1.4, -0.2], -1, 1.2, 'membrane', '#5a1a10', '#7a2a1a', 0.3)], height: 2.1 }; } },
-  minotaur: { label: 'Minotaur', group: 'Monstrosities', size: 'large', build: (g) => { brute(g, { c: '#5a3a22', horns: 'bull', head: 'bull', fur: true, tail: true }); return { height: 2.0 }; } },
+  demon: { label: 'Demon / devil (large)', group: 'Fiends', size: 'large', flies: true, build: (g, _t, v) => { brute(g, { female: v === 'female', c: '#8a2a1a', c2: '#3a1010', horns: 'demon', tail: true, head: 'beast', eye: '#ffcf3a', eyeGlow: 1.2 }); return { wings: [wing([0.22, 1.4, -0.2], 1, 1.2, 'membrane', '#5a1a10', '#7a2a1a', 0.3), wing([-0.22, 1.4, -0.2], -1, 1.2, 'membrane', '#5a1a10', '#7a2a1a', 0.3)], height: 2.1 }; } },
+  minotaur: { label: 'Minotaur', group: 'Monstrosities', size: 'large', build: (g, _t, v) => { brute(g, { female: v === 'female', c: '#5a3a22', horns: 'bull', head: 'bull', fur: true, tail: true }); return { height: 2.0 }; } },
   yeti: { label: 'Yeti', group: 'Monstrosities', size: 'large', build: (g) => { brute(g, { c: '#e8e4dc', c2: '#a8b8c8', head: 'ape', fur: true }); return { height: 1.9 }; } },
   hellhound: { label: 'Hell hound', group: 'Fiends', size: 'medium', build: quad(Q({ c: '#3a1a12', c2: '#5a2a1a', mane: 'flame', tail: 'thin', eye: '#ffcf3a', eyeGlow: 1.4, feet: 'claw' }), 1.1) },
   // ---------------------------------------------------------------- APEX 2.3: farm, wild and small animals
@@ -661,7 +663,7 @@ export const CREATURES: Record<string, { label: string; group: 'Beasts' | 'Mount
   sheep: { label: 'Sheep / ram / lamb', group: 'Beasts', size: 'medium', build: quad(Q({ c: '#f2ecdc', len: 1.1, h: 0.4, girth: 0.32, leg: 0.05, neck: 0.18, neckUp: 0.6, head: 0.15, snout: 0.5, ears: 'long', tail: 'stub', wool: true, headC: '#2a2622', feet: 'hoof', horns: 'ram', accent: '#c8b890' }), 1.0) },
   cow: { label: 'Cow / bull / calf', group: 'Beasts', size: 'large', build: quad(Q({ c: '#f2ecdc', spots: '#2a2622', len: 1.6, h: 0.48, girth: 0.37, leg: 0.09, neck: 0.18, head: 0.23, snout: 0.6, horns: 'bull', ears: 'round', feet: 'hoof', tail: 'thin', dark: '#e8a0a0' }), 1.25) },
   pig: { label: 'Pig / sow / piglet', group: 'Beasts', size: 'medium', build: quad(Q({ c: '#e8a8a0', len: 1.2, h: 0.28, girth: 0.32, leg: 0.06, neck: 0.05, head: 0.22, snout: 0.35, ears: 'round', tail: 'thin', feet: 'hoof', dark: '#c87870' }), 0.85) },
-  chicken: { label: 'Chicken / rooster', group: 'Beasts', size: 'tiny', flies: true, build: (g) => ({ wings: fowl(g, { c: '#f2ecdc', c2: '#e8d4b8', beak: '#e8b030', neck: 0.08, comb: true }), height: 0.95 }) },
+  chicken: { label: 'Chicken / rooster', group: 'Beasts', size: 'tiny', flies: true, build: (g, _t, v) => ({ wings: fowl(g, { c: v === 'female' ? '#c8946a' : '#f2ecdc', c2: v === 'female' ? '#e8c8a0' : '#e8d4b8', beak: '#e8b030', neck: 0.08, comb: true, hen: v === 'female' || v === 'young' }), height: 0.95 }) },
   duck: { label: 'Duck / goose', group: 'Beasts', size: 'tiny', flies: true, build: (g) => ({ wings: fowl(g, { c: '#7a6a52', c2: '#c8b890', beak: '#e8a030', neck: 0.18 }), height: 1.0 }) },
   swan: { label: 'Swan', group: 'Beasts', size: 'small', flies: true, build: (g) => ({ wings: fowl(g, { c: '#f8f4ec', c2: '#e8e4dc', beak: '#e87830', neck: 0.45, size: 1.1 }), height: 1.4 }) },
   billygoat: { label: 'Billy goat', group: 'Beasts', size: 'medium', build: (g, t, v) => { const r = quadruped(g, varyQuad(Q({ c: '#8a6a45', c2: '#d8c49a', len: 1.15, h: 0.46, girth: 0.22, leg: 0.05, neck: 0.3, neckUp: 0.8, head: 0.17, snout: 0.7, horns: 'goat', feet: 'hoof', tail: 'stub', accent: '#5a4a3a' }), v)); spike(g, [0, r.headAt[1] - 0.15, r.headAt[2] + 0.12], [0, -1, 0.2], 0.16, 0.05, M('#d8c49a'), 3); void t; return { height: 1.15 }; } },

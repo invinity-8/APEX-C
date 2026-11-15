@@ -17,7 +17,7 @@ import { beastIcon } from './effectIcons';
 import { ancestryScale, buildLowPoly } from './lowpoly';
 import { propV21 } from './props3d';
 import { buildCreature, creatureFor } from './creatures3d';
-import { autoLook, FIGURE_PRESETS, hashText, lookFromPreset, type FigureLook } from '../../game/figure';
+import { autoLook, FIGURE_PRESETS, hashText, lookAsSex, lookFromPreset, type FigureLook, type FigureSex } from '../../game/figure';
 
 /** APEX 2.1 – the low-poly look of a figure: chosen, or automatic (heroes by token, humanoid NPCs by kind). */
 export function figureLook(tk: SceneToken): FigureLook | null {
@@ -31,9 +31,9 @@ export function figureLook(tk: SceneToken): FigureLook | null {
     const look = lookFromPreset(heroes[h % heroes.length], h);
     return /^#[0-9a-f]{6}$/i.test(tk.color) ? { ...look, primary: tk.color.toLowerCase() } : look;
   }
-  if (enemy.look) return enemy.look;
+  if (enemy.look) return lookAsSex(enemy.look, enemy.sex, tk.tokenId);
   if (enemy.build && enemy.build !== 'humanoid' && enemy.build !== 'undead') return null;
-  return autoLook(`${enemy.breed ?? ''} ${tk.name}`, tk.tokenId, tk.color);
+  return autoLook(`${enemy.breed ?? ''} ${tk.name}`, tk.tokenId, tk.color, enemy.sex);
 }
 
 /** APEX 2.2 – the creature model of a figure: explicit, by wild-shape form, or by name/type (humanoids: none). */
@@ -41,9 +41,15 @@ export function figureCreature(tk: SceneToken): { kind: string; tint?: string; v
   if (tk.vitals?.form) return creatureFor(tk.vitals.form);
   const e = tk.enemy;
   if (!e || e.look) return null;
-  if (e.creature) return e.creature;
-  if (/humanoid/i.test(e.breed ?? '')) return null;
-  return creatureFor(`${e.breed ?? ''} ${tk.name}`);
+  const c = e.creature ?? (/humanoid/i.test(e.breed ?? '') ? null : creatureFor(`${e.breed ?? ''} ${tk.name}`));
+  return c ? creatureAsSex(c, e.sex, tk.tokenId) : null;
+}
+/** APEX 2.8 – the male or female animal (young ones stay young; a variant named in the stat block's name wins). */
+type CreatureId = { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' };
+export function creatureAsSex(c: CreatureId, sex: FigureSex | undefined, seed: string): CreatureId {
+  if (!sex || c.variant === 'young' || (sex === 'mixed' && c.variant)) return c;
+  const want = sex === 'mixed' ? (hashText(`${seed}:sex`) % 2 ? 'female' : 'male') : sex;
+  return { ...c, variant: want };
 }
 
 export const FT = Math.sqrt(3) / 5;

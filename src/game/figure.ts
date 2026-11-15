@@ -81,77 +81,119 @@ export function parseLook(v: unknown): FigureLook | null {
   return out as FigureLook;
 }
 
-export interface FigurePreset { id: string; label: string; group: 'hero' | 'npc' | 'monster'; look: Partial<FigureLook>; /** Parts the variation may swap (per figure). */ vary?: Partial<{ [K in FigurePartKey]: ReadonlyArray<PartValue<K>> }>; colours?: Partial<Record<FigureColourKey, readonly string[]>>; match?: RegExp }
+export interface FigurePreset { id: string; label: string; group: 'hero' | 'npc' | 'monster'; look: Partial<FigureLook>; /** Parts the variation may swap (per figure). */ vary?: Partial<{ [K in FigurePartKey]: ReadonlyArray<PartValue<K>> }>; colours?: Partial<Record<FigureColourKey, readonly string[]>>; match?: RegExp;
+  /** APEX 2.8 – touches for the other version of the preset (the woman of a male preset and vice versa). */ female?: Partial<FigureLook>; male?: Partial<FigureLook> }
 
 const humanVary = { hair: ['short', 'messy', 'buzz', 'long', 'ponytail', 'bun', 'curly', 'none', 'sidecut', 'braids', 'slicked', 'undercut', 'shaggy', 'mullet', 'swept', 'braid', 'dreads', 'afro', 'wavy', 'pixie', 'sidepart', 'halfup', 'highpony', 'cornrows'], beard: ['none', 'none', 'stubble', 'moustache', 'goatee', 'full', 'chin'], eyes: ['dots', 'narrow', 'angry', 'wide', 'scarred', 'almond', 'round', 'hooded', 'bright'], brows: ['thin', 'thick', 'angry', 'bushy', 'arched', 'raised'], head: ['round', 'square', 'oval', 'long'], nose: ['button', 'pointy', 'broad', 'hooked', 'small', 'snub', 'aquiline', 'crooked'], mouth: ['smile', 'flat', 'smirk', 'lips', 'frown'], face: ['plain', 'plain', 'cheekbones', 'strongjaw', 'softjaw', 'dimples', 'beautymark', 'wrinkles'] } as const;
 const anyHuman = { skin: SKIN_TONES.slice(0, 7), hairColor: HAIR_COLOURS.slice(0, 9) };
 
 export const FIGURE_PRESETS: FigurePreset[] = [
   // heroes (starting points for players)
-  { id: 'fighter', label: 'Fighter', group: 'hero', look: { torso: 'chain', shoulders: 'pads', main: 'longsword', off: 'kiteshield', legs: 'greaves', boots: 'armored', primary: '#2d4f8f', secondary: '#d8b25a', beard: 'stubble' } },
-  { id: 'barbarian', label: 'Barbarian', group: 'hero', look: { build: 'broad', torso: 'furs', shoulders: 'fur', hair: 'wild', beard: 'braided', main: 'greataxe', legs: 'kilt', boots: 'wraps', extra: 'warpaint', primary: '#6b4a2b', secondary: '#7a1f1f', cloak: 'fur' } },
-  { id: 'wizard', label: 'Wizard', group: 'hero', look: { torso: 'robe', legs: 'robe', hat: 'wizard', beard: 'long', main: 'staff', off: 'book', primary: '#2d4f8f', secondary: '#d8b25a', hairColor: '#f2ecdc', build: 'slim', belt: 'sash' } },
-  { id: 'sorcerer', label: 'Sorcerer', group: 'hero', look: { torso: 'coat', hair: 'spiky', main: 'wand', off: 'orb', primary: '#5a2a6e', secondary: '#d8b25a', eyes: 'glowing', eyeColor: '#c97fff', cloak: 'mantle' } },
-  { id: 'warlock', label: 'Warlock', group: 'hero', look: { body: 'tiefling', horns: 'curled', tail: true, skin: '#b9585a', torso: 'coat', main: 'wand', off: 'skull', primary: '#141210', secondary: '#7a1f1f', cloak: 'long', eyes: 'glowing', eyeColor: '#d8b25a' } },
+  { id: 'fighter', label: 'Fighter', group: 'hero', female: { hair: 'braid', build: 'muscular' }, look: { torso: 'chain', shoulders: 'pads', main: 'longsword', off: 'kiteshield', legs: 'greaves', boots: 'armored', primary: '#2d4f8f', secondary: '#d8b25a', beard: 'stubble' } },
+  { id: 'barbarian', label: 'Barbarian', group: 'hero', female: { hair: 'wild', build: 'muscular' }, look: { build: 'broad', torso: 'furs', shoulders: 'fur', hair: 'wild', beard: 'braided', main: 'greataxe', legs: 'kilt', boots: 'wraps', extra: 'warpaint', primary: '#6b4a2b', secondary: '#7a1f1f', cloak: 'fur' } },
+  { id: 'wizard', label: 'Wizard', group: 'hero', female: { hair: 'flowing', build: 'slender' }, look: { torso: 'robe', legs: 'robe', hat: 'wizard', beard: 'long', main: 'staff', off: 'book', primary: '#2d4f8f', secondary: '#d8b25a', hairColor: '#f2ecdc', build: 'slim', belt: 'sash' } },
+  { id: 'sorcerer', label: 'Sorcerer', group: 'hero', female: { hair: 'wavy' }, look: { torso: 'coat', hair: 'spiky', main: 'wand', off: 'orb', primary: '#5a2a6e', secondary: '#d8b25a', eyes: 'glowing', eyeColor: '#c97fff', cloak: 'mantle' } },
+  { id: 'warlock', label: 'Warlock', group: 'hero', female: { hair: 'long', hairColor: '#1d1612', face: 'lipstick' }, look: { body: 'tiefling', horns: 'curled', tail: true, skin: '#b9585a', torso: 'coat', main: 'wand', off: 'skull', primary: '#141210', secondary: '#7a1f1f', cloak: 'long', eyes: 'glowing', eyeColor: '#d8b25a' } },
   { id: 'rogue', label: 'Rogue', group: 'hero', look: { torso: 'leather', hat: 'hood', cloak: 'short', main: 'dagger', off: 'dagger', primary: '#2a2a2a', secondary: '#5c7a2a', belt: 'pouches', build: 'slim', extra: 'scarf' } },
-  { id: 'ranger', label: 'Ranger', group: 'hero', look: { body: 'elf', ears: 'pointed', torso: 'leather', cloak: 'long', hat: 'hood', main: 'bow', back: 'quiver', primary: '#2f6b3a', secondary: '#6b4a2b', hair: 'long', hairColor: '#e8cf8f' } },
-  { id: 'cleric', label: 'Cleric', group: 'hero', look: { torso: 'scale', main: 'mace', off: 'holy', primary: '#f2ecdc', secondary: '#d8b25a', extra: 'amulet', hair: 'short', beard: 'full' } },
-  { id: 'paladin', label: 'Paladin', group: 'hero', look: { torso: 'plate', shoulders: 'plate', legs: 'greaves', boots: 'armored', hat: 'helmet', main: 'longsword', off: 'towershield', cloak: 'cape', primary: '#f2ecdc', secondary: '#d8b25a', metal: '#e8e8f0' } },
-  { id: 'druid', label: 'Druid', group: 'hero', look: { torso: 'robe', legs: 'robe', hat: 'antlers', main: 'staff', off: 'none', primary: '#5c7a2a', secondary: '#6b4a2b', hair: 'braids', extra: 'necklace', boots: 'wraps', cloak: 'tattered' } },
+  { id: 'ranger', label: 'Ranger', group: 'hero', female: { build: 'slender' }, look: { body: 'elf', ears: 'pointed', torso: 'leather', cloak: 'long', hat: 'hood', main: 'bow', back: 'quiver', primary: '#2f6b3a', secondary: '#6b4a2b', hair: 'long', hairColor: '#e8cf8f' } },
+  { id: 'cleric', label: 'Cleric', group: 'hero', female: { hair: 'bun' }, look: { torso: 'scale', main: 'mace', off: 'holy', primary: '#f2ecdc', secondary: '#d8b25a', extra: 'amulet', hair: 'short', beard: 'full' } },
+  { id: 'paladin', label: 'Paladin', group: 'hero', female: { hair: 'braid', build: 'muscular' }, look: { torso: 'plate', shoulders: 'plate', legs: 'greaves', boots: 'armored', hat: 'helmet', main: 'longsword', off: 'towershield', cloak: 'cape', primary: '#f2ecdc', secondary: '#d8b25a', metal: '#e8e8f0' } },
+  { id: 'druid', label: 'Druid', group: 'hero', female: { hair: 'braids' }, look: { torso: 'robe', legs: 'robe', hat: 'antlers', main: 'staff', off: 'none', primary: '#5c7a2a', secondary: '#6b4a2b', hair: 'braids', extra: 'necklace', boots: 'wraps', cloak: 'tattered' } },
   { id: 'bard', label: 'Bard', group: 'hero', look: { body: 'halfling', torso: 'vest', hat: 'feathercap', main: 'lute', off: 'none', primary: '#b3261e', secondary: '#d8b25a', hair: 'curly', extra: 'blush', cloak: 'cape' } },
-  { id: 'monk', label: 'Monk', group: 'hero', look: { torso: 'robe', legs: 'trousers', boots: 'sandals', hair: 'none', belt: 'sash', main: 'staff', primary: '#d4602b', secondary: '#d8b25a', extra: 'none' } },
-  { id: 'dwarf-hero', label: 'Dwarf warrior', group: 'hero', look: { body: 'dwarf', build: 'stocky', beard: 'braided', hat: 'horned', torso: 'chain', main: 'warhammer', off: 'roundshield', primary: '#7a1f1f', hairColor: '#a33a22' } },
-  { id: 'gnome-tinker', label: 'Gnome tinker', group: 'hero', look: { body: 'gnome', ears: 'big', hair: 'wild', hairColor: '#d4602b', torso: 'apron', main: 'hammer', off: 'lantern', extra: 'monocle', back: 'backpack', primary: '#6b4a2b', secondary: '#1f5a5a' } },
-  { id: 'dragonborn-hero', label: 'Dragonborn knight', group: 'hero', look: { body: 'dragonborn', skin: '#b9585a', tail: true, torso: 'scale', main: 'greatsword', shoulders: 'spiked', primary: '#1f2f5a', secondary: '#d8b25a', hair: 'none', horns: 'long' } },
+  { id: 'monk', label: 'Monk', group: 'hero', female: { hair: 'topknot', build: 'slender' }, look: { torso: 'robe', legs: 'trousers', boots: 'sandals', hair: 'none', belt: 'sash', main: 'staff', primary: '#d4602b', secondary: '#d8b25a', extra: 'none' } },
+  { id: 'dwarf-hero', label: 'Dwarf warrior', group: 'hero', female: { hair: 'braids', build: 'stocky' }, look: { body: 'dwarf', build: 'stocky', beard: 'braided', hat: 'horned', torso: 'chain', main: 'warhammer', off: 'roundshield', primary: '#7a1f1f', hairColor: '#a33a22' } },
+  { id: 'gnome-tinker', label: 'Gnome tinker', group: 'hero', female: { hair: 'pigtails' }, look: { body: 'gnome', ears: 'big', hair: 'wild', hairColor: '#d4602b', torso: 'apron', main: 'hammer', off: 'lantern', extra: 'monocle', back: 'backpack', primary: '#6b4a2b', secondary: '#1f5a5a' } },
+  { id: 'dragonborn-hero', label: 'Dragonborn knight', group: 'hero', female: { build: 'muscular', hair: 'none' }, look: { body: 'dragonborn', skin: '#b9585a', tail: true, torso: 'scale', main: 'greatsword', shoulders: 'spiked', primary: '#1f2f5a', secondary: '#d8b25a', hair: 'none', horns: 'long' } },
   // APEX 2.3 – heroines
-  { id: 'shieldmaiden', label: 'Shieldmaiden', group: 'hero', look: { sex: 'female', build: 'muscular', torso: 'scale', shoulders: 'fur', hair: 'braids', hairColor: '#e8cf8f', main: 'axe', off: 'roundshield', primary: '#2d4f8f', secondary: '#d8b25a', cloak: 'fur', extra: 'warpaint' } },
-  { id: 'sorceress', label: 'Sorceress', group: 'hero', look: { sex: 'female', build: 'slender', torso: 'dress', legs: 'robe', hair: 'flowing', hairColor: '#7a1f1f', main: 'wand', off: 'orb', primary: '#5a2a6e', secondary: '#d8b25a', eyes: 'glowing', eyeColor: '#c97fff', extra: 'amulet', hat: 'circlet' } },
+  { id: 'shieldmaiden', label: 'Shieldmaiden', group: 'hero', male: { beard: 'braided', build: 'broad' }, look: { sex: 'female', build: 'muscular', torso: 'scale', shoulders: 'fur', hair: 'braids', hairColor: '#e8cf8f', main: 'axe', off: 'roundshield', primary: '#2d4f8f', secondary: '#d8b25a', cloak: 'fur', extra: 'warpaint' } },
+  { id: 'sorceress', label: 'Sorceress', group: 'hero', male: { torso: 'coat', legs: 'trousers', hair: 'long', beard: 'goatee' }, look: { sex: 'female', build: 'slender', torso: 'dress', legs: 'robe', hair: 'flowing', hairColor: '#7a1f1f', main: 'wand', off: 'orb', primary: '#5a2a6e', secondary: '#d8b25a', eyes: 'glowing', eyeColor: '#c97fff', extra: 'amulet', hat: 'circlet' } },
   { id: 'huntress', label: 'Huntress', group: 'hero', look: { sex: 'female', build: 'slender', body: 'elf', ears: 'pointed', torso: 'leather', hair: 'ponytail', hairColor: '#3b2516', main: 'bow', back: 'quiver', cloak: 'short', primary: '#2f6b3a', secondary: '#6b4a2b', boots: 'tall' } },
-  { id: 'priestess', label: 'Priestess', group: 'hero', look: { sex: 'female', build: 'average', torso: 'robe', legs: 'robe', hair: 'bun', hairColor: '#e8cf8f', main: 'mace', off: 'holy', primary: '#f2ecdc', secondary: '#d8b25a', extra: 'amulet', hat: 'circlet' } },
+  { id: 'priestess', label: 'Priestess', group: 'hero', male: { hair: 'short', beard: 'full' }, look: { sex: 'female', build: 'average', torso: 'robe', legs: 'robe', hair: 'bun', hairColor: '#e8cf8f', main: 'mace', off: 'holy', primary: '#f2ecdc', secondary: '#d8b25a', extra: 'amulet', hat: 'circlet' } },
   { id: 'valkyrie', label: 'Valkyrie', group: 'hero', look: { sex: 'female', build: 'muscular', torso: 'plate', shoulders: 'plate', legs: 'greaves', boots: 'armored', hat: 'helmet', hair: 'braid', hairColor: '#e8cf8f', main: 'spear', off: 'kiteshield', back: 'wings', primary: '#f2ecdc', secondary: '#d8b25a' } },
-  { id: 'witch', label: 'Witch', group: 'hero', look: { sex: 'female', build: 'heavy', torso: 'robe', legs: 'robe', hat: 'wizard', hair: 'long', hairColor: '#1d1612', main: 'staff', off: 'potion', primary: '#141210', secondary: '#5c7a2a', nose: 'hooked', extra: 'necklace' } },
+  { id: 'witch', label: 'Witch', group: 'hero', male: { beard: 'long', hairColor: '#8a8a8a' }, look: { sex: 'female', build: 'heavy', torso: 'robe', legs: 'robe', hat: 'wizard', hair: 'long', hairColor: '#1d1612', main: 'staff', off: 'potion', primary: '#141210', secondary: '#5c7a2a', nose: 'hooked', extra: 'necklace' } },
   { id: 'rogue-f', label: 'Rogue (woman)', group: 'hero', look: { sex: 'female', build: 'slender', torso: 'leather', hat: 'hood', hair: 'bob', hairColor: '#1d1612', main: 'dagger', off: 'dagger', cloak: 'short', primary: '#2a2a2a', secondary: '#7a1f1f', belt: 'pouches', extra: 'scarf' } },
-  { id: 'druidess', label: 'Druidess', group: 'hero', look: { sex: 'female', build: 'average', body: 'halfling', torso: 'dress', legs: 'robe', hair: 'curly', hairColor: '#d4602b', hat: 'antlers', main: 'staff', primary: '#5c7a2a', secondary: '#e8d4a6', extra: 'freckles', cloak: 'tattered' } },
+  { id: 'druidess', label: 'Druidess', group: 'hero', male: { torso: 'robe', beard: 'full' }, look: { sex: 'female', build: 'average', body: 'halfling', torso: 'dress', legs: 'robe', hair: 'curly', hairColor: '#d4602b', hat: 'antlers', main: 'staff', primary: '#5c7a2a', secondary: '#e8d4a6', extra: 'freckles', cloak: 'tattered' } },
   { id: 'brawler-f', label: 'Monk (woman)', group: 'hero', look: { sex: 'female', build: 'muscular', torso: 'vest', legs: 'trousers', boots: 'wraps', hair: 'topknot', hairColor: '#1d1612', belt: 'sash', main: 'none', primary: '#d4602b', secondary: '#d8b25a', skin: '#8d5a36' } },
   { id: 'paladin-f', label: 'Paladin (woman)', group: 'hero', look: { sex: 'female', build: 'heavy', torso: 'plate', shoulders: 'plate', legs: 'greaves', boots: 'armored', hair: 'swept', hairColor: '#6b4224', main: 'warhammer', off: 'towershield', cloak: 'cape', primary: '#7a1f1f', secondary: '#d8b25a' } },
   // NPCs (humanoid enemies and townsfolk) – `match` maps an enemy's name/type to its preset
   { id: 'bandit', label: 'Bandit', group: 'npc', match: /bandit|brigand|outlaw|highway/i, look: { torso: 'leather', hat: 'bandana', main: 'scimitar', off: 'none', primary: '#6b4a2b', secondary: '#7a1f1f', belt: 'pouches', extra: 'scar', mouth: 'grin' }, vary: { ...humanVary, hat: ['bandana', 'hood', 'none', 'cap', 'mask'], main: ['scimitar', 'dagger', 'club', 'axe', 'sword', 'crossbow'], off: ['none', 'none', 'dagger', 'buckler'], torso: ['leather', 'vest', 'rags', 'studded'], cloak: ['none', 'tattered', 'short'] }, colours: { ...anyHuman, primary: ['#6b4a2b', '#3a2a1a', '#5c7a2a', '#2a2a2a', '#8a8a8a'], secondary: ['#7a1f1f', '#d4602b', '#1f5a5a', '#e8d4a6'] } },
-  { id: 'bandit-captain', label: 'Bandit captain', group: 'npc', match: /captain|chief|boss/i, look: { torso: 'studded', hat: 'tricorn', main: 'scimitar', off: 'dagger', cloak: 'long', primary: '#3a2a1a', secondary: '#b3261e', beard: 'handlebar', extra: 'earring', belt: 'sash', shoulders: 'pads' } },
+  { id: 'bandit-captain', label: 'Bandit captain', group: 'npc', female: { hair: 'long', hairColor: '#3b2516' }, match: /captain|chief|boss/i, look: { torso: 'studded', hat: 'tricorn', main: 'scimitar', off: 'dagger', cloak: 'long', primary: '#3a2a1a', secondary: '#b3261e', beard: 'handlebar', extra: 'earring', belt: 'sash', shoulders: 'pads' } },
   { id: 'thug', label: 'Thug', group: 'npc', match: /thug|bruiser|enforcer/i, look: { build: 'broad', torso: 'vest', hair: 'buzz', main: 'club', off: 'none', primary: '#3a2a1a', secondary: '#8a8a8a', extra: 'tattoos', brows: 'angry', mouth: 'frown' }, vary: { ...humanVary, main: ['club', 'mace', 'flail', 'hammer'], hair: ['buzz', 'none', 'mohawk', 'short'] }, colours: anyHuman },
   { id: 'cultist', label: 'Cultist', group: 'npc', match: /cult|acolyte|zealot/i, look: { torso: 'cultrobe', legs: 'robe', hat: 'cowl', main: 'sickle', off: 'none', primary: '#5a1515', secondary: '#141210', extra: 'amulet', eyes: 'hollow', mouth: 'flat' }, vary: { main: ['sickle', 'dagger', 'dagger', 'scythe', 'staff'], off: ['none', 'none', 'skull', 'book'], eyes: ['hollow', 'narrow', 'glowing', 'angry'] }, colours: { ...anyHuman, primary: ['#5a1515', '#3a0d0d', '#141210', '#2b1b3a'] } },
-  { id: 'cult-fanatic', label: 'Cult fanatic', group: 'npc', match: /fanatic|priest of|high priest/i, look: { torso: 'cultrobe', legs: 'robe', hat: 'horned', main: 'staff', off: 'skull', primary: '#141210', secondary: '#7a1f1f', eyes: 'glowing', eyeColor: '#b3261e', cloak: 'long', extra: 'warpaint' } },
+  { id: 'cult-fanatic', label: 'Cult fanatic', group: 'npc', female: { hair: 'long', hairColor: '#1d1612' }, match: /fanatic|priest of|high priest/i, look: { torso: 'cultrobe', legs: 'robe', hat: 'horned', main: 'staff', off: 'skull', primary: '#141210', secondary: '#7a1f1f', eyes: 'glowing', eyeColor: '#b3261e', cloak: 'long', extra: 'warpaint' } },
   { id: 'guard', label: 'Guard', group: 'npc', match: /guard|watch|soldier|militia|sentry/i, look: { torso: 'chain', hat: 'helmet', main: 'spear', off: 'roundshield', primary: '#1f2f5a', secondary: '#d8b25a', legs: 'trousers', boots: 'tall', shoulders: 'pads' }, vary: { ...humanVary, main: ['spear', 'spear', 'halberd', 'sword'], beard: ['none', 'moustache', 'stubble', 'full'] }, colours: anyHuman },
-  { id: 'knight', label: 'Knight', group: 'npc', match: /knight|veteran|champion/i, look: { torso: 'plate', shoulders: 'plate', legs: 'greaves', boots: 'armored', hat: 'greathelm', main: 'longsword', off: 'kiteshield', cloak: 'cape', primary: '#7a1f1f', secondary: '#d8b25a' } },
+  { id: 'knight', label: 'Knight', group: 'npc', female: { hair: 'braid', build: 'muscular' }, match: /knight|veteran|champion/i, look: { torso: 'plate', shoulders: 'plate', legs: 'greaves', boots: 'armored', hat: 'greathelm', main: 'longsword', off: 'kiteshield', cloak: 'cape', primary: '#7a1f1f', secondary: '#d8b25a' } },
   { id: 'archer', label: 'Archer', group: 'npc', match: /archer|scout|hunter|sharpshoot/i, look: { torso: 'leather', hat: 'hood', main: 'bow', back: 'quiver', cloak: 'short', primary: '#2f6b3a', secondary: '#6b4a2b' }, vary: { ...humanVary, hat: ['hood', 'none', 'feathercap', 'cap'], main: ['bow', 'bow', 'crossbow'] }, colours: anyHuman },
-  { id: 'mage', label: 'Mage', group: 'npc', match: /mage|wizard|sorcer|warlock|apprentice|necromancer/i, look: { torso: 'robe', legs: 'robe', hat: 'wizard', main: 'staff', off: 'orb', primary: '#1f2f5a', secondary: '#c0c0c0', beard: 'long', eyes: 'glowing', eyeColor: '#7fd6ff' } },
-  { id: 'priest', label: 'Priest', group: 'npc', match: /priest|cleric|monk|abbot/i, look: { torso: 'robe', legs: 'robe', hair: 'none', main: 'mace', off: 'holy', primary: '#f2ecdc', secondary: '#d8b25a', extra: 'amulet' } },
+  { id: 'mage', label: 'Mage', group: 'npc', female: { hair: 'flowing', hairColor: '#c0c0c0' }, match: /mage|wizard|sorcer|warlock|apprentice|necromancer/i, look: { torso: 'robe', legs: 'robe', hat: 'wizard', main: 'staff', off: 'orb', primary: '#1f2f5a', secondary: '#c0c0c0', beard: 'long', eyes: 'glowing', eyeColor: '#7fd6ff' } },
+  { id: 'priest', label: 'Priest', group: 'npc', female: { hair: 'bun', hat: 'circlet' }, match: /priest|cleric|monk|abbot/i, look: { torso: 'robe', legs: 'robe', hair: 'none', main: 'mace', off: 'holy', primary: '#f2ecdc', secondary: '#d8b25a', extra: 'amulet' } },
   { id: 'pirate', label: 'Pirate', group: 'npc', match: /pirate|sailor|corsair|buccaneer/i, look: { torso: 'shirt', hat: 'tricorn', main: 'scimitar', off: 'none', eyes: 'patch', beard: 'full', primary: '#f2ecdc', secondary: '#b3261e', belt: 'sash', boots: 'tall', extra: 'earring' }, vary: { ...humanVary, hat: ['tricorn', 'bandana', 'headband'], eyes: ['patch', 'dots', 'narrow', 'scarred'] }, colours: anyHuman },
   { id: 'villager', label: 'Villager', group: 'npc', match: /villager|commoner|peasant|farmer|townsfolk/i, look: { torso: 'shirt', hat: 'strawhat', main: 'pick', off: 'none', primary: '#e8d4a6', secondary: '#6b4a2b', belt: 'rope', legs: 'trousers' }, vary: { ...humanVary, hat: ['strawhat', 'none', 'cap', 'none'], main: ['pick', 'none', 'sickle', 'club', 'torch'], torso: ['shirt', 'apron', 'tunic', 'dress'] }, colours: { ...anyHuman, primary: ['#e8d4a6', '#6b4a2b', '#5c7a2a', '#8a8a8a', '#d4602b'] } },
-  { id: 'merchant', label: 'Merchant', group: 'npc', match: /merchant|trader|shopkeep/i, look: { build: 'heavy', torso: 'coat', hat: 'turban', main: 'none', off: 'potion', primary: '#5a2a6e', secondary: '#d8b25a', beard: 'goatee', extra: 'necklace', belt: 'pouches' } },
-  { id: 'noble', label: 'Noble', group: 'npc', match: /noble|lord|lady|duke|baron/i, look: { torso: 'coat', hat: 'circlet', main: 'sword', off: 'none', cloak: 'mantle', primary: '#7a1f1f', secondary: '#d8b25a', extra: 'monocle', beard: 'moustache' } },
-  { id: 'smith', label: 'Blacksmith', group: 'npc', match: /smith|forge/i, look: { build: 'broad', torso: 'apron', main: 'hammer', off: 'none', primary: '#3a2a1a', secondary: '#6b4a2b', hair: 'buzz', beard: 'full', shoulders: 'none' } },
+  { id: 'merchant', label: 'Merchant', group: 'npc', female: { hair: 'bun', extra: 'earring' }, match: /merchant|trader|shopkeep/i, look: { build: 'heavy', torso: 'coat', hat: 'turban', main: 'none', off: 'potion', primary: '#5a2a6e', secondary: '#d8b25a', beard: 'goatee', extra: 'necklace', belt: 'pouches' } },
+  { id: 'noble', label: 'Noble', group: 'npc', female: { hair: 'halfup', torso: 'dress', legs: 'skirt', extra: 'necklace', face: 'beautymark' }, match: /noble|lord|lady|duke|baron/i, look: { torso: 'coat', hat: 'circlet', main: 'sword', off: 'none', cloak: 'mantle', primary: '#7a1f1f', secondary: '#d8b25a', extra: 'monocle', beard: 'moustache' } },
+  { id: 'smith', label: 'Blacksmith', group: 'npc', female: { hair: 'ponytail', build: 'muscular' }, match: /smith|forge/i, look: { build: 'broad', torso: 'apron', main: 'hammer', off: 'none', primary: '#3a2a1a', secondary: '#6b4a2b', hair: 'buzz', beard: 'full', shoulders: 'none' } },
   // monsters (humanoid ones the kit can show)
   { id: 'orc', label: 'Orc warrior', group: 'monster', match: /orc/i, look: { body: 'orc', build: 'broad', skin: '#6f8f4e', torso: 'furs', shoulders: 'spiked', main: 'greataxe', off: 'none', mouth: 'tusks', hair: 'mohawk', hairColor: '#1d1612', primary: '#3a2a1a', secondary: '#7a1f1f', extra: 'warpaint', ears: 'pointed', eyes: 'angry' }, vary: { main: ['greataxe', 'axe', 'spear', 'club', 'warhammer'], off: ['none', 'roundshield', 'none'], hair: ['mohawk', 'topknot', 'none', 'wild'], torso: ['furs', 'leather', 'bare', 'studded'] }, colours: { skin: ['#6f8f4e', '#4f6b3a', '#7d8f6a', '#5a7a4a', '#8a9a6a'] } },
   { id: 'goblin', label: 'Goblin', group: 'monster', match: /goblin|kobold|hobgoblin/i, look: { body: 'goblin', skin: '#9fb37a', ears: 'big', torso: 'rags', legs: 'shorts', boots: 'bare', main: 'scimitar', off: 'buckler', mouth: 'fangs', hair: 'none', primary: '#6b4a2b', secondary: '#5c7a2a', eyes: 'wide', eyeColor: '#d8b25a' }, vary: { main: ['scimitar', 'dagger', 'spear', 'bow', 'club'], off: ['buckler', 'none', 'none', 'torch'], hat: ['none', 'skullcap', 'helmet', 'none'] }, colours: { skin: ['#9fb37a', '#6f8f4e', '#a0b8a8', '#b9a06a'] } },
-  { id: 'skeleton', label: 'Skeleton', group: 'monster', match: /skeleton/i, look: { body: 'skeleton', skin: '#e8e2cc', torso: 'bare', legs: 'rags', boots: 'bare', hair: 'none', main: 'sword', off: 'roundshield', eyes: 'glowing', eyeColor: '#7fd6ff', mouth: 'fangs', nose: 'none', ears: 'none', brows: 'none' }, vary: { main: ['sword', 'spear', 'axe', 'bow', 'mace'], off: ['roundshield', 'none', 'buckler'], hat: ['none', 'helmet', 'none'] } },
-  { id: 'zombie', label: 'Zombie', group: 'monster', match: /zombie|ghoul|ghast|wight/i, look: { body: 'zombie', skin: '#a0b8a8', torso: 'rags', legs: 'rags', boots: 'bare', hair: 'messy', main: 'none', off: 'none', eyes: 'hollow', mouth: 'open', primary: '#5a5a4a', secondary: '#3a2a1a', extra: 'scar' }, vary: { hair: ['messy', 'none', 'long', 'wild'], torso: ['rags', 'shirt', 'tunic'] } },
-  { id: 'ogre', label: 'Ogre', group: 'monster', match: /ogre|troll|giant/i, look: { body: 'ogre', build: 'heavy', skin: '#b9a06a', torso: 'furs', legs: 'kilt', boots: 'bare', main: 'club', off: 'none', mouth: 'tusks', hair: 'none', eyes: 'narrow' } },
-  { id: 'lizardfolk', label: 'Lizardfolk', group: 'monster', match: /lizard|troglodyte|yuan/i, look: { body: 'lizardfolk', skin: '#4f6b3a', tail: true, torso: 'bare', main: 'trident', off: 'roundshield', hair: 'none', ears: 'none', primary: '#6b4a2b', extra: 'necklace' } },
+  { id: 'skeleton', label: 'Skeleton', group: 'monster', female: { hair: 'long', hairColor: '#8a8a8a' }, match: /skeleton/i, look: { body: 'skeleton', skin: '#e8e2cc', torso: 'bare', legs: 'rags', boots: 'bare', hair: 'none', main: 'sword', off: 'roundshield', eyes: 'glowing', eyeColor: '#7fd6ff', mouth: 'fangs', nose: 'none', ears: 'none', brows: 'none' }, vary: { main: ['sword', 'spear', 'axe', 'bow', 'mace'], off: ['roundshield', 'none', 'buckler'], hat: ['none', 'helmet', 'none'] } },
+  { id: 'zombie', label: 'Zombie', group: 'monster', female: { hair: 'long', torso: 'dress', legs: 'skirt' }, match: /zombie|ghoul|ghast|wight/i, look: { body: 'zombie', skin: '#a0b8a8', torso: 'rags', legs: 'rags', boots: 'bare', hair: 'messy', main: 'none', off: 'none', eyes: 'hollow', mouth: 'open', primary: '#5a5a4a', secondary: '#3a2a1a', extra: 'scar' }, vary: { hair: ['messy', 'none', 'long', 'wild'], torso: ['rags', 'shirt', 'tunic'] } },
+  { id: 'ogre', label: 'Ogre', group: 'monster', female: { hair: 'wild', hairColor: '#3b2516' }, match: /ogre|troll|giant/i, look: { body: 'ogre', build: 'heavy', skin: '#b9a06a', torso: 'furs', legs: 'kilt', boots: 'bare', main: 'club', off: 'none', mouth: 'tusks', hair: 'none', eyes: 'narrow' } },
+  { id: 'lizardfolk', label: 'Lizardfolk', group: 'monster', female: { extra: 'amulet', hair: 'none' }, match: /lizard|troglodyte|yuan/i, look: { body: 'lizardfolk', skin: '#4f6b3a', tail: true, torso: 'bare', main: 'trident', off: 'roundshield', hair: 'none', ears: 'none', primary: '#6b4a2b', extra: 'necklace' } },
 ];
 
 const rng = (seed: number) => { let s = (seed >>> 0) || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; };
 export const hashText = (t: string) => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 
-/** Preset + seeded variation: a different face, hair and gear per figure, same every time for the same seed. */
-export function lookFromPreset(preset: FigurePreset, seed: number): FigureLook {
+/** APEX 2.8 – which version of a figure: a man, a woman, or either (decided per figure by its seed). */
+export const FIGURE_SEXES = ['male', 'female', 'mixed'] as const;
+export type FigureSex = (typeof FIGURE_SEXES)[number];
+export const SEX_LABEL: Record<FigureSex, string> = { male: '♂ Male', female: '♀ Female', mixed: '⚥ Mixed' };
+export const parseSex = (v: unknown): FigureSex | null => ((FIGURE_SEXES as readonly unknown[]).includes(v) ? (v as FigureSex) : null);
+
+/**
+ * Preset + seeded variation: a different face, hair and gear per figure, same every time for the same seed.
+ * `sex` (APEX 2.8) asks for the man or the woman of the preset – every preset has both – or either at random.
+ * Without it the preset decides as before (variable humanoid presets are women about half the time).
+ */
+export function lookFromPreset(preset: FigurePreset, seed: number, sex?: FigureSex): FigureLook {
   const r = rng(seed);
   const pick = <T,>(list: readonly T[]) => list[Math.floor(r() * list.length)];
   const look: FigureLook = { ...DEFAULT_LOOK, ...preset.look };
   for (const [k, list] of Object.entries(preset.vary ?? {})) if (list?.length) (look as Record<string, unknown>)[k] = pick(list as readonly string[]);
   for (const [k, list] of Object.entries(preset.colours ?? {})) if (list?.length) (look as Record<string, unknown>)[k] = pick(list);
+  if (sex) {
+    const want = sex === 'mixed' ? (r() < 0.5 ? 'female' : 'male') : sex;
+    if (want === look.sex) return look;
+    return want === 'female' ? { ...(preset.vary ? feminine(look, r) : femaleLook(look)), ...preset.female } : { ...maleLook(look), ...preset.male };
+  }
   // APEX 2.3: variations of humanoid presets are women about half the time (with fitting hair, no beard)
   if (preset.vary && !preset.look.sex && !['skeleton', 'zombie', 'ogre'].includes(look.body) && r() < (preset.group === 'monster' ? 0.35 : 0.5)) return feminine(look, r);
   return look;
+}
+const TO_FEMALE_HAIR: Partial<Record<FigureLook['hair'], FigureLook['hair']>> = { none: 'long', buzz: 'pixie', short: 'bob', messy: 'shaggy', spiky: 'pixie', slicked: 'swept', tonsure: 'bun', sidepart: 'wavy', mullet: 'shaggy' };
+const TO_MALE_HAIR: Partial<Record<FigureLook['hair'], FigureLook['hair']>> = { pigtails: 'braids', spacebuns: 'topknot', bob: 'pageboy', pixie: 'short', highpony: 'ponytail', halfup: 'long', flowing: 'long', bun: 'topknot' };
+/** The woman of a look, without chance: no beard, a longer cut of the same hair, softer brows and jaw. */
+export function femaleLook(look: FigureLook): FigureLook {
+  if (look.sex === 'female') return look;
+  return {
+    ...look, sex: 'female', beard: 'none', hair: TO_FEMALE_HAIR[look.hair] ?? look.hair,
+    build: look.build === 'broad' ? 'muscular' : look.build === 'slim' ? 'slender' : look.build,
+    brows: look.brows === 'bushy' || look.brows === 'unibrow' ? 'arched' : look.brows,
+    face: look.face === 'strongjaw' ? 'cheekbones' : look.face,
+  };
+}
+/** The man of a look: shorter cuts of the same hair, no make-up; the preset's touches add a beard where it fits. */
+export function maleLook(look: FigureLook): FigureLook {
+  if (look.sex === 'male') return look;
+  return {
+    ...look, sex: 'male', hair: TO_MALE_HAIR[look.hair] ?? look.hair,
+    face: look.face === 'lipstick' || look.face === 'eyeliner' ? 'plain' : look.face,
+  };
+}
+/** A look as the asked version (a chosen figure keeps everything but what makes it a man or a woman). */
+export function lookAsSex(look: FigureLook, sex: FigureSex | undefined, seed: string): FigureLook {
+  if (!sex) return look;
+  const want = sex === 'mixed' ? (hashText(`${seed}:sex`) % 2 ? 'female' : 'male') : sex;
+  return want === 'female' ? femaleLook(look) : maleLook(look);
 }
 const FEMALE_HAIR = ['long', 'ponytail', 'bun', 'braids', 'braid', 'bob', 'flowing', 'pigtails', 'pageboy', 'curly', 'afro', 'shaggy', 'swept', 'undercut', 'dreads', 'topknot'] as const;
 /** The same look as a woman: no beard, mostly longer hair, a slender build unless the preset is heavy or muscular. */
@@ -166,10 +208,10 @@ export const BODY_TYPES_3D: Array<{ id: string; label: string; sex: FigureLook['
 ];
 
 /** Auto look for a humanoid enemy without a chosen one (null: no preset fits – the old miniature is used). */
-export function autoLook(nameAndType: string, seed: string, colour?: string): FigureLook | null {
+export function autoLook(nameAndType: string, seed: string, colour?: string, sex?: FigureSex): FigureLook | null {
   const preset = FIGURE_PRESETS.find((p) => p.match?.test(nameAndType));
   if (!preset) return null;
-  const look = lookFromPreset(preset, hashText(seed));
+  const look = lookFromPreset(preset, hashText(seed), sex);
   return colour && HEX.test(colour) && preset.group === 'npc' && !preset.colours?.primary ? { ...look, secondary: colour.toLowerCase() } : look;
 }
 

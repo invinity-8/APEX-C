@@ -22,12 +22,12 @@ import { carriedLights, clockFor, hexKeyAt, parseStoredSheet, sheetOf, visionFor
 import { spellSlots, STANDARD_ACTIONS, addOffers, attacksPerAction, budgetOf, characterLevel, dropOffer, firstOpportunity, activeActors, isActiveActor, npcActor, ordinal, pcActor, planSpell, reactionUsed, reactionsOf, spellNumbers, spend, spendSlot, withShillelagh, takeStandardAction, useEconomy, type Figure, type ReactionOffer, type StandardAction } from '../game/sceneActions.js';
 import { bestiary, statBlock, type AbilityKey } from '../game/bestiary.js';
 import { effectiveAc, effectiveSpeed, flanks, hiddenEffect, hiddenOf, reveal, CONDITIONS, type ConditionId, type EffectMods, PHYSICAL, addEffect, attackMods, conditionEffect, startConcentration, effectsOf, speedZero, concentrationDc, concentrationOf, endConcentration, incapacitated, removeEffect, resistsPhysical } from '../game/combatEffects.js';
-import type { AttackOptions } from '../game/sceneCombat.js';
+import type { AttackOptions, SceneEnemy } from '../game/sceneCombat.js';
 import { attackExtras } from './combatFeatures.js';
 import { areaHexes, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
-import { addEnemy, setEnemyLight, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
+import { addEnemy, setEnemyLight, setEnemySex, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { HAZARD_HARM, heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathChecks, pathDrops, tileLookup } from '../campaign/hexScene.js';
 import { continuePcMove, placePc } from './sceneMotion.js';
@@ -39,9 +39,10 @@ import { findBeast } from '../game/beastCatalog.js';
 import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
 import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
 import { allGroups, groupTemplates, spotsAround } from '../game/groups.js';
+import { defaultProfile, parseProfile, planAiStep, type AiFigure, type AiProfile, type AiSelf, type AiStep } from '../game/enemyAi.js';
 import { WEATHERS, WEATHER_FX, type WeatherFx, changeWorldTime, clockText, dayOf, parseWorldTimeChange } from '../game/worldTime.js';
 import { flightCost, altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
-import { npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
+import { npcPassivePerception, npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
 import { spellCount, spellEffectOf, spellHealing } from '../game/spellEffects.js';
 import type { SceneMap } from '../campaign/maps.js';
 import { parseMap } from '../campaign/maps.js';
@@ -406,6 +407,12 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     await rememberCurrentVision(user, repo, sceneId).catch(() => undefined);
     return mutate(user, repo, (s) => setEnemyLight(s, sceneId, v.enemyId as string, v.on as boolean));
   }
+  if (v.action === 'npcSex') {
+    // APEX 2.8 – the GM shows one creature as a man or a woman
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM changes NPC figures.' } };
+    if (typeof v.enemyId !== 'string' || !(v.sex === null || v.sex === 'male' || v.sex === 'female')) return { status: 400, body: { error: 'Invalid figure.' } };
+    return mutate(user, repo, (s) => setEnemySex(s, sceneId, v.enemyId as string, v.sex as 'male' | 'female' | null));
+  }
   if (v.action === 'torch') {
     // Players switch their own light on or off (no item check – the GM rules it by hand).
     if (typeof v.tokenId !== 'string' || typeof v.on !== 'boolean') return { status: 400, body: { error: 'Invalid light.' } };
@@ -514,8 +521,9 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
       return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy'));
     }
     if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid enemy.' } };
-    return moveNpc(user, repo, scene, map, v.id, at, [], typeof v.alt === 'number' ? v.alt : undefined);
+    return moveNpc(user, repo, scene, map, v.id, at, [], typeof v.alt === 'number' ? v.alt : undefined, v.careful === true);
   }
+  if (v.action === 'ai' || v.action === 'npcAi' || v.action === 'aiStep') return aiRequest(user, repo, scene, v);
   if (v.action === 'enemyRemove' || v.action === 'enemyHp') {
     if (typeof v.id !== 'string' || (v.action === 'enemyHp' && (!Number.isSafeInteger(v.delta) || Math.abs(v.delta as number) > 1000))) return { status: 400, body: { error: 'Invalid enemy change.' } };
     return mutate(user, repo, (s) => {
@@ -642,7 +650,7 @@ async function battleFigures(ctx: Ctx, sceneId: string, map: SceneMap): Promise<
  * Altitude for a move (APEX 1.9): the requested altitude above the destination's ground (or the current one), the
  * movement mode (flying while in the air or taking off, climbing with a climb speed) and the vertical feet it costs.
  */
-export function planAltitude(map: SceneMap, from: { x: number; y: number }, to: { x: number; y: number }, current: number, wanted: number | undefined, speeds: { fly: number; climb: number }): { from: number; to: number; verticalFt: number; mode: { fly?: boolean; climb?: boolean }; verb: string } | string {
+export function planAltitude(map: SceneMap, from: { x: number; y: number }, to: { x: number; y: number }, current: number, wanted: number | undefined, speeds: { fly: number; climb: number }): { from: number; to: number; verticalFt: number; mode: { fly?: boolean; climb?: boolean; athletics?: boolean }; verb: string } | string {
   const target = Math.max(0, Math.min(MAX_ALTITUDE_FT, Math.round((typeof wanted === 'number' && Number.isFinite(wanted) ? wanted : speeds.fly ? current : 0) / 5) * 5));
   if (target > 0 && !speeds.fly) return 'cannot fly (no flying speed).';
   const flying = speeds.fly > 0 && (current > 0 || target > 0);
@@ -1217,7 +1225,7 @@ export const pausedMoveOf = (state: GameState, sceneId: string, mover: Side) => 
  * The GM moves an NPC along the cheapest path. In initiative only on its own turn and within its speed (Dash
  * doubles it); leaving a hostile's reach pauses the move for an opportunity attack.
  */
-export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: SceneMap, npcId: string, at: { x: number; y: number }, declined: string[] = [], alt?: number): Promise<SceneResult> {
+export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: SceneMap, npcId: string, at: { x: number; y: number }, declined: string[] = [], alt?: number, careful = false): Promise<SceneResult> {
   const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId: scene.id };
   const state = ctx.state;
   const npc = state ? enemiesOf(state, scene.id).find((e) => e.id === npcId) : undefined;
@@ -1230,6 +1238,8 @@ export async function moveNpc(user: AuthUser, repo: Repo, scene: Scene, map: Sce
   const speeds = npcSpeeds(npc, effectsOf(state, scene.id, actor));
   const air = planAltitude(map, npc, at, altitudeOf(state, scene.id, actor), alt, speeds);
   if (typeof air === 'string') return { status: 422, body: { error: `${npc.name} ${air}` } };
+  // APEX 2.7 – the AI moves carefully: no cliff climbs or lava jumps that need a check
+  if (careful) delete air.mode.athletics;
   const path = hexMovementCost(map, npc, at, air.mode);
   if (!path.ok) return { status: 422, body: { error: path.error } };
   const b = budgetOf(e, actor);
@@ -1646,4 +1656,121 @@ export async function searchFor(ctx: Ctx, map: SceneMap, searcher: Side): Promis
   const hidden = figures.filter((f) => f.side !== me.side && !f.down && hiddenOf(state, sceneId, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id)));
   const found = hidden.filter((f) => (hiddenOf(state, sceneId, f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id))!.value ?? 0) <= total && inReach(map, me, f, 600).ok);
   return { lines: [`${me.name} searches: Perception d20 ${d} ${bonus >= 0 ? '+' : '−'} ${Math.abs(bonus)} = ${total}${found.length ? ` – finds ${found.map((f) => f.name).join(', ')}` : ' – finds nothing'}.`], found: found.map((f) => (f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id))) };
+}
+
+// ---------------------------------------------------------------- enemy AI (APEX 2.7)
+
+/** The behaviour of an NPC: its own setting, else its stat block's default. */
+export function aiProfileOf(state: GameState, e: SceneEnemy): AiProfile {
+  const block = statBlock(state, e.templateId);
+  const base = block ? defaultProfile(block) : defaultProfile({ name: e.name, type: '', attacks: npcAttacks(e), areas: e.areas, buffs: e.buffs });
+  return { tactic: e.ai?.tactic ?? base.tactic, mood: e.ai?.mood ?? base.mood };
+}
+const aiControls = (state: GameState, sceneId: string, e: SceneEnemy | undefined) => !!e && !e.defeated && !!state.sceneAi?.[sceneId]?.on && !e.ai?.off;
+
+/**
+ * Enemy AI (GM): `ai` switches it on or off for the scene, `npcAi` sets one creature's tactic / mood or takes it
+ * out of the AI's hands, `aiStep` lets the AI do ONE thing (answer an opportunity attack, or one step of the turn of
+ * an NPC whose turn it is). The GM's client calls `aiStep` while the AI is on; every step goes through the normal
+ * rules (movement left, action economy, reach, range, line of sight), so the AI cannot do what the GM could not.
+ */
+async function aiRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<string, unknown>): Promise<SceneResult> {
+  if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM controls the enemy AI.' } };
+  const sceneId = scene.id;
+  if (v.action === 'ai') {
+    if (typeof v.on !== 'boolean') return { status: 400, body: { error: 'Invalid AI switch.' } };
+    return mutate(user, repo, (s) => { const st = structuredClone(s); st.sceneAi = { ...(st.sceneAi ?? {}), [sceneId]: { on: v.on as boolean } }; const text = v.on ? 'Enemy AI on: NPCs act on their own turns.' : 'Enemy AI off: the GM steers the NPCs.'; logCombat(st, sceneId, text); return { ok: true, state: st, message: text }; });
+  }
+  if (v.action === 'npcAi') {
+    const profile = v.profile === undefined ? {} : parseProfile(v.profile);
+    if (typeof v.id !== 'string' || !profile || (v.off !== undefined && typeof v.off !== 'boolean')) return { status: 400, body: { error: 'Invalid AI setting.' } };
+    return mutate(user, repo, (s) => {
+      const st = structuredClone(s);
+      const e = enemiesOf(st, sceneId).find((x) => x.id === v.id);
+      if (!e) return { ok: false, error: 'Creature not found.' };
+      e.ai = { ...(e.ai ?? {}), ...profile, ...(v.off !== undefined ? { off: v.off as boolean } : {}) };
+      if (!e.ai.off) delete e.ai.off;
+      const p = aiProfileOf(st, e);
+      return { ok: true, state: st, message: `${e.name}: ${e.ai.off ? 'steered by the GM' : `${p.tactic}, ${p.mood}`}.` };
+    });
+  }
+  // ---- one AI step
+  const map = parseMap(scene.published_metadata);
+  const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
+  const state = ctx.state;
+  const idle = (why: string, wait = false): SceneResult => ({ status: 200, body: { ok: true, ai: { idle: !wait, wait, why } } });
+  if (!state || !map?.hex) return idle('no battle map');
+  if (!state.sceneAi?.[sceneId]?.on) return idle('AI is off');
+  const call = (input: Record<string, unknown>) => sceneTurnRequest(user, 'POST', { sceneId, ...input }, repo);
+  // opportunity attacks offered to AI creatures: take them (the cowardly let go)
+  const offers = reactionsOf(state, sceneId);
+  const mine = offers.find((o) => o.reactor.kind === 'npc' && aiControls(state, sceneId, enemiesOf(state, sceneId).find((e) => e.id === o.reactor.id)));
+  if (mine) {
+    const e = enemiesOf(state, sceneId).find((x) => x.id === mine.reactor.id)!;
+    const accept = mine.kind !== 'shield' && aiProfileOf(state, e).mood !== 'cowardly';
+    const r = await call({ action: 'reaction', offerId: mine.id, accept });
+    return { ...r, body: { ...(r.body as object), ai: { actor: npcActor(e.id), step: 'reaction' } } };
+  }
+  if (offers.length) return idle('waiting for a reaction to be decided', true);
+  const enc = activeEncounter(state, sceneId);
+  if (!enc) return idle('no initiative');
+  const actor = activeActors(enc).find((a) => a.startsWith('npc-') && aiControls(state, sceneId, enemiesOf(state, sceneId).find((e) => npcActor(e.id) === a)));
+  if (!actor) return idle('no AI creature is on turn');
+  const npc = enemiesOf(state, sceneId).find((e) => npcActor(e.id) === actor)!;
+  if (pausedMoveOf(state, sceneId, { kind: 'npc', id: npc.id })) return idle('waiting for an opportunity attack', true);
+  const end = (_why: string) => call({ action: 'endTurn', encounterId: enc.id, turnSerial: enc.turnSerial ?? 0, actor });
+  // runaway guard: a turn is at most 14 AI steps
+  const turnKey = `${enc.id}:${enc.turnSerial ?? 0}:${actor}`;
+  const steps = state.sceneAi[sceneId].turn === turnKey ? state.sceneAi[sceneId].steps ?? 0 : 0;
+  await mutate(user, repo, (s) => { const st = structuredClone(s); if (st.sceneAi?.[sceneId]) st.sceneAi[sceneId] = { ...st.sceneAi[sceneId], turn: turnKey, steps: steps + 1 }; return { ok: true, state: st }; });
+  let step: AiStep;
+  if (steps >= 14 || incapacitated(state, sceneId, actor)) step = { kind: 'end', why: steps >= 14 ? 'out of ideas' : 'incapacitated' };
+  else {
+    // everybody on the map as the planner sees them
+    const figures = await battleFigures(ctx, sceneId, map);
+    const ground = groundFt(map);
+    const passive = npcPassivePerception(state, npc);
+    const others: AiFigure[] = [];
+    let friendHurt = false;
+    for (const f of figures) {
+      const key = f.kind === 'pc' ? pcActor(f.id) : npcActor(f.id);
+      if (key === actor) continue;
+      let hp = 1, down = !!f.down;
+      if (f.kind === 'pc') { const hpNow = (await sheetOf(ctx, f.id)).hitPoints; if (hpNow && hpNow.max > 0) { hp = Math.max(0, hpNow.current / hpNow.max); down = hpNow.current <= 0; } }
+      else { const e = enemiesOf(state, sceneId).find((x) => x.id === f.id); if (e) hp = Math.max(0, e.hp / Math.max(1, e.maxHp)); }
+      const hidden = hiddenOf(state, sceneId, key);
+      const side = f.side;
+      if (side === (npc.side === 'ally' ? 'party' : 'enemy') && (hp < 1 || down)) friendHurt = true;
+      others.push({ id: key, name: f.name, side, x: f.x, y: f.y, alt: (f.z ?? ground(f)) - ground(f), hp, ...(down ? { down: true } : {}), ...(hidden && (hidden.value ?? 0) > passive ? { unseen: true } : {}) });
+    }
+    const b = budgetOf(enc, actor);
+    const speeds = npcSpeeds(npc, effectsOf(state, sceneId, actor));
+    const base = speedZero(state, sceneId, actor) ? 0 : effectiveSpeed(state, sceneId, actor, speeds.fly ? Math.max(speeds.fly, 0) : npc.speedFt) * (b.dash ? 2 : 1);
+    const multi = Math.max(1, npc.multiattack ?? 1);
+    const attacksLeft = !b.action ? multi : b.attackAction ? Math.max(0, multi - (b.attacks ?? 0)) : 0;
+    const traits = (statBlock(state, npc.templateId)?.traits ?? []).map((t) => t.name).join(' ');
+    const used = (name: string, uses?: number | null) => (uses ? Math.max(0, uses - (npc.areaUsed?.[name] ?? 0)) : null);
+    const me: AiSelf = {
+      id: actor, name: npc.name, side: npc.side === 'ally' ? 'party' : 'enemy', x: npc.x, y: npc.y, alt: altitudeOf(state, sceneId, actor), hp: Math.max(0, npc.hp / Math.max(1, npc.maxHp)),
+      profile: aiProfileOf(state, npc), attacks: npcAttacks(npc), attacksLeft, actionFree: !b.action, bonusFree: !b.bonus, dashed: !!b.dash, moveLeft: Math.max(0, base - (b.moved ?? 0)),
+      ...(speeds.fly ? { flyFt: speeds.fly } : {}), ...(speeds.climb ? { climbFt: speeds.climb } : {}),
+      areas: (npc.areas ?? []).map((a, index) => ({ ...a, index, left: used(a.name, a.uses) })), buffs: (npc.buffs ?? []).map((x, index) => ({ ...x, index, left: used(x.name, x.uses) })),
+      ...(/nimble escape|cunning action/i.test(traits) ? { nimble: true } : {}), provoked: friendHurt || npc.hp < npc.maxHp,
+    };
+    step = planAiStep(map, me, others);
+  }
+  const side = (id: string) => (id.startsWith('pc-') ? { kind: 'pc', tokenId: id.slice(3) } : { kind: 'npc', id: id.slice(4) });
+  let r: SceneResult;
+  switch (step.kind) {
+    case 'move': r = await call({ action: 'enemyMove', id: npc.id, x: step.x, y: step.y, ...(step.alt !== undefined ? { alt: step.alt } : {}), careful: true }); break;
+    case 'attack': r = await call({ action: 'strike', attacker: { kind: 'npc', id: npc.id }, target: side(step.target), attackIndex: step.attackIndex }); break;
+    case 'area': r = await call({ action: 'npcArea', id: npc.id, area: step.area, point: { x: step.x, y: step.y } }); break;
+    case 'buff': r = await call({ action: 'npcBuff', id: npc.id, buff: step.buff }); break;
+    case 'standard': r = await call({ action: 'standard', actor: { kind: 'npc', id: npc.id }, act: step.act, ...(step.viaBonus ? { viaBonus: true } : {}) }); break;
+    default: r = await end(step.why);
+  }
+  // a step the rules refuse ends the turn instead of trying it again and again
+  let done = step.kind === 'end';
+  if (r.status !== 200 && step.kind !== 'end') { const refused = (r.body as { error?: string }).error ?? 'refused'; r = await end(refused); done = true; if (r.status === 200) (r.body as { message?: string }).message = `${npc.name} (AI) ends its turn – ${refused}`; }
+  return { ...r, body: { ...(r.body as object), ai: { actor, step: step.kind, why: step.why, done } } };
 }
