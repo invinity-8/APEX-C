@@ -889,3 +889,68 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tests:** 576 Tests grün.
 - **Neu:** `climb26` (Klippen, Bäume, Lava-Sprünge, Würfe) und Ergänzungen in `world25` (Flugkosten, Gegnerlicht, Wetter-Kombination).
+
+## APEX 2.7 – Gegner-KI und neue Kampfschauplätze
+
+**Gegner-KI**
+- **Schalter pro Szene:** Im Kampfkommando schaltet der GM „🤖 Enemy AI“ ein oder aus. Ist sie an, spielen die Gegner ihre Züge selbst: bewegen, angreifen, Flächenfähigkeiten und Kriegsschreie einsetzen, Spurt, Ausweichen, Rückzug. Jeder Schritt läuft über dieselben Regeln wie ein Zug von Hand.
+- **Taktik pro Kreatur:** Jede Kreatur hat eine Taktik. Sie wird aus dem Werteblock vorbelegt und ist in der Gegnerleiste änderbar:
+  - **Rudel:** gemeinsam, flankieren.
+  - **Schläger:** auf den Nächsten, frontal.
+  - **Plänkler:** schießen und Abstand halten.
+  - **Zauberer:** hinten bleiben, Flächen auf Gruppen.
+  - **Lauerer:** auf Verwundete und Einzelne.
+  - **Wächter:** hält seinen Posten.
+  - **Unterstützer:** erst Kriegsschrei, dann Kampf.
+  - **Soldat:** diszipliniert, Fokusfeuer.
+  - **Hirnlos:** auf den Nächsten, flieht nie.
+- **Charakter (Stimmung):** aggressiv, vorsichtig, neugierig (beobachtet erst), feige (flieht bei Verlusten, verweigert Reaktionen) oder defensiv.
+- **Übernehmen:** Mit dem Häkchen „AI“ steuert der GM eine einzelne Kreatur trotz eingeschalteter KI selbst.
+
+**Neue Kampfschauplätze (Szenenvorlagen „Site · …“)**
+- **Die 14 Orte:**
+  - Steinbrücke über einem Fluss
+  - Schlucht zwischen Klippen (Steinschlag, ein Aufstieg)
+  - verlassener Handelsposten
+  - Kreuzung mit Wegschrein
+  - verfallener Wachturm
+  - Mineneingang in einer Felswand
+  - altes Schlachtfeld (Gräben, Pfähle, Knochen)
+  - Steinkreis auf einem Hügel
+  - Schiffswrack am Strand
+  - Lavafeld mit Basaltwegen
+  - Wasserfall mit Becken und Bach
+  - überfallene Karawane
+  - Seeufer mit Steg und Hütte
+  - Spinnennest
+- **Prüfung:** Jeder Ort ist für 3 Größen und mehrere Zufallswerte getestet: gültig, reproduzierbar, begehbar, die Kartenränder sind vom Start aus erreichbar.
+
+**Noch offen aus der 2.7-Anfrage:**
+- **Zufallsbegegnung:** der Assistent „Create random encounter“ im Game-Tab (Stil, Gruppengröße und Stufe → Vorschlag, Gegner wählen, Quest-NPCs aus der Bibliothek).
+- **Ton:** Soundeffekte und Musik.
+
+## APEX 2.8 – Alle Modelle auch als Frau
+
+**Figuren-Editor**
+- **Neuer Schalter über den Vorlagen:** „As preset / ♂ Man / ♀ Woman“.
+- **Jede Vorlage gibt es in beiden Versionen:** Helden, NPCs und Monster.
+  - Beispiele für die Frau: Magierin, Ritterin, Oger-Frau, Untote …
+  - Die Heldinnen gibt es auch als Mann.
+- **Umschalten:** Nach einer gewählten Vorlage zieht der Schalter dieselbe Figur sofort um: gleiche Ausrüstung und Farben, kein Bart, passende Frisur. Vorlagen, die immer Männer waren (Magier, Ritter, Adliger, Schmied …), haben eigene Akzente für die Frau. Beispiele: die Magierin mit langem Haar, die Adlige im Kleid.
+
+**Gegnerbibliothek**
+- **Wahl pro Kreatur:** „Auto · ♂ Male · ♀ Female · ⚥ Mixed“.
+- **Wirkung:** Gilt für menschliche Figuren und für Tier- und Monstermodelle.
+  - **Female:** z. B. Löwin ohne Mähne, Hirschkuh ohne Geweih, Henne, Minotaurin und Dämonin mit kürzeren Hörnern.
+  - **Mixed:** Jede Figur wird für sich zufällig Mann oder Frau.
+- **Gespeicherte Figur:** Eine gespeicherte Figur wird zur Frau bzw. zum Mann ihrer selbst.
+- **Auto:** verhält sich wie bisher.
+
+**Auf der Karte**
+- **Pro einzelner Figur:** In der Gegnerleiste stellt der GM die Figur auf ♂ oder ♀ um, oder zurück auf die Wahl der Bibliothek.
+
+**Bestehende Figuren**
+- **Unverändert:** Bestehende automatische Figuren sehen unverändert aus. Das ist gegen den alten Stand geprüft.
+
+**Tests:** 593 Tests grün.
+- **Neu:** `ai27` (KI), `sites27` (Schauplätze), `female28` (Figuren, Bibliothek, Karte, Server).
