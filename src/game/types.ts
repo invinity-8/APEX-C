@@ -223,6 +223,8 @@ export interface Token {
   cubeProgression?: { level: number; gmOverride?: boolean; legacyEntitlement?: boolean };
   /** APEX 0.7: Sneak mode – each step costs double movement points. Not invisibility: being unseen still needs a Stealth check. */
   sneaking?: boolean;
+  /** APEX 2.9 – when this character wants to be asked for reactions (reactionPrefs.ts). */
+  reactionPrefs?: import('./reactionPrefs.js').ReactionPrefs;
   /** APEX 0.7: player-uploaded pictures per Wild Shape form (private storage path + cache version; path never sent). */
   beastImages?: Record<string, { path: string; v: number }>;
   /** APEX 0.7: cosmetic paper-doll silhouette (never affects rules). */

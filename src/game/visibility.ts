@@ -155,6 +155,8 @@ export interface TokenDetails {
   /** APEX 0.7: Sneak mode (owner + GM) and the cache versions of uploaded beast pictures (never the storage path). */
   sneaking?: boolean;
   beastImageV?: Record<string, number>;
+  /** APEX 2.9 – reaction settings (owner + GM). */
+  reactionPrefs?: import('./reactionPrefs.js').ReactionPrefs;
   /** APEX 0.7: Arcane Transmutation unlocked (cube carried or GM entitlement). */
   transmuteUnlocked?: boolean;
   cubeAccess?: boolean;
@@ -274,6 +276,7 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.timeTwist ? { timeTwist: { ...t.timeTwist } } : {}),
   ...(withInventory && t.bodyType ? { bodyType: t.bodyType } : {}),
   ...(withInventory && t.sneaking ? { sneaking: true } : {}),
+  ...(withInventory && t.reactionPrefs ? { reactionPrefs: { ...t.reactionPrefs } } : {}),
   ...(withInventory && canUseCubeOperation(t, 'transmute') ? { transmuteUnlocked: true } : {}),
   ...(withInventory && t.cubeAccess ? { cubeAccess: true } : {}),
   ...(withInventory ? { cubeProgression: { ...(t.cubeProgression ?? {}), level: cubeLevelOf(t), ...(t.cubeAccess ? { gmOverride: true } : {}) }, cubeCarried: t.inventory.some(i => i.baseId === 'apex-imperial-transmutation-cube'), cubeCanTransmute: canUseCubeOperation(t, 'transmute') } : {}),

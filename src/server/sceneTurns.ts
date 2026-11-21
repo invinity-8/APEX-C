@@ -41,6 +41,7 @@ import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situat
 import { allGroups, groupTemplates, spotsAround } from '../game/groups.js';
 import { defaultProfile, parseProfile, planAiStep, type AiFigure, type AiProfile, type AiSelf, type AiStep } from '../game/enemyAi.js';
 import { sceneTone } from '../game/individual.js';
+import { offerFor } from '../game/reactionPrefs.js';
 import { creaturePersonality, isLeader, leaderBonus, rally, rollMorale, surrenders, type MoraleSituation, type Personality } from '../game/morale.js';
 import { WEATHERS, WEATHER_FX, type WeatherFx, changeWorldTime, clockText, dayOf, parseWorldTimeChange } from '../game/worldTime.js';
 import { flightCost, altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
@@ -813,9 +814,11 @@ async function damagePc(user: AuthUser, repo: Repo, ctx: Ctx, tokenId: string, a
 /** Can a character cast Shield right now (prepared, a slot left, reaction free, not incapacitated)? */
 function shieldReady(state: GameState, sceneId: string, sheet: CharacterSheet, tokenId: string): boolean {
   const known = sheet.spells.some((x) => x.name.trim().toLowerCase() === 'shield' && x.prepared);
-  const slot = spellSlots(sheet).some((x) => x.current > 0);
+  const slots = spellSlots(sheet).reduce((n, x) => n + Math.max(0, x.current), 0);
   const e = activeEncounter(state, sceneId);
-  return known && slot && !reactionUsed(e, pcActor(tokenId)) && !incapacitated(state, sceneId, pcActor(tokenId));
+  // APEX 2.9: the character's reaction setting (never / only while it has a slot or two)
+  const wanted = offerFor(state.tokens[tokenId]?.reactionPrefs, 'shield', slots) !== 'skip';
+  return known && slots > 0 && wanted && !reactionUsed(e, pcActor(tokenId)) && !incapacitated(state, sceneId, pcActor(tokenId));
 }
 
 /**
@@ -1240,7 +1243,9 @@ export async function planInterruption(repo: Repo, campaignId: string, sceneId: 
   const figures = await battleFigures(ctx, sceneId, map);
   const me = positionOf(figures, mover);
   if (!me) return null;
-  return firstOpportunity({ ...me, ...points[0] }, points, figures.filter((f) => f !== me), feetBetween(map), activeEncounter(ctx.state, sceneId), declined);
+  // APEX 2.9: characters who never want to be asked for an opportunity attack are not offered one
+  const never = Object.entries(ctx.state.tokens).filter(([, t]) => offerFor(t.reactionPrefs, 'opportunity') === 'skip').map(([id]) => pcActor(id));
+  return firstOpportunity({ ...me, ...points[0] }, points, figures.filter((f) => f !== me), feetBetween(map), activeEncounter(ctx.state, sceneId), [...declined, ...never]);
 }
 
 /** Stores the offers and the paused move (state write). */

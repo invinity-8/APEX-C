@@ -58,6 +58,8 @@ export type Command =
   | { type: 'advancePhase' }
   | { type: 'setDay'; day: number; phase?: Phase }
   | { type: 'setSneak'; tokenId: string; on: boolean }
+  /** APEX 2.9 – when to be asked for a reaction. */
+  | { type: 'setReactionPref'; tokenId: string; kind: import('./reactionPrefs.js').ReactionKind; mode: import('./reactionPrefs.js').ReactionMode }
   | { type: 'setCosmetics'; tokenId: string; selected: Partial<Record<CosmeticKind, string | null>> }
   | { type: 'gmCosmetic'; tokenId: string; cosmeticId: string; grant: boolean }
   | { type: 'gmSetBeast'; beast: BeastForm }
@@ -118,6 +120,7 @@ export type Command =
 export const CHARACTER_COMMANDS: ReadonlySet<Command['type']> = new Set([
   'setAppearance',
   'setSneak',
+  'setReactionPref',
   'setCosmetics',
   'invAddItem',
   'invRequestItem',
@@ -495,6 +498,14 @@ export function executeCommand(prev: GameState, actor: Actor, cmd: Command): Com
       if (!cmd.grant && selected[def.kind] === def.id) delete selected[def.kind];
       t.cosmetics = { unlocked, selected };
       addLog(state, 'gm', `${t.name}: cosmetic “${def.name}” ${cmd.grant ? 'granted' : 'revoked'}.`, 'gm');
+      return { ok: true, state };
+    }
+    case 'setReactionPref': {
+      const t = state.tokens[cmd.tokenId];
+      if (!t) return fail(prev, 'Character unavailable.');
+      t.reactionPrefs = { ...(t.reactionPrefs ?? {}), [cmd.kind]: cmd.mode };
+      if (cmd.mode === 'ask') delete t.reactionPrefs[cmd.kind];
+      if (!Object.keys(t.reactionPrefs).length) delete t.reactionPrefs;
       return { ok: true, state };
     }
     case 'setSneak': {
