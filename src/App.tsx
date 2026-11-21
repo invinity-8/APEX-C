@@ -1,4 +1,4 @@
-import { setMusicMood, unlockSound } from './audio/sound';
+import { play, setMusicMood, unlockSound, type Sfx } from './audio/sound';
 import { GroupsContext } from './components/groupsContext';
 import { bestiary, BUILTIN_BESTIARY } from './game/bestiary';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -46,6 +46,9 @@ interface Toast {
   kind: 'error' | 'info';
 }
 
+/** APEX 2.10 – the sound of a successful command (gear, items, trade). */
+const FOLEY: Partial<Record<string, Sfx>> = { equipItem: 'equip', unequipSlot: 'equip', setWeaponSet: 'equip', setWeaponGrip: 'equip', setFigureGear: 'equip', invMoveItem: 'drop', invRemoveItem: 'drop', invSplitStack: 'drop', invMergeStack: 'drop', merchantBuy: 'coins', merchantSell: 'coins', lootRollChoose: 'coins', lootRollClaimExpired: 'coins' };
+
 export default function App({ game }: { game: GameApi }) {
   const { view, gmState, dispatch } = game;
   const state = gmState;
@@ -80,6 +83,8 @@ export default function App({ game }: { game: GameApi }) {
     async (cmd: Command) => {
       const res = await dispatch(cmd);
       if (!res.ok) notify(res.error ?? 'The action failed.');
+      // APEX 2.10: a little Foley for what the hands do (recorded sounds, see audio/sound.ts)
+      else { const sfx = FOLEY[cmd.type]; if (sfx) play(sfx); }
       return res;
     },
     [dispatch, notify],

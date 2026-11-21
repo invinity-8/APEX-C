@@ -15,6 +15,8 @@ const DRAGON_COLOURS = DRAGON_TINTS;
 export function creatureFor(text: string): { kind: string; tint?: string; variant?: CreatureVariant } | null {
   const t = ` ${text.toLowerCase().replace(/[-_]/g, ' ')} `;
   if (/\bwere ?(wolf|rat|bear|boar|tiger|wölf)|\bwerwolf|lykanthrop/.test(t)) return null;
+  // APEX 2.10: the walking dead stay humanoid figures (an ogre zombie is not an ogre), skeletal steeds and dragons excepted
+  if (/\b(zombie|skeleton|ghoul|ghast|mummy|wight)\b/.test(t) && !/dragon|drache|horse|steed|pferd|ross\b/.test(t)) return null;
   const variant: CreatureVariant | undefined = /\b(cub|pup|puppy|kitten|calf|lamb|foal|fawn|piglet|kid|chick|duckling|hatchling|wyrmling|young|baby|juvenile|welpe|junges|kalb|lamm|fohlen|kitz|ferkel|küken|jung)\b/.test(t) ? 'young'
     : /\b(female|she|lioness|doe|hind|cow|ewe|sow|mare|vixen|hen|weibchen|löwin|hirschkuh|bärin|wölfin|stute|sau|henne|kuh|ricke|fähe)\b/.test(t) ? 'female' : undefined;
   const dragonTint = () => { for (const c of DRAGON_COLOURS) if (t.includes(c)) return c; const de: Record<string, string> = { rot: 'red', blau: 'blue', grün: 'green', schwarz: 'black', weiß: 'white', weiss: 'white', gold: 'gold', silber: 'silver', bronze: 'bronze', kupfer: 'copper', messing: 'brass', schatten: 'shadow', fee: 'fairy' }; for (const [k, v] of Object.entries(de)) if (t.includes(k)) return v; return undefined; };
@@ -29,7 +31,13 @@ export function creatureFor(text: string): { kind: string; tint?: string; varian
     [/grell/, 'grell'], [/intellect devourer/, 'devourer'], [/flumph/, 'flumph'], [/gazer|spectator/, 'gazer'], [/nothic/, 'nothic'], [/cloaker/, 'cloaker'], [/slaad/, 'slaad'],
     [/myconid|walking mushroom|wandelnder pilz|pilzwesen/, 'myconid'], [/glowing mushroom|leuchtpilz|pilzkoloss/, 'glowshroom'], [/carnivorous|man ?eating plant|fleischfressend|flytrap/, 'flytrap'],
     [/world turtle|weltenschildkröte|dragon turtle/, 'worldturtle'], [/sky whale|himmelswal|leviathan|\bwhale\b|\bwal\b/, 'skywhale'], [/colossus|koloss|titan/, 'colossus'],
-    [/skeletal (horse|steed)|skelettpferd|knochenpferd/, 'skelhorse'],
+    [/skeletal (horse|steed)|(war)?horse skeleton|steed skeleton|skelettpferd|knochenpferd/, 'skelhorse'],
+    // APEX 2.10: monsters with their own model instead of a figure or a generic one
+    [/\bimp\b|kobold devil/, 'imp'], [/quasit/, 'quasit'], [/vrock/, 'vrock'], [/barbed devil|bearded devil|bone devil|chain devil|dornenteufel|bartteufel/, 'devil'],
+    [/pseudodragon|pseudodrache|faerie dragon/, 'pseudodragon'], [/animated armou?r|belebte rüstung|helmed horror/, 'armor'],
+    [/ettin/, 'ettin'], [/\btroll\b/, 'troll'], [/\bogre\b|oger\b/, 'ogre'],
+    [/sab(er|re).?tooth|säbelzahn/, 'sabertooth'], [/weasel|wiesel|ferret|frettchen|stoat|marten|marder/, 'weasel'],
+    [/three headed guard|giant three headed|dreiköpfiger wachhund|riesiger dreiköpfiger/, 'guarddog3'],
     [/wyvern|lindwurm/, 'wyvern'], [/\bdrake\b|drache ohne flügel/, 'drake'],
     [/dragon|wyrm|drache|drachen/, 'dragon', dragonTint],
     [/beholder|eye tyrant|betrachter|gauth/, 'beholder'], [/aboleth/, 'aboleth'], [/otyugh|neogi/, 'otyugh'], [/gibbering|mouther/, 'mouther'], [/octopus|squid|oktopus|tintenfisch/, 'octopus'],
@@ -50,7 +58,7 @@ export function creatureFor(text: string): { kind: string; tint?: string; varian
     [/rhino|nashorn/, 'rhino'], [/hippo|nilpferd|flusspferd/, 'hippo'], [/giraffe/, 'giraffe'], [/zebra/, 'zebra'],
     [/tiger/, 'tiger'], [/panther|leopard|jaguar|puma|lynx|luchs/, 'panther'], [/lion|sabre|saber|big cat|löwe|lowe\b/, 'cat'], [/house ?cat|kitten|hauskatze|kätzchen|\bkatze\b|\bcat\b/, 'housecat'],
     [/rabbit|hare|bunny|hase|kaninchen/, 'rabbit'], [/squirrel|eichhörnchen/, 'squirrel'], [/hedgehog|igel/, 'hedgehog'], [/badger|dachs|wolverine|vielfraß/, 'badger'],
-    [/\brat\b|weasel|ratte|wiesel/, 'rat'], [/crocodile|alligator|krokodil/, 'crocodile'], [/lizard|iguana|echse|waran/, 'lizard'], [/turtle|tortoise|schildkröte/, 'turtle'], [/snail|schnecke/, 'snail'],
+    [/\brat\b|ratte/, 'rat'], [/crocodile|alligator|krokodil/, 'crocodile'], [/lizard|iguana|echse|waran/, 'lizard'], [/turtle|tortoise|schildkröte/, 'turtle'], [/snail|schnecke/, 'snail'],
     [/mammoth|mammut/, 'mammoth'], [/elephant|elefant/, 'elephant'], [/\bape\b|gorilla|baboon|affe/, 'ape'], [/frog|toad|frosch|kröte/, 'frog'], [/shark|\bhai\b/, 'shark'], [/fish|eel|fisch|\baal\b/, 'fish'],
     [/cobra|viper|asp\b|kobra/, 'cobra'], [/snake|serpent|constrictor|python|naga|schlange/, 'snake'],
     [/spider|ettercap|spinne/, 'spider'], [/scorpion|skorpion/, 'scorpion'], [/centipede|tausendfüß|hundertfüß/, 'centipede'], [/beetle|käfer/, 'beetle'], [/crab|krabbe|hummer/, 'crab'],

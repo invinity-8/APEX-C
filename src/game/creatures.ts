@@ -139,6 +139,19 @@ export const CREATURE_LIST: Array<{ id: string; label: string; group: string }> 
   { id: 'worldturtle', label: 'World turtle (boss)', group: 'Monstrosities' },
   { id: 'skywhale', label: 'Sky whale (boss)', group: 'Monstrosities' },
   { id: 'colossus', label: 'Obsidian colossus (boss)', group: 'Constructs & plants' },
+  // APEX 2.10: more monsters with a body of their own
+  { id: 'sabertooth', label: 'Sabre-toothed cat', group: 'Beasts' },
+  { id: 'weasel', label: 'Weasel / giant weasel', group: 'Beasts' },
+  { id: 'guarddog3', label: 'Three-headed guard dog', group: 'Monstrosities' },
+  { id: 'troll', label: 'Troll', group: 'Monstrosities' },
+  { id: 'ogre', label: 'Ogre', group: 'Monstrosities' },
+  { id: 'ettin', label: 'Ettin (two-headed giant)', group: 'Monstrosities' },
+  { id: 'pseudodragon', label: 'Pseudodragon', group: 'Dragons' },
+  { id: 'armor', label: 'Animated armour', group: 'Constructs & plants' },
+  { id: 'devil', label: 'Barbed devil', group: 'Fiends' },
+  { id: 'imp', label: 'Imp', group: 'Fiends' },
+  { id: 'quasit', label: 'Quasit', group: 'Fiends' },
+  { id: 'vrock', label: 'Vrock (vulture demon)', group: 'Fiends' },
 ];
 export const CREATURE_KINDS = CREATURE_LIST.map((c) => c.id);
 export const DRAGON_TINTS = ['red', 'blue', 'green', 'black', 'white', 'gold', 'silver', 'bronze', 'copper', 'brass', 'shadow', 'fairy'];

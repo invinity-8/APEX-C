@@ -1,5 +1,8 @@
 /**
- * APEX 2.9 – sound: effects and music, all synthesised in the browser with Web Audio (no recordings, no files).
+ * APEX 2.9 – sound: effects and music, synthesised in the browser with Web Audio.
+ * APEX 2.10 – plus recorded Foley from Kenney's "RPG Audio" pack (CC0, public/audio/kenney): blade swishes and slices,
+ * an axe chop, footsteps, cloth and belt sounds when gear is equipped, book pages, coins, doors. The recordings load
+ * after the first click; until they are there (or if a browser cannot play them) the synthesised sound plays instead.
  *
  *  - Effects: sword swing, hit, critical hit, miss, bow shot, bite, growl, spells by element (fire roar, frost
  *    tinkle, lightning crackle, thunder boom, radiant bells, necrotic drone, acid bubbles, psychic warble, arcane
@@ -55,7 +58,39 @@ function audio(): AudioContext | null {
   return ctx;
 }
 /** Call once from a user gesture (the app does it on the first click). */
-export function unlockSound() { const c = audio(); if (c?.state === 'suspended') void c.resume(); syncMusic(); }
+export function unlockSound() { const c = audio(); if (c?.state === 'suspended') void c.resume(); syncMusic(); loadSamples(); }
+
+// ---------------------------------------------------------------- recorded Foley (Kenney RPG Audio, CC0)
+const SAMPLE_FILES: Record<string, string[]> = {
+  whoosh: ['drawKnife1', 'drawKnife2', 'drawKnife3'], slice: ['knifeSlice', 'knifeSlice2'], chop: ['chop'],
+  step: ['footstep00', 'footstep02', 'footstep05', 'footstep07'], cloth: ['cloth1', 'cloth2', 'cloth3', 'cloth4', 'clothBelt'], belt: ['beltHandle1', 'metalLatch'],
+  book: ['bookOpen'], page: ['bookFlip1', 'bookFlip2', 'bookFlip3'], bookClose: ['bookClose'], coins: ['handleCoins', 'handleCoins2'],
+  door: ['doorOpen_1'], doorClose: ['doorClose_1'], drop: ['dropLeather'], latch: ['metalClick'],
+};
+const buffers = new Map<string, AudioBuffer>();
+let loading = false;
+/** Fetches and decodes the recordings once (after the first user gesture). */
+function loadSamples() {
+  const c = ctx; if (!c || loading || typeof fetch !== 'function') return;
+  loading = true;
+  const base = `${(import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/'}audio/kenney/`;
+  for (const name of new Set(Object.values(SAMPLE_FILES).flat())) {
+    fetch(`${base}${name}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status))))).then((b) => c.decodeAudioData(b)).then((buf) => { buffers.set(name, buf); }).catch(() => { /* the synthesised sound stays */ });
+  }
+}
+/** Plays one recording of a group (random take, slight pitch variation); false when none is loaded. */
+function sample(group: string, t: number, gain = 1, rate = 1): boolean {
+  const c = ctx; if (!c || !sfxBus) return false;
+  const takes = (SAMPLE_FILES[group] ?? []).filter((n) => buffers.has(n));
+  if (!takes.length) return false;
+  const src = c.createBufferSource(); src.buffer = buffers.get(takes[Math.floor(Math.random() * takes.length)])!;
+  src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
+  const g = c.createGain(); g.gain.value = gain;
+  src.connect(g).connect(sfxBus); src.start(t);
+  return true;
+}
+/** Whether the recordings are ready (for tests and the settings). */
+export const samplesLoaded = () => buffers.size;
 
 // ---------------------------------------------------------------- building blocks
 type Env = { a?: number; d: number; peak?: number };
@@ -72,16 +107,27 @@ function noise(out: AudioNode, t: number, e: Env, filter: BiquadFilterType, f0: 
 }
 
 // ---------------------------------------------------------------- effects
-export type Sfx = 'swing' | 'hit' | 'crit' | 'miss' | 'bow' | 'bite' | 'growl' | 'heal' | 'buff' | 'click' | 'fire' | 'cold' | 'lightning' | 'thunder' | 'radiant' | 'necrotic' | 'acid' | 'poison' | 'psychic' | 'force' | 'arcane';
+export type Sfx = 'swing' | 'hit' | 'crit' | 'miss' | 'bow' | 'bite' | 'growl' | 'heal' | 'buff' | 'click' | 'fire' | 'cold' | 'lightning' | 'thunder' | 'radiant' | 'necrotic' | 'acid' | 'poison' | 'psychic' | 'force' | 'arcane'
+  /** APEX 2.10 – recorded: a blade slicing, an axe / club chopping, a footstep, gear equipped, a page, a book, coins, a door, something dropped */
+  | 'slice' | 'chop' | 'step' | 'equip' | 'page' | 'book' | 'coins' | 'door' | 'drop';
 export function play(s: Sfx, delay = 0) {
   if (!settings.sfx) return;
   const c = audio(); if (!c || c.state !== 'running' || !sfxBus) return;
   const t = c.currentTime + delay, o = sfxBus;
   switch (s) {
-    case 'swing': noise(o, t, { a: 0.04, d: 0.22, peak: 1 }, 'bandpass', 600, 2600, 1.1); break;
-    case 'miss': noise(o, t, { a: 0.05, d: 0.28, peak: 0.8 }, 'bandpass', 900, 3200, 1.2); break;
+    case 'swing': if (!sample('whoosh', t, 0.8)) noise(o, t, { a: 0.04, d: 0.22, peak: 1 }, 'bandpass', 600, 2600, 1.1); break;
+    case 'miss': if (!sample('whoosh', t, 0.7, 1.15)) noise(o, t, { a: 0.05, d: 0.28, peak: 0.8 }, 'bandpass', 900, 3200, 1.2); break;
     case 'hit': play('swing', delay); tone(o, t + 0.12, 140, { d: 0.22, peak: 0.9 }, 'sine', 45); noise(o, t + 0.12, { d: 0.09, peak: 0.6 }, 'lowpass', 1800); break;
-    case 'crit': play('hit', delay); tone(o, t + 0.13, 1320, { d: 0.6, peak: 0.25 }, 'triangle'); tone(o, t + 0.13, 1980, { d: 0.5, peak: 0.12 }, 'sine'); break;
+    case 'slice': play('swing', delay); tone(o, t + 0.12, 140, { d: 0.18, peak: 0.6 }, 'sine', 45); if (!sample('slice', t + 0.1, 0.9)) noise(o, t + 0.12, { d: 0.12, peak: 0.6 }, 'highpass', 2600); break;
+    case 'chop': play('swing', delay); tone(o, t + 0.12, 120, { d: 0.25, peak: 0.9 }, 'sine', 40); if (!sample('chop', t + 0.1, 1)) noise(o, t + 0.12, { d: 0.1, peak: 0.7 }, 'lowpass', 1500); break;
+    case 'step': if (!sample('step', t, 0.45)) noise(o, t, { d: 0.06, peak: 0.25 }, 'lowpass', 500); break;
+    case 'equip': if (!sample('cloth', t, 0.8)) noise(o, t, { a: 0.02, d: 0.2, peak: 0.3 }, 'bandpass', 1500, 900, 0.8); sample('belt', t + 0.12, 0.5); break;
+    case 'page': if (!sample('page', t, 1.6)) noise(o, t, { a: 0.03, d: 0.25, peak: 0.3 }, 'highpass', 3000, 1500); break;
+    case 'book': if (!sample('book', t, 0.8)) noise(o, t, { a: 0.02, d: 0.3, peak: 0.35 }, 'bandpass', 1200, 500); break;
+    case 'coins': if (!sample('coins', t, 0.8)) [2637, 3136, 2794].forEach((f, i) => tone(o, t + i * 0.05, f, { d: 0.18, peak: 0.1 }, 'triangle')); break;
+    case 'door': if (!sample('door', t, 0.8)) tone(o, t, 180, { a: 0.1, d: 0.6, peak: 0.15 }, 'sawtooth', 120); break;
+    case 'drop': if (!sample('drop', t, 0.8)) tone(o, t, 110, { d: 0.12, peak: 0.4 }, 'sine', 60); break;
+    case 'crit': play('hit', delay); critBell(o, t); break;
     case 'bow': tone(o, t, 220, { d: 0.18, peak: 0.4 }, 'sawtooth', 90); noise(o, t + 0.03, { a: 0.03, d: 0.35, peak: 0.25 }, 'highpass', 2500, 900); break;
     case 'bite': for (const k of [0, 0.09]) { noise(o, t + k, { d: 0.07, peak: 0.8 }, 'bandpass', 1400, 600, 2); tone(o, t + k, 120, { d: 0.08, peak: 0.5 }, 'square', 60); } break;
     case 'growl': {
@@ -106,6 +152,9 @@ export function play(s: Sfx, delay = 0) {
   }
 }
 
+/** The bright ring of a critical hit. */
+function critBell(o: AudioNode, t: number) { tone(o, t + 0.13, 1320, { d: 0.6, peak: 0.25 }, 'triangle'); tone(o, t + 0.13, 1980, { d: 0.5, peak: 0.12 }, 'sine'); }
+
 /** The sound of a combat event (from the scene's visual effects). */
 export function playFx(f: { kind: string; element: string; ranged?: boolean; label?: string; from?: string }) {
   const beastly = /bite|claw|gore|tusk|maul|talon|sting|tail|horn/i.test(f.label ?? '');
@@ -116,7 +165,15 @@ export function playFx(f: { kind: string; element: string; ranged?: boolean; lab
   if (f.element !== 'physical' && f.element !== 'heal') return play(f.element as Sfx);
   if (beastly && f.kind !== 'miss') { play('bite'); if (Math.random() < 0.5) play('growl', 0.15); return; }
   if (f.ranged) { play('bow'); if (f.kind !== 'miss') play('hit', 0.25); return; }
-  play(f.kind === 'crit' ? 'crit' : f.kind === 'miss' ? 'miss' : f.kind === 'resist' ? 'swing' : 'hit');
+  if (f.kind === 'hit' || f.kind === 'crit') {
+    const label = f.label ?? '';
+    const blunt = /axe|hammer|maul|club|mace|flail|morningstar|staff|fist|slam|unarmed|greatclub|pick/i.test(label);
+    const blade = /sword|dagger|scimitar|rapier|blade|knife|sickle|scythe|glaive|halberd|spear|trident|claw/i.test(label);
+    play(blunt ? 'chop' : blade ? 'slice' : 'hit');
+    if (f.kind === 'crit' && settings.sfx && ctx?.state === 'running' && sfxBus) critBell(sfxBus, ctx.currentTime);
+    return;
+  }
+  play(f.kind === 'miss' ? 'miss' : f.kind === 'resist' ? 'swing' : 'hit');
 }
 
 // ---------------------------------------------------------------- music

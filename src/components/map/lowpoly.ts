@@ -1,14 +1,17 @@
 /**
- * APEX 2.1 – low-poly figure builder: turns a FigureLook (game/figure.ts) into a chunky, flat-shaded tabletop
- * miniature – big head, short limbs, faceted shapes. Facing +z, standing on y = 0, a medium human is ≈ 2 units tall
- * (6 ft at the battle map's scale). Every part is a handful of low-segment primitives; at the end the meshes are
- * merged per material, so a whole figure costs only a few draw calls.
+ * APEX 2.1 – figure builder: turns a FigureLook (game/figure.ts) into a chunky tabletop miniature – big head, short
+ * limbs. Facing +z, standing on y = 0, a medium human is ≈ 2 units tall (6 ft at the battle map's scale). At the end
+ * the meshes are merged per material, so a whole figure costs only a few draw calls.
+ * APEX 2.10 – the body comes from the building-block kit (kit3d.ts): soft-shaded, jointed legs and arms with a muscle
+ * swing, hands with fingers and a thumb that close around what they hold, shaped shoes and boots, a torso with a
+ * waist and a chest; clothes, faces, hair, headwear and gear keep every option of the look.
  */
 import * as THREE from 'three';
 import type { FigureLook } from '../../game/figure';
 import { buildBeard, buildHair, type HeadShape } from './hair3d';
 import { mergeByMaterial } from './merge3d';
 import { buildCreature, wing } from './creatures3d';
+import { blob as kBlob, hand as kHand, limb as kLimb, profile2, tail as kTail, tube as kTube, type V3 } from './kit3d';
 import { sizeScale } from './sizes';
 
 type C = THREE.ColorRepresentation;
@@ -18,7 +21,7 @@ function M(color: C, o: { metal?: boolean; glow?: boolean; side?: boolean; rough
   const key = `${c.getHexString()}|${o.metal ? 1 : 0}${o.glow ? 1 : 0}${o.side ? 1 : 0}${o.rough ?? ''}`;
   let m = cache.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: o.rough ?? (o.metal ? 0.35 : 0.85), metalness: o.metal ? 0.65 : 0, ...(o.glow ? { emissive: c, emissiveIntensity: 0.9 } : {}), side: o.side ? THREE.DoubleSide : THREE.FrontSide });
+    m = new THREE.MeshStandardMaterial({ color: c, flatShading: false, roughness: o.rough ?? (o.metal ? 0.35 : 0.85), metalness: o.metal ? 0.65 : 0, ...(o.glow ? { emissive: c, emissiveIntensity: 0.9 } : {}), side: o.side ? THREE.DoubleSide : THREE.FrontSide });
     cache.set(key, m);
   }
   return m;
@@ -40,6 +43,8 @@ const ico = (r: number, d = 0) => new THREE.IcosahedronGeometry(r, d);
 const cone = (r: number, h: number, seg = 5) => new THREE.ConeGeometry(r, h, seg);
 const sph = (r: number, ws = 7, hs = 5, ps = 0, pl = Math.PI * 2, ts = 0, tl = Math.PI) => new THREE.SphereGeometry(r, ws, hs, ps, pl, ts, tl);
 const tor = (r: number, t: number, arc = Math.PI * 2, rs = 4, ts = 10) => new THREE.TorusGeometry(r, t, rs, ts, arc);
+/** A smooth ball (heads, chins, cheeks). */
+const ball = (r: number) => new THREE.SphereGeometry(r, 20, 14);
 
 interface Dims { s: number; leg: number; th: number; tw: number; hr: number; limb: number }
 const ANCESTRY: Record<FigureLook['body'], Dims> = {
@@ -95,11 +100,8 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
       const knee = new THREE.Vector3(sx * (0.11 * b.w + 0.2), hip - 0.08, 0.3);
       const hipP = new THREE.Vector3(sx * 0.11 * b.w, hip, 0.02);
       const foot = new THREE.Vector3(sx * (0.11 * b.w + 0.26), hip - leg * 0.85, 0.24);
-      for (const [p0, p1, r] of [[hipP, knee, limb * 1.15], [knee, foot, limb]] as Array<[THREE.Vector3, THREE.Vector3, number]>) {
-        const m = add(g, cyl(r * 0.9, r, p0.distanceTo(p1), 6), legC, [(p0.x + p1.x) / 2, (p0.y + p1.y) / 2, (p0.z + p1.z) / 2]);
-        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize());
-      }
-      add(g, box(0.15, 0.1, 0.24), bootC, [foot.x, foot.y - 0.02, foot.z + 0.06]);
+      kLimb(g, [hipP.toArray() as V3, knee.toArray() as V3, foot.toArray() as V3], [limb * 1.3, limb * 1.05, limb * 0.85], legC, 0.2, 10);
+      shoe(g, [foot.x, foot.y - 0.06, foot.z - 0.02], bootC, 0.5);
     }
     if (look.legs === 'kilt' || look.legs === 'robe' || look.torso === 'robe' || look.torso === 'cultrobe' || look.torso === 'dress') add(g, cyl(tw * 0.95, tw * 1.25, leg * 0.35, 8), prim, [0, hip - leg * 0.12, 0.05]);
   } else {
@@ -107,25 +109,30 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     for (const sx of [-1, 1]) {
       const x = sx * 0.11 * b.w;
       const fm = look.boots === 'bare' ? skin : look.boots === 'sandals' ? skin : look.boots === 'armored' ? metal : look.boots === 'wraps' ? M(mix(look.secondary, '#d8c9a8', 0.6)) : leatherD;
-      add(g, box(0.15, 0.1, 0.24), fm, [x, 0.05, 0.04]);
-      if (look.boots === 'sandals') add(g, box(0.16, 0.025, 0.25), leather, [x, 0.012, 0.04]);
-      if (look.boots === 'tall' || look.boots === 'armored') add(g, cyl(limb * 1.35, limb * 1.25, leg * 0.5, 6), look.boots === 'armored' ? metal : leatherD, [x, footY + leg * 0.22, 0]);
+      shoe(g, [x, 0, 0], fm, look.boots === 'armored' ? 1.1 : 1);
+      if (look.boots === 'sandals') kTube(g, [[x, 0.012, -0.09], [x, 0.012, 0.17]], () => [0.075, 0.012], leather, { sides: 10 });
+      if (look.boots === 'tall' || look.boots === 'armored') kTube(g, [[x, footY - 0.02, -0.01], [x, footY + leg * 0.25, 0.005], [x, footY + leg * 0.5, 0.01]], (t) => limb * (1.42 - t * 0.12) + (t > 0.9 ? limb * 0.12 : 0), look.boots === 'armored' ? metal : leatherD, { sides: 12 });
       if (look.boots === 'wraps') for (let i = 0; i < 3; i++) add(g, tor(limb * 1.15, 0.018, Math.PI * 2, 3, 6), fm, [x, footY + 0.05 + i * 0.07, 0], [Math.PI / 2, 0, 0.2]);
     }
     // ---- legs
     const legM = bone ? skin : look.legs === 'shorts' ? prim : look.legs === 'greaves' ? metal : look.legs === 'rags' ? M(shade(look.primary, 0.5)) : primD;
     for (const sx of [-1, 1]) {
       const x = sx * 0.11 * b.w;
-      add(g, cyl(limb * 1.1, limb, leg, 6), look.legs === 'trousers' && !bone ? M(shade(look.leather, 0.85)) : legM, [x, footY + leg / 2, 0]);
-      if (look.legs === 'shorts' && !bone) add(g, cyl(limb * 0.95, limb * 0.9, leg * 0.5, 6), skin, [x, footY + leg * 0.25, 0]);
-      if (look.legs === 'greaves') add(g, ico(limb * 1.4), metalD, [x, footY + leg * 0.5, 0.03]);
+      // hip → knee (slightly forward) → ankle, thigh and calf muscles
+      const hipP: V3 = [x, hip + 0.03, 0], knee: V3 = [x * 1.04, footY + leg * 0.5, 0.03], ankle: V3 = [x, footY + 0.03, -0.01];
+      const lm = look.legs === 'trousers' && !bone ? M(shade(look.leather, 0.85)) : legM;
+      const sw = bone ? 0.05 : b.arm > 1.2 ? 0.3 : 0.2;
+      if (look.legs === 'shorts' && !bone) { kLimb(g, [hipP, knee], [limb * 1.35, limb * 1.08], legM, 0.1, 10); kLimb(g, [knee, ankle], [limb * 1.0, limb * 0.75], skin, 0.3, 10); }
+      else kLimb(g, [hipP, knee, ankle], [limb * 1.35, limb * 1.02, limb * 0.75], lm, sw, 10);
+      if (look.legs === 'greaves') kBlob(g, [limb * 1.15, limb * 1.05, limb * 0.8], metalD, [x * 1.04, footY + leg * 0.5, 0.07]);
     }
     if (look.legs === 'skirt' || look.legs === 'kilt') add(g, cyl(tw * 0.92, tw * (look.legs === 'kilt' ? 1.05 : 1.2), leg * (look.legs === 'kilt' ? 0.45 : 0.75), 7), look.legs === 'kilt' ? sec : prim, [0, hip - leg * (look.legs === 'kilt' ? 0.2 : 0.35), 0]);
     if (look.legs === 'robe' || look.torso === 'dress') add(g, cyl(tw * 0.9, tw * 1.3, leg + 0.06, 8), look.torso === 'robe' || look.torso === 'cultrobe' || look.torso === 'dress' ? prim : primD, [0, footY + leg / 2 - 0.02, 0]);
     if (look.legs === 'rags') add(g, cyl(tw * 0.9, tw * 1.1, leg * 0.45, 5), M(shade(look.primary, 0.5)), [0, hip - leg * 0.18, 0], [0, 0.3, 0]);
 
   }
-  // ---- torso
+  // ---- torso: a soft section that narrows at the waist and widens at the chest (women: hips, waist, bust)
+  const torsoProfile = fem ? profile2([[tw * 0.9, tw * 0.8], [tw * 0.76, tw * 0.68], [tw * 0.98, tw * 0.86], [tw * 0.84, tw * 0.74]]) : profile2([[tw * 0.86, tw * 0.84], [tw * 0.84 + b.belly * 0.05, tw * 0.8], [tw * (b.delt ? 1.07 : 1.0), tw * 0.9], [tw * (b.delt ? 0.95 : 0.86), tw * 0.78]]);
   const torsoC = look.torso === 'bare' ? skin : look.torso === 'shirt' || look.torso === 'apron' ? sec : look.torso === 'leather' || look.torso === 'studded' ? leather : look.torso === 'chain' ? M(shade(look.metal, 0.85), { metal: true, rough: 0.55 }) : look.torso === 'scale' || look.torso === 'plate' ? metal : look.torso === 'rags' ? M(shade(look.primary, 0.55)) : look.torso === 'furs' ? leather : prim;
   if (bone && (look.torso === 'bare' || look.torso === 'rags')) {
     add(g, cyl(0.035, 0.035, th, 5), skin, [0, hip + th / 2, -0.05]);
@@ -133,18 +140,17 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     add(g, cyl(tw * 0.7, tw * 0.75, 0.12, 6), skin, [0, hip + 0.04, 0]);
   } else {
     if (fem) {
-      // chest to waist, then the hips (in the colour of the legs or a long garment)
-      add(g, cyl(tw * 1.0, tw * 0.78, th * 0.62, 7), torsoC, [0, hip + th * 0.69, 0]);
-      add(g, cyl(tw * 0.78, tw * 0.98, th * 0.4, 7), torsoC, [0, hip + th * 0.2, 0]);
+      // hips → waist → chest → shoulders; the hips in the colour of the legs or a long garment
+      kTube(g, [[0, hip + th * 0.06, 0], [0, hip + th * 0.38, 0], [0, hip + th * 0.74, 0.01], [0, top + 0.01, 0]], torsoProfile, torsoC, { sides: 16 });
       const long = ['robe', 'cultrobe', 'dress', 'coat'].includes(look.torso) || ['robe', 'skirt', 'kilt'].includes(look.legs);
-      add(g, ico(tw * 1.0, 1), long ? torsoC : look.legs === 'trousers' ? M(shade(look.leather, 0.85)) : primD, [0, hip + 0.02, 0], [0, 0, 0], [1.08 + b.belly * 0.5, 0.5, 0.92]);
+      kBlob(g, [tw * (1.04 + b.belly * 0.5), tw * 0.55, tw * 0.9], long ? torsoC : look.legs === 'trousers' ? M(shade(look.leather, 0.85)) : primD, [0, hip + 0.03, 0]);
       const bustM = look.torso === 'bare' ? sec : torsoC;
-      add(g, ico(tw * (0.5 + b.belly * 0.15), 1), bustM, [0, top - th * 0.28, tw * 0.42], [0.15, 0, 0], [1.55, 0.72, 0.85]);
-      if (look.torso === 'bare') add(g, cyl(tw * 0.98, tw * 0.95, th * 0.2, 7), sec, [0, top - th * 0.32, 0]);
-    } else add(g, cyl(tw * (b.delt ? 1.06 : 1), tw * 0.84, th, 7), torsoC, [0, hip + th / 2, 0]);
-    if (b.belly) add(g, ico(tw * (0.62 + b.belly * 0.6) * (fem ? 0.85 : 1), 1), torsoC, [0, hip + th * 0.35, tw * 0.25 + b.belly * 0.2], [0, 0, 0], [1, 0.85, 0.75]);
+      for (const sx of [-1, 1]) kBlob(g, [tw * (0.36 + b.belly * 0.08), tw * 0.32, tw * 0.3], bustM, [sx * tw * 0.36, top - th * 0.3, tw * 0.5], [sx * 0.25, -0.15, 1]);
+      if (look.torso === 'bare') kTube(g, [[0, top - th * 0.42, 0], [0, top - th * 0.22, 0]], () => [tw * 0.99, tw * 0.9], sec, { sides: 16 });
+    } else kTube(g, [[0, hip - 0.02, 0], [0, hip + th * 0.4, 0.005], [0, hip + th * 0.78, 0.01], [0, top + 0.01, 0]], torsoProfile, torsoC, { sides: 16 });
+    if (b.belly) kBlob(g, [tw * (0.62 + b.belly * 0.6) * (fem ? 0.85 : 1), tw * (0.62 + b.belly * 0.6) * 0.85, tw * (0.62 + b.belly * 0.6) * 0.75], torsoC, [0, hip + th * 0.35, tw * 0.25 + b.belly * 0.2]);
   }
-  const front = (y: number) => tw * (0.84 + 0.16 * ((y - hip) / th)) + 0.005;
+  const front = (y: number) => torsoProfile(Math.max(0, Math.min(1, (y - hip) / th)))[1] + 0.006;
   switch (look.torso) {
     case 'tunic': add(g, tor(tw * 0.55, 0.035, Math.PI * 2, 3, 8), sec, [0, top - 0.01, 0], [Math.PI / 2, 0, 0]); add(g, cyl(tw * 0.86, tw * 1.0, th * 0.3, 7), prim, [0, hip - th * 0.05, 0]); break;
     case 'shirt': add(g, box(0.12, th * 0.3, 0.02), skin, [0, top - th * 0.17, front(top - 0.1)], [-0.08, 0, 0]); break;
@@ -185,31 +191,33 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
     const pivot = new THREE.Group();
     pivot.position.set(sx * (tw * (b.delt ? 1.06 : 1) + armR * 0.6), top - 0.07, 0);
     pivot.rotation.set(zombie ? -1.35 : sx > 0 ? -0.55 : -0.25, 0, sx * (zombie ? 0.05 : 0.14));
-    add(pivot, cyl(armR * 1.05, armR * 0.9, armLen, 6), sleeve, [0, -armLen / 2, 0]);
-    if (b.delt && !bone) add(pivot, ico(armR * 1.7, 0), sleeve, [0, -armR * 0.3, 0]);
-    if (b.arm > 1.25 && !bone) add(pivot, ico(armR * 1.25, 0), sleeve, [0, -armLen * 0.4, 0.02], [0, 0, 0], [1, 1.3, 1]);
+    // shoulder → elbow (a little back) → wrist, biceps and forearm swell; a rounded shoulder cap
+    kLimb(pivot, [[0, 0.01, 0], [0, -armLen * 0.5, -0.015], [0, -armLen * 0.94, 0.01]], [armR * 1.12, armR * 0.9, armR * 0.7], sleeve, bone ? 0.04 : b.arm > 1.15 ? 0.34 : 0.2, 10);
+    if (!bone) kBlob(pivot, b.delt ? [armR * 1.55, armR * 1.3, armR * 1.45] : [armR * 1.2, armR * 1.05, armR * 1.15], sleeve, [0, -armR * 0.25, 0]);
     if (look.extra === 'tattoos' && !['bare', 'vest'].includes(look.torso)) { /* tattoos only show on bare arms */ }
     if (look.extra === 'tattoos' && ['bare', 'vest'].includes(look.torso)) add(pivot, cyl(limb * 1.08, limb * 1.08, 0.05, 6), M(shade(look.skin, 0.45)), [0, -armLen * 0.4, 0]);
     const hand = new THREE.Group(); hand.position.set(0, -armLen, 0); pivot.add(hand);
-    add(hand, ico(limb * 1.25, 0), armoured && look.torso === 'plate' ? metal : skin, [0, 0, 0]);
+    // a hand with fingers and a thumb, closed around what it holds
+    const holds = sx > 0 ? look.main !== 'none' : look.off !== 'none';
+    kHand(hand, [0, limb * 0.95, 0.005], [0, -1, 0.12], [-sx, 0, 0.15], limb * (bone ? 2.0 : 2.3), armoured && look.torso === 'plate' ? metal : skin, { curl: holds ? 0.85 : zombie ? 0.25 : 0.45, thick: bone ? 0.55 : look.body === 'ogre' || look.body === 'orc' ? 1.3 : 1.05 });
     g.add(pivot); hands.push(hand);
   }
   // ---- neck and head
-  if (!bone) add(g, cyl(hr * (fem ? 0.27 : b.delt ? 0.42 : 0.35), hr * (fem ? 0.32 : b.delt ? 0.48 : 0.4), 0.12, 6), skin, [0, top + 0.03, 0]); else add(g, cyl(0.03, 0.03, 0.12, 4), skin, [0, top + 0.03, 0]);
+  if (!bone) kTube(g, [[0, top - 0.04, -0.01], [0, top + 0.1, 0.01]], (t) => hr * (fem ? 0.3 - t * 0.04 : b.delt ? 0.47 - t * 0.06 : 0.39 - t * 0.05), skin, { sides: 12 }); else add(g, cyl(0.03, 0.03, 0.12, 4), skin, [0, top + 0.03, 0]);
   const head = new THREE.Group(); head.position.set(0, headY, 0); g.add(head);
   let fz = hr * 0.9; // front surface of the face
   const snout = look.body === 'dragonborn' || look.body === 'lizardfolk';
   switch (bone ? 'skull' : look.head) {
-    case 'skull': add(head, ico(hr, 1), skin, [0, 0.03, 0], [0, 0, 0], [0.95, 1, 1]); add(head, box(hr * 1.1, hr * 0.4, hr * 0.9), skin, [0, -hr * 0.75, 0.05]); fz = hr * 0.92; break;
+    case 'skull': add(head, ball(hr), skin, [0, 0.03, 0], [0, 0, 0], [0.95, 1, 1]); add(head, box(hr * 1.1, hr * 0.4, hr * 0.9), skin, [0, -hr * 0.75, 0.05]); fz = hr * 0.92; break;
     case 'square': add(head, box(hr * 1.6, hr * 1.6, hr * 1.5), skin); fz = hr * 0.76; break;
-    case 'oval': add(head, ico(hr, 1), skin, [0, 0, 0], [0, 0, 0], [0.9, 1.12, 0.95]); fz = hr * 0.86; break;
+    case 'oval': add(head, ball(hr), skin, [0, 0, 0], [0, 0, 0], [0.9, 1.12, 0.95]); fz = hr * 0.86; break;
     case 'long': add(head, cyl(hr * 0.85, hr * 0.72, hr * 2.1, 7), skin); fz = hr * 0.8; break;
-    case 'wide': add(head, ico(hr, 1), skin, [0, 0, 0], [0, 0, 0], [1.2, 0.9, 1]); fz = hr * 0.92; break;
+    case 'wide': add(head, ball(hr), skin, [0, 0, 0], [0, 0, 0], [1.2, 0.9, 1]); fz = hr * 0.92; break;
     case 'pointed': add(head, new THREE.DodecahedronGeometry(hr, 0), skin, [0, 0, 0], [0, 0, 0], [0.95, 1.05, 1]); add(head, cone(hr * 0.45, hr * 0.5, 5), skin, [0, -hr * 0.85, hr * 0.15], [Math.PI, 0, 0]); fz = hr * 0.85; break;
-    default: add(head, ico(hr, 1), skin); fz = hr * 0.92;
+    default: add(head, ball(hr), skin); fz = hr * 0.92;
   }
-  if (snout) { add(head, box(hr * 1.0, hr * 0.7, hr * 1.0), skin, [0, -hr * 0.3, hr * 0.85]); add(head, box(hr * 0.9, hr * 0.18, hr * 0.9), skinD, [0, -hr * 0.62, hr * 0.85]); if (look.body === 'lizardfolk') for (let i = 0; i < 3; i++) add(head, cone(0.05, 0.18, 3), M(look.secondary), [0, hr * 0.9 - i * 0.05, -i * hr * 0.4]); }
-  if (look.body === 'ogre' || look.body === 'orc') add(head, box(hr * 1.4, hr * 0.6, hr * 1.1), skin, [0, -hr * 0.55, hr * 0.15]);
+  if (snout) { kTube(head, [[0, -hr * 0.18, hr * 0.35], [0, -hr * 0.28, hr * 0.95], [0, -hr * 0.34, hr * 1.38]], (t) => [hr * 0.52 * (1 - t * 0.32), hr * 0.38 * (1 - t * 0.25)], skin, { sides: 14 }); kTube(head, [[0, -hr * 0.55, hr * 0.4], [0, -hr * 0.6, hr * 1.25]], (t) => [hr * 0.42 * (1 - t * 0.3), hr * 0.12], skinD, { sides: 12 }); for (const sx of [-1, 1]) add(head, ball(hr * 0.05), dark, [sx * hr * 0.14, -hr * 0.22, hr * 1.42]); if (look.body === 'lizardfolk') for (let i = 0; i < 3; i++) add(head, cone(0.05, 0.18, 3), M(look.secondary), [0, hr * 0.9 - i * 0.05, -i * hr * 0.4]); }
+  if (look.body === 'ogre' || look.body === 'orc') kBlob(head, [hr * 0.72, hr * 0.34, hr * 0.6], skin, [0, -hr * 0.55, hr * 0.18]);
   const faceZ = snout ? fz + hr * 0.05 : fz;
   const ey = hr * 0.12, ex = hr * 0.36;
   const eyeM = look.eyes === 'glowing' ? M(look.eyeColor, { glow: true }) : M(look.eyeColor, { rough: 0.3 });
@@ -310,10 +318,10 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
   // APEX 2.4 – face sculpt: every human-like face gets a chin and cheeks; the 'face' part shapes them or adds make-up
   if (!snout && !bone) {
     const chubby = look.face === 'chubby', gaunt = look.face === 'gaunt';
-    add(head, ico(hr * 0.26, 1), skin, [0, -hr * 0.7, faceZ - hr * 0.42], [0, 0, 0], look.face === 'strongjaw' ? [1.7, 0.7, 0.75] : look.face === 'softjaw' ? [1.3, 0.8, 0.7] : [1.0, 0.6, 0.6]);
+    add(head, ball(hr * 0.26), skin, [0, -hr * 0.7, faceZ - hr * 0.42], [0, 0, 0], look.face === 'strongjaw' ? [1.7, 0.7, 0.75] : look.face === 'softjaw' ? [1.3, 0.8, 0.7] : [1.0, 0.6, 0.6]);
     ex2((sx) => {
       const cheek = look.face === 'cheekbones' ? 0.17 : chubby ? 0.24 : 0.13;
-      add(head, ico(hr * cheek, 1), chubby ? M(mix(look.skin, '#e07a7a', 0.15)) : skin, [sx * hr * 0.5, -hr * (chubby ? 0.22 : 0.12), faceZ - hr * (chubby ? 0.18 : 0.24)], [0, 0, 0], [1, look.face === 'cheekbones' ? 0.55 : 0.8, 0.7]);
+      add(head, ball(hr * cheek), chubby ? M(mix(look.skin, '#e07a7a', 0.15)) : skin, [sx * hr * 0.5, -hr * (chubby ? 0.22 : 0.12), faceZ - hr * (chubby ? 0.18 : 0.24)], [0, 0, 0], [1, look.face === 'cheekbones' ? 0.55 : 0.8, 0.7]);
       if (gaunt) add(head, ico(hr * 0.12, 0), M(shade(look.skin, 0.72)), [sx * hr * 0.48, -hr * 0.33, faceZ - hr * 0.2], [0, 0, 0], [0.8, 1.1, 0.3]);
       if (look.face === 'strongjaw') add(head, box(hr * 0.26, hr * 0.26, hr * 0.42), skin, [sx * hr * 0.52, -hr * 0.55, faceZ - hr * 0.62], [0, sx * 0.5, sx * 0.2]);
       if (look.face === 'dimples') add(head, ico(hr * 0.025, 0), M(shade(look.skin, 0.6)), [sx * hr * 0.27, my - hr * 0.01, mz - hr * 0.02]);
@@ -397,8 +405,8 @@ export function buildLowPoly(look: FigureLook, opts: { mountScale?: number } = {
   // ---- tail
   if (look.tail || look.body === 'tiefling' || look.body === 'dragonborn' || look.body === 'lizardfolk') {
     const thick = look.body !== 'tiefling';
-    add(g, cone(thick ? 0.13 : 0.04, thick ? 0.9 : 0.85, 5), skin, [0, hip - 0.1, -tw - 0.3], [-1.9, 0, 0]);
-    if (!thick) add(g, cone(0.07, 0.12, 3), skin, [0, hip - 0.38, -tw - 0.72], [-1.2, 0, 0]);
+    if (thick) kTail(g, [[0, hip, -tw * 0.7], [0, hip - 0.2, -tw - 0.25], [0.05, 0.12, -tw - 0.6], [-0.04, 0.05, -tw - 0.95]], 0.12, skin);
+    else kTail(g, [[0, hip, -tw * 0.8], [0, hip - 0.25, -tw - 0.2], [0.06, hip - 0.45, -tw - 0.5], [0, hip - 0.3, -tw - 0.75]], 0.03, skin, { end: 'spade' });
   }
 
   // ---- gear in the hands
@@ -496,3 +504,9 @@ function offModel(id: FigureLook['off'], m: Mats): THREE.Object3D | null {
 }
 
 export { mergeByMaterial } from './merge3d';
+
+/** A shoe / boot: a soft lofted foot from heel to toe, sole on the ground; `k` widens armoured boots. */
+function shoe(g: THREE.Object3D, at: V3, m: THREE.Material, k = 1): void {
+  const [x, y, z] = at;
+  kTube(g, [[x, y + 0.06, z - 0.08], [x, y + 0.055, z + 0.03], [x, y + 0.042, z + 0.15]], (t) => [(0.068 - t * 0.012) * k, (0.06 - t * 0.03) * k], m, { sides: 12 });
+}

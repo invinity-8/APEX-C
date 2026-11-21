@@ -8,6 +8,7 @@
  * button to pan; the mouse wheel zooms; arrow keys pan, Q/E orbit, R/F tilt, 0 recentres.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { play } from '../../audio/sound';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
 import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
@@ -79,6 +80,28 @@ interface Props {
 }
 
 /** APEX 2.1 – 3D quality (per device): resolution, shadows, grass and animation. 'auto' picks by the device. */
+/**
+ * APEX 2.10 – ambient occlusion without ghost boxes: the stock pass hides points and lines while it renders the scene's
+ * depth and normals, but not sprites (name labels, floating numbers) or see-through overlays – they went into the
+ * depth buffer as solid rectangles and the occlusion painted a dark, half-transparent box above every figure.
+ */
+class SpriteSafeGTAO extends GTAOPass {
+  constructor(...args: ConstructorParameters<typeof GTAOPass>) {
+    super(...args);
+    // the pass's own (private) hook: hide what must not cast occlusion, restored by the pass afterwards
+    const self = this as unknown as { _overrideVisibility: () => void; _visibilityCache: THREE.Object3D[]; scene: THREE.Scene };
+    const base = self._overrideVisibility.bind(this);
+    self._overrideVisibility = () => {
+      base();
+      self.scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+        if (!o.visible) return;
+        if ((o as THREE.Sprite).isSprite || (m && !Array.isArray(m) && m.transparent && !m.depthWrite)) { o.visible = false; self._visibilityCache.push(o); }
+      });
+    };
+  }
+}
+
 export type Quality3D = 'low' | 'medium' | 'high' | 'ultra';
 const QUALITY_KEY = 'apex.3d.quality';
 export function readQuality(): Quality3D {
@@ -269,7 +292,7 @@ export default function HexScene3D(p: Props) {
       const el0 = wrap.current; const w = el0?.clientWidth || 600, h = el0?.clientHeight || 400;
       const composer = new EffectComposer(t.renderer);
       composer.addPass(new RenderPass(t.scene, t.camera));
-      if (qcfg.ao) { const ao = new GTAOPass(t.scene, t.camera, w, h); ao.blendIntensity = 0.85; composer.addPass(ao); }
+      if (qcfg.ao) { const ao = new SpriteSafeGTAO(t.scene, t.camera, w, h); ao.blendIntensity = 0.85; composer.addPass(ao); }
       if (qcfg.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.45, 0.82));
       composer.addPass(new OutputPass());
       composer.setSize(w, h);
@@ -622,6 +645,8 @@ export default function HexScene3D(p: Props) {
           g.userData.moving = true;
           anim.current.moves = anim.current.moves.filter((m) => m.id !== tk.tokenId);
           anim.current.moves.push({ id: tk.tokenId, obj: g, pts, born: performance.now(), dur: Math.min(4000, 260 * (pts.length - 1)) });
+          // APEX 2.10: footsteps (recorded) for walkers, a few at most
+          if (!(tk.alt ?? 0)) for (let k = 0; k < Math.min(6, pts.length - 1); k++) play('step', (k * Math.min(4000, 260 * (pts.length - 1))) / (pts.length - 1) / 1000);
         }
       });
     }
