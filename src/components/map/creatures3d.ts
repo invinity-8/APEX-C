@@ -26,11 +26,11 @@ const pair = (at: (x: number) => V3, kind: 'feather' | 'membrane', span: number,
 };
 const add3 = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
-export interface CreatureModel { group: THREE.Group; height: number; wings: THREE.Object3D[]; ride?: number; /** default size class if the stat block gives none */ size: string; flies: boolean; /** where a rider sits */ seat?: V3 }
+export interface CreatureModel { group: THREE.Group; height: number; wings: THREE.Object3D[]; ride?: number; /** default size class if the stat block gives none */ size: string; flies: boolean; /** where a rider sits */ seat?: V3; /** APEX 2.10 – the head (portraits frame it) */ head?: V3 }
 /** APEX 2.3 – male / female / young (see varyBeast: a cow has no bull horns, a lioness no mane, young ones big heads). */
 export type CreatureVariant = 'male' | 'female' | 'young';
 /** Builds into `g`; `height` is measured from the model when left out. `airborne`: wings spread (else folded). */
-type Builder = (g: THREE.Group, tint?: string, variant?: CreatureVariant, airborne?: boolean) => { wings?: THREE.Group[]; height?: number; seat?: V3 } | void;
+type Builder = (g: THREE.Group, tint?: string, variant?: CreatureVariant, airborne?: boolean) => { wings?: THREE.Group[]; height?: number; seat?: V3; head?: V3 } | void;
 type Extra = (g: THREE.Group, r: { back: V3; headAt: V3; neckBase: V3; tailRoot: V3 }, v?: CreatureVariant) => void;
 
 /** A kit-built four-legged animal; `extra` adds parts, `wings` adds a pair of wings at the shoulders. */
@@ -39,7 +39,7 @@ const B = (s: Beast, o: { seat?: boolean; extra?: Extra; wings?: { kind: 'feathe
   o.extra?.(g, r, v);
   const w = o.wings;
   const wings = w ? pair((x) => [x * s.girth * 0.55, r.back[1] - s.girth * 0.15, s.len * 0.3], w.kind, w.span, w.c1, w.c2, air, g) : undefined;
-  return { ...(o.seat ? { seat: r.back } : {}), ...(wings ? { wings } : {}) };
+  return { ...(o.seat ? { seat: r.back } : {}), ...(wings ? { wings } : {}), head: r.headAt };
 };
 
 // ---------------------------------------------------------------- species presets (spread, then override)
@@ -281,6 +281,8 @@ export function buildCreature(kind: string, tint?: string, airborne = false, var
   }
   const wings = group.children.filter((c) => c.userData.flapZ);
   const seat = r.seat && vs !== 1 ? (r.seat.map((x) => x * vs) as V3) : r.seat;
-  return { group, height, wings, size: spec.size, ...(spec.ride ? { ride: spec.ride } : {}), flies: !!spec.flies, ...(seat ? { seat } : {}) };
+  const h0 = r.head ?? (raw.userData.head as V3 | undefined);
+  const head = h0 ? (h0.map((x) => x * vs) as V3) : undefined;
+  return { group, height, wings, size: spec.size, ...(spec.ride ? { ride: spec.ride } : {}), flies: !!spec.flies, ...(seat ? { seat } : {}), ...(head ? { head } : {}) };
 }
 export const MOUNT_KINDS = Object.entries(CREATURES).filter(([, v]) => v.mount).map(([k]) => k);

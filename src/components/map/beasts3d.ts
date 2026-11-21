@@ -173,6 +173,7 @@ export function beast(g: THREE.Group, s: Beast): { back: V3; headAt: V3; neckBas
     if (s.barding) tube(g, [[0, cy + G * 0.2, zB + G * 0.1], [0, cy + G * 0.3, 0], [0, cy + G * 0.35, zF - G * 0.1]], () => [G * 1.08 * W, G * 1.0], skin(s.barding, { side: true, rough: 0.9 }), { sides: 14, capStart: false, capEnd: false });
   }
   if (s.pattern) withPattern(g, coat, s.pattern.kind, s.pattern.mark);
+  g.userData.head = headAt;
   return { back: [0, cy + G * 1.05, 0], headAt, neckBase, tailRoot: root };
 }
 
@@ -274,6 +275,7 @@ export function avian(g: THREE.Group, s: Avian, airborne = false): THREE.Group[]
   const headM = s.headC ? skin(s.headC, s.glow ? { glow: s.glow } : { rough: 0.85 }) : body;
   tube(g, s.longNeck ? [[0, cy + 0.15 * S, 0.22 * S], [0, cy + 0.3 * S, 0.42 * S], [0, cy + 0.55 * S, 0.22 * S], neckTop] : [[0, cy + 0.12 * S, 0.22 * S], neckTop], (t) => (0.12 - t * 0.04) * S, s.headC && !s.longNeck ? headM : body, { sides: 10 });
   const hr = (s.owl ? 0.2 : 0.13) * S, hc: V3 = add(neckTop, [0, hr * 0.3, hr * 0.2]);
+  g.userData.head = hc;
   blob(g, [hr, hr * 0.95, hr * 1.05], s.owl ? chest : headM, hc);
   if (s.owl) for (const x of [-1, 1]) blob(g, [hr * 0.5, hr * 0.5, hr * 0.15], skin(mixHex(s.c2, '#ffffff', 0.3)), add(hc, [x * hr * 0.42, hr * 0.05, hr * 0.82]));
   // beak
@@ -320,6 +322,7 @@ export function serpent(g: THREE.Group, s: Serpent): void {
   const head = pts[n], prev = pts[n - 1];
   const fwd = new THREE.Vector3(head[0] - prev[0], head[1] - prev[1], head[2] - prev[2]).normalize().lerp(new THREE.Vector3(0, -0.1, 1), 0.5).normalize();
   const f = v3(fwd);
+  g.userData.head = head;
   if (s.worm) {
     // a round maw of teeth
     const ring = add(head, f, R * 0.2);
@@ -473,6 +476,7 @@ export function brute(g: THREE.Group, s: Brute): { shoulderY: number; hipY: numb
   if (s.tail === 'tuft') tail(g, [[0, hipY + 0.05 * Hgt, -0.12 * Hgt], [0, hipY - 0.1 * Hgt, -0.3 * Hgt], [0, hipY - 0.25 * Hgt, -0.36 * Hgt]], 0.025 * Hgt, tm, { end: 'tuft', endM: skin(tone(s.c, 0.6)) });
   if (s.tail === 'spade') tail(g, [[0, hipY + 0.05 * Hgt, -0.12 * Hgt], [0, hipY - 0.15 * Hgt, -0.4 * Hgt], [0.05 * Hgt, hipY - 0.3 * Hgt, -0.55 * Hgt], [0, hipY - 0.2 * Hgt, -0.7 * Hgt]], 0.025 * Hgt, tm, { end: 'spade' });
   if (s.tail === 'thin') tail(g, [[0, hipY + 0.05 * Hgt, -0.12 * Hgt], [0, hipY - 0.2 * Hgt, -0.35 * Hgt], [0, 0.05 * Hgt, -0.6 * Hgt]], 0.05 * Hgt, tm);
+  g.userData.head = hcMain;
   return { shoulderY: neckY - 0.06 * Hgt, hipY, hc: hcMain };
 }
 
