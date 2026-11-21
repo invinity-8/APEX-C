@@ -14,7 +14,7 @@ import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach,
 import { MAX_ALTITUDE_FT, flightCost } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
-import type { SceneToken } from './HexSceneMap';
+import { FigureHoverCard, type SceneToken } from './HexSceneMap';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { gradientMap, paletteKey } from '../../campaign/palette';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -1127,6 +1127,7 @@ export default function HexScene3D(p: Props) {
       {hover && hoverInfo && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
           <b>{hoverInfo.label}</b> · height {Math.round(height(hover) * (p.map.unitsPerCell || 5))} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
+          <FigureHoverCard tokens={(p.tokens ?? []).filter((t) => hexKey(hexAt(p.map, t)) === hover)} />
         </div>
       )}
       <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">
