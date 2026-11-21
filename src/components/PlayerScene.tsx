@@ -1,3 +1,4 @@
+import { play } from '../audio/sound';
 import { combatAttacks } from '../game/effectiveStats';
 import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
@@ -25,6 +26,9 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const personalAsset = settings?.backgrounds.some(b => b.assetId === background) ? background : null;
   const chosenAsset = preset ? null : personalAsset ?? settings?.defaultAsset;
   useEffect(() => { let live = true; setSanctuaryImage(null); if (chosenAsset && scene?.kind === 'sanctuary') api.mapImage(chosenAsset).then(r => { if (live) setSanctuaryImage(r.url); }).catch(() => undefined); return () => { live = false; }; }, [chosenAsset, scene?.kind]);
+  // APEX 2.10: a door opens when the character arrives in another scene
+  const lastScene = useRef<string | null>(null);
+  useEffect(() => { const id = scene?.scene?.id ?? null; if (id && lastScene.current && id !== lastScene.current) play('door'); lastScene.current = id; }, [scene?.scene?.id]);
   const [moveMode, setMoveMode] = useState(false), [pending, setPending] = useState(false), [message, setMessage] = useState('');
   const [attackIndex, setAttackIndex] = useState<number | null>(null);
   const [attacks, setAttacks] = useState<SheetAttack[]>([]);

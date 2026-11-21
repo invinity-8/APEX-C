@@ -1,3 +1,4 @@
+import { play } from '../audio/sound';
 import { useEffect, useId, useState } from 'react';
 import { api } from '../online/api';
 import { journalMarkdown, type JournalDraft, type JournalEntry, type JournalFilters } from '../server/journals';
@@ -52,6 +53,7 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
   }, [dirty]);
   function change(patch: Partial<JournalDraft>) { setDraft(old => ({ ...old, ...patch })); setDirty(true); setNotice(''); }
   function open(entry?: JournalEntry, newCategory?: string) {
+    play('page');
     if (busy || (dirty && !window.confirm('Discard unsaved journal changes?'))) return;
     const value = entry ?? blank();
     if (newCategory) value.category = newCategory;
@@ -141,7 +143,7 @@ export function PlayerJournal({ sceneReference }: { sceneReference?: { id:string
   const referenceEntries = entries.filter(entry => ['People', 'Places'].includes(entry.category));
   const references = Object.fromEntries(referenceEntries.map(entry => [entry.id, entry.title]));
   const readOnly = !!entries.find(e => e.id === editing.id) && entries.find(e => e.id === editing.id)?.owner_id !== owner;
-  const chapter = (c: string) => { setCategory(c); void searchAll({ category: c }); };
+  const chapter = (c: string) => { play('page'); setCategory(c); void searchAll({ category: c }); };
   const sharingLabel = { private: '🔒 private', gm: '👁 shared with the GM', party: '👥 shared with the party' } as const;
   return <section className="journal-book" aria-label="Campaign journal" data-testid="journal-book">
     <header className="journal-book-bar">

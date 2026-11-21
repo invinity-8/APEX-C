@@ -8,6 +8,7 @@
  * button to pan; the mouse wheel zooms; arrow keys pan, Q/E orbit, R/F tilt, 0 recentres.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { play } from '../../audio/sound';
 import * as THREE from 'three';
 import type { MapNode, SceneMap } from '../../campaign/maps';
 import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach, type TileDef } from '../../campaign/hexScene';
@@ -644,6 +645,8 @@ export default function HexScene3D(p: Props) {
           g.userData.moving = true;
           anim.current.moves = anim.current.moves.filter((m) => m.id !== tk.tokenId);
           anim.current.moves.push({ id: tk.tokenId, obj: g, pts, born: performance.now(), dur: Math.min(4000, 260 * (pts.length - 1)) });
+          // APEX 2.10: footsteps (recorded) for walkers, a few at most
+          if (!(tk.alt ?? 0)) for (let k = 0; k < Math.min(6, pts.length - 1); k++) play('step', (k * Math.min(4000, 260 * (pts.length - 1))) / (pts.length - 1) / 1000);
         }
       });
     }
