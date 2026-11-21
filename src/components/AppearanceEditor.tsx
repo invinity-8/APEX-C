@@ -57,7 +57,7 @@ export function AppearanceEditor({ game, token, run, notify, isGm = false }: Pro
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       <div className="lg:col-span-2">
-        <FigureEditor key={token.id} value={token.figure} onSave={saveFigure} gm={isGm} busy={figureBusy} title={`3D figure of ${token.name}`} ring={accent} />
+        <FigureEditor key={token.id} value={token.details?.appearanceFigure ?? token.figure} onSave={saveFigure} gm={isGm} busy={figureBusy} title={`3D figure of ${token.name}`} ring={accent} />
       </div>
       <section className="panel space-y-3 p-3">
         <h3 className="panel-title">Portrait</h3>

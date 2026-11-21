@@ -255,6 +255,9 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'gmCosmetic':
       if (!isId(c.tokenId) || !isId(c.cosmeticId) || typeof c.grant !== 'boolean') return bad('gmCosmetic');
       return { ok: true, command: { type: 'gmCosmetic', tokenId: c.tokenId, cosmeticId: c.cosmeticId, grant: c.grant } };
+    case 'setFigureGear':
+      if (!isId(c.tokenId) || typeof c.on !== 'boolean') return bad('setFigureGear');
+      return { ok: true, command: { type: 'setFigureGear', tokenId: c.tokenId, on: c.on } };
     case 'setReactionPref': {
       const pref = parseReactionPref(c.kind, c.mode);
       if (!isId(c.tokenId) || !pref) return bad('setReactionPref');
