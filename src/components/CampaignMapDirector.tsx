@@ -18,6 +18,8 @@ import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
 import { NpcBar } from './NpcBar';
 import { EncounterPanel, SpawnMarkers } from './EncounterPanel';
+import { RandomEncounterWizard } from './RandomEncounterWizard';
+import { createPortal } from 'react-dom';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -116,6 +118,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [notice, setNotice] = useState('');
   const [uncertain, setUncertain] = useState<Transfer | null>(null);
   const [confirmSwitch, setConfirmSwitch] = useState(false);
+  // APEX 2.9 – random encounter creator
+  const [wizard, setWizard] = useState(false);
   const [placementToken, setPlacementToken] = useState('');
   const [placeMode, setPlaceMode] = useState(false);
   // Enemy tools: place a new enemy / move the selected one by clicking a hex.
@@ -525,6 +529,13 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     icon: '🗺',
     render: () => (
       <div className="space-y-2" data-testid="game-scenes">
+        <button type="button" className="btn btn-gold w-full py-2 text-sm" disabled={busy} onClick={() => setWizard(true)} data-testid="open-random-encounter">🎲 Create random encounter</button>
+        {wizard && createPortal(
+          <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-black/60 p-3" onClick={(e) => { if (e.target === e.currentTarget) setWizard(false); }}>
+            <div className="w-full max-w-3xl">
+              <RandomEncounterWizard library={enemyLibrary} busy={busy} partySizeDefault={players.length} onClose={() => setWizard(false)} onCreated={(id, message) => { setWizard(false); setNotice(message); void loadScenes(search).then(() => dispatch({ type: 'select', id })).catch((e) => setError(String(e))); }} />
+            </div>
+          </div>, document.body)}
         <p className="text-xs text-marble-400">
           Current scene: <strong className="text-gold-200">{listName(state.current)}</strong>
           {previewing && (

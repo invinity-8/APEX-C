@@ -187,26 +187,35 @@ async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Rec
     return { status: 200, body: { ok: true, plan } };
   }
   if (v.op !== 'apply' || !Array.isArray(v.entries)) return { status: 400, body: { error: 'Invalid encounter.' } };
-  const ids = (v.entries as unknown[]).map((e) => (e as { templateId?: unknown })?.templateId).filter((id): id is string => typeof id === 'string' && !!statBlock(ctx.state!, id)).slice(0, 20);
-  if (!ids.length) return { status: 422, body: { error: 'Nothing to place.' } };
+  // APEX 2.9: entries may be quest characters – on the party's side (placed next to the party) and with a name
+  type Item = { templateId: string; side: 'enemy' | 'ally'; name?: string };
+  const items: Item[] = (v.entries as unknown[]).map((e) => e as { templateId?: unknown; side?: unknown; name?: unknown }).filter((e) => typeof e?.templateId === 'string' && !!statBlock(ctx.state!, e.templateId))
+    .map((e) => ({ templateId: e.templateId as string, side: e.side === 'ally' ? 'ally' as const : 'enemy' as const, ...(typeof e.name === 'string' && e.name.trim() ? { name: e.name.trim().slice(0, 60) } : {}) })).slice(0, 24);
+  const foes = items.filter((x) => x.side === 'enemy'), friends = items.filter((x) => x.side === 'ally');
+  if (!items.length) return { status: 422, body: { error: 'Nothing to place.' } };
   const pcs = await ctx.pcs!(scene.id, map);
   const spawn = map.nodes.find((n) => n.kind === 'spawn');
   const party = pcs.length ? { x: pcs.reduce((a, p) => a + p.x, 0) / pcs.length, y: pcs.reduce((a, p) => a + p.y, 0) / pcs.length } : spawn ?? hexCentre(map, { q: 0, r: 0 });
   const occupied = new Set([...pcs.map((p) => hexKeyAt(map, p)), ...enemiesOf(ctx.state, scene.id).filter((e) => !e.defeated).map((e) => hexKeyAt(map, e))]);
-  const ranged = ids.map((id) => { const b = statBlock(ctx.state!, id)!; return b.attacks[0]?.kind === 'ranged'; });
-  const spots = placeEncounter(map, situation, ids.length, party, seed, occupied, ranged);
-  if (spots.length < ids.length) return { status: 422, body: { error: `Only ${spots.length} free spots for ${ids.length} creatures on this map.` } };
+  // the party's arrival hexes stay free for the characters
+  if (spawn) for (const h of spotsAround(map, spawn, 4, new Set())) occupied.add(hexKeyAt(map, h));
+  const allySpots = spotsAround(map, party, friends.length, new Set(occupied));
+  for (const at of allySpots) occupied.add(hexKeyAt(map, at));
+  const ranged = foes.map((x) => { const b = statBlock(ctx.state!, x.templateId)!; return b.attacks[0]?.kind === 'ranged'; });
+  const spots = placeEncounter(map, situation, foes.length, party, seed, occupied, ranged);
+  if (spots.length < foes.length || allySpots.length < friends.length) return { status: 422, body: { error: `Only ${spots.length + allySpots.length} free spots for ${items.length} creatures on this map.` } };
+  const placed: Array<Item & { at: { x: number; y: number; hidden?: boolean } }> = [...foes.map((x, i) => ({ ...x, at: spots[i] })), ...friends.map((x, i) => ({ ...x, at: allySpots[i] }))];
   return mutate(user, repo, (s) => {
     let st = structuredClone(s);
     const names: string[] = [];
-    for (const [i, id] of ids.entries()) {
+    for (const item of placed) {
       const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
-      const r = addEnemy(st, scene.id, newId, id, spots[i], undefined, d20());
+      const r = addEnemy(st, scene.id, newId, item.templateId, item.at, item.name, d20(), item.side);
       if (!r.ok) return r;
       st = r.state;
       const e = enemiesOf(st, scene.id).find((x) => x.id === newId)!;
-      names.push(e.name);
-      if (spots[i].hidden) addEffect(st, scene.id, npcActor(newId), hiddenEffect(die(20) + npcStealth(e), () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+      names.push(item.side === 'ally' ? `${e.name} (with the party)` : e.name);
+      if (item.at.hidden) addEffect(st, scene.id, npcActor(newId), hiddenEffect(die(20) + npcStealth(e), () => `fx-${crypto.randomUUID().slice(0, 8)}`));
     }
     const text = `Encounter (${SITUATIONS.find((x) => x.id === situation)!.label.toLowerCase()}): ${names.join(', ')}.`;
     logCombat(st, scene.id, text);

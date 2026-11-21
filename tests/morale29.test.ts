@@ -223,3 +223,27 @@ describe('API: morale on the battle map', () => {
     expect(enemiesOf(st(), scene.id)[1].morale!.seenDown).toBe(1);
   });
 });
+
+describe('API: encounter with quest characters', () => {
+  const cid = 'campaign-quest29';
+  let repo: MemoryRepo;
+  let cookies: Record<string, string>;
+  const request = async (profile: string, op: string, body?: unknown, query: Record<string, string> = {}) =>
+    handleApi({ method: body === undefined ? 'GET' : 'POST', op, body: body ?? null, query, ip: '203.0.113.23', headers: { host: 'apex.test', origin: 'https://apex.test', 'x-apex-csrf': '1', cookie: cookies[profile] } }, repo);
+  it('places the band and a named quest character on the party side', async () => {
+    resetSchemaCache(); repo = new MemoryRepo(); cookies = {};
+    repo.campaigns.push({ id: cid, slug: 'main', name: 'Campaign' }); seedProfiles(repo, cid);
+    repo.states.set(cid, { state: createDemoState({ radius: 12, seed: 5 }), version: 1 });
+    await activate(repo, cid, 'gm', 'gm-test-password');
+    cookies.gm = (await request('gm', 'login', { profile: 'gm', password: 'gm-test-password' })).cookies![0].split(';')[0];
+    const created = (await request('gm', 'scenes', { name: 'Ambush', category: 'battle', template: 'hex-battle' })).body as { scene: SceneDefinition };
+    const scene = ((await request('gm', 'scenes', { action: 'publish', id: created.scene.id, revision: created.scene.revision, map: created.scene.metadata })).body as { scene: SceneDefinition }).scene;
+    const r = await request('gm', 'scene-turn', { sceneId: scene.id, action: 'encounter', op: 'apply', situation: 'ambush', seed: 7, entries: [{ templateId: 'bandit' }, { templateId: 'bandit' }, { templateId: 'commoner', side: 'ally', name: 'Merchant Olva' }, { templateId: 'nope' }] });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const list = enemiesOf(repo.states.get(cid)!.state, scene.id);
+    expect(list).toHaveLength(3);
+    const olva = list.find((e) => e.name === 'Merchant Olva')!;
+    expect(olva.side).toBe('ally');
+    expect(list.filter((e) => e.side !== 'ally').every((e) => e.templateId === 'bandit')).toBe(true);
+  });
+});
