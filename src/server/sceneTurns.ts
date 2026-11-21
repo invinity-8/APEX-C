@@ -40,6 +40,7 @@ import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
 import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
 import { allGroups, groupTemplates, spotsAround } from '../game/groups.js';
 import { defaultProfile, parseProfile, planAiStep, type AiFigure, type AiProfile, type AiSelf, type AiStep } from '../game/enemyAi.js';
+import { sceneTone } from '../game/individual.js';
 import { creaturePersonality, isLeader, leaderBonus, rally, rollMorale, surrenders, type MoraleSituation, type Personality } from '../game/morale.js';
 import { WEATHERS, WEATHER_FX, type WeatherFx, changeWorldTime, clockText, dayOf, parseWorldTimeChange } from '../game/worldTime.js';
 import { flightCost, altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
@@ -171,7 +172,7 @@ async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Rec
       const names: string[] = [];
       for (const item of plan) {
         const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
-        const r = addEnemy(st, scene.id, newId, item.templateId, item.at, undefined, d20());
+        const r = addEnemy(st, scene.id, newId, item.templateId, item.at, undefined, d20(), 'enemy', sceneTone(map.palette));
         if (!r.ok) return r;
         st = r.state;
         names.push(enemiesOf(st, scene.id).find((x) => x.id === newId)!.name);
@@ -210,7 +211,7 @@ async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Rec
     const names: string[] = [];
     for (const item of placed) {
       const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
-      const r = addEnemy(st, scene.id, newId, item.templateId, item.at, item.name, d20(), item.side);
+      const r = addEnemy(st, scene.id, newId, item.templateId, item.at, item.name, d20(), item.side, sceneTone(map.palette));
       if (!r.ok) return r;
       st = r.state;
       const e = enemiesOf(st, scene.id).find((x) => x.id === newId)!;
@@ -528,7 +529,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     if (v.action === 'enemyAdd') {
       if (typeof v.templateId !== 'string' || !statBlock(ctx.state ?? {}, v.templateId)) return { status: 400, body: { error: 'Unknown enemy.' } };
       const id = `en-${crypto.randomUUID().slice(0, 8)}`, roll = d20();
-      return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy'));
+      return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy', sceneTone(map.palette)));
     }
     if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid enemy.' } };
     return moveNpc(user, repo, scene, map, v.id, at, [], typeof v.alt === 'number' ? v.alt : undefined, v.careful === true);

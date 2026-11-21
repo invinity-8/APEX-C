@@ -34,6 +34,7 @@ import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, 
 import type { Season, Weather, WeatherMix } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
 import { fromPixel } from '../../game/hex';
+import { sceneTone } from '../../game/individual';
 
 /** World units: a hex has corner radius 1; one 5-ft level = one hex width high (true scale, LEVEL from world3d). */
 const BASE = 0.35;
@@ -558,7 +559,7 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : '', tk.enemy?.sex])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : '', tk.enemy?.sex, tk.enemy?.seed])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -576,7 +577,7 @@ export default function HexScene3D(p: Props) {
         const enemy = tk.enemy;
         const ringColor = tk.tokenId === p.selectedTokenId ? 0xf3dc9a : enemy ? (enemy.ally ? 0x7fb8ff : 0xb3261e) : 0xe8d4a6;
         // APEX 2.0: a true-scale standee (portrait) or miniature on a base
-        const fig = buildFigure(tk, ringColor);
+        const fig = buildFigure(tk, ringColor, { tone: sceneTone(p.map.palette) });
         const g = fig.group;
         g.position.set(w.x + off.x, y + lift, w.z + off.z);
         g.rotation.y = yawMemory.get(tk.tokenId) ?? (enemy ? Math.PI : 0); // keeps the direction it last turned to

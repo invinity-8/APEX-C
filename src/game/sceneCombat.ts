@@ -10,6 +10,7 @@
  *  - Enemy stats are SRD 5.1 basics (no flavour text), enough to try out a fight.
  */
 import type { FigureLook } from './figure.js';
+import { uniqueIndividual } from './individual.js';
 import type { GameState } from './types.js';
 import { BUILTIN_BESTIARY, displayName, initBonus, statBlock, type AbilityKey, type NpcArea, type NpcAttack, type StatBlock } from './bestiary.js';
 import { activeEncounter } from './sceneTurns.js';
@@ -64,6 +65,8 @@ export interface SceneEnemy {
   sex?: 'male' | 'female';
   /** APEX 2.9 – hidden combat fatigue and morale in this fight (see morale.ts). */
   morale?: import('./morale.js').MoraleState;
+  /** APEX 2.9 – the seed of this creature's own look (coat, markings, face); older creatures use their id. */
+  seed?: string;
 }
 /** APEX 2.6 – whether an NPC carries a light now. */
 export const enemyCarriesLight = (e: Pick<SceneEnemy, 'light' | 'darkvisionFt' | 'defeated'>, type = '') => !e.defeated && (e.light ?? (/humanoid|giant/i.test(type) && !((e.darkvisionFt ?? 0) > 0)));
@@ -105,15 +108,17 @@ export function setCarriedLight(prev: GameState, sceneId: string, tokenId: strin
   return { ok: true, state, message: on ? `${prev.tokens[tokenId].name} lights a torch.` : `${prev.tokens[tokenId].name} puts out the light.` };
 }
 
-export function addEnemy(prev: GameState, sceneId: string, id: string, templateId: string, at: { x: number; y: number }, name: string | undefined, roll: number | null, side: 'enemy' | 'ally' = 'enemy'): Result {
+export function addEnemy(prev: GameState, sceneId: string, id: string, templateId: string, at: { x: number; y: number }, name: string | undefined, roll: number | null, side: 'enemy' | 'ally' = 'enemy', /** APEX 2.9 – the land's colour (coats that blend in) */ tone?: string): Result {
   const b = statBlock(prev, templateId);
   if (!b) return { ok: false, error: 'Unknown enemy.' };
   if (enemiesOf(prev, sceneId).length >= 60) return { ok: false, error: 'Too many enemies on this map.' };
-  const count = enemiesOf(prev, sceneId).filter((e) => e.templateId === templateId).length;
   const t = templateOf(b);
-  const label = b.elite ? displayName(b) : `${b.name} ${count + 1}`;
+  // APEX 2.9: a name that says what it looks like (“Grey wolf”, “One-eyed bandit”) and the seed of that look
+  const names = new Set(enemiesOf(prev, sceneId).map((e) => e.name.toLowerCase()));
+  const own = uniqueIndividual(b, id, (n) => names.has(n.toLowerCase()), { ...(tone ? { tone } : {}), colour: side === 'ally' ? '#3f7fbf' : b.color, ...(b.sex && b.sex !== 'mixed' ? { sex: b.sex } : {}) });
+  const label = b.elite ? displayName(b) : own.name;
   const enemy: SceneEnemy = {
-    id, templateId, name: (name?.trim() || label).slice(0, 60), x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, ...(b.flyFt ? { flyFt: b.flyFt } : {}), ...(b.climbFt ? { climbFt: b.climbFt } : {}), init: t.init, attack: t.attack,
+    id, templateId, name: (name?.trim() || label).slice(0, 60), seed: own.seed, x: at.x, y: at.y, hp: b.hp, maxHp: b.hp, ac: b.ac, speedFt: b.speedFt, ...(b.flyFt ? { flyFt: b.flyFt } : {}), ...(b.climbFt ? { climbFt: b.climbFt } : {}), init: t.init, attack: t.attack,
     attacks: structuredClone(b.attacks), multiattack: b.multiattack, abilities: { ...b.abilities }, ...(b.saves ? { saves: { ...b.saves } } : {}), ...(b.areas ? { areas: structuredClone(b.areas) } : {}), ...(b.buffs ? { buffs: structuredClone(b.buffs) } : {}), ...(b.elite ? { elite: true } : {}),
     color: side === 'ally' ? '#3f7fbf' : b.color, icon: b.icon, darkvisionFt: b.darkvisionFt, ...(side === 'ally' ? { side } : {}),
   };

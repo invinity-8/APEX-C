@@ -128,7 +128,7 @@ describe('API: battle actions', () => {
     Object.assign(st().sceneEnemies![scene.id][0], { hp: 100, maxHp: 100 }); // the goblin must survive the random wolf bite
     await toTurn(`npc-${wolf.id}`);
     expect((await turn(scene.id, { action: 'strike', attacker: { kind: 'npc', id: wolf.id }, target: { kind: 'npc', id: goblin.id } })).status).toBe(200);
-    expect(st().sceneCombatLog![scene.id].at(-1)!.text).toMatch(/^Wolf 1 attacks Goblin 1 with Bite/);
+    expect(st().sceneCombatLog![scene.id].at(-1)!.text.startsWith(`${wolf.name} attacks ${goblin.name} with Bite`)).toBe(true);
 
     // Sinna's turn: Dash doubles movement, then the action is used
     await toTurn(`pc-${sinna}`);
@@ -146,10 +146,11 @@ describe('API: battle actions', () => {
     expect(moved.status, JSON.stringify(moved.body)).toBe(200);
     expect((moved.body as { message?: string }).message).toMatch(/opportunity attack/);
     const focus = (await request('gm', 'scene-runtime', undefined, { focus: scene.id })).body as SceneSnapshot;
-    expect(focus.reactions!.map((r) => `${r.reactor.name}→${r.target.name}`)).toEqual(['Goblin 1→Sinna']);
+    expect(focus.reactions!.map((r) => `${r.reactor.name}→${r.target.name}`)).toEqual([`${goblin.name}→Sinna`]);
     expect((await turn(scene.id, { action: 'reaction', offerId: focus.reactions![0].id, accept: true }, 'hannah')).status).toBe(403); // the GM decides for the goblin
     expect((await turn(scene.id, { action: 'reaction', offerId: focus.reactions![0].id, accept: true })).status).toBe(200);
-    expect(st().sceneCombatLog![scene.id].at(-1)!.text).toMatch(/Goblin 1 attacks Sinna .*\(opportunity attack\)/);
+    expect(st().sceneCombatLog![scene.id].at(-1)!.text).toContain(`${goblin.name} attacks Sinna`);
+    expect(st().sceneCombatLog![scene.id].at(-1)!.text).toMatch(/\(opportunity attack\)/);
     expect(e().reactions![`npc-${goblin.id}`]).toBeDefined();
     expect((await turn(scene.id, { action: 'reaction', offerId: focus.reactions![0].id, accept: true })).status).toBe(409);
 
@@ -173,8 +174,8 @@ describe('API: battle actions', () => {
       // walking past the allied wolf pauses the goblin: the wolf may react (GM decides) – the GM lets it go
       const r1 = await turn(scene.id, { action: 'enemyMove', id: goblin.id, x: sNow.x + step, y: sNow.y });
       expect(r1.status, JSON.stringify(r1.body)).toBe(200);
-      expect((r1.body as { message: string }).message).toMatch(/Wolf 1 may make an opportunity attack/);
-      const wolfOffer = ((await request('gm', 'scene-runtime', undefined, { focus: scene.id })).body as SceneSnapshot).reactions!.find((o) => o.reactor.name === 'Wolf 1')!;
+      expect((r1.body as { message: string }).message).toContain(`${wolf.name} may make an opportunity attack`);
+      const wolfOffer = ((await request('gm', 'scene-runtime', undefined, { focus: scene.id })).body as SceneSnapshot).reactions!.find((o) => o.reactor.name === wolf.name)!;
       expect((await turn(scene.id, { action: 'reaction', offerId: wolfOffer.id, accept: false })).status).toBe(200);
       const arrived = st().sceneEnemies![scene.id].find((x) => x.id === goblin.id)!;
       expect(Math.round(arrived.x)).toBe(Math.round(sNow.x + step));
@@ -183,13 +184,13 @@ describe('API: battle actions', () => {
     const away = await turn(scene.id, { action: 'enemyMove', id: goblin.id, x: sNow.x + 4 * step, y: sNow.y });
     expect(away.status, JSON.stringify(away.body)).toBe(200);
     const offers = (await view()).reactions!;
-    expect(offers.map((o) => `${o.reactor.name}→${o.target.name}`)).toEqual(['Sinna→Goblin 1']);
+    expect(offers.map((o) => `${o.reactor.name}→${o.target.name}`)).toEqual([`Sinna→${goblin.name}`]);
     const paused = st().sceneEnemies![scene.id].find((x) => x.id === goblin.id)!;
     expect(`${paused.x},${paused.y}`).not.toBe(`${sNow.x + 4 * step},${sNow.y}`); // stopped next to Sinna
     expect((await turn(scene.id, { action: 'enemyMove', id: goblin.id, x: sNow.x + 3 * step, y: sNow.y })).status).toBe(409); // decide first
     const skip = await turn(scene.id, { action: 'reaction', offerId: offers[0].id, accept: false }, 'hannah');
     expect(skip.status).toBe(200);
-    expect((skip.body as { message: string }).message).toMatch(/Goblin 1 moves/);
+    expect((skip.body as { message: string }).message).toContain(`${goblin.name} moves`);
     expect((await view()).reactions).toEqual([]);
     const done = st().sceneEnemies![scene.id].find((x) => x.id === goblin.id)!;
     expect(Math.round(done.x)).toBe(Math.round(sNow.x + 4 * step)); // the move continued to its destination

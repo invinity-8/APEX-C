@@ -167,7 +167,7 @@ describe('API: flying, falling, 3D reach, spheres in the air', () => {
     const r = await turn(scene.id, { action: 'cast', tokenId: sinna, spellId: 'fireball', slotLevel: 3, point: { x: me.x + 6 * step, y: me.y, alt: 40 } }, 'hannah');
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const msg = (r.body as { message: string }).message;
-    expect(msg).toMatch(/Giant bat 1: d20/);
-    expect(msg).not.toMatch(/Goblin 1: d20/);
+    expect(msg).toContain(`${bat.name}: d20`);
+    expect(msg).not.toContain(`${enemiesOf(st(), scene.id)[1].name}: d20`);
   });
 });

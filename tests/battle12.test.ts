@@ -159,7 +159,7 @@ describe('API: NPC actions, area spells, weapon sets', () => {
     expect(fb.status, JSON.stringify(fb.body)).toBe(200);
     const msg = (fb.body as { message: string }).message;
     expect(msg).toMatch(/Fireball.*20-ft sphere, DC 30 Dexterity save/);
-    expect(msg).toMatch(/Brown bear 1: d20/);
+    expect(msg).toContain(`${bear.name}: d20`);
     expect(msg).toMatch(/Sinna: d20 \d+ − 20/); // the caster stands in her own fireball
     expect(st().sceneEnemies![scene.id].find((x) => x.id === bear.id)!.hp).toBeLessThan(before);
     expect(((await request('hannah', 'sheet', undefined, { token: sinna })).body as SheetPayload).sheet.resources[0].current).toBe(0);

@@ -134,25 +134,28 @@ describe('API: enemies, attacks, torches, library preview', () => {
     expect((await turn(scene.id, { action: 'enemyAdd', templateId: 'goblin', x: me.x + step, y: me.y })).status).toBe(200);
     expect((await turn(scene.id, { action: 'enemyAdd', templateId: 'dragon', x: me.x + 2 * step, y: me.y })).status).toBe(400);
     const goblin = repo.states.get(cid)!.state.sceneEnemies![scene.id][0];
-    expect(goblin).toMatchObject({ name: 'Goblin 1', hp: 7, ac: 15 });
+    expect(goblin).toMatchObject({ hp: 7, ac: 15 });
+    // APEX 2.9: named after what it looks like (“One-eyed goblin”), or plainly “Goblin”
+    expect(goblin.name).toMatch(/goblin$/i);
+    expect(goblin.name).not.toMatch(/\d/);
     // The goblin joined the running initiative.
     expect(repo.states.get(cid)!.state.sceneEncounters![scene.id].participants.map((p) => p.id)).toContain(`npc-${goblin.id}`);
     // Players see the goblin (bright light, in sight) but not its HP.
     let view = ((await request('hannah', 'state')).body as PlayerPayload).scene!;
     const seenGoblin = view.figures!.find((f) => f.kind === 'enemy')!;
-    expect(seenGoblin).toMatchObject({ name: 'Goblin 1', condition: 'healthy' });
+    expect(seenGoblin).toMatchObject({ name: goblin.name, condition: 'healthy' });
     expect(seenGoblin.hp).toBeUndefined();
     // In darkness without darkvision or a torch, the goblin next to you is still visible (adjacent) – one further away is not.
     expect((await turn(scene.id, { action: 'enemyAdd', templateId: 'wolf', x: me.x - 4 * step, y: me.y })).status).toBe(200);
     await turn(scene.id, { action: 'clock', expectedVersion: 0, lighting: 'dark' });
     view = ((await request('hannah', 'state')).body as PlayerPayload).scene!;
-    expect(view.figures!.filter((f) => f.kind === 'enemy').map((f) => f.name)).toEqual(['Goblin 1']);
+    expect(view.figures!.filter((f) => f.kind === 'enemy').map((f) => f.name)).toEqual([goblin.name]);
     // Lighting a torch reveals the wolf.
     expect((await turn(scene.id, { action: 'torch', tokenId: sinna, on: true }, 'hannah')).status).toBe(200);
     expect((await turn(scene.id, { action: 'torch', tokenId: user('jean').tokenIds[0], on: true }, 'hannah')).status).toBe(403);
     view = ((await request('hannah', 'state')).body as PlayerPayload).scene!;
     expect(view.torch).toBe(true);
-    expect(view.figures!.filter((f) => f.kind === 'enemy').map((f) => f.name).sort()).toEqual(['Goblin 1', 'Wolf 1']);
+    expect(view.figures!.filter((f) => f.kind === 'enemy').map((f) => f.name).sort()).toEqual(repo.states.get(cid)!.state.sceneEnemies![scene.id].map((x) => x.name).sort());
     // Attack with the sheet's weapon – on Hannah's turn, once.
     const sheet = { ...emptySheet(), hitPoints: { current: 20, max: 20, temp: 0 }, combat: [{ id: 'ac', label: 'Armor Class', value: '1' }], attacks: [{ id: 'a1', name: 'Quarterstaff', bonus: '+30', damage: '1d6+20', range: '5 ft.', notes: '' }, { id: 'a2', name: 'Shrug', bonus: '', damage: '', range: '', notes: '' }] };
     expect((await request('hannah', 'sheet', { action: 'save', tokenId: sinna, sheet, expectedVersion: 0 })).status).toBe(200);
@@ -166,7 +169,7 @@ describe('API: enemies, attacks, torches, library preview', () => {
     const after = repo.states.get(cid)!.state.sceneEnemies![scene.id][0];
     expect(after.hp < 7 || /natural 1/.test((hit.body as { message: string }).message)).toBe(true);
     expect((await turn(scene.id, { action: 'attack', tokenId: sinna, enemyId: goblin.id, attackIndex: 0 }, 'hannah')).status).toBe(409); // once per turn
-    expect(repo.states.get(cid)!.state.sceneCombatLog![scene.id].at(-1)!.text).toMatch(/Sinna attacks Goblin 1 with Quarterstaff: d20/);
+    expect(repo.states.get(cid)!.state.sceneCombatLog![scene.id].at(-1)!.text).toContain(`Sinna attacks ${goblin.name} with Quarterstaff: d20`);
     // A living goblin attacks Sinna (AC 1): the sheet loses HP.
     if (!after.defeated) {
       // only the creature whose turn it is acts – also for the GM

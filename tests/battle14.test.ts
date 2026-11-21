@@ -118,7 +118,7 @@ describe('API: ranged attacks, hiding, Sneak Attack', () => {
     await toTurn(`pc-${sinna}`);
     const fb = await turn(scene.id, { action: 'cast', tokenId: sinna, spellId: 'fire-bolt', slotLevel: 0, targets: [{ kind: 'npc', id: goblin.id }] }, 'hannah');
     expect(fb.status, JSON.stringify(fb.body)).toBe(200);
-    expect((fb.body as { message: string }).message).toMatch(/Sinna attacks Goblin 1 with Fire Bolt: d20/);
+    expect((fb.body as { message: string }).message).toContain(`Sinna attacks ${goblin.name} with Fire Bolt: d20`);
     await toTurn(`npc-${goblin.id}`);
     await toTurn(`pc-${sinna}`);
     const shot = await turn(scene.id, { action: 'strike', attacker: { kind: 'pc', tokenId: sinna }, target: { kind: 'npc', id: goblin.id }, attackIndex: 0 }, 'hannah');
@@ -153,7 +153,8 @@ describe('API: ranged attacks, hiding, Sneak Attack', () => {
     // the goblin searches on its turn (d20 + −1 vs 41+): it does not find her
     await toTurn(`npc-${goblin.id}`);
     const search = await turn(scene.id, { action: 'standard', actor: { kind: 'npc', id: goblin.id }, act: 'search' });
-    expect((search.body as { message: string }).message).toMatch(/Goblin 1 searches: Perception d20 .* finds nothing/);
+    expect((search.body as { message: string }).message).toContain(`${goblin.name} searches: Perception d20`);
+    expect((search.body as { message: string }).message).toMatch(/finds nothing/);
     // Sinna attacks from hiding: advantage, then she is revealed
     await toTurn(`pc-${sinna}`);
     const atk = await turn(scene.id, { action: 'strike', attacker: { kind: 'pc', tokenId: sinna }, target: { kind: 'npc', id: goblin.id }, attackIndex: 0 }, 'hannah');
