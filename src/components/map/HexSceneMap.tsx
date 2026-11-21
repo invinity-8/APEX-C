@@ -457,7 +457,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                     {enemy.tokenId === selectedTokenId && <circle r={HEX_SIZE * 0.72} fill="none" stroke="#f3dc9a" strokeWidth={3} />}
                     {e.elite && <EliteFrame r={HEX_SIZE * 0.55} />}
                     <circle r={HEX_SIZE * 0.55} fill={enemy.color} stroke={e.condition === 'bloodied' ? '#ff5a4a' : e.ally ? '#7fb8ff' : '#b3261e'} strokeWidth={3} />
-                    <text y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={2.5} paintOrder="stroke">{down ? '✕' : e.icon}</text>
+                    {(() => { const letters = down || /^[\x20-\x7e]+$/.test(e.icon); return <text y={letters ? 4 : 6} textAnchor="middle" fontSize={letters ? 11 : 17} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={letters ? 2.5 : 0} paintOrder="stroke">{down ? '✕' : e.icon}</text>; })()}
                     {e.hp !== undefined && e.maxHp ? <LifeBar hp={e.hp} maxHp={e.maxHp} temp={e.tempHp ?? 0} y={HEX_SIZE * 0.62} party={e.ally} /> : null}
                     {enemy.icons?.length ? <FigureIcons icons={enemy.icons} /> : null}
                     <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill={e.ally ? '#cfe4ff' : '#ffd6d0'} stroke="#000" strokeWidth={2.5} paintOrder="stroke">

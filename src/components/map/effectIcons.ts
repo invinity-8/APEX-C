@@ -29,3 +29,24 @@ export function moraleIcons(m: 'shaken' | 'broken' | 'surrendered' | undefined):
   if (m === 'shaken') return [{ icon: '😟', name: 'Shaken (combat fatigue)', tone: 'bad' }];
   return [];
 }
+/**
+ * APEX 2.9 – a picture symbol for any creature (map tokens, target chips): like the druid's wild-shape icon, for
+ * goblins, cultists, spiders, dragons … instead of two letters. `fallback`: the stat block's own icon.
+ */
+export function creatureEmoji(text: string, fallback?: string): string {
+  const n = ` ${text.toLowerCase()} `;
+  const table: Array<[RegExp, string]> = [
+    [/skeleton|bone/, '💀'], [/zombie|ghoul|ghast|mummy|wight/, '🧟'], [/ghost|specter|wraith|banshee|shadow|will-o/, '👻'], [/vampire/, '🧛'], [/lich|necromancer/, '☠'],
+    [/dragon|drake|wyrm/, '🐉'], [/wyvern|pseudodragon/, '🐲'], [/demon|devil|fiend|vrock|imp\b|quasit|hell hound|nightmare/, '😈'],
+    [/goblin|hobgoblin|bugbear|kobold/, '👺'], [/orc\b|ogre|troll|ettin|gnoll|giant\b|hill giant|frost giant|fire giant|minotaur|yeti/, '👹'],
+    [/cult|fanatic|acolyte|priest|cleric|shaman/, '🕯'], [/mage|wizard|sorcer|warlock|witch|druid/, '🧙'], [/bandit|thug|pirate|brigand|assassin|spy|outlaw/, '🗡'],
+    [/guard|soldier|knight|veteran|gladiator|captain|militia/, '🛡'], [/archer|scout|hunter/, '🏹'], [/noble|merchant|commoner|villager|peasant/, '🧑'], [/berserker/, '🪓'], [/lizardfolk/, '🦎'],
+    [/beholder|gazer|spectator/, '👁'], [/kraken|octopus|squid|aboleth/, '🦑'], [/mimic/, '📦'], [/golem|gargoyle|animated|construct/, '🗿'], [/treant|tree|shambling/, '🌳'], [/myconid|mushroom/, '🍄'],
+    [/fire elemental|magma|salamander/, '🔥'], [/water elemental/, '💧'], [/air elemental|wind/, '🌪'], [/earth elemental/, '🪨'], [/ooze|pudding|jelly|cube/, '🟢'],
+    [/unicorn|pegasus/, '🦄'], [/owlbear/, '🦉'], [/griffon|hippogriff|roc\b/, '🦅'], [/hydra/, '🐉'], [/worm|centipede|carrion/, '🐛'], [/scorpion|ankheg/, '🦂'], [/elf/, '🧝'], [/dwarf/, '🧔'], [/fairy|sprite|pixie|fey/, '🧚'],
+  ];
+  const hit = table.find(([re]) => re.test(n))?.[1];
+  if (hit) return hit;
+  const beast = beastIcon(n);
+  return beast !== '🐾' ? beast : /beast|monstrosity/.test(n) ? '🐾' : fallback ?? '⚔';
+}

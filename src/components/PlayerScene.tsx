@@ -12,6 +12,8 @@ import { api, ApiError } from '../online/api';
 import { SceneSurface } from './SceneSurface';
 import { WorldTravel } from './WorldTravel';
 import type { SanctuarySettings } from '../server/sanctuary';
+import type { SceneFigure } from '../server/sceneLocal';
+import { sceneTone } from '../game/individual';
 
 export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'character' | 'inventory') => void }) {
   const scene = game.scene;
@@ -117,7 +119,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     // APEX 1.9: the map in the centre, turn order and action bar over it, details docked to a side of the player's choice
     return <div className="player-scene">
       <BattleLayout label={scene.scene.name}
-        top={liveEncounter ? <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me.id} /> : null}
+        top={liveEncounter ? <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me.id} figures={scene.figures} tone={sceneTone(scene.scene?.map?.palette)} /> : null}
         map={<SceneSurface compact snapshot={scene} tokenId={me.id} name={me.name} color={me.color} tokenViews={game.view.tokens} reachBudget={(moveMode || (myTurn && canMove)) && !free ? remaining : null} onDestination={moveMode ? move : undefined} interaction={interaction} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />}
         dock={(bar) => <>
           <div className="journal-toolbar">
@@ -162,18 +164,45 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
 }
 
 /** Turn order across the top of the map: portraits in initiative order, the active turn (or block) highlighted. */
-export function InitiativeBar({ encounter, tokens, myTokenId, onSelect, elites }: { encounter: NonNullable<GameApi['view']['sceneEncounter']>; tokens: GameApi['view']['tokens']; myTokenId: string | null; onSelect?: (p: { id: string; tokenId?: string }) => void; elites?: Set<string> }) {
+export function InitiativeBar({ encounter, tokens, myTokenId, onSelect, elites, figures, tone }: { encounter: NonNullable<GameApi['view']['sceneEncounter']>; tokens: GameApi['view']['tokens']; myTokenId: string | null; onSelect?: (p: { id: string; tokenId?: string }) => void; elites?: Set<string>; /** APEX 2.9 – the creatures on the map (their pictures) and the land's colour */ figures?: SceneFigure[]; tone?: string }) {
   const live = new Set(activeActors(encounter));
   const block = new Set(blockOf(encounter));
+  const pictures = useNpcPictures(encounter.participants, figures, tone);
   return <section className="initiative-bar" aria-label={`Initiative, round ${encounter.round}`} data-testid="initiative-bar">
     <span className="initiative-round">Round {encounter.round}</span>
-    <ol>{encounter.participants.map((p, i) => {
+    <ol>{encounter.participants.map((p) => {
       const t = p.tokenId ? tokens.find(x => x.id === p.tokenId) : undefined;
-      void i;
-      return <li key={p.id} aria-current={live.has(p.id) ? 'true' : undefined} className={`${p.tokenId && p.tokenId === myTokenId ? 'is-mine' : ''} ${block.has(p.id) && !live.has(p.id) ? 'opacity-50' : ''} ${onSelect ? 'cursor-pointer' : ''}`} title={`${p.name} · initiative ${p.initiative}${block.has(p.id) && !live.has(p.id) ? ' · done' : ''}`} onClick={onSelect ? () => onSelect(p) : undefined}>
-        {t ? <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online color={t.color} accent={t.accent} initials={t.initials} name={t.name} size={40} /> : <span className={`initiative-npc ${elites?.has(p.id) ? 'ring-2 ring-amber-400' : ''}`}>{elites?.has(p.id) ? '🐉' : p.name.slice(0, 2)}</span>}
-        <small>{p.name}</small><em>{p.initiative}</em>
+      const pic = pictures[p.id];
+      const elite = elites?.has(p.id) || figures?.some((f) => `npc-${f.id}` === p.id && f.elite);
+      // APEX 2.9: pictures only – the name and initiative show on hover
+      return <li key={p.id} aria-current={live.has(p.id) ? 'true' : undefined} aria-label={`${p.name}, initiative ${p.initiative}`} className={`${p.tokenId && p.tokenId === myTokenId ? 'is-mine' : ''} ${block.has(p.id) && !live.has(p.id) ? 'opacity-50' : ''} ${onSelect ? 'cursor-pointer' : ''}`} title={`${p.name} · initiative ${p.initiative}${block.has(p.id) && !live.has(p.id) ? ' · done' : ''}`} onClick={onSelect ? () => onSelect(p) : undefined}>
+        {t ? <CharacterPortrait tokenId={t.id} portraitV={t.portraitV} online color={t.color} accent={t.accent} initials={t.initials} name={t.name} size={48} />
+          : pic ? <img className={`initiative-pic ${elite ? 'is-elite' : ''}`} src={pic} alt="" draggable={false} data-testid="initiative-picture" />
+          : <span className={`initiative-npc ${elite ? 'is-elite' : ''}`} aria-hidden>{figures && !figures.some((f) => `npc-${f.id}` === p.id) ? '?' : elite ? '🐉' : '⚔'}</span>}
+        {elite && <span className="initiative-crown" aria-hidden>♛</span>}
+        <em>{p.initiative}</em>
       </li>;
     })}</ol>
   </section>;
+}
+
+/** Pictures of the creatures in the turn order (rendered lazily with the 3D kit, cached). */
+function useNpcPictures(participants: Array<{ id: string }>, figures: SceneFigure[] | undefined, tone?: string): Record<string, string> {
+  const [pics, setPics] = useState<Record<string, string>>({});
+  const want = (figures ?? []).filter((f) => f.kind === 'enemy' && participants.some((p) => p.id === `npc-${f.id}`));
+  const sig = JSON.stringify(want.map((f) => [f.id, f.look, f.breed, f.creature, f.seed, f.sex, f.name, f.color]));
+  useEffect(() => {
+    if (!want.length) return;
+    let live = true;
+    void import('./map/figureSnapshot').then(({ figurePortrait }) => {
+      const out: Record<string, string> = {};
+      for (const f of want) {
+        const url = figurePortrait({ tokenId: f.id, x: 0, y: 0, name: f.name, color: f.color, enemy: { icon: f.icon ?? '?', condition: 'healthy', size: f.size, build: f.build, look: f.look, breed: f.breed, creature: f.creature, sex: f.sex, seed: f.seed } }, tone);
+        if (url) out[`npc-${f.id}`] = url;
+      }
+      if (live) setPics(out);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [sig, tone]); // eslint-disable-line react-hooks/exhaustive-deps
+  return pics;
 }

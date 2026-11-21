@@ -19,6 +19,8 @@ import { BattleLayout } from './BattleLayout';
 import { NpcBar } from './NpcBar';
 import { EncounterPanel, SpawnMarkers } from './EncounterPanel';
 import { RandomEncounterWizard } from './RandomEncounterWizard';
+import { sceneTone } from '../game/individual';
+import type { SceneFigure } from '../server/sceneLocal';
 import { createPortal } from 'react-dom';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
@@ -846,6 +848,15 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
 
   const gmEncounter = shownScene && game.gmState?.sceneEncounters?.[shownScene.id]?.status === 'active' ? game.gmState.sceneEncounters[shownScene.id] : null;
   const gmEnemies = shownScene ? (game.gmState?.sceneEnemies?.[shownScene.id] ?? []) : [];
+  // APEX 2.9 – every creature as the 3D kit sees it (for the pictures in the turn order, whatever the vision mode)
+  const initiativeFigures: SceneFigure[] = gmEnemies.map((e) => {
+    const seen = snapshot?.figures?.find((f) => f.kind === 'enemy' && f.id === e.id);
+    if (seen) return seen;
+    const block = enemyLibrary.find((b) => b.id === e.templateId);
+    const t = `${block?.type ?? ''} ${block?.name ?? e.name}`;
+    const build = /undead/i.test(t) ? 'undead' : e.flyFt ? 'flyer' : /spider|insect|vermin/i.test(t) ? 'spider' : /beast|monstrosity/i.test(t) ? 'beast' : 'humanoid';
+    return { id: e.id, kind: 'enemy', name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: 'healthy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build, ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60), ...(block.creature ? { creature: block.creature } : {}) }) } : {}), ...((e.sex ?? block?.sex) ? { sex: e.sex ?? block?.sex } : {}), ...(e.seed ? { seed: e.seed } : {}) } as SceneFigure;
+  });
   const refOf = (id: string): FigureRef | null => {
     const f = (snapshot?.figures ?? []).find((x) => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
     return f ? (f.kind === 'pc' ? { kind: 'pc', id: f.tokenId! } : { kind: 'npc', id: f.id }) : markers.some((m) => m.tokenId === id) ? { kind: 'pc', id } : null;
@@ -990,7 +1001,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
             // APEX 1.9: the map in the centre, turn order over its top, the selected character's action bar over its
             // bottom, the GM tools docked to the side of the GM's choice
             <BattleLayout label={shownScene.name}
-              top={gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
+              top={gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} figures={initiativeFigures} tone={sceneTone(shownScene?.map?.palette)} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
               map={<SceneSurface
               compact
               snapshot={snapshot}
@@ -1025,7 +1036,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               </>} />
           ) : (
           <>
-            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
+            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} figures={initiativeFigures} tone={sceneTone(shownScene?.map?.palette)} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
             <SceneSurface
               snapshot={snapshot}
               tokenLabels={markers}

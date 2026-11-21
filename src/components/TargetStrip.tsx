@@ -7,6 +7,7 @@
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import { hexAt, heightLookup } from '../campaign/hexScene';
 import { distance, hexKey } from '../game/hex';
+import { creatureEmoji } from './map/effectIcons';
 
 type Fig = NonNullable<SceneSnapshot['figures']>[number];
 
@@ -27,7 +28,7 @@ export function TargetStrip({ snapshot, from, fromAlt = 0, side, rangeFt, onPick
         const id = f.kind === 'pc' ? f.tokenId! : f.id;
         return (
           <button key={id} type="button" className={`target-chip${ok ? '' : ' is-far'}`} onClick={() => onPick(id)} title={`${f.name} · ${ft} ft${f.alt ? ` · ${f.alt} ft up` : ''}${rangeFt ? (ok ? ' · in range' : ' · out of range') : ''} – click: act on it (like a right-click)`} data-testid="target-chip">
-            <span className="target-chip-icon" style={{ background: f.color }} aria-hidden>{f.kind === 'pc' ? f.name.slice(0, 2) : f.icon ?? '?'}</span>
+            <span className="target-chip-icon" style={{ background: f.color }} aria-hidden>{f.kind === 'pc' ? f.name.slice(0, 2) : creatureEmoji(`${f.breed ?? ''} ${f.name}`, f.icon)}</span>
             <span className="target-chip-name">{f.name}</span>
             <span className="target-chip-ft">{ft} ft{f.alt ? ' ↑' : ''}</span>
             {rangeFt ? <span aria-hidden className={`target-chip-dot ${ok ? 'ok' : 'far'}`} /> : null}

@@ -58,3 +58,11 @@ describe('coats and markings', () => {
     expect(uniqueIndividual({ name: 'Ooze', type: 'ooze' }, 'x', () => true).name).toMatch(/ \d+$|[IVX]+$/);
   });
 });
+
+describe('names follow what the 3D view shows', () => {
+  it('a giant spider is a spider (not an ogre figure), a werewolf a humanoid, a red dragon keeps its colour name', () => {
+    for (let i = 0; i < 10; i++) expect(individualName(block('spider'), `s${i}`)).toMatch(/^(Striped |Spotted |Banded |Speckled )?[a-z-]+ giant spider$/i);
+    expect(individualName(block('young-red-dragon'), 'x')).toBe('Young red dragon');
+    expect(individualName({ name: 'Giant toad', type: 'beast' }, 'x')).toMatch(/giant toad$/i);
+  });
+});

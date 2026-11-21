@@ -9,6 +9,7 @@
  * striking feature (eye patch, scar, tattoos, war paint, hood, hair colour).
  */
 import { autoLook, type FigureLook, type FigureSex } from './figure.js';
+import { creatureFor } from './creatureKinds.js';
 
 export interface Coat { name: string; c: string; c2: string }
 export const PATTERNS = ['plain', 'striped', 'spotted', 'banded', 'speckled', 'saddled'] as const;
@@ -69,39 +70,50 @@ export function describeCreature(ind: Individual, noun: string): string {
 }
 
 const HAIR_WORDS: Record<string, string> = { '#1d1612': 'black-haired', '#3b2516': 'dark-haired', '#6b4224': 'brown-haired', '#9a6a35': 'chestnut-haired', '#c79a55': 'sandy-haired', '#e8cf8f': 'blond', '#f2ecdc': 'white-haired', '#8a8a8a': 'grey-haired', '#a33a22': 'red-haired', '#d4602b': 'copper-haired', '#5a2a6e': 'violet-haired', '#2d4f8f': 'blue-haired', '#2f6b3a': 'green-haired', '#c0c0c0': 'silver-haired', '#7a1f1f': 'auburn' };
-/** The most striking feature of a humanoid figure (stable when the GM switches it to a man or a woman). */
-export function lookAdjective(l: FigureLook): string | null {
-  if (l.eyes === 'patch') return 'one-eyed';
-  if (l.eyes === 'scarred' || l.face === 'cheekscar' || l.extra === 'scar') return 'scarred';
-  if (l.extra === 'tattoos' || l.face === 'facetattoo') return 'tattooed';
-  if (l.extra === 'warpaint') return 'war-painted';
-  if (l.hat === 'mask') return 'masked';
-  if (l.hat === 'hood' || l.hat === 'cowl') return 'hooded';
-  if (l.eyes === 'glowing') return 'glowing-eyed';
-  if (l.hair !== 'none' && l.hat !== 'helmet' && l.hat !== 'greathelm' && HAIR_WORDS[l.hairColor]) return HAIR_WORDS[l.hairColor];
-  return null;
+const WEAPON_WORDS: Partial<Record<FigureLook['main'], string>> = { greataxe: 'axe-wielding', axe: 'axe-wielding', spear: 'spear-carrying', halberd: 'halberd-carrying', bow: 'bow-carrying', crossbow: 'crossbow-carrying', dagger: 'knife-wielding', scimitar: 'scimitar-wielding', club: 'club-wielding', mace: 'mace-wielding', flail: 'flail-swinging', warhammer: 'hammer-wielding', hammer: 'hammer-wielding', sickle: 'sickle-wielding', scythe: 'scythe-wielding', staff: 'staff-bearing', trident: 'trident-wielding', whip: 'whip-cracking', greatsword: 'greatsword-wielding', torch: 'torch-bearing' };
+/** Striking features of a humanoid figure, most striking first (all stable when the GM switches man / woman). */
+export function lookAdjectives(l: FigureLook): string[] {
+  const out: string[] = [];
+  if (l.eyes === 'patch') out.push('one-eyed');
+  if (l.eyes === 'scarred' || l.face === 'cheekscar' || l.extra === 'scar') out.push('scarred');
+  if (l.extra === 'tattoos' || l.face === 'facetattoo') out.push('tattooed');
+  if (l.extra === 'warpaint') out.push('war-painted');
+  if (l.hat === 'mask') out.push('masked');
+  if (l.eyes === 'glowing') out.push('glowing-eyed');
+  if (l.hair !== 'none' && l.hat !== 'helmet' && l.hat !== 'greathelm' && HAIR_WORDS[l.hairColor]) out.push(HAIR_WORDS[l.hairColor]);
+  if (WEAPON_WORDS[l.main]) out.push(WEAPON_WORDS[l.main]!);
+  if (l.hat === 'hood' || l.hat === 'cowl') out.push('hooded');
+  return out;
 }
+export const lookAdjective = (l: FigureLook): string | null => lookAdjectives(l)[0] ?? null;
 
-/** The name a newly placed creature gets: what it looks like plus what it is. */
-export function individualName(block: { name: string; type: string; elite?: boolean }, seed: string, o: { tone?: string; colour?: string; sex?: FigureSex } = {}): string {
+/**
+ * Names a newly placed creature could get (what it looks like plus what it is), the best first. Decides like the
+ * 3D view: a saved figure, else a creature model (its coat), else a humanoid figure preset (its face), else nothing
+ * to describe (the old miniature).
+ */
+export function individualNames(block: { name: string; type: string; elite?: boolean; look?: FigureLook; creature?: { kind: string; tint?: string }; flyFt?: number }, seed: string, o: { tone?: string; colour?: string; sex?: FigureSex } = {}): string[] {
   const breed = `${block.name} ${block.type}`.slice(0, 60);
-  const look = autoLook(breed, seed, o.colour, o.sex);
-  if (look) { const a = lookAdjective(look); return a ? cap(`${a} ${block.name.toLowerCase()}`) : block.name; }
-  // humanoids without a figure preset keep the old miniature: nothing to describe
-  if (/humanoid/i.test(block.type)) return block.name;
-  return describeCreature(individualOf(breed, seed, o.tone), block.name);
+  const named = (adjectives: string[]) => { const list = adjectives.map((a) => cap(`${a} ${block.name.toLowerCase()}`)); return list.length ? list : [block.name]; };
+  if (block.look) return named(lookAdjectives(block.look));
+  const creature = block.creature ?? (/humanoid/i.test(breed) ? null : creatureFor(breed));
+  if (creature) return creature.kind === 'dragon' && creature.tint ? [block.name] : [describeCreature(individualOf(breed, seed, o.tone), block.name)];
+  const build = /undead/i.test(block.type) ? 'undead' : block.flyFt ? 'flyer' : /spider|insect|vermin/i.test(block.type) ? 'spider' : /beast|monstrosity/i.test(block.type) ? 'beast' : 'humanoid';
+  const look = build === 'humanoid' || build === 'undead' ? autoLook(breed, seed, o.colour, o.sex) : null;
+  return look ? named(lookAdjectives(look)) : [block.name];
 }
+export const individualName = (block: Parameters<typeof individualNames>[0], seed: string, o: { tone?: string; colour?: string; sex?: FigureSex } = {}) => individualNames(block, seed, o)[0];
 
 const ROMAN = ['', '', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
 /**
  * A name and appearance seed for a new creature that no other creature on the map has: the first look whose name
  * is free (up to ten tries), else the name with a numeral.
  */
-export function uniqueIndividual(block: { name: string; type: string; elite?: boolean }, id: string, taken: (name: string) => boolean, o: { tone?: string; colour?: string; sex?: FigureSex } = {}): { name: string; seed: string } {
+export function uniqueIndividual(block: Parameters<typeof individualNames>[0], id: string, taken: (name: string) => boolean, o: { tone?: string; colour?: string; sex?: FigureSex } = {}): { name: string; seed: string } {
   for (let k = 0; k < 10; k++) {
     const seed = k ? `${id}~${k}` : id;
-    const name = individualName(block, seed, o);
-    if (!taken(name)) return { name, seed };
+    const name = individualNames(block, seed, o).find((n) => !taken(n));
+    if (name) return { name, seed };
   }
   const name = individualName(block, id, o);
   let n = 2;
