@@ -22,3 +22,10 @@ export function beastIcon(name: string): string {
   const table: Array<[RegExp, string]> = [[/wolf|dog|mastiff|jackal/, '🐺'], [/bear/, '🐻'], [/cat|panther|lion|tiger|leopard/, '🐈'], [/spider/, '🕷'], [/owl/, '🦉'], [/eagle|hawk|raven|vulture|bird|falcon/, '🦅'], [/boar|pig/, '🐗'], [/rat/, '🐀'], [/snake|serpent|constrictor/, '🐍'], [/horse|pony/, '🐎'], [/frog|toad/, '🐸'], [/deer|elk/, '🦌'], [/ape|baboon/, '🦍'], [/crocodile|lizard/, '🐊'], [/shark/, '🦈'], [/bat/, '🦇'], [/fish|piranha|quipper/, '🐟'], [/crab/, '🦀'], [/goat/, '🐐'], [/badger|weasel/, '🦡'], [/octopus/, '🐙'], [/scorpion/, '🦂'], [/mule|camel/, '🐪']];
   return table.find(([re]) => re.test(n))?.[1] ?? '🐾';
 }
+/** APEX 2.9 – morale marks on enemies: fleeing and surrendered for everyone, shaken for the GM. */
+export function moraleIcons(m: 'shaken' | 'broken' | 'surrendered' | undefined): Array<{ icon: string; name: string; tone: 'conc' | 'bad' | 'good' }> {
+  if (m === 'surrendered') return [{ icon: '🏳', name: 'Surrendered', tone: 'good' }];
+  if (m === 'broken') return [{ icon: '🏃', name: 'Broken – flees in panic', tone: 'bad' }];
+  if (m === 'shaken') return [{ icon: '😟', name: 'Shaken (combat fatigue)', tone: 'bad' }];
+  return [];
+}

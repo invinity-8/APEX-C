@@ -62,6 +62,8 @@ export interface SceneEnemy {
   light?: boolean;
   /** APEX 2.8 – this figure as a man or a woman (else the stat block's choice, else automatic). */
   sex?: 'male' | 'female';
+  /** APEX 2.9 – hidden combat fatigue and morale in this fight (see morale.ts). */
+  morale?: import('./morale.js').MoraleState;
 }
 /** APEX 2.6 – whether an NPC carries a light now. */
 export const enemyCarriesLight = (e: Pick<SceneEnemy, 'light' | 'darkvisionFt' | 'defeated'>, type = '') => !e.defeated && (e.light ?? (/humanoid|giant/i.test(type) && !((e.darkvisionFt ?? 0) > 0)));

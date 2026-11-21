@@ -497,9 +497,10 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       if (busyRef.current) { setAiTick((n) => n + 1); return; }
       let wait = false;
       await guarded(async () => {
-        const r = (await api.sceneTurn({ sceneId: aiSceneId, action: 'aiStep' })) as { message?: string; ai?: { wait?: boolean; idle?: boolean } };
+        const r = (await api.sceneTurn({ sceneId: aiSceneId, action: 'aiStep' })) as { message?: string; ai?: { wait?: boolean; idle?: boolean; morale?: string } };
         wait = !!r.ai?.wait || !!r.ai?.idle;
-        if (r.message) setNotice(`🤖 ${r.message}`);
+        // APEX 2.9: the hidden morale rolls are shown to the GM only
+        if (r.message || r.ai?.morale) setNotice(`🤖 ${[r.ai?.morale ? `🎲 ${r.ai.morale}` : '', r.message ?? ''].filter(Boolean).join(' · ')}`);
         game.online?.refresh();
         setSnapshot(await api.sceneFocus(aiSceneId, viewRef.current));
       });

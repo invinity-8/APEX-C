@@ -10,7 +10,7 @@ import { stealthWatch } from '../game/stealth';
 import { TimeDial, useWorldMinute } from './TimeDial';
 import { hourOf, weatherMix } from '../game/worldTime';
 import type { TokenView } from '../game/visibility';
-import { figureIcons } from './map/effectIcons';
+import { figureIcons, moraleIcons } from './map/effectIcons';
 
 const HexScene3D = lazy(() => import('./map/HexScene3D'));
 
@@ -137,7 +137,7 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
       ...((f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) ?? []).some((e) => e.key === 'hidden') ? { sneaking: true } : {}),
       badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
-      icons: figureIcons(f.effects, f.concentration),
+      icons: [...figureIcons(f.effects, f.concentration), ...moraleIcons(f.morale)],
       ...(f.alt ? { alt: f.alt } : {}),
       ...(f.kind === 'pc' && snapshot.vitals?.[f.tokenId!] ? { vitals: snapshot.vitals[f.tokenId!] } : {}),
     }))].map((t) => {

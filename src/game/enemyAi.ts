@@ -19,6 +19,7 @@ import { hexAt, hexCentre, hexMovementCost, hexReach, tileLookup, type MoveMode 
 import { lineOfSight, sightRules } from '../campaign/hexVision.js';
 import type { NpcArea, NpcAttack, NpcBuff } from './bestiary.js';
 import { distance, hexKey, parseKey, type Axial, type HexKey } from './hex.js';
+import type { Trait } from './morale.js';
 
 export const TACTICS = ['pack', 'brute', 'skirmisher', 'caster', 'ambusher', 'guardian', 'support', 'soldier', 'mindless'] as const;
 export type Tactic = (typeof TACTICS)[number];
@@ -75,6 +76,8 @@ export interface AiFigure {
   down?: boolean;
   /** Hidden from the acting creature (its passive Perception does not reach the Stealth). */
   unseen?: boolean;
+  /** APEX 2.9 – carries a torch or lantern (light-shy animals keep away). */
+  light?: boolean;
 }
 export interface AiSelf extends AiFigure {
   profile: AiProfile;
@@ -94,6 +97,14 @@ export interface AiSelf extends AiFigure {
   nimble?: boolean;
   /** Somebody of its side was hurt or went down (wakes the curious). */
   provoked?: boolean;
+  /** APEX 2.9 – personality traits (0–10) and morale in this fight (see morale.ts). */
+  traits?: Partial<Record<Trait, number>>;
+  morale?: 'steady' | 'shaken' | 'broken' | 'surrendered';
+  lightShy?: boolean;
+  /** A leader: comrades in its sight that need rallying (bonus action). */
+  rallyable?: number;
+  /** Broken and cornered, it would lay down its arms. */
+  canSurrender?: boolean;
 }
 export type AiStep =
   | { kind: 'move'; x: number; y: number; alt?: number; why: string }
@@ -101,6 +112,8 @@ export type AiStep =
   | { kind: 'area'; area: number; x: number; y: number; why: string }
   | { kind: 'buff'; buff: number; why: string }
   | { kind: 'standard'; act: 'dash' | 'dodge' | 'disengage'; viaBonus?: boolean; why: string }
+  | { kind: 'rally'; why: string }
+  | { kind: 'surrender'; why: string }
   | { kind: 'end'; why: string };
 
 const avg = (dice: string): number => { const m = /^(\d+)d(\d+)([+-]\d+)?$/.exec(dice.replace(/\s/g, '')); return m ? Number(m[1]) * (Number(m[2]) + 1) / 2 + Number(m[3] ?? 0) : Number(dice) || 0; };
@@ -115,6 +128,10 @@ export function planAiStep(map: SceneMap, me: AiSelf, others: AiFigure[]): AiSte
   const foes = others.filter((f) => f.side !== me.side && !f.down && !f.unseen);
   const friends = others.filter((f) => f.side === me.side && !f.down);
   const { tactic, mood } = me.profile;
+  if (me.morale === 'surrendered') return { kind: 'end', why: 'has surrendered' };
+  const tr = (k: Trait) => me.traits?.[k] ?? 0;
+  // a leader steadies its troops first (bonus action)
+  if ((me.rallyable ?? 0) > 0 && me.bonusFree && me.morale !== 'broken') return { kind: 'rally', why: `rallies ${me.rallyable} wavering ${me.rallyable === 1 ? 'comrade' : 'comrades'}` };
   if (!foes.length) return { kind: 'end', why: 'sees no opponent' };
   const rules = sightRules(map);
   const sees = (from: Axial, fromAlt: number, f: AiFigure) => lineOfSight(from, pos(f), rules.blocks, rules.height, { a: fromAlt / 5, b: f.alt / 5 });
@@ -129,7 +146,7 @@ export function planAiStep(map: SceneMap, me: AiSelf, others: AiFigure[]): AiSte
   const adjacentFoes = foes.filter((f) => dToMe(f) <= 5);
 
   // ---- the curious watch from a few steps away until they (or a friend) are hurt
-  if (mood === 'curious' && !me.provoked && me.hp >= 1) {
+  if (mood === 'curious' && !me.provoked && me.hp >= 1 && me.morale !== 'broken') {
     const d = dToMe(nearest);
     if (d <= 20 || me.moveLeft <= 0) return { kind: 'end', why: `watches ${nearest.name}` };
     const spot = approach(nearest, 15, false);
@@ -138,14 +155,18 @@ export function planAiStep(map: SceneMap, me: AiSelf, others: AiFigure[]): AiSte
 
   // ---- morale: run when it is time to run
   const alone = !friends.some((f) => feet(here, me.alt, pos(f), f.alt) <= 30);
-  const flee = tactic !== 'mindless' && ((mood === 'cowardly' && (me.hp <= 0.5 || (alone && foes.length > 1 && me.hp < 1))) || (mood === 'cautious' && me.hp <= 0.25) || (tactic === 'pack' && mood !== 'aggressive' && alone && me.hp <= 0.5));
+  // APEX 2.9: a broken creature (morale) flees whatever its temper
+  const flee = me.morale === 'broken' || (tactic !== 'mindless' && ((mood === 'cowardly' && (me.hp <= 0.5 || (alone && foes.length > 1 && me.hp < 1))) || (mood === 'cautious' && me.hp <= 0.25) || (tactic === 'pack' && mood !== 'aggressive' && alone && me.hp <= 0.5)));
   if (flee) {
+    const why = me.morale === 'broken' ? 'panics and flees' : 'flees';
     if (adjacentFoes.length && me.actionFree && !me.nimble) return { kind: 'standard', act: 'disengage', why: 'breaks away' };
     if (adjacentFoes.length && me.nimble && me.bonusFree) return { kind: 'standard', act: 'disengage', viaBonus: true, why: 'slips away' };
     const away = farthest();
-    if (away) return { kind: 'move', ...away, why: 'flees' };
+    if (away) return { kind: 'move', ...away, why };
     if (me.actionFree && !me.dashed && me.moveLeft <= 0) return { kind: 'standard', act: 'dash', why: 'runs for it' };
-    return { kind: 'end', why: 'cowers' };
+    if (me.morale === 'broken' && me.canSurrender) return { kind: 'surrender', why: 'cornered, it throws down its weapons' };
+    // cornered and unwilling to give up: fights on (a cornered animal)
+    if (me.morale !== 'broken' || !adjacentFoes.length) return { kind: 'end', why: 'cowers' };
   }
 
   const canAttack = me.attacksLeft > 0;
@@ -158,9 +179,18 @@ export function planAiStep(map: SceneMap, me: AiSelf, others: AiFigure[]): AiSte
     }
   }
   // what one attack is worth against a foe, from where the creature would stand
+  // light-shy animals keep away from torches unless the pack outnumbers the foes around
+  const friendsNear = friends.filter((a) => feet(here, me.alt, pos(a), a.alt) <= 30).length + 1;
+  const foesNear = foes.filter((f) => dToMe(f) <= 30).length;
+  const fearsLight = !!me.lightShy && (friendsNear <= foesNear || me.morale === 'shaken');
   const weight = (f: AiFigure) => {
     let w = 1 + (1 - f.hp) * 0.5;
     const fp = pos(f);
+    // APEX 2.9 – personality: the opportunist and the savage go for the bleeding and the lone, the honourable for the strong
+    if (tr('opportunism') >= 7) w += (1 - f.hp) * 0.6 + (foes.some((o) => o !== f && feet(pos(o), o.alt, fp, f.alt) <= 10) ? 0 : 0.4);
+    if (tr('savagery') >= 7) w += (1 - f.hp) * 0.4;
+    if (tr('honor') >= 7) w += f.hp * 0.5 - (1 - f.hp) * 0.4;
+    if (fearsLight && f.light) w *= 0.35;
     if (tactic === 'pack' || tactic === 'soldier') w += 0.35 * friends.filter((a) => feet(pos(a), a.alt, fp, f.alt) <= 5).length;
     if (tactic === 'ambusher') w += (1 - f.hp) * 0.6 + (foes.some((o) => o !== f && feet(pos(o), o.alt, fp, f.alt) <= 10) ? 0 : 0.5);
     if (tactic === 'soldier') w += (1 - f.hp) * 0.4;
@@ -244,7 +274,7 @@ export function planAiStep(map: SceneMap, me: AiSelf, others: AiFigure[]): AiSte
       const spot = approach(nearest, ranged && (tactic === 'skirmisher' || tactic === 'caster') ? Math.max(10, (ranged.rangeFt ?? 30) - 5) : 5, true);
       if (spot) return { kind: 'move', ...spot, why: `advances on ${nearest.name}` };
     }
-    if (me.actionFree && !me.dashed && me.moveLeft <= 0 && (mood === 'aggressive' || tactic === 'brute' || tactic === 'pack' || tactic === 'mindless')) return { kind: 'standard', act: 'dash', why: `charges towards ${nearest.name}` };
+    if (me.actionFree && !me.dashed && me.moveLeft <= 0 && me.morale !== 'shaken' && !fearsLight && (mood === 'aggressive' || tactic === 'brute' || tactic === 'pack' || tactic === 'mindless')) return { kind: 'standard', act: 'dash', why: `charges towards ${nearest.name}` };
     if (me.actionFree && mood === 'cautious') return { kind: 'standard', act: 'dodge', why: 'stays wary' };
     return { kind: 'end', why: 'cannot reach anyone' };
   }
