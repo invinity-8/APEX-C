@@ -14,7 +14,7 @@ import { decodeTiles, heightLookup, hexAt, hexCentre, hexMovementCost, hexReach,
 import { MAX_ALTITUDE_FT, flightCost } from '../../game/altitude';
 import { ORIGIN, distance, hexKey, hexesInRange, parseKey, type HexKey } from '../../game/hex';
 import { HEX_SIZE, center, corner } from './geometry';
-import type { SceneToken } from './HexSceneMap';
+import { FigureHoverCard, type SceneToken } from './HexSceneMap';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { gradientMap, paletteKey } from '../../campaign/palette';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -34,6 +34,7 @@ import { biomeHasSky, biomeOf, buildBackdrop, buildSky, buildWeather, lightFor, 
 import type { Season, Weather, WeatherMix } from '../../game/worldTime';
 import { bearingArrow, type AwarenessRing, type StealthMark } from '../../game/stealth';
 import { fromPixel } from '../../game/hex';
+import { sceneTone } from '../../game/individual';
 
 /** World units: a hex has corner radius 1; one 5-ft level = one hex width high (true scale, LEVEL from world3d). */
 const BASE = 0.35;
@@ -558,7 +559,7 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : '', tk.enemy?.sex])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : '', tk.enemy?.sex, tk.enemy?.seed])) + (p.selectedTokenId ?? '');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
@@ -576,7 +577,7 @@ export default function HexScene3D(p: Props) {
         const enemy = tk.enemy;
         const ringColor = tk.tokenId === p.selectedTokenId ? 0xf3dc9a : enemy ? (enemy.ally ? 0x7fb8ff : 0xb3261e) : 0xe8d4a6;
         // APEX 2.0: a true-scale standee (portrait) or miniature on a base
-        const fig = buildFigure(tk, ringColor);
+        const fig = buildFigure(tk, ringColor, { tone: sceneTone(p.map.palette) });
         const g = fig.group;
         g.position.set(w.x + off.x, y + lift, w.z + off.z);
         g.rotation.y = yawMemory.get(tk.tokenId) ?? (enemy ? Math.PI : 0); // keeps the direction it last turned to
@@ -1126,6 +1127,7 @@ export default function HexScene3D(p: Props) {
       {hover && hoverInfo && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-ink-600 bg-ink-950/90 px-2 py-1 text-xs text-marble-100" style={{ bottom: "auto", top: "5rem" }} data-testid="hover-3d">
           <b>{hoverInfo.label}</b> · height {Math.round(height(hover) * (p.map.unitsPerCell || 5))} ft{hoverInfo.cost === null ? ' · impassable' : hoverInfo.cost > 1 ? ' · difficult' : ''}{p.reach?.has(hover) ? ` · reachable` : ''}
+          <FigureHoverCard tokens={(p.tokens ?? []).filter((t) => hexKey(hexAt(p.map, t)) === hover)} />
         </div>
       )}
       <div className="absolute right-3 top-12 flex items-center gap-1 rounded-md border border-ink-600 bg-ink-950/85 px-1.5 py-0.5 text-[10px] text-marble-300" role="group" aria-label="3D quality">

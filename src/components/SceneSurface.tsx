@@ -1,3 +1,4 @@
+import { playFx } from '../audio/sound';
 import { Suspense, lazy, useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import { api } from '../online/api';
@@ -10,7 +11,7 @@ import { stealthWatch } from '../game/stealth';
 import { TimeDial, useWorldMinute } from './TimeDial';
 import { hourOf, weatherMix } from '../game/worldTime';
 import type { TokenView } from '../game/visibility';
-import { figureIcons } from './map/effectIcons';
+import { creatureEmoji, figureIcons, moraleIcons } from './map/effectIcons';
 
 const HexScene3D = lazy(() => import('./map/HexScene3D'));
 
@@ -72,6 +73,18 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   // APEX 2.5 – what a right-click would do, shown at the pointer; a choice menu when it needs one (Dash …)
   const [hoverHex, setHoverHex] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ items: MapMenuItem[]; x: number; y: number } | null>(null);
+  // APEX 2.9 – sound: every new combat event once (attacks, hits, spells, bites …)
+  const heard = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const list = snapshot.fx ?? [];
+    if (!heard.current) { heard.current = new Set(list.map((f) => f.id)); return; } // what happened before we came stays quiet
+    const now = Date.now();
+    for (const f of list) {
+      if (heard.current.has(f.id)) continue;
+      heard.current.add(f.id);
+      if (now - f.at < 6000) setTimeout(() => playFx(f), Math.max(0, f.at - now));
+    }
+  }, [snapshot.fx]);
   const mouse = useRef({ x: 0, y: 0 });
   const cursorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -133,11 +146,11 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const tokens: SceneToken[] = [...own, ...figures.map(f => ({
       tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
       view: f.tokenId ? view(f.tokenId) : undefined,
-      enemy: f.kind === 'enemy' ? { icon: f.icon ?? '?', ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp, size: f.size, build: f.build, look: f.look, breed: f.breed, creature: f.creature, sex: f.sex } : undefined,
+      enemy: f.kind === 'enemy' ? { icon: creatureEmoji(`${f.breed ?? ''} ${f.name}`, f.icon), ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp, size: f.size, build: f.build, look: f.look, breed: f.breed, creature: f.creature, sex: f.sex, seed: f.seed, ...(f.ac !== undefined ? { ac: f.ac } : {}) } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
       ...((f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) ?? []).some((e) => e.key === 'hidden') ? { sneaking: true } : {}),
       badges: [f.concentration ? `◎ ${f.concentration}` : '', ...(f.effects ?? []).map((e) => (e.key === 'hidden' ? `🥷 ${e.name}` : e.name))].filter(Boolean).join(' · ') || undefined,
-      icons: figureIcons(f.effects, f.concentration),
+      icons: [...figureIcons(f.effects, f.concentration), ...moraleIcons(f.morale)],
       ...(f.alt ? { alt: f.alt } : {}),
       ...(f.kind === 'pc' && snapshot.vitals?.[f.tokenId!] ? { vitals: snapshot.vitals[f.tokenId!] } : {}),
     }))].map((t) => {

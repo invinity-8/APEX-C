@@ -5,7 +5,10 @@
  * derived-stat panel that explains every step. All changes are server-validated commands.
  */
 import { ResistanceRow } from './items/StatsUi';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { gearLook } from '../game/gearLook';
+import { DEFAULT_LOOK } from '../game/figure';
+const FigurePreview = lazy(() => import('./FigurePreview'));
 import type { Command } from '../game/commands';
 import {
   DEFAULT_RESTING_KEEP,
@@ -16,6 +19,7 @@ import {
   activeSlots,
   deriveStats,
   equipmentOf,
+  wornItems,
   fmt,
   slotAccepts,
   slotOfItem,
@@ -68,6 +72,14 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
   const items = useMemo(() => new Map(inv.map((i) => [i.id, i])), [inv]);
   const [editing, setEditing] = useState<Item | null>(null);
   const [chooser, setChooser] = useState<EquipSlot | null>(null);
+  // APEX 2.9: 3D figure or paper doll (remembered per browser)
+  const [dollView, setDollView] = useState<'3d' | 'doll'>(() => { try { return localStorage.getItem('apex.doll.view') === 'doll' ? 'doll' : '3d'; } catch { return '3d'; } });
+  const chooseView = (v: '3d' | 'doll') => { setDollView(v); try { localStorage.setItem('apex.doll.view', v); } catch { /* private mode */ } };
+  const shownLook = useMemo(() => {
+    // the Appearance tab's look is the baseline; with "equipped gear" the armour and weapons come from the slots
+    const appearance = token.details?.appearanceFigure ?? token.figure;
+    return token.details?.figureGear ? gearLook(appearance, wornItems({ inventory: inv, equipment: token.details?.equipment })) : { ...DEFAULT_LOOK, ...(appearance ?? {}) };
+  }, [token, inv]);
   const [over, setOver] = useState<EquipSlot | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const mageArmorExpiry = sheet?.spellEffects.find((effect) => effect.kind === 'mageArmor')?.expiresAt;
@@ -206,8 +218,22 @@ export function EquipmentPanel({ game, token, run, isGm }: { game: GameApi; toke
           {renderSlot('cloak')}
           {renderSlot('chest')}
         </div>
-        <div className="apex-doll-figure">
-          <HeroFigure worn={worn} body={token.details?.bodyType} />
+        <div className="apex-doll-figure flex-col gap-1">
+          {/* APEX 2.9: the 3D figure (in the equipped gear or the Appearance look) or the paper doll */}
+          <span className="flex gap-0.5 rounded-md border border-ink-700 p-px text-[10px]" role="radiogroup" aria-label="Figure view">
+            {([['3d', '🧍 3D'], ['doll', '🧵 Paper doll']] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={dollView === v} className={`rounded px-1.5 ${dollView === v ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => chooseView(v)} data-testid={`doll-view-${v}`}>{l}</button>)}
+          </span>
+          {dollView === '3d' ? (
+            <>
+              <Suspense fallback={<div className="grid h-[260px] w-[200px] place-items-center text-marble-500">Loading 3D…</div>}>
+                <div className="max-w-full overflow-hidden"><FigurePreview look={shownLook} ring={token.color} size={150} /></div>
+              </Suspense>
+              <span className="flex gap-0.5 rounded-md border border-ink-700 p-px text-[10px]" role="radiogroup" aria-label="The figure shows" title="What your figure wears – here and on the battle map">
+                <button type="button" role="radio" aria-checked={!!token.details?.figureGear} className={`rounded px-1.5 ${token.details?.figureGear ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => void run({ type: 'setFigureGear', tokenId: token.id, on: true })} data-testid="figure-gear-on">⚔ Equipped gear</button>
+                <button type="button" role="radio" aria-checked={!token.details?.figureGear} className={`rounded px-1.5 ${!token.details?.figureGear ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => void run({ type: 'setFigureGear', tokenId: token.id, on: false })} data-testid="figure-gear-off">✨ Appearance</button>
+              </span>
+            </>
+          ) : <HeroFigure worn={worn} body={token.details?.bodyType} />}
         </div>
         <div className="apex-doll-col">
           {renderSlot('gloves')}

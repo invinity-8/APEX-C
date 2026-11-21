@@ -5,6 +5,7 @@
  */
 import { parseStatBlock } from '../game/bestiary.js';
 import { parseLook } from '../game/figure.js';
+import { parseReactionPref } from '../game/reactionPrefs.js';
 import { CHARACTER_COMMANDS, type Command } from '../game/commands.js';
 import { INVENTORY_LIMITS } from '../game/inventory.js';
 import { ITEM_RULE_LIMITS, MAX_ITEM_LEVEL } from '../game/items/rules.js';
@@ -254,6 +255,14 @@ export function parseCommand(raw: unknown): ParseResult {
     case 'gmCosmetic':
       if (!isId(c.tokenId) || !isId(c.cosmeticId) || typeof c.grant !== 'boolean') return bad('gmCosmetic');
       return { ok: true, command: { type: 'gmCosmetic', tokenId: c.tokenId, cosmeticId: c.cosmeticId, grant: c.grant } };
+    case 'setFigureGear':
+      if (!isId(c.tokenId) || typeof c.on !== 'boolean') return bad('setFigureGear');
+      return { ok: true, command: { type: 'setFigureGear', tokenId: c.tokenId, on: c.on } };
+    case 'setReactionPref': {
+      const pref = parseReactionPref(c.kind, c.mode);
+      if (!isId(c.tokenId) || !pref) return bad('setReactionPref');
+      return { ok: true, command: { type: 'setReactionPref', tokenId: c.tokenId, ...pref } };
+    }
     case 'setSneak':
       if (!isId(c.tokenId) || typeof c.on !== 'boolean') return bad('setSneak');
       return { ok: true, command: { type: 'setSneak', tokenId: c.tokenId, on: c.on } };

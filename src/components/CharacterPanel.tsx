@@ -22,6 +22,8 @@ import { CharacterPortrait } from './CharacterVisuals';
 import { VitalsPanel } from './ResourceOrbs';
 import { IdentityEditor } from './IdentityEditor';
 import { CharacterHistory } from './CharacterHistory';
+import { InventoryPanel } from './InventoryPanel';
+import { EquipmentPanel } from './EquipmentPanel';
 import { ClassAbilities } from './ClassAbilities';
 import { CosmeticsPicker, CosmeticTitle, DecoratedPortrait, cosmeticCardStyle } from './Cosmetics';
 import { Bar } from './ui';
@@ -30,12 +32,14 @@ const SheetImport = lazy(() => import('./SheetImport').then((m) => ({ default: m
 const SpellImport = lazy(() => import('./SpellImport').then((m) => ({ default: m.SpellImport })));
 
 // APEX 0.7 consolidation: equipment and inventory live together on the Inventory page
-type Tab = 'overview' | 'attributes' | 'abilities' | 'spells' | 'resources' | 'appearance' | 'notes' | 'history';
+type Tab = 'overview' | 'attributes' | 'abilities' | 'spells' | 'inventory' | 'resources' | 'appearance' | 'notes' | 'history';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'attributes', label: 'Attributes & Skills' },
   { id: 'abilities', label: 'Abilities & Features' },
   { id: 'spells', label: 'Spells' },
+  // APEX 2.9: the inventory (with the worn equipment and the 3D figure) is part of the character
+  { id: 'inventory', label: 'Inventory' },
   { id: 'resources', label: 'Resources' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notes', label: 'Notes' },
@@ -181,7 +185,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
   const set = (patch: Partial<CharacterSheet>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const changedElsewhere = editing && data && data.version !== baseVersion;
   const build = sheet.details.find((d) => /race, class|class & level|^class$/i.test(d.label))?.value;
-  const canEditSheet = tab !== 'appearance' && tab !== 'history';
+  const canEditSheet = tab !== 'appearance' && tab !== 'history' && tab !== 'inventory';
   const wearsArmor = details ? isWearingArmor(details) : false;
   const mageArmorEffect = wearsArmor ? null : activeMageArmor(sheet, details?.armorWornAt);
   useEffect(() => {
@@ -535,6 +539,15 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
               </button>
             )}
           </EntrySection>
+        </div>
+      )}
+
+      {tab === 'inventory' && (
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_27rem]" data-testid="character-inventory">
+          <InventoryPanel key={token.id} token={token} run={run} busy={game.busy} rules={game.view.itemRules} isGm={isGm} game={game} />
+          <section className="panel p-3 xl:sticky xl:top-2" aria-label="Equipment">
+            <EquipmentPanel game={game} token={token} run={run} isGm={isGm} />
+          </section>
         </div>
       )}
 

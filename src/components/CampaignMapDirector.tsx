@@ -18,6 +18,10 @@ import { PlayerCombat, type ReadyAction } from './PlayerCombat';
 import { BattleLayout } from './BattleLayout';
 import { NpcBar } from './NpcBar';
 import { EncounterPanel, SpawnMarkers } from './EncounterPanel';
+import { RandomEncounterWizard } from './RandomEncounterWizard';
+import { sceneTone } from '../game/individual';
+import type { SceneFigure } from '../server/sceneLocal';
+import { createPortal } from 'react-dom';
 import { speedWith } from '../game/combatEffects';
 import { withShillelagh, withSrdSpells } from '../game/sceneActions';
 import type { CharacterSheet, SheetAttack } from '../game/sheet';
@@ -116,6 +120,8 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
   const [notice, setNotice] = useState('');
   const [uncertain, setUncertain] = useState<Transfer | null>(null);
   const [confirmSwitch, setConfirmSwitch] = useState(false);
+  // APEX 2.9 – random encounter creator
+  const [wizard, setWizard] = useState(false);
   const [placementToken, setPlacementToken] = useState('');
   const [placeMode, setPlaceMode] = useState(false);
   // Enemy tools: place a new enemy / move the selected one by clicking a hex.
@@ -497,9 +503,10 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
       if (busyRef.current) { setAiTick((n) => n + 1); return; }
       let wait = false;
       await guarded(async () => {
-        const r = (await api.sceneTurn({ sceneId: aiSceneId, action: 'aiStep' })) as { message?: string; ai?: { wait?: boolean; idle?: boolean } };
+        const r = (await api.sceneTurn({ sceneId: aiSceneId, action: 'aiStep' })) as { message?: string; ai?: { wait?: boolean; idle?: boolean; morale?: string } };
         wait = !!r.ai?.wait || !!r.ai?.idle;
-        if (r.message) setNotice(`🤖 ${r.message}`);
+        // APEX 2.9: the hidden morale rolls are shown to the GM only
+        if (r.message || r.ai?.morale) setNotice(`🤖 ${[r.ai?.morale ? `🎲 ${r.ai.morale}` : '', r.message ?? ''].filter(Boolean).join(' · ')}`);
         game.online?.refresh();
         setSnapshot(await api.sceneFocus(aiSceneId, viewRef.current));
       });
@@ -524,6 +531,13 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
     icon: '🗺',
     render: () => (
       <div className="space-y-2" data-testid="game-scenes">
+        <button type="button" className="btn btn-gold w-full py-2 text-sm" disabled={busy} onClick={() => setWizard(true)} data-testid="open-random-encounter">🎲 Create random encounter</button>
+        {wizard && createPortal(
+          <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-black/60 p-3" onClick={(e) => { if (e.target === e.currentTarget) setWizard(false); }}>
+            <div className="w-full max-w-3xl">
+              <RandomEncounterWizard library={enemyLibrary} busy={busy} partySizeDefault={players.length} onClose={() => setWizard(false)} onCreated={(id, message) => { setWizard(false); setNotice(message); void loadScenes(search).then(() => dispatch({ type: 'select', id })).catch((e) => setError(String(e))); }} />
+            </div>
+          </div>, document.body)}
         <p className="text-xs text-marble-400">
           Current scene: <strong className="text-gold-200">{listName(state.current)}</strong>
           {previewing && (
@@ -834,6 +848,15 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
 
   const gmEncounter = shownScene && game.gmState?.sceneEncounters?.[shownScene.id]?.status === 'active' ? game.gmState.sceneEncounters[shownScene.id] : null;
   const gmEnemies = shownScene ? (game.gmState?.sceneEnemies?.[shownScene.id] ?? []) : [];
+  // APEX 2.9 – every creature as the 3D kit sees it (for the pictures in the turn order, whatever the vision mode)
+  const initiativeFigures: SceneFigure[] = gmEnemies.map((e) => {
+    const seen = snapshot?.figures?.find((f) => f.kind === 'enemy' && f.id === e.id);
+    if (seen) return seen;
+    const block = enemyLibrary.find((b) => b.id === e.templateId);
+    const t = `${block?.type ?? ''} ${block?.name ?? e.name}`;
+    const build = /undead/i.test(t) ? 'undead' : e.flyFt ? 'flyer' : /spider|insect|vermin/i.test(t) ? 'spider' : /beast|monstrosity/i.test(t) ? 'beast' : 'humanoid';
+    return { id: e.id, kind: 'enemy', name: e.name, color: e.color, icon: e.icon, x: e.x, y: e.y, condition: 'healthy', ...(e.elite ? { elite: true } : {}), ...(block ? { size: block.size, build, ...(e.look ?? block.look ? { look: e.look ?? block.look } : { breed: `${block.name} ${block.type}`.slice(0, 60), ...(block.creature ? { creature: block.creature } : {}) }) } : {}), ...((e.sex ?? block?.sex) ? { sex: e.sex ?? block?.sex } : {}), ...(e.seed ? { seed: e.seed } : {}) } as SceneFigure;
+  });
   const refOf = (id: string): FigureRef | null => {
     const f = (snapshot?.figures ?? []).find((x) => (x.kind === 'pc' ? x.tokenId === id : x.id === id));
     return f ? (f.kind === 'pc' ? { kind: 'pc', id: f.tokenId! } : { kind: 'npc', id: f.id }) : markers.some((m) => m.tokenId === id) ? { kind: 'pc', id } : null;
@@ -978,7 +1001,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
             // APEX 1.9: the map in the centre, turn order over its top, the selected character's action bar over its
             // bottom, the GM tools docked to the side of the GM's choice
             <BattleLayout label={shownScene.name}
-              top={gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
+              top={gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} figures={initiativeFigures} tone={sceneTone(shownScene?.map?.palette)} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
               map={<SceneSurface
               compact
               snapshot={snapshot}
@@ -1013,7 +1036,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               </>} />
           ) : (
           <>
-            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
+            {gmEncounter && <InitiativeBar encounter={gmEncounter} tokens={game.view.tokens} myTokenId={null} figures={initiativeFigures} tone={sceneTone(shownScene?.map?.palette)} onSelect={(p: { id: string; tokenId?: string }) => setSelected(p.tokenId ? { kind: 'pc', id: p.tokenId } : { kind: 'npc', id: p.id.replace(/^npc-/, '') })} elites={new Set(gmEnemies.filter((e) => e.elite).map((e) => `npc-${e.id}`))} />}
             <SceneSurface
               snapshot={snapshot}
               tokenLabels={markers}

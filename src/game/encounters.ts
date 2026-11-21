@@ -46,6 +46,16 @@ export const THEMES: Theme[] = [
   { id: 'goblins', label: 'Goblin raiders', leaders: ['ogre'], troops: ['goblin'], support: ['wolf'], match: /goblin|hobgoblin|bugbear/i },
   { id: 'undead', label: 'Restless dead', leaders: ['zombie'], troops: ['skeleton'], support: ['giant-bat'], match: /skeleton|zombie|ghoul|undead/i },
   { id: 'beasts', label: 'Wild beasts', leaders: ['bear'], troops: ['wolf', 'spider'], support: ['blood-hawk', 'giant-bat'], match: /wolf|bear|spider|boar|beast/i },
+  // APEX 2.9 – more bands for the random encounter creator
+  { id: 'wolves', label: 'Wolf pack with an alpha', leaders: ['dire-wolf'], troops: ['wolf'], support: ['worg'] },
+  { id: 'hobgoblins', label: 'Hobgoblin warband', leaders: ['bugbear'], troops: ['hobgoblin', 'goblin'], support: ['wolf'] },
+  { id: 'gnolls', label: 'Gnoll hunting party', leaders: ['gnoll'], troops: ['gnoll'], support: ['jackal'] },
+  { id: 'lizardfolk', label: 'Lizardfolk tribe', leaders: ['lizardfolk'], troops: ['lizardfolk'], support: ['giant-lizard', 'crocodile'] },
+  { id: 'pirates', label: 'Pirate crew', leaders: ['bandit-captain'], troops: ['pirate', 'bandit'], support: ['archer'] },
+  { id: 'spiders', label: 'Spider brood', leaders: ['phase-spider'], troops: ['spider', 'giant-wolf-spider'], support: ['giant-centipede'] },
+  { id: 'kobolds', label: 'Kobolds and their wyrmling', leaders: ['red-dragon-wyrmling'], troops: ['kobold'], support: ['giant-lizard'] },
+  { id: 'mercenaries', label: 'Mercenary company', leaders: ['knight'], troops: ['guard', 'veteran'], support: ['archer'] },
+  { id: 'giants', label: 'Hill giant and ogres', leaders: ['hill-giant'], troops: ['ogre'], support: ['goblin'] },
 ];
 export type Situation = 'camp' | 'ambush' | 'siege' | 'patrol' | 'lair';
 export const SITUATIONS: Array<{ id: Situation; label: string; text: string }> = [

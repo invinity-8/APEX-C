@@ -3,7 +3,7 @@
  * the standard actions (Dash, Disengage, Dodge …), a target menu when an enemy is clicked (weapon attacks with
  * range, spells with slot choice / upcasting) and the opportunity-attack prompt. The server checks every rule.
  */
-import { useEffect, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import type { SceneEncounter } from '../game/types';
@@ -23,6 +23,7 @@ const beastOptions = (sheet: CharacterSheet | null) => { const lvl = sheet ? wil
 import { parseArea } from '../campaign/hexArea';
 import { beastIcon } from './map/effectIcons';
 import { TargetStrip } from './TargetStrip';
+import { MODE_LABEL, REACTION_KINDS, REACTION_LABEL, modesFor, offerFor, reactionMode, type ReactionKind, type ReactionMode, type ReactionPrefs } from '../game/reactionPrefs';
 
 /** The attack or spell "in hand": its range is shown on the map, area spells are aimed with a right-click. */
 export type ReadyAction = { kind: 'attack'; index: number } | { kind: 'spell'; spellId: string; slotLevel: number } | null;
@@ -51,6 +52,9 @@ interface Props {
   onEndTurn?: () => void;
   /** APEX 2.0: act on a figure from the target strip (same as right-clicking it on the map). */
   onTargetFigure?: (id: string) => void;
+  /** APEX 2.9 – the character's reaction settings and how to change them. */
+  reactionPrefs?: ReactionPrefs;
+  onReactionPref?: (kind: ReactionKind, mode: ReactionMode) => void;
 }
 
 export function PlayerCombat(p: Props) {
@@ -172,6 +176,36 @@ export function PlayerCombat(p: Props) {
   };
   const dragQuick = (q: QuickItem) => ({ draggable: true, onDragStart: (e: DragEvent) => { e.dataTransfer.setData(QUICK_MIME, JSON.stringify({ item: q })); e.dataTransfer.effectAllowed = 'copy'; } });
 
+  // APEX 2.9: offers set to "always" are answered at once (opportunity attacks with the first melee attack)
+  const answered = useRef(new Set<string>());
+  useEffect(() => {
+    for (const r of reactions) {
+      if (answered.current.has(r.id) || p.pending) continue;
+      const slots = sheet ? spellSlots(sheet).reduce((n, x) => n + Math.max(0, x.current), 0) : 0;
+      if (offerFor(p.reactionPrefs, r.kind === 'shield' ? 'shield' : 'opportunity', slots) !== 'auto') continue;
+      if (r.kind !== 'shield' && !melee.length) continue;
+      answered.current.add(r.id);
+      p.act({ action: 'reaction', offerId: r.id, accept: true, ...(r.kind !== 'shield' ? { attackIndex: melee[0].i } : {}) });
+    }
+  }, [reactions, p.reactionPrefs, p.pending]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const prefsNode = p.onReactionPref && (
+    <span className="relative">
+      <button type="button" className="rounded border border-arcane-500/50 px-1.5 py-0.5 text-[11px] text-arcane-300 hover:bg-arcane-500/15" aria-expanded={prefsOpen} title="When do you want to be asked for reactions?" onClick={() => setPrefsOpen(!prefsOpen)} data-testid="reaction-settings">⚙ Reactions</button>
+      {prefsOpen && <div className="absolute bottom-full left-0 z-30 mb-1 w-72 space-y-1.5 rounded-lg border border-arcane-500/60 bg-ink-950/95 p-2 text-[11px] shadow-xl" role="dialog" aria-label="Reaction settings">
+        <b className="text-arcane-300">Reactions – when to ask</b>
+        {REACTION_KINDS.map((k) => (
+          <label key={k} className="flex flex-col gap-0.5">{REACTION_LABEL[k]}
+            <select className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={reactionMode(p.reactionPrefs, k)} onChange={(e) => p.onReactionPref!(k, e.target.value as ReactionMode)} data-testid={`reaction-pref-${k}`}>
+              {modesFor(k).map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
+            </select>
+          </label>
+        ))}
+        <p className="text-marble-500">“Always” answers at once (opportunity attacks with your first melee attack). “Never” is not offered at all.</p>
+      </div>}
+    </span>
+  );
+
   const barNode = (
     <div className="battle-hotbar space-y-1.5 text-xs" data-testid="combat-bar">
       {reactions.filter((r) => r.kind === 'shield').map((r) => (
@@ -235,6 +269,7 @@ export function PlayerCombat(p: Props) {
       <div className="hotbar-frame">
         <div className="hotbar-economy">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {prefsNode}
         {encounter ? <EconomyOrbs encounter={encounter} actor={actor} haste={!!me2?.effects.some((e) => e.key === 'haste')} /> : <span className="rounded-full border border-forest-400/60 px-2 py-0.5 text-forest-300">Free play – no initiative</span>}
         {p.movement && !p.free && (
           <span className="flex min-w-[11rem] flex-1 items-center gap-2" title={`${moveLeft} of ${p.movement.allowance} ft left${p.movement.dashed ? ' (Dash)' : ''}`}>

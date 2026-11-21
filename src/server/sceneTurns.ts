@@ -27,7 +27,7 @@ import { attackExtras } from './combatFeatures.js';
 import { areaHexes, parseArea, type AreaSpec } from '../campaign/hexArea.js';
 import { abilityMods } from '../game/equipment.js';
 import type { CharacterSheet } from '../game/sheet.js';
-import { addEnemy, setEnemyLight, setEnemySex, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
+import { addEnemy, enemyCarriesLight, setEnemyLight, setEnemySex, torchesOf, enemiesOf, npcAttacks, npcReach, logCombat, parseBonus, parseDamage, parseRangeFt, resolveAttack, setCarriedLight, updateEnemy, grantEnemyTempHp } from '../game/sceneCombat.js';
 import { activeEncounter } from '../game/sceneTurns.js';
 import { HAZARD_HARM, heightLookup, hexAt, hexCentre, hexMovementCost, passable, pathChecks, pathDrops, tileLookup } from '../campaign/hexScene.js';
 import { continuePcMove, placePc } from './sceneMotion.js';
@@ -40,6 +40,9 @@ import { elementOf, pushFx, type SceneFx } from '../game/sceneFx.js';
 import { planEncounter, placeEncounter, SITUATIONS, type Difficulty, type Situation } from '../game/encounters.js';
 import { allGroups, groupTemplates, spotsAround } from '../game/groups.js';
 import { defaultProfile, parseProfile, planAiStep, type AiFigure, type AiProfile, type AiSelf, type AiStep } from '../game/enemyAi.js';
+import { sceneTone } from '../game/individual.js';
+import { offerFor } from '../game/reactionPrefs.js';
+import { creaturePersonality, isLeader, leaderBonus, rally, rollMorale, surrenders, type MoraleSituation, type Personality } from '../game/morale.js';
 import { WEATHERS, WEATHER_FX, type WeatherFx, changeWorldTime, clockText, dayOf, parseWorldTimeChange } from '../game/worldTime.js';
 import { flightCost, altitudeOf, distance3d, fallDice, npcSpeeds, pendingFalls, setAltitude, MAX_ALTITUDE_FT } from '../game/altitude.js';
 import { npcPassivePerception, npcPerception, npcStealth, pcAbilityMod, pcAcrobatics, pcAthletics, pcPerception, pcStealth } from '../game/perception.js';
@@ -170,7 +173,7 @@ async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Rec
       const names: string[] = [];
       for (const item of plan) {
         const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
-        const r = addEnemy(st, scene.id, newId, item.templateId, item.at, undefined, d20());
+        const r = addEnemy(st, scene.id, newId, item.templateId, item.at, undefined, d20(), 'enemy', sceneTone(map.palette));
         if (!r.ok) return r;
         st = r.state;
         names.push(enemiesOf(st, scene.id).find((x) => x.id === newId)!.name);
@@ -186,26 +189,35 @@ async function encounterRequest(user: AuthUser, repo: Repo, scene: Scene, v: Rec
     return { status: 200, body: { ok: true, plan } };
   }
   if (v.op !== 'apply' || !Array.isArray(v.entries)) return { status: 400, body: { error: 'Invalid encounter.' } };
-  const ids = (v.entries as unknown[]).map((e) => (e as { templateId?: unknown })?.templateId).filter((id): id is string => typeof id === 'string' && !!statBlock(ctx.state!, id)).slice(0, 20);
-  if (!ids.length) return { status: 422, body: { error: 'Nothing to place.' } };
+  // APEX 2.9: entries may be quest characters – on the party's side (placed next to the party) and with a name
+  type Item = { templateId: string; side: 'enemy' | 'ally'; name?: string };
+  const items: Item[] = (v.entries as unknown[]).map((e) => e as { templateId?: unknown; side?: unknown; name?: unknown }).filter((e) => typeof e?.templateId === 'string' && !!statBlock(ctx.state!, e.templateId))
+    .map((e) => ({ templateId: e.templateId as string, side: e.side === 'ally' ? 'ally' as const : 'enemy' as const, ...(typeof e.name === 'string' && e.name.trim() ? { name: e.name.trim().slice(0, 60) } : {}) })).slice(0, 24);
+  const foes = items.filter((x) => x.side === 'enemy'), friends = items.filter((x) => x.side === 'ally');
+  if (!items.length) return { status: 422, body: { error: 'Nothing to place.' } };
   const pcs = await ctx.pcs!(scene.id, map);
   const spawn = map.nodes.find((n) => n.kind === 'spawn');
   const party = pcs.length ? { x: pcs.reduce((a, p) => a + p.x, 0) / pcs.length, y: pcs.reduce((a, p) => a + p.y, 0) / pcs.length } : spawn ?? hexCentre(map, { q: 0, r: 0 });
   const occupied = new Set([...pcs.map((p) => hexKeyAt(map, p)), ...enemiesOf(ctx.state, scene.id).filter((e) => !e.defeated).map((e) => hexKeyAt(map, e))]);
-  const ranged = ids.map((id) => { const b = statBlock(ctx.state!, id)!; return b.attacks[0]?.kind === 'ranged'; });
-  const spots = placeEncounter(map, situation, ids.length, party, seed, occupied, ranged);
-  if (spots.length < ids.length) return { status: 422, body: { error: `Only ${spots.length} free spots for ${ids.length} creatures on this map.` } };
+  // the party's arrival hexes stay free for the characters
+  if (spawn) for (const h of spotsAround(map, spawn, 4, new Set())) occupied.add(hexKeyAt(map, h));
+  const allySpots = spotsAround(map, party, friends.length, new Set(occupied));
+  for (const at of allySpots) occupied.add(hexKeyAt(map, at));
+  const ranged = foes.map((x) => { const b = statBlock(ctx.state!, x.templateId)!; return b.attacks[0]?.kind === 'ranged'; });
+  const spots = placeEncounter(map, situation, foes.length, party, seed, occupied, ranged);
+  if (spots.length < foes.length || allySpots.length < friends.length) return { status: 422, body: { error: `Only ${spots.length + allySpots.length} free spots for ${items.length} creatures on this map.` } };
+  const placed: Array<Item & { at: { x: number; y: number; hidden?: boolean } }> = [...foes.map((x, i) => ({ ...x, at: spots[i] })), ...friends.map((x, i) => ({ ...x, at: allySpots[i] }))];
   return mutate(user, repo, (s) => {
     let st = structuredClone(s);
     const names: string[] = [];
-    for (const [i, id] of ids.entries()) {
+    for (const item of placed) {
       const newId = `en-${crypto.randomUUID().slice(0, 8)}`;
-      const r = addEnemy(st, scene.id, newId, id, spots[i], undefined, d20());
+      const r = addEnemy(st, scene.id, newId, item.templateId, item.at, item.name, d20(), item.side, sceneTone(map.palette));
       if (!r.ok) return r;
       st = r.state;
       const e = enemiesOf(st, scene.id).find((x) => x.id === newId)!;
-      names.push(e.name);
-      if (spots[i].hidden) addEffect(st, scene.id, npcActor(newId), hiddenEffect(die(20) + npcStealth(e), () => `fx-${crypto.randomUUID().slice(0, 8)}`));
+      names.push(item.side === 'ally' ? `${e.name} (with the party)` : e.name);
+      if (item.at.hidden) addEffect(st, scene.id, npcActor(newId), hiddenEffect(die(20) + npcStealth(e), () => `fx-${crypto.randomUUID().slice(0, 8)}`));
     }
     const text = `Encounter (${SITUATIONS.find((x) => x.id === situation)!.label.toLowerCase()}): ${names.join(', ')}.`;
     logCombat(st, scene.id, text);
@@ -518,7 +530,7 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     if (v.action === 'enemyAdd') {
       if (typeof v.templateId !== 'string' || !statBlock(ctx.state ?? {}, v.templateId)) return { status: 400, body: { error: 'Unknown enemy.' } };
       const id = `en-${crypto.randomUUID().slice(0, 8)}`, roll = d20();
-      return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy'));
+      return mutate(user, repo, (s) => addEnemy(s, sceneId, id, v.templateId as string, at, typeof v.name === 'string' ? v.name : undefined, roll, v.side === 'ally' ? 'ally' : 'enemy', sceneTone(map.palette)));
     }
     if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid enemy.' } };
     return moveNpc(user, repo, scene, map, v.id, at, [], typeof v.alt === 'number' ? v.alt : undefined, v.careful === true);
@@ -534,6 +546,32 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
   }
   if (v.action === 'enemyAttack') return enemyAttackRequest(user, repo, scene, v);
   if (v.action === 'npcArea') return npcAreaRequest(user, repo, scene, v);
+  if (v.action === 'npcRally') {
+    // APEX 2.9 – a leader steadies the wavering troops it can see (bonus action)
+    if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM steers NPCs.' } };
+    if (typeof v.id !== 'string') return { status: 400, body: { error: 'Invalid creature.' } };
+    const map = parseMap(scene.published_metadata);
+    if (!map?.hex) return { status: 400, body: { error: 'Needs a battle map.' } };
+    const ctx = { ...(await sceneContext(repo, user.campaignId)), sceneId };
+    const npc = ctx.state ? enemiesOf(ctx.state, sceneId).find((e) => e.id === v.id && !e.defeated) : undefined;
+    if (!npc || !ctx.state) return { status: 404, body: { error: 'Creature not found.' } };
+    const lead = personalityFor(ctx.state, npc);
+    if (!isLeader(lead)) return { status: 409, body: { error: `${npc.name} is no leader (Inspire 6+ in the library).` } };
+    const troops = rallyTargets(ctx.state, sceneId, map, npc, false).map((e) => e.id);
+    const actor = npcActor(npc.id);
+    return mutate(user, repo, (s) => {
+      const st = structuredClone(s);
+      const e = st.sceneEncounters?.[sceneId];
+      const err = useEconomy(e?.status === 'active' ? e : null, actor, 'bonus', { gm: true });
+      if (err) return { ok: false, error: err };
+      const names: string[] = [];
+      for (const t of enemiesOf(st, sceneId).filter((x) => troops.includes(x.id))) { if (t.morale) t.morale = rally(personalityFor(st, t), t.morale, lead); names.push(t.name); }
+      if (e) e.version++;
+      const text = names.length ? `${npc.name} rallies the troops – ${names.join(', ')} ${names.length === 1 ? 'steadies itself' : 'steady themselves'}.` : `${npc.name} shouts orders.`;
+      logCombat(st, sceneId, text);
+      return { ok: true, state: st, message: text };
+    });
+  }
   if (v.action === 'npcBuff') {
     // elite support ability: allies within the radius get the buff until the creature's next turn
     if (typeof v.id !== 'string' || !Number.isSafeInteger(v.buff)) return { status: 400, body: { error: 'Invalid ability.' } };
@@ -569,10 +607,13 @@ export async function sceneTurnRequest(user: AuthUser, method: string, body: unk
     const encounterId = crypto.randomUUID();
     const enemyRolls = new Map<string, number>();
     return mutate(user, repo, (s) => {
+      const fresh = s.sceneEncounters?.[sceneId]?.status !== 'active';
       const r = joinInitiative(s, sceneId, encounterId, entries);
       if (!r.ok) return r;
       // Living enemies on the map roll as well.
       const st = r.state === s ? structuredClone(s) : r.state;
+      // APEX 2.9: a new fight starts with fresh nerves
+      if (fresh) for (const enemy of enemiesOf(st, sceneId)) delete enemy.morale;
       const e = st.sceneEncounters?.[sceneId];
       if (e?.status === 'active') {
         for (const enemy of enemiesOf(st, sceneId).filter((x) => !x.defeated && !e.participants.some((p) => p.id === `npc-${x.id}`))) {
@@ -773,9 +814,11 @@ async function damagePc(user: AuthUser, repo: Repo, ctx: Ctx, tokenId: string, a
 /** Can a character cast Shield right now (prepared, a slot left, reaction free, not incapacitated)? */
 function shieldReady(state: GameState, sceneId: string, sheet: CharacterSheet, tokenId: string): boolean {
   const known = sheet.spells.some((x) => x.name.trim().toLowerCase() === 'shield' && x.prepared);
-  const slot = spellSlots(sheet).some((x) => x.current > 0);
+  const slots = spellSlots(sheet).reduce((n, x) => n + Math.max(0, x.current), 0);
   const e = activeEncounter(state, sceneId);
-  return known && slot && !reactionUsed(e, pcActor(tokenId)) && !incapacitated(state, sceneId, pcActor(tokenId));
+  // APEX 2.9: the character's reaction setting (never / only while it has a slot or two)
+  const wanted = offerFor(state.tokens[tokenId]?.reactionPrefs, 'shield', slots) !== 'skip';
+  return known && slots > 0 && wanted && !reactionUsed(e, pcActor(tokenId)) && !incapacitated(state, sceneId, pcActor(tokenId));
 }
 
 /**
@@ -1200,7 +1243,9 @@ export async function planInterruption(repo: Repo, campaignId: string, sceneId: 
   const figures = await battleFigures(ctx, sceneId, map);
   const me = positionOf(figures, mover);
   if (!me) return null;
-  return firstOpportunity({ ...me, ...points[0] }, points, figures.filter((f) => f !== me), feetBetween(map), activeEncounter(ctx.state, sceneId), declined);
+  // APEX 2.9: characters who never want to be asked for an opportunity attack are not offered one
+  const never = Object.entries(ctx.state.tokens).filter(([, t]) => offerFor(t.reactionPrefs, 'opportunity') === 'skip').map(([id]) => pcActor(id));
+  return firstOpportunity({ ...me, ...points[0] }, points, figures.filter((f) => f !== me), feetBetween(map), activeEncounter(ctx.state, sceneId), [...declined, ...never]);
 }
 
 /** Stores the offers and the paused move (state write). */
@@ -1668,6 +1713,41 @@ export function aiProfileOf(state: GameState, e: SceneEnemy): AiProfile {
 }
 const aiControls = (state: GameState, sceneId: string, e: SceneEnemy | undefined) => !!e && !e.defeated && !!state.sceneAi?.[sceneId]?.on && !e.ai?.off;
 
+/** APEX 2.9 – a creature's personality: the stat block's preset plus what the GM changed in the library. */
+export function personalityFor(state: GameState, e: SceneEnemy): Personality {
+  return creaturePersonality(statBlock(state, e.templateId), { name: e.name, ...(e.elite ? { elite: true } : {}), ...(e.abilities ? { abilities: e.abilities } : {}) });
+}
+const sameSide = (a: SceneEnemy, b: SceneEnemy) => (a.side ?? 'enemy') === (b.side ?? 'enemy');
+const sightOn = (map: SceneMap) => { const rules = sightRules(map); return (a: { x: number; y: number }, b: { x: number; y: number }) => lineOfSight(hexAt(map, a), hexAt(map, b), rules.blocks, rules.height); };
+/** Comrades a leader sees within 30 ft (`needy`: only those whose nerve is going). */
+function rallyTargets(state: GameState, sceneId: string, map: SceneMap, leader: SceneEnemy, needy: boolean): SceneEnemy[] {
+  const ft = feetBetween(map), sees = sightOn(map);
+  return enemiesOf(state, sceneId).filter((t) => t.id !== leader.id && sameSide(t, leader) && !t.defeated && !t.morale?.surrendered && personalityFor(state, t).style !== 'horde'
+    && ft(t, leader) <= 30 && sees(leader, t) && (!needy || (t.morale?.broken || (t.morale?.fatigue ?? 0) >= 2)));
+}
+/** What a creature takes in of the fight at the start of its turn (for its morale check). */
+function moraleSituation(state: GameState, sceneId: string, map: SceneMap, npc: SceneEnemy, figures: Figure[]): MoraleSituation {
+  const ft = feetBetween(map), sees = sightOn(map);
+  const comrades = enemiesOf(state, sceneId).filter((e) => e.id !== npc.id && sameSide(e, npc));
+  const standing = comrades.filter((e) => !e.defeated && e.hp > 0 && !e.morale?.surrendered);
+  const mySide = npc.side === 'ally' ? 'party' : 'enemy';
+  const foes = figures.filter((f) => f.side !== mySide && !f.down);
+  const torches = torchesOf(state, sceneId);
+  const lit = (f: Figure) => (f.kind === 'pc' ? torches.includes(f.id) : (() => { const e = enemiesOf(state, sceneId).find((x) => x.id === f.id); return !!e && enemyCarriesLight(e, statBlock(state, e.templateId)?.type); })());
+  const near = (p: { x: number; y: number }, r: number) => ft(p, npc) <= r;
+  const leaders = standing.filter((e) => near(e, 60) && sees(npc, e)).map((e) => leaderBonus(personalityFor(state, e)));
+  return {
+    alliesDown: comrades.filter((e) => e.defeated || e.hp <= 0).length,
+    leaderDown: comrades.some((e) => (e.defeated || e.hp <= 0) && isLeader(personalityFor(state, e))),
+    hp: Math.max(0, npc.hp / Math.max(1, npc.maxHp)),
+    isolated: !standing.some((e) => near(e, 30) || sees(npc, e)),
+    outnumbered: foes.filter((f) => near(f, 30)).length > standing.filter((e) => near(e, 30)).length + 1,
+    lightNear: foes.some((f) => near(f, 15) && lit(f)),
+    leaderBonus: Math.max(0, ...leaders),
+    wisSave: npc.saves?.wis ?? Math.floor(((npc.abilities?.wis ?? 10) - 10) / 2),
+  };
+}
+
 /**
  * Enemy AI (GM): `ai` switches it on or off for the scene, `npcAi` sets one creature's tactic / mood or takes it
  * out of the AI's hands, `aiStep` lets the AI do ONE thing (answer an opportunity attack, or one step of the turn of
@@ -1707,7 +1787,7 @@ async function aiRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<str
   const mine = offers.find((o) => o.reactor.kind === 'npc' && aiControls(state, sceneId, enemiesOf(state, sceneId).find((e) => e.id === o.reactor.id)));
   if (mine) {
     const e = enemiesOf(state, sceneId).find((x) => x.id === mine.reactor.id)!;
-    const accept = mine.kind !== 'shield' && aiProfileOf(state, e).mood !== 'cowardly';
+    const accept = mine.kind !== 'shield' && aiProfileOf(state, e).mood !== 'cowardly' && !e.morale?.broken && !e.morale?.surrendered && personalityFor(state, e).traits.mercy < 7;
     const r = await call({ action: 'reaction', offerId: mine.id, accept });
     return { ...r, body: { ...(r.body as object), ai: { actor: npcActor(e.id), step: 'reaction' } } };
   }
@@ -1724,10 +1804,28 @@ async function aiRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<str
   const steps = state.sceneAi[sceneId].turn === turnKey ? state.sceneAi[sceneId].steps ?? 0 : 0;
   await mutate(user, repo, (s) => { const st = structuredClone(s); if (st.sceneAi?.[sceneId]) st.sceneAi[sceneId] = { ...st.sceneAi[sceneId], turn: turnKey, steps: steps + 1 }; return { ok: true, state: st }; });
   let step: AiStep;
+  let moraleNote = '';
   if (steps >= 14 || incapacitated(state, sceneId, actor)) step = { kind: 'end', why: steps >= 14 ? 'out of ideas' : 'incapacitated' };
   else {
     // everybody on the map as the planner sees them
     const figures = await battleFigures(ctx, sceneId, map);
+    // APEX 2.9 – morale: what shook it since its last turn (hidden; the GM reads the rolls)
+    const pers = personalityFor(state, npc);
+    if (steps === 0 && pers.style !== 'horde' && !npc.morale?.surrendered) {
+      const res = rollMorale(pers, npc.morale ?? { fatigue: 0 }, moraleSituation(state, sceneId, map, npc, figures), d20);
+      const changed = JSON.stringify(res.state) !== JSON.stringify(npc.morale ?? { fatigue: 0 });
+      if (changed) {
+        await mutate(user, repo, (s) => {
+          const st = structuredClone(s);
+          const t = enemiesOf(st, sceneId).find((x) => x.id === npc.id);
+          if (t) t.morale = res.state;
+          if (res.broke) logCombat(st, sceneId, `${npc.name} loses its nerve and breaks!`);
+          return { ok: true, state: st };
+        });
+        npc.morale = res.state;
+      }
+      moraleNote = res.lines.length ? `${npc.name} – ${res.lines.join('; ')}` : '';
+    }
     const ground = groundFt(map);
     const passive = npcPassivePerception(state, npc);
     const others: AiFigure[] = [];
@@ -1741,7 +1839,8 @@ async function aiRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<str
       const hidden = hiddenOf(state, sceneId, key);
       const side = f.side;
       if (side === (npc.side === 'ally' ? 'party' : 'enemy') && (hp < 1 || down)) friendHurt = true;
-      others.push({ id: key, name: f.name, side, x: f.x, y: f.y, alt: (f.z ?? ground(f)) - ground(f), hp, ...(down ? { down: true } : {}), ...(hidden && (hidden.value ?? 0) > passive ? { unseen: true } : {}) });
+      const lit = f.kind === 'pc' ? torchesOf(state, sceneId).includes(f.id) : (() => { const e = enemiesOf(state, sceneId).find((x) => x.id === f.id); return !!e && enemyCarriesLight(e, statBlock(state, e.templateId)?.type); })();
+      others.push({ id: key, name: f.name, side, x: f.x, y: f.y, alt: (f.z ?? ground(f)) - ground(f), hp, ...(down ? { down: true } : {}), ...(hidden && (hidden.value ?? 0) > passive ? { unseen: true } : {}), ...(lit ? { light: true } : {}) });
     }
     const b = budgetOf(enc, actor);
     const speeds = npcSpeeds(npc, effectsOf(state, sceneId, actor));
@@ -1756,6 +1855,9 @@ async function aiRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<str
       ...(speeds.fly ? { flyFt: speeds.fly } : {}), ...(speeds.climb ? { climbFt: speeds.climb } : {}),
       areas: (npc.areas ?? []).map((a, index) => ({ ...a, index, left: used(a.name, a.uses) })), buffs: (npc.buffs ?? []).map((x, index) => ({ ...x, index, left: used(x.name, x.uses) })),
       ...(/nimble escape|cunning action/i.test(traits) ? { nimble: true } : {}), provoked: friendHurt || npc.hp < npc.maxHp,
+      traits: pers.traits, lightShy: pers.lightShy, morale: npc.morale?.surrendered ? 'surrendered' : npc.morale?.broken ? 'broken' : (npc.morale?.fatigue ?? 0) > 0 ? 'shaken' : 'steady',
+      ...(isLeader(pers) ? { rallyable: rallyTargets(state, sceneId, map, npc, true).length } : {}),
+      ...(surrenders(pers, npc.abilities?.int ?? 10) ? { canSurrender: true } : {}),
     };
     step = planAiStep(map, me, others);
   }
@@ -1766,11 +1868,23 @@ async function aiRequest(user: AuthUser, repo: Repo, scene: Scene, v: Record<str
     case 'attack': r = await call({ action: 'strike', attacker: { kind: 'npc', id: npc.id }, target: side(step.target), attackIndex: step.attackIndex }); break;
     case 'area': r = await call({ action: 'npcArea', id: npc.id, area: step.area, point: { x: step.x, y: step.y } }); break;
     case 'buff': r = await call({ action: 'npcBuff', id: npc.id, buff: step.buff }); break;
+    case 'rally': r = await call({ action: 'npcRally', id: npc.id }); break;
+    case 'surrender': {
+      await mutate(user, repo, (s) => {
+        const st = structuredClone(s);
+        const t = enemiesOf(st, sceneId).find((x) => x.id === npc.id);
+        if (t) { t.morale = { ...(t.morale ?? { fatigue: 0 }), surrendered: true }; delete t.morale.broken; }
+        logCombat(st, sceneId, `🏳 ${npc.name} throws down its weapons and surrenders.`);
+        return { ok: true, state: st };
+      });
+      r = await end('surrendered');
+      break;
+    }
     case 'standard': r = await call({ action: 'standard', actor: { kind: 'npc', id: npc.id }, act: step.act, ...(step.viaBonus ? { viaBonus: true } : {}) }); break;
     default: r = await end(step.why);
   }
   // a step the rules refuse ends the turn instead of trying it again and again
-  let done = step.kind === 'end';
+  let done = step.kind === 'end' || step.kind === 'surrender';
   if (r.status !== 200 && step.kind !== 'end') { const refused = (r.body as { error?: string }).error ?? 'refused'; r = await end(refused); done = true; if (r.status === 200) (r.body as { message?: string }).message = `${npc.name} (AI) ends its turn – ${refused}`; }
-  return { ...r, body: { ...(r.body as object), ai: { actor, step: step.kind, why: step.why, done } } };
+  return { ...r, body: { ...(r.body as object), ai: { actor, step: step.kind, why: step.why, done, ...(moraleNote ? { morale: moraleNote } : {}) } } };
 }

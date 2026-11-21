@@ -36,7 +36,7 @@ export interface SceneToken {
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
-  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string; /** APEX 2.1: chosen low-poly look, or the creature kind an automatic look is picked from. */ look?: FigureLook; breed?: string; /** APEX 2.2: an explicit creature model (beast, dragon, aberration …). */ creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' }; /** APEX 2.8 – men, women or mixed. */ sex?: FigureSex };
+  enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string; /** APEX 2.1: chosen low-poly look, or the creature kind an automatic look is picked from. */ look?: FigureLook; breed?: string; /** APEX 2.2: an explicit creature model (beast, dragon, aberration …). */ creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' }; /** APEX 2.8 – men, women or mixed. */ sex?: FigureSex; /** APEX 2.9 – seed of its own look. */ seed?: string; /** GM: armour class */ ac?: number };
   /** Carries a light (torch glow). */
   torch?: boolean;
   /** Highlight as a valid target (attack mode). */
@@ -50,7 +50,7 @@ export interface SceneToken {
   /** APEX 2.4 – hidden / sneaking: the 3D figure crouches. */
   sneaking?: boolean;
   /** APEX 1.6 – hit points of a character (life bar under the figure). */
-  vitals?: { hp: number; maxHp: number; temp: number; form?: string };
+  vitals?: { hp: number; maxHp: number; temp: number; form?: string; ac?: number };
 }
 
 interface Props {
@@ -457,7 +457,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
                     {enemy.tokenId === selectedTokenId && <circle r={HEX_SIZE * 0.72} fill="none" stroke="#f3dc9a" strokeWidth={3} />}
                     {e.elite && <EliteFrame r={HEX_SIZE * 0.55} />}
                     <circle r={HEX_SIZE * 0.55} fill={enemy.color} stroke={e.condition === 'bloodied' ? '#ff5a4a' : e.ally ? '#7fb8ff' : '#b3261e'} strokeWidth={3} />
-                    <text y={4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={2.5} paintOrder="stroke">{down ? '✕' : e.icon}</text>
+                    {(() => { const letters = down || /^[\x20-\x7e]+$/.test(e.icon); return <text y={letters ? 4 : 6} textAnchor="middle" fontSize={letters ? 11 : 17} fontWeight={700} fill="#fff" stroke="#000" strokeWidth={letters ? 2.5 : 0} paintOrder="stroke">{down ? '✕' : e.icon}</text>; })()}
                     {e.hp !== undefined && e.maxHp ? <LifeBar hp={e.hp} maxHp={e.maxHp} temp={e.tempHp ?? 0} y={HEX_SIZE * 0.62} party={e.ally} /> : null}
                     {enemy.icons?.length ? <FigureIcons icons={enemy.icons} /> : null}
                     <text y={HEX_SIZE * 1.05} textAnchor="middle" fontSize={9} fill={e.ally ? '#cfe4ff' : '#ffd6d0'} stroke="#000" strokeWidth={2.5} paintOrder="stroke">
@@ -553,7 +553,7 @@ export function HexSceneMap({ map, label, tokens: targetTokens = [], gm = false,
           </div>
           {reach?.has(hover!) && <div className="text-gold-200">→ reachable · {fmt(reach.get(hover!)!.cost * map.unitsPerCell)} {unit}</div>}
           {hoverMarker && <div className="mt-1 text-gold-300">◆ {hoverMarker.label || hoverMarker.kind}</div>}
-          {hoverTokens.length > 0 && <div className="mt-1 text-marble-100">{hoverTokens.map((t) => t.name).join(', ')}</div>}
+          {hoverTokens.length > 0 && <FigureHoverCard tokens={hoverTokens} />}
         </div>
       )}
 
@@ -672,4 +672,20 @@ function FigureIcons({ icons }: { icons: Array<{ icon: string; name: string; ton
       {icons.length > shown.length && <text x={x0 + shown.length * gap} y={3} fontSize={8} fill="#f3dc9a" stroke="#000" strokeWidth={2} paintOrder="stroke">+{icons.length - shown.length}</text>}
     </g>
   );
+}
+
+/** APEX 2.9 – what the hover card says about a figure: life, armour class (with effects) and what is on it. */
+export function FigureHoverCard({ tokens }: { tokens: SceneToken[] }) {
+  if (!tokens.length) return null;
+  return <div className="mt-1 space-y-1" data-testid="figure-hover">{tokens.map((t) => {
+    const v = t.vitals, e = t.enemy;
+    const hp = v ? `❤ ${v.hp}/${v.maxHp}${v.temp ? ` +${v.temp}` : ''}` : e?.hp !== undefined && e.maxHp ? `❤ ${e.hp}/${e.maxHp}` : e ? (e.condition === 'bloodied' ? 'bloodied' : e.condition === 'down' ? 'down' : '') : '';
+    const ac = v?.ac ?? e?.ac;
+    const effects = (t.icons ?? []).map((i) => `${i.icon} ${i.name}`);
+    return <div key={t.tokenId} className="leading-tight">
+      <b className="text-marble-50">{t.name}</b>
+      {(hp || ac !== undefined || v?.form) && <span className="text-marble-300"> · {[hp, ac !== undefined ? `🛡 AC ${ac}` : '', v?.form ? `🐾 ${v.form}` : ''].filter(Boolean).join(' · ')}</span>}
+      {effects.length > 0 && <div className="text-[11px] text-sky-200">{effects.join(' · ')}</div>}
+    </div>;
+  })}</div>;
 }

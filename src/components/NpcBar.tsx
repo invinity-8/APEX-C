@@ -5,6 +5,7 @@
  */
 import { speedWith } from '../game/combatEffects';
 import { MOODS, MOOD_LABEL, TACTICS, TACTIC_LABEL, defaultProfile } from '../game/enemyAi';
+import { STYLE_LABEL, creaturePersonality, isLeader, moraleText, rallyAmount } from '../game/morale';
 import type { StatBlock } from '../game/bestiary';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -84,6 +85,16 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
                 <span title={aiOn ? 'The enemy AI is on for this scene' : 'The enemy AI is off for this scene (switch it on in the battle command)'} className={aiOn && !npc.ai?.off ? 'text-emerald-300' : 'text-marble-500'}>🤖</span>
                 <select aria-label="AI tactic" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={tactic} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, profile: { tactic: e.target.value } })}>{TACTICS.map((t) => <option key={t} value={t}>{TACTIC_LABEL[t]}{t === base.tactic ? ' (default)' : ''}</option>)}</select>
                 <select aria-label="AI mood" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={mood} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, profile: { mood: e.target.value } })}>{MOODS.map((m) => <option key={m} value={m}>{MOOD_LABEL[m]}{m === base.mood ? ' (default)' : ''}</option>)}</select>
+                {(() => {
+                  // APEX 2.9 – morale (hidden from the players) and the leader's rally
+                  const pers = creaturePersonality(block, { name: npc.name, ...(npc.elite ? { elite: true } : {}), ...(npc.abilities ? { abilities: npc.abilities } : {}) });
+                  const text = moraleText(pers, npc.morale);
+                  const tone = npc.morale?.surrendered ? 'text-sky-300' : npc.morale?.broken ? 'text-blood-400' : (npc.morale?.fatigue ?? 0) > 0 ? 'text-amber-300' : 'text-marble-400';
+                  return <>
+                    <span className={`rounded border border-ink-700 px-1 py-0.5 ${tone}`} title={`${STYLE_LABEL[pers.style]} · hidden from the players`} data-testid="npc-morale">{pers.style === 'horde' ? '🧟' : npc.morale?.surrendered ? '🏳' : npc.morale?.broken ? '🏃' : (npc.morale?.fatigue ?? 0) > 0 ? '😟' : '🙂'} {text}</span>
+                    {isLeader(pers) && <button type="button" className="rounded border border-gold-400/50 px-1.5 py-0.5 text-gold-100 hover:bg-gold-500/20 disabled:opacity-40" disabled={busy || !myTurn || (live && !!b.bonus)} title={`Rally (bonus action): wavering comrades it sees within 30 ft lose ${rallyAmount(pers)} fatigue; the broken come back`} onClick={() => act({ action: 'npcRally', id: npc.id })} data-testid="npc-rally">⚑ Rally</button>}
+                  </>;
+                })()}
                 <select aria-label="Figure: man or woman" title="3D figure of this creature: as a man / male animal or a woman / female animal" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={npc.sex ?? ''} disabled={busy} onChange={(e) => act({ action: 'npcSex', enemyId: npc.id, sex: e.target.value || null })} data-testid="npc-sex"><option value="">⚥ {block?.sex && block.sex !== 'mixed' ? (block.sex === 'female' ? '♀' : '♂') : 'auto'}</option><option value="male">♂ male</option><option value="female">♀ female</option></select>
                 <label className="flex items-center gap-1 text-marble-300" title="Unticked: you steer this creature yourself even while the AI is on"><input type="checkbox" checked={!npc.ai?.off} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, off: !e.target.checked })} /> AI</label>
               </span>

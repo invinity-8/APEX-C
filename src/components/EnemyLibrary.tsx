@@ -8,6 +8,8 @@ import { GroupLibrary } from './GroupLibrary';
 import { autoLook, FIGURE_SEXES, SEX_LABEL, type FigureLook, type FigureSex } from '../game/figure';
 import { CreaturePicker } from './CreaturePicker';
 import type { CreatureChoice } from '../game/creatures';
+import type { PersonalityOverride } from '../game/morale';
+import { PersonalityPanel } from './PersonalityPanel';
 import type { Command } from '../game/commands';
 import type { GameState } from '../game/types';
 import type { DispatchResult } from '../state/gameApi';
@@ -135,6 +137,7 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
   const [shown, setShown] = useState<string | null>(all[0]?.id ?? null);
   const [editing, setEditing] = useState<StatBlock | null>(null);
   const [figure, setFigure] = useState(false);
+  const [mind, setMind] = useState(false);
   const [view, setView] = useState<'creatures' | 'groups'>('creatures');
   const list = all.filter((b) => `${displayName(b)} ${b.type} ${b.cr}`.toLowerCase().includes(q.trim().toLowerCase()));
   const sel = all.find((b) => b.id === shown) ?? null;
@@ -152,6 +155,13 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
     if (!sel) return;
     const next: StatBlock = { ...structuredClone(sel), source: 'custom' };
     if (sex) next.sex = sex; else delete next.sex;
+    await run({ type: 'enemyLibrarySave', block: next });
+  };
+  // APEX 2.9: personality and morale
+  const savePersonality = async (p: PersonalityOverride | undefined) => {
+    if (!sel) return;
+    const next: StatBlock = { ...structuredClone(sel), source: 'custom' };
+    if (p) next.personality = p; else delete next.personality;
     await run({ type: 'enemyLibrarySave', block: next });
   };
   // APEX 2.2: or a creature model (beasts, dragons, aberrations …)
@@ -197,11 +207,13 @@ export function EnemyLibrary({ state, run, busy = false }: { state: GameState; r
               <button type="button" className="btn btn-ghost" onClick={() => setEditing(own(sel.id) ? sel : { ...structuredClone(sel), source: 'custom' })}>{own(sel.id) ? 'Edit' : BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Adjust for this campaign' : 'Edit'}</button>
               <button type="button" className="btn btn-ghost" onClick={() => setEditing({ ...structuredClone(sel), id: `${sel.id}-elite`.slice(0, 40), elite: true, title: 'the Elite', hp: Math.round(sel.hp * 2), source: 'custom' })}>Make an elite from it</button>
               <button type="button" className="btn btn-ghost" aria-pressed={figure} onClick={() => setFigure(!figure)} data-testid="enemy-figure">🧍 3D figure{sel.look ? ' ✓' : ''}</button>
+              <button type="button" className="btn btn-ghost" aria-pressed={mind} onClick={() => setMind(!mind)} data-testid="enemy-personality">🧠 Personality{sel.personality ? ' ✓' : ''}</button>
               <span className="flex items-center gap-0.5 rounded-md border border-ink-700 p-0.5 text-xs" role="radiogroup" aria-label="Figures as men or women" title="3D figures of this creature: men / male animals, women / female animals, or mixed (each figure on its own)" data-testid="enemy-sex">
                 {([null, ...FIGURE_SEXES] as const).map((v) => <button key={v ?? 'auto'} type="button" role="radio" aria-checked={(sel.sex ?? null) === v} disabled={busy} className={`rounded px-1.5 py-0.5 ${(sel.sex ?? null) === v ? 'bg-gold-500/25 text-gold-100' : 'text-marble-400 hover:text-gold-200'}`} onClick={() => void saveSex(v)} data-testid={`enemy-sex-${v ?? 'auto'}`}>{v ? SEX_LABEL[v] : 'Auto'}</button>)}
               </span>
               {own(sel.id) && <button type="button" className="btn btn-ghost hover:text-blood-400" onClick={() => void run({ type: 'enemyLibraryRemove', id: sel.id })}>{BUILTIN_BESTIARY.some((x) => x.id === sel.id) ? 'Restore the SRD version' : 'Delete'}</button>}
             </div>
+            {mind && <PersonalityPanel key={`p-${sel.id}-${JSON.stringify(sel.personality ?? {})}`} block={sel} busy={busy} onSave={savePersonality} />}
             {figure && <CreaturePicker key={`c-${sel.id}`} block={sel} busy={busy} onSave={saveCreature} />}
             {figure && <FigureEditor key={sel.id} gm value={sel.look ?? autoLook(`${sel.name} ${sel.type}`, sel.id, sel.color, sel.sex)} onSave={saveLook} onCancel={() => setFigure(false)} busy={busy} title={`Humanoid figure – ${displayName(sel)}`} ring={sel.color} />}
             {figure && !sel.look && !sel.creature && <p className="text-[11px] text-marble-500">Without a saved figure every {sel.name} gets its own variation of the matching preset (bandits, cultists, guards, orcs …). Saving one fixes this look for all of them.</p>}

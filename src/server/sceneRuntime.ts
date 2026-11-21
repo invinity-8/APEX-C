@@ -4,7 +4,10 @@ import type { WorldTime } from '../game/worldTime.js';
 import { statBlock } from '../game/bestiary.js';
 import { parseMap, type SceneMap } from '../campaign/maps.js';
 import { emptySheet } from '../game/sheet.js';
-import { npcPassivePerception, pcPassivePerception } from '../game/perception.js';
+import { npcPassivePerception, pcAbilityMod, pcPassivePerception } from '../game/perception.js';
+import { effectiveAc } from '../game/combatEffects.js';
+import { targetAc } from '../game/effectiveStats.js';
+import { itemRulesOf } from '../game/items/rules.js';
 import type { AuthUser, Repo } from './repo.js';
 import type { SceneCategory, SceneResult } from './scenes.js';
 import { carriedLights, clockFor, figuresFor, fogMap, motionShape, movementFor, parseStoredSheet, sheetOf, visionFor, withArrivalSlots, type SceneFigure, type SceneViewContext, type ViewerMovement } from './sceneLocal.js';
@@ -47,7 +50,7 @@ export interface SceneSnapshot {
   /** APEX 1.6: recent visual combat events (animated by the client). */
   fx?: SceneFx[];
   /** APEX 1.6: hit points of the party's characters on this scene (life bars on the map). */
-  vitals?: Record<string, { hp: number; maxHp: number; temp: number; form?: string }>;
+  vitals?: Record<string, { hp: number; maxHp: number; temp: number; form?: string; /** APEX 2.9 – armour class with every effect (Mage Armor, Shield of Faith …) */ ac?: number }>;
 }
 export interface SceneAssignment { user_id: string; scene_id: string | null; revision: number; spawn_x: number | null; spawn_y: number | null }
 export interface RuntimeScene { id: string; name: string; category: SceneCategory; revision: number; is_legacy_arena: boolean; is_draft: boolean; archived: boolean; published_metadata: unknown }
@@ -98,7 +101,7 @@ export async function sceneSnapshot(user: AuthUser, runtime?: SceneRuntime, moti
     for (const id of user.tokenIds) passive = Math.max(passive, pcPassivePerception(await sheetOf(ctx, id)));
     extra.figures = figuresFor(ctx.state, s.id, full, pcs, user.tokenIds, visible, false, { side: 'party', passive });
     extra.reactions = reactionsOf(ctx.state, s.id).filter((r) => r.reactor.kind === 'pc' && user.tokenIds.includes(r.reactor.id));
-    extra.vitals = await vitalsOf(ctx, pcs.map((p) => p.tokenId));
+    extra.vitals = await vitalsOf(ctx, pcs.map((p) => p.tokenId), s.id);
     // combat feedback only between creatures this viewer can see (or its own characters)
     const seen = new Set([...user.tokenIds.map((id) => `pc-${id}`), ...extra.figures.map((f) => (f.kind === 'pc' ? `pc-${f.tokenId}` : `npc-${f.id}`))]);
     extra.fx = recentFx(ctx.state, s.id).filter((f) => (!f.to || seen.has(f.to)) && (!f.from || seen.has(f.from) || !!f.to)).map((f) => (f.from && !seen.has(f.from) ? { ...f, from: undefined } : f));
@@ -218,7 +221,7 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
           try {
             if (local) pcMovement = Object.fromEntries(await Promise.all(pcs.map(async (p) => [p.tokenId, movementFor(stored.state, focus.id, focus.category as 'battle' | 'region', p.tokenId, true, await sheetOf(ctx, p.tokenId).catch(() => emptySheet()), local)] as const)));
           } catch { pcMovement = {}; }
-          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id), pcMovement, fx: recentFx(stored.state, focus.id), vitals: await vitalsOf(ctx, pcs.map((p) => p.tokenId)) };
+          return { figures, ...(fog ? { fog, view } : {}), combatLog: (stored.state.sceneCombatLog?.[focus.id] ?? []).slice(-12), reactions: reactionsOf(stored.state, focus.id), pcMovement, fx: recentFx(stored.state, focus.id), vitals: await vitalsOf(ctx, pcs.map((p) => p.tokenId), focus.id) };
         })() : {}),
       } };
     }
@@ -261,12 +264,15 @@ export async function runtimeRequest(user: AuthUser, method: string, query: Reco
 }
 
 /** Hit points (and temporary HP) of characters from their sheets – Wild Shape shows the beast's hit points. */
-async function vitalsOf(ctx: SceneViewContext, tokenIds: string[]): Promise<Record<string, { hp: number; maxHp: number; temp: number; form?: string }>> {
-  const out: Record<string, { hp: number; maxHp: number; temp: number; form?: string }> = {};
+async function vitalsOf(ctx: SceneViewContext, tokenIds: string[], sceneId?: string): Promise<Record<string, { hp: number; maxHp: number; temp: number; form?: string; ac?: number }>> {
+  const out: Record<string, { hp: number; maxHp: number; temp: number; form?: string; ac?: number }> = {};
   for (const id of tokenIds) {
     const sheet = await ctx.loadSheet(id).catch(() => null);
-    if (sheet?.wildShape) out[id] = { hp: sheet.wildShape.hp, maxHp: sheet.wildShape.maxHp, temp: sheet.hitPoints?.temp ?? 0, form: sheet.wildShape.formName };
-    else if (sheet?.hitPoints) out[id] = { hp: Math.max(0, sheet.hitPoints.current), maxHp: sheet.hitPoints.max, temp: sheet.hitPoints.temp };
+    // APEX 2.9: the armour class as attacks see it (sheet, equipment and every effect) – shown when hovering the figure
+    const token = ctx.state?.tokens[id];
+    const ac = sheet && token && ctx.state && sceneId ? effectiveAc(ctx.state, sceneId, `pc-${id}`, targetAc(sheet, token, itemRulesOf(ctx.state)), pcAbilityMod(sheet, /^dex/i)) : undefined;
+    if (sheet?.wildShape) out[id] = { hp: sheet.wildShape.hp, maxHp: sheet.wildShape.maxHp, temp: sheet.hitPoints?.temp ?? 0, form: sheet.wildShape.formName, ...(ac !== undefined ? { ac } : {}) };
+    else if (sheet?.hitPoints) out[id] = { hp: Math.max(0, sheet.hitPoints.current), maxHp: sheet.hitPoints.max, temp: sheet.hitPoints.temp, ...(ac !== undefined ? { ac } : {}) };
   }
   return out;
 }

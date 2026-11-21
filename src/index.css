@@ -488,12 +488,16 @@
 .initiative-bar { display: flex; align-items: center; gap: .6rem; margin: 0 0 .5rem; padding: .35rem .6rem; border: 1px solid rgba(192,155,88,.45); border-radius: .6rem; background: rgba(14,17,22,.92); overflow-x: auto; }
 .initiative-round { flex: 0 0 auto; font: 700 .72rem/1 Georgia, serif; letter-spacing: .08em; text-transform: uppercase; color: #dfc58a; }
 .initiative-bar ol { display: flex; gap: .45rem; }
-.initiative-bar li { position: relative; display: grid; justify-items: center; gap: .1rem; padding: .25rem .35rem; border: 1px solid transparent; border-radius: .5rem; opacity: .72; min-width: 3.4rem; }
+.initiative-bar li { position: relative; display: grid; justify-items: center; gap: .1rem; padding: .2rem .2rem; border: 1px solid transparent; border-radius: .5rem; opacity: .72; min-width: 3.2rem; }
 .initiative-bar li[aria-current=true] { opacity: 1; border-color: #e8c66f; background: rgba(192,155,88,.18); box-shadow: 0 0 12px rgba(232,198,111,.35); }
 .initiative-bar li.is-mine small { color: #9fe2b0; }
 .initiative-bar small { font-size: .62rem; color: #e6d8bc; max-width: 4.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* APEX 2.9 – creature pictures instead of letters */
+.initiative-pic, .initiative-npc { width: 2.9rem; height: 2.9rem; border-radius: 50%; border: 2px solid rgba(192,155,88,.6); background: radial-gradient(circle at 50% 38%, #8a7a5c, #3a3226 70%, #1e1a14); object-fit: cover; }
+.initiative-npc { display: grid; place-items: center; color: #e8d4a6; font-size: 1.2rem; }
+.initiative-pic.is-elite, .initiative-npc.is-elite { border-color: #f0c04a; box-shadow: 0 0 8px rgba(240,192,74,.6); }
+.initiative-crown { position: absolute; top: -.15rem; left: 50%; transform: translateX(-50%); color: #f0c04a; font-size: .7rem; text-shadow: 0 0 3px #000; }
 .initiative-bar em { position: absolute; top: .1rem; right: .15rem; font: 700 .58rem/1 sans-serif; font-style: normal; color: #f3e1b4; background: #2a2418; border-radius: .3rem; padding: .1rem .2rem; }
-.initiative-npc { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; background: #3b2626; color: #f2c9c9; font-weight: 700; font-size: .8rem; }
 
 .combat-log { margin: .3rem 0 .5rem; padding: .35rem .6rem; border: 1px solid rgba(179,38,30,.45); border-radius: .5rem; background: rgba(30,14,14,.75); font-size: .72rem; color: #f0d8d0; }
 .combat-log summary { cursor: pointer; font-weight: 700; color: #ffb4a8; }
@@ -557,8 +561,9 @@
 .battle-stage > .hex-scene > .hex-scene-frame { flex: 1; min-height: 0; border: 0; border-radius: 0; }
 .battle-dock { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: .5rem; padding-right: .15rem; }
 .battle-layout.dock-right .battle-dock, .battle-layout.dock-left .battle-dock { max-height: 100%; }
-.battle-overlay-top { position: absolute; top: .4rem; left: 50%; transform: translateX(-50%); z-index: 20; max-width: calc(100% - 13rem); pointer-events: none; }
-.battle-overlay-top > * { pointer-events: auto; }
+/* APEX 2.9: between the dock switch (left) and the 2D/3D toggle (right) – never on top of them */
+.battle-overlay-top { position: absolute; top: .4rem; left: 8.9rem; right: 4.9rem; z-index: 20; display: flex; justify-content: center; pointer-events: none; }
+.battle-overlay-top > * { pointer-events: auto; max-width: 100%; min-width: 0; }
 .battle-overlay-top .initiative-bar { margin: 0; background: rgba(14,17,22,.82); backdrop-filter: blur(4px); border-radius: .6rem; }
 .battle-dock-switch { position: absolute; top: .5rem; left: .5rem; z-index: 21; display: flex; gap: 2px; padding: 2px; border-radius: .45rem; border: 1px solid rgba(192,155,88,.45); background: rgba(14,17,22,.85); }
 .battle-dock-switch button { width: 1.7rem; height: 1.5rem; border-radius: .3rem; color: #bcb29e; font-size: .85rem; }
@@ -599,7 +604,7 @@
   .hotbar-slots { display: flex; overflow-x: auto; justify-content: flex-start; }
   .hotbar-slot { flex: none; }
   .hotbar-economy { font-size: .65rem; }
-  .battle-overlay-top { max-width: calc(100% - 4rem); }
+  .battle-overlay-top { left: .4rem; right: 4.6rem; }
 }
 @media (max-width: 767px) {
   .map-stage .player-scene > .battle-layout { order: 1; }

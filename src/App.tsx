@@ -1,3 +1,4 @@
+import { setMusicMood, unlockSound } from './audio/sound';
 import { GroupsContext } from './components/groupsContext';
 import { bestiary, BUILTIN_BESTIARY } from './game/bestiary';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -32,8 +33,6 @@ import { MapStage } from './components/map/MapStage';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 // APEX 2.1 – performance: pages that are not on the map screen load on first use (smaller start bundle)
-const EquipmentPanel = lazy(() => import('./components/EquipmentPanel').then((m) => ({ default: m.EquipmentPanel })));
-const InventoryPanel = lazy(() => import('./components/InventoryPanel').then((m) => ({ default: m.InventoryPanel })));
 const ArsenalPanel = lazy(() => import('./components/ArsenalPanel').then((m) => ({ default: m.ArsenalPanel })));
 const EnemyLibrary = lazy(() => import('./components/EnemyLibrary').then((m) => ({ default: m.EnemyLibrary })));
 const SceneDirector = lazy(() => import('./components/SceneDirector').then((m) => ({ default: m.SceneDirector })));
@@ -62,6 +61,15 @@ export default function App({ game }: { game: GameApi }) {
   const mapRef = useRef<MapHandle>(null);
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'error') => setToast({ id: Date.now(), text, kind }), []);
+  // APEX 2.9 – sound: allowed after the first click or key; the music follows the situation (battle, map, menus)
+  useEffect(() => {
+    const f = () => unlockSound();
+    window.addEventListener('pointerdown', f, { once: true });
+    window.addEventListener('keydown', f, { once: true });
+    return () => { window.removeEventListener('pointerdown', f); window.removeEventListener('keydown', f); };
+  }, []);
+  const inBattle = view.sceneEncounter?.status === 'active' || Object.values(gmState?.sceneEncounters ?? {}).some((e) => e?.status === 'active');
+  useEffect(() => { setMusicMood(screen === 'map' ? (inBattle ? 'battle' : 'explore') : 'menu'); }, [screen, inBattle]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 4200);
@@ -408,7 +416,6 @@ export default function App({ game }: { game: GameApi }) {
     ...(isGm && state ? [{ id: 'enemies' as View, label: '🐉 Enemy Library' }] : []),
     { id: 'character', label: '📜 Character' },
     ...(game.online ? [{ id: 'journal' as View, label: '📖 Journal' }] : []),
-    { id: 'inventory', label: '🎒 Inventory' },
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
     ...(isGm && game.online ? [{ id: 'feedback' as View, label: '📮 Feedback' }] : []),
@@ -460,9 +467,9 @@ export default function App({ game }: { game: GameApi }) {
           <button
             key={t.id}
             onClick={() => setScreen(t.id)}
-            aria-current={screen === t.id ? 'page' : undefined}
+            aria-current={screen === t.id || (t.id === 'character' && (screen === 'inventory' || screen === 'spells')) ? 'page' : undefined}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-              screen === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:bg-ink-800 hover:text-marble-50'
+              screen === t.id || (t.id === 'character' && (screen === 'inventory' || screen === 'spells')) ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:bg-ink-800 hover:text-marble-50'
             }`}
           >
             {t.label}
@@ -518,17 +525,10 @@ export default function App({ game }: { game: GameApi }) {
             <p className="p-6 text-sm text-marble-500">The merchant has closed shop.</p>
           ) : !sheetToken ? (
             <p className="p-6 text-sm text-marble-500">No character available.</p>
-          ) : screen === 'character' || screen === 'spells' ? (
-            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} initialTab={screen === 'spells' ? 'spells' : 'overview'} />
-          ) : (
-            // APEX 0.7 consolidation: one page for everything the character carries – worn equipment and inventory
-            <div className="mx-auto grid max-w-7xl items-start gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_27rem]">
-              <InventoryPanel key={sheetToken.id} token={sheetToken} run={run} busy={game.busy} rules={view.itemRules} isGm={isGm} game={game} />
-              <section className="panel p-3 xl:sticky xl:top-2" aria-label="Equipment">
-                <EquipmentPanel game={game} token={sheetToken} run={run} isGm={isGm} />
-              </section>
-            </div>
-          )}
+          ) : screen === 'character' || screen === 'spells' || screen === 'inventory' ? (
+            // APEX 2.9: the inventory is a tab of the character (older links to “inventory” open it there)
+            <CharacterPanel key={sheetToken.id} game={game} token={sheetToken} isGm={isGm} run={run} notify={notify} initialTab={screen === 'spells' ? 'spells' : screen === 'inventory' ? 'inventory' : 'overview'} />
+          ) : null}
           </Suspense>
         </div>
       )}

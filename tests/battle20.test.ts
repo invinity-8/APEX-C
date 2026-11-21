@@ -104,7 +104,8 @@ describe('API: jumping down, shoving', () => {
     const r = await turn(scene.id, { action: 'shove', attacker: { kind: 'npc', id: orc.id }, target: { kind: 'npc', id: gob.id }, mode: 'push' });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const msg = (r.body as { message: string }).message;
-    expect(msg).toMatch(/shoves Goblin 1 \(push 5 ft\).*→ success\. Goblin 1 is pushed 5 ft – over the edge!/);
+    expect(msg).toContain(`shoves ${gob.name} (push 5 ft)`);
+    expect(msg).toContain(`→ success. ${gob.name} is pushed 5 ft – over the edge!`);
     expect(msg).toMatch(/falls 15 ft \(pushed over the edge\)/);
     const moved = enemiesOf(st(), scene.id).find((e) => e.id === gob.id)!;
     const sm = scene.metadata as unknown as SceneMap;
