@@ -1,3 +1,4 @@
+import { playFx } from '../audio/sound';
 import { Suspense, lazy, useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { SceneSnapshot } from '../server/sceneRuntime';
 import { api } from '../online/api';
@@ -72,6 +73,18 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
   // APEX 2.5 – what a right-click would do, shown at the pointer; a choice menu when it needs one (Dash …)
   const [hoverHex, setHoverHex] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ items: MapMenuItem[]; x: number; y: number } | null>(null);
+  // APEX 2.9 – sound: every new combat event once (attacks, hits, spells, bites …)
+  const heard = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const list = snapshot.fx ?? [];
+    if (!heard.current) { heard.current = new Set(list.map((f) => f.id)); return; } // what happened before we came stays quiet
+    const now = Date.now();
+    for (const f of list) {
+      if (heard.current.has(f.id)) continue;
+      heard.current.add(f.id);
+      if (now - f.at < 6000) setTimeout(() => playFx(f), Math.max(0, f.at - now));
+    }
+  }, [snapshot.fx]);
   const mouse = useRef({ x: 0, y: 0 });
   const cursorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

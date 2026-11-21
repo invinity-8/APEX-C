@@ -1,3 +1,4 @@
+import { SoundMenu } from './SoundMenu';
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { Connection, GameApi } from '../state/gameApi';
@@ -144,6 +145,7 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map', arenaClock 
             <span className="hidden max-w-40 truncate text-[11px] text-marble-300 lg:inline" title="Signed-in profile">
               {online.profileName}
             </span>
+            <SoundMenu />
             <FeedbackButton online={online} area={area} notify={notify} />
             <button className="btn btn-ghost px-2" onClick={() => setPwOpen(true)} title="Change your password" aria-label="Change your password">
               🔑

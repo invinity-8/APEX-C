@@ -1,3 +1,4 @@
+import { setMusicMood, unlockSound } from './audio/sound';
 import { GroupsContext } from './components/groupsContext';
 import { bestiary, BUILTIN_BESTIARY } from './game/bestiary';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -60,6 +61,15 @@ export default function App({ game }: { game: GameApi }) {
   const mapRef = useRef<MapHandle>(null);
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'error') => setToast({ id: Date.now(), text, kind }), []);
+  // APEX 2.9 – sound: allowed after the first click or key; the music follows the situation (battle, map, menus)
+  useEffect(() => {
+    const f = () => unlockSound();
+    window.addEventListener('pointerdown', f, { once: true });
+    window.addEventListener('keydown', f, { once: true });
+    return () => { window.removeEventListener('pointerdown', f); window.removeEventListener('keydown', f); };
+  }, []);
+  const inBattle = view.sceneEncounter?.status === 'active' || Object.values(gmState?.sceneEncounters ?? {}).some((e) => e?.status === 'active');
+  useEffect(() => { setMusicMood(screen === 'map' ? (inBattle ? 'battle' : 'explore') : 'menu'); }, [screen, inBattle]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 4200);
