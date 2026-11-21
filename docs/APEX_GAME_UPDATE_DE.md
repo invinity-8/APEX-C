@@ -954,3 +954,89 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tests:** 593 Tests grün.
 - **Neu:** `ai27` (KI), `sites27` (Schauplätze), `female28` (Figuren, Bibliothek, Karte, Server).
+
+## APEX 2.9 – Moral und Charakter der Gegner, Zufallsbegegnungen, lebendige Gegner, Reaktionen, Inventar in 3D, Ton
+
+**Charakter und Moral der Gegner** (Gegnerbibliothek → „🧠 Personality“)
+- **Sieben Regler (0–10):**
+  - Loyalität
+  - Opportunismus
+  - Gier
+  - Wildheit
+  - Gnade
+  - Ehre
+  - Inspiration (Führung): ab 6 ist die Kreatur ein **Anführer**.
+- **Lichtscheu:** Tiere, die Fackeln und Feuer fernhalten.
+- **Kategorien** aus Werteblock und Art, änderbar:
+  - **Truppe** (Goblins, Banditen, Orks, Kultisten, Soldaten): braucht Gruppe und Anführer.
+  - **Rudel** (Wölfe, Hyänen): mutig nur in der Überzahl.
+  - **Horde** (Zombies, Skelette, Konstrukte, Schleime): keine Moral, kommt immer.
+  - **Raubtier** (Bären, Spinnen, Monster): flieht schwer verletzt.
+  - **Stolz** (Drachen, Riesen, Aberrationen): nur echte Gefahr bewegt es.
+- **Kampfmüdigkeit (verborgen):** Zu Beginn jedes KI-Zugs prüft die Kreatur, was sie erschüttert hat:
+  - gefallene Kameraden
+  - gefallener Anführer
+  - erste schwere Wunde
+  - Sicht zur Gruppe verloren
+  - Unterzahl (Rudel)
+  - Fackel vor der Nase (lichtscheu)
+- **Moralwurf:** W20 + Weisheitsrettung + Anführerbonus + Charakter gegen SG 10–13 + Müdigkeit.
+  - **Misslingt er:** Die Müdigkeit steigt.
+  - **Bruchpunkt** (3, mehr für Loyale, Ehrenhafte, Wilde): Die Kreatur **bricht** und flieht.
+  - **Eingekesselt:** Wer klug genug, nicht wild und gnädig, gierig oder opportunistisch ist, **ergibt sich** (🏳).
+- **Anführer:**
+  - **Rückhalt:** Wer sie sieht, würfelt besser.
+  - **⚑ Sammeln (Bonusaktion):** Kameraden, die sie innerhalb von 30 ft sieht, verlieren Müdigkeit; Gebrochene kehren zurück.
+  - **KI:** Sie tut das von selbst, die Wackelnden zuerst.
+- **Zielwahl nach Charakter:**
+  - **Opportunisten und Wilde:** gehen auf Verwundete und Einzelne.
+  - **Ehrenhafte:** suchen den Stärksten.
+  - **Gnädige:** lassen Fliehende ziehen (keine Gelegenheitsangriffe).
+- **Sichtbarkeit:**
+  - **Spieler:** sehen nur Flucht 🏃 und Kapitulation 🏳.
+  - **GM:** sieht in der Gegnerleiste „standhaft / erschüttert x/3 / gebrochen“ und die Moralwürfe im KI-Protokoll.
+  - **Neuer Kampf:** Ein neuer Kampf beginnt mit frischen Nerven.
+
+**🎲 Create random encounter** (Game-Tab, Szenenliste, großer goldener Knopf)
+- **Eingaben:** Schauplatz (oder „passend“), Gegner-Bande (15 Banden, oder „passend zum Schauplatz“), Situation, Gruppengröße, Stufe, Schwierigkeit.
+- **Vorschlag:** Karte als Vorschau, Gegner mit XP-Bewertung nach DMG. Mit „Andere Karte“ / „Neuer Vorschlag“ neu würfeln.
+- **Bearbeiten:** Gegner entfernen oder aus der Bibliothek hinzufügen.
+- **Quest-Charaktere:** aus der Bibliothek, mit Namen, auf Seite der Gruppe (steht neben ihr) oder dagegen.
+- **„⚔ Begegnung erstellen“:** Die Szene wird angelegt, veröffentlicht und bestückt.
+
+**Lebendige Gegner**
+- **Eigenes Aussehen:** Jede neu platzierte Kreatur hat ihr eigenes Fell bzw. ihre eigenen Schuppen:
+  - Farben pro Art, z. B. Spinnen, Wölfe, Bären, Großkatzen, Huftiere, Rinder, Schafwolle, Amphibien, Reptilien, Vögel, Ungeziefer.
+  - Muster: Streifen, Flecken, Bänder, Sprenkel, dunkler Sattel, Schuppenglanz.
+- **Farbschema der Karte:** färbt mit (Tarnung), z. B. ockerfarbene Spinnen in der Mesa, weiße Wölfe in der Tundra.
+- **Beschreibende Namen** statt Nummern, z. B. „Gestreifte ockerfarbene Riesenspinne“, „Grauer Wolf“, „Einäugiger Bandit“, „Vernarbter Banditenhauptmann“.
+- **Bestehende Kreaturen** behalten Namen und Aussehen.
+
+**Initiative-Leiste**
+- **Bilder statt Kürzel:** jede Kreatur in ihrem eigenen Fell bzw. Gesicht. Keine Namen mehr unter den Porträts, Name und Initiative stehen im Tooltip. Die Porträts sind größer.
+- **Keine Überlappung mehr:** Die Leiste sitzt zwischen Layout-Knöpfen und 2D/3D-Schalter.
+- **Symbole:** Auf der 2D-Karte und in der Zielleiste stehen Symbole statt „SP“/„CU“, z. B. 🕷 🐺 👺 👹 🕯 🧟.
+
+**Hover über Figuren**
+- **Anzeige:** Trefferpunkte, Rüstungsklasse mit allen Effekten (z. B. 🔷 Magierrüstung → RK 15), Wildgestalt und alle Zustände und Buffs der Figur. In 2D und 3D.
+
+**Reaktionen wie in Baldur's Gate 3** (Kampfleiste → „⚙ Reactions“)
+- **Pro Charakter**, für Gelegenheitsangriff und Schild:
+  - „Fragen“
+  - „Immer – automatisch“
+  - „Nie“ (wird gar nicht angeboten)
+  - bei Zaubern zusätzlich „nur fragen, solange ich einen Slot habe / zwei Slots habe“
+
+**Inventar im Charakter**
+- **Neuer Ort:** Das Inventar ist jetzt ein Reiter im Charakter, kein eigener Hauptreiter mehr.
+- **Ansicht:** Neben den Slots dreht sich die 3D-Figur; umschaltbar auf die Stoffpuppe.
+- **„⚔ Angelegte Ausrüstung / ✨ Aussehen“:** Die Figur trägt hier und auf der Kampfkarte die angelegte Rüstung, Helm, Stiefel, Umhang, Waffen und Schild. Alternativ zeigt sie das Wunsch-Aussehen aus „Appearance“, das die Grundlage bleibt (Körper, Gesicht, Haare, Kleidung).
+
+**Ton** (🔊 in der Kopfzeile)
+- **Effekte:** Schwertschwung, Treffer, kritischer Treffer, Fehlschlag, Bogen, Biss, Knurren, Zauber je Element (Feuer, Frost, Blitz, Donner, Strahlen, Nekrotisch, Säure, Psychisch, Arkan), Heilung, Buffs. Sie klingen bei jedem Kampfereignis.
+- **Musik:** Taverne, Kampf, Erkundung, Verlies, dazu eine leise Menü-Atmosphäre. „Auto“ folgt dem Spiel (Kampf, Karte, Menüs).
+- **Einstellungen:** Effekte und Musik einzeln an/aus, Lautstärke, Titelliste.
+- **Technik:** Alles wird im Browser erzeugt, ohne Audiodateien.
+
+**Tests:** 619 Tests grün.
+- **Neu:** `morale29`, `randomEncounter29`, `individual29`, `hover29`, `reactions29`, `gear29`.
