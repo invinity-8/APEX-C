@@ -1040,3 +1040,91 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tests:** 619 Tests grün.
 - **Neu:** `morale29`, `randomEncounter29`, `individual29`, `hover29`, `reactions29`, `gear29`.
+
+## APEX 2.10 – Baukasten für Kreaturen und Figuren, neue Monster, Porträts, Geräusche
+
+**Bugfix: dunkles Rechteck über den Figuren (3D)**
+- **Ursache:** Die Umgebungsverdeckung (Qualität „ultra“) hat Namensschilder und schwebende Zahlen als feste Flächen mitgerechnet und dadurch einen halbtransparenten dunklen Kasten darüber gelegt.
+- **Behebung:** Der Effekt lässt Schilder, Zahlen und durchsichtige Overlays jetzt aus.
+- **Prüfstand:** Die Ursache ist im Code eindeutig. In meinem Testbrowser ließ sich das Rechteck vorher nicht zuverlässig nachstellen. Nach dem Fix ist auf „ultra“ kein Kasten zu sehen. Bitte auf eurem Gerät gegenprüfen.
+
+**Der Baukasten** (`kit3d.ts`)
+- **Grundformen, aus denen jetzt alle Modelle gebaut sind:**
+  - weiche Röhren entlang einer Kurve (Körper, Hälse, Schwänze) mit beliebigem Querschnitt
+  - Gliedmaßen mit Gelenken und Muskelschwung
+  - Pfoten mit Zehen und Krallen, Hufe (auch gespalten), Vogelfüße mit Krallen
+  - Hände mit Fingern und Daumen, die sich um etwas schließen
+  - Krallen, Hörner (gebogen, gedreht, gerillt), Stoßzähne
+  - Ohren (spitz, rund, Schlapp-, Hasen-, Flossenohren), Augen mit Iris und Pupille (rund, Schlitz, Ziegenpupille) oder leuchtend
+  - Mähnen und Krausen, Zahnreihen, Schwänze (Quaste, buschig, Keule, Stachel, Schwanzflosse, Teufelsspitze), Tentakel mit Saugnäpfen, Stachel- und Plattenkämme
+  - Flügel: Federn, Fledermaus- bzw. Drachenhaut, Insektenflügel
+- **Muster für Fell und Haut:** Tigerstreifen, Zebrastreifen, Giraffennetz und Kuhflecken neu, dazu wie bisher Streifen, Tupfen, Bänder, Sprenkel und Sattel.
+- **Einheitlich:** Alles ist skalierbar und frei einfärbbar.
+
+**Kreaturen neu gebaut** (`beasts3d.ts`, `monsters3d.ts`, `creatures3d.ts`)
+- **Vierbeiner-Bauplan:**
+  - Eine Art ist ein Parametersatz: Körperlänge, Beinlänge, Brust, Hals, Kopf, Schnauze, Füße, Ohren, Schwanz, Hörner, Mähne und Muster.
+  - Rumpf mit Taille und tiefer Brust, Schulter- und Schenkelmuskeln.
+  - Vorderbeine mit Ellbogen und Handgelenk, Hinterbeine mit Knie und Sprunggelenk.
+  - Echte Köpfe mit Schädel, Wangen, Schnauze, Nase und Unterkiefer; Pferde haben lange Gesichter.
+- **Beispiele:**
+  - Katze (getigert, mit Schnurrhaaren)
+  - Hund (Schlappohren)
+  - Wolf (Halskrause)
+  - **dreiköpfiger Wachhund** (neu, riesig, braun) neben dem dämonischen Höllen-Kerberos
+- **Weitere Baupläne:**
+  - Vögel mit eiförmigem Körper, Hakenschnabel, Eulengesicht, Kamm, Schwanzfächer
+  - Schlangen als ein durchgehender Körper mit Bauchschuppen, Kobra-Haube, Wurmmaul
+  - Spinnen, Skorpione, Krabben, Käfer und Tausendfüßer mit Gliederbeinen
+  - Drachen, Wyvern und Drachen ohne Flügel mit Bauchplatten und Rückenkamm
+  - Zweibeinige Monster mit echten Händen; Köpfe für Affe, Stier, Troll, Oger, Bestie, Imp, Geier, Frosch, Helm
+- **Flügel:** Am Boden liegen sie gefaltet am Körper. In der Luft breiten sie sich aus und schlagen.
+- **Einzelstücke neu modelliert:**
+  - Betrachter, Geister, Elementare, Golems, Schleime, Gallertwürfel
+  - Baumhirt, Sumpfhügel, Aboleth, Otyugh, Krake, Mimic, Frosch, Fische
+  - Hydra mit fünf Hälsen, Schildkröte mit Schuppenpanzer, Schnecke, Pilzwesen, fleischfressende Pflanze
+  - Grell, Hirnfresser, Cloaker, Wal, Qualle, Roper, Fledermaus, Schmetterling
+- **Neue Modelle** für Monster, die bisher ein unpassendes bekamen:
+  - Imp und Quasit (statt großem Dämon)
+  - Dornenteufel, Vrock (Geierdämon)
+  - Troll, Oger (mit Keule), Ettin (zwei Köpfe); bisher erschienen sie als Menschenfiguren
+  - Pseudodrache, belebte Rüstung, Wiesel, Säbelzahnkatze, Skelett-Schlachtross
+- **Untote bleiben Figuren:** Zombies, Skelette, Ghule, Mumien und Wights bleiben Menschenfiguren; auch ein „Oger-Zombie“ wird kein lebender Oger.
+- **Fell der Individuen:** Artmuster bleiben erhalten (Tiger gestreift, Kuh gefleckt). Tiger und Zebra haben feste Farben.
+- **Bestehende Szenen:** Modell-IDs, Farben und gespeicherte Szenen bleiben gültig, keine Migration.
+
+**Helden- und NPC-Figuren** (`lowpoly.ts`)
+- **Körper aus dem Baukasten:**
+  - weiche Beine mit Knie, Arme mit Ellbogen, Muskelschwung (kräftige Figuren stärker)
+  - **Hände mit Fingern und Daumen**, die sich um Waffe, Schild oder Stab schließen
+  - geformte Schuhe und Stiefel statt Kästen
+  - ein Rumpf mit Taille und Brust; Frauen mit Hüfte, Taille und Brust
+  - runde Köpfe, runde Schnauzen bei Drachenblütigen und Echsenmenschen, runder Kiefer bei Orks und Ogern
+  - Schwänze (Tiefling-Spitze, Echsenschwanz)
+- **Alles Bisherige bleibt:** Kleidung, Gesichter, Haare, Kopfbedeckungen, Ausrüstung und gespeicherte Figuren behalten ihre Optionen.
+
+**Porträts** (Initiative-Leiste)
+- **Licht:** warmes Haupt-, kühles Füll- und Kantenlicht, das die Silhouette betont.
+- **Schärfe:** doppelte Auflösung.
+- **Ausschnitt:** Figuren als Kopf und Schultern, Kreaturen auf Kopf und Vorderkörper statt des ganzen Tiers.
+
+**Geräusche** (🔊)
+- **Aufnahmen:** Kenneys „RPG Audio“ (CC0, kenney.nl), 28 Dateien, 168 KB, in `public/audio/kenney` mit Lizenzdatei.
+- **Wo sie klingen:**
+  - Klingenschwung bei jedem Nahkampfangriff
+  - Schnitt bei Klingen, Axthieb bei Äxten, Hämmern und Keulen
+  - Schritte, wenn Figuren in 3D laufen
+  - Stoff und Gürtel beim Anlegen von Ausrüstung
+  - Ablegen und Umpacken von Gegenständen
+  - Münzen beim Handeln und Beute-Würfeln
+  - Blättern im Tagebuch
+  - eine Tür beim Szenenwechsel
+- **Rückfall:** Bis die Aufnahmen geladen sind, oder falls ein Browser sie nicht abspielt, klingt der synthetische Ton.
+- **Musik:** unverändert. howler.js war nicht nötig, Web Audio reicht.
+
+**Leistung**
+- **Mehr Detail:** Die Modelle sind deutlich detaillierter als vorher, im Median etwa 12 000 Dreiecke, das aufwendigste (Chimäre) etwa 30 000.
+- **Messung:** In meinem Testbrowser (Software-Grafik) lief eine Kampfszene mit 13 Figuren flüssig. Auf echten Handys habe ich das **nicht** gemessen.
+
+**Tests:** 632 Tests grün.
+- **Neu:** `creatures210`. Er prüft Baukasten, Muster, alle Kreaturen und Figuren, Flügel gefaltet und ausgebreitet, Modellzuordnung der Monster, Artmuster unter individuellem Fell und die neuen Geräusche.

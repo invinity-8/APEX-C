@@ -58,6 +58,7 @@ vec2 coatCells(vec3 p) { vec3 c = floor(p), f = fract(p); float d1 = 8.0, d2 = 8
 }`);
   };
   m.customProgramCacheKey = () => `apex-coat-${id}`;
+  m.userData = { ...m.userData, marking: undefined };
   return m;
 }
 
@@ -86,11 +87,15 @@ export function applyCoat(group: THREE.Object3D, ind: Individual): void {
     let next = done.get(mat);
     if (!next) {
       const shade = lum(mainColour) > 0.02 ? Math.max(0.6, Math.min(1.5, lum(c) / lum(mainColour))) : 1;
+      // APEX 2.10: a species marking (tiger stripes, cow blotches …) stays – in the individual's colours
+      const marking = mat.userData.marking as { kind: Marking; mark: string } | undefined;
       if (ind.coat) {
         const colour = new THREE.Color(ind.coat.c).multiplyScalar(shade);
         // a saddle is always a darker back; the other markings use the coat's second colour
         const mark = ind.pattern === 'saddled' ? new THREE.Color(ind.coat.c).multiplyScalar(0.16) : new THREE.Color(ind.coat.c2);
-        next = patterned(mat, colour, mark, ind.pattern, size, box.min.y, ind.shimmer);
+        next = marking ? patterned(mat, colour, mark, marking.kind, size, box.min.y, ind.shimmer) : patterned(mat, colour, mark, ind.pattern, size, box.min.y, ind.shimmer);
+      } else if (marking) {
+        next = patterned(mat, mat.color.clone().multiplyScalar(1 + ind.jitter * 0.25), new THREE.Color(marking.mark), marking.kind, size, box.min.y, false);
       } else {
         next = mat.clone();
         (next as THREE.MeshStandardMaterial).color.multiplyScalar(1 + ind.jitter * 0.25);

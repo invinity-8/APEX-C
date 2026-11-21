@@ -17,6 +17,8 @@ export function withPattern(g: THREE.Object3D, body: THREE.Material, pattern: Ma
   const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3());
   const base = body as THREE.MeshStandardMaterial;
   const m = patterned(base, base.color.clone(), new THREE.Color(mark), pattern, size, box.min.y, false);
+  // remembered, so an individual coat (coat3d.ts) keeps the species' marking
+  m.userData = { ...m.userData, marking: { kind: pattern, mark } };
   g.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh && mesh.material === body) mesh.material = m; });
 }
 
