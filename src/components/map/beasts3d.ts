@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { blob, claw, ear, eye, featherWing, hand, hoof, horn, limb, membraneWing, mixHex, paw, profile2, skin, spikeRow, tail, talonFoot, teeth, tone, tube, tuftRing, tusk, type V3 } from './kit3d';
 import { patterned } from './coat3d';
+import type { Surface } from './surface3d';
 import type { Marking } from './coat3d';
 
 export type Variant = 'male' | 'female' | 'young';
@@ -69,6 +70,8 @@ export interface Beast {
   thinFront?: boolean; sabre?: boolean;
   pattern?: { kind: Marking; mark: string };
   saddle?: boolean; barding?: string; fangs?: boolean; whiskers?: boolean; ghost?: boolean; glow?: number;
+  /** APEX 2.11 – the coat's material (default: fur; scales for sprawling reptiles). */
+  surface?: Surface;
 }
 export const varyBeast = (s: Beast, v?: Variant): Beast => {
   if (v === 'female') return { ...s, mane: s.mane === 'lion' ? 'none' : s.mane, horns: s.horns === 'antler' ? 'none' : s.horns === 'bull' || s.horns === 'ram' ? 'goat' : s.horns, tusks: s.trunk ? s.tusks : false, beard: false, girth: s.girth * 0.93, len: s.len * 0.96 };
@@ -76,7 +79,7 @@ export const varyBeast = (s: Beast, v?: Variant): Beast => {
   return s;
 };
 interface Mats { coat: THREE.Material; face: THREE.Material; belly: THREE.Material; noseM: THREE.Material; clawM: THREE.Material; hairM: THREE.Material }
-const look = (s: Beast) => s.ghost ? { opacity: 0.55, glow: 0.45 } : s.glow ? { glow: s.glow, rough: 0.7 } : { rough: 0.78 };
+const look = (s: Beast) => s.ghost ? { opacity: 0.55, glow: 0.45 } : { ...(s.glow ? { glow: s.glow, rough: 0.7 } : { rough: 0.78 }), surface: s.surface ?? (s.sprawl ? 'scales' : 'fur') as Surface };
 export function beastMats(s: Beast): Mats {
   const coat = skin(s.c, look(s));
   return { coat, face: s.face ? skin(s.face, look(s)) : coat, belly: skin(s.belly ?? mixHex(s.c, '#f2e6d0', 0.35), look(s)), noseM: skin(s.nose ?? '#2a201a', { rough: 0.35 }), clawM: skin(s.claws ?? '#e8dcc0', { rough: 0.4 }), hairM: skin(s.hair ?? tone(s.c, 0.6), s.mane === 'flame' ? { glow: 1.2 } : { rough: 0.9 }) };

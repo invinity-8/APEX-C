@@ -16,12 +16,15 @@
  * Conventions: metres-ish units, +y up, +z forward, x to the creature's left/right; parts are added to a parent group.
  */
 import * as THREE from 'three';
+import { withSurface, type Surface } from './surface3d';
 
 export type V3 = [number, number, number];
 const vec = (p: V3) => new THREE.Vector3(p[0], p[1], p[2]);
 
 // ---------------------------------------------------------------- materials
-export interface SkinOpts { rough?: number; metal?: number; glow?: number; glowColor?: string; opacity?: number; side?: boolean; flat?: boolean }
+export interface SkinOpts { rough?: number; metal?: number; glow?: number; glowColor?: string; opacity?: number; side?: boolean; flat?: boolean;
+  /** APEX 2.11 – a procedural material on top (cloth, leather, metal, scales, fur …), see surface3d.ts. */
+  surface?: Surface; surfaceScale?: number }
 const mats = new Map<string, THREE.MeshStandardMaterial>();
 /** A cached material: soft by default, `flat` for rock and crystal, `glow` for eyes, fire and magic. */
 export function skin(color: THREE.ColorRepresentation, o: SkinOpts = {}): THREE.MeshStandardMaterial {
@@ -35,6 +38,7 @@ export function skin(color: THREE.ColorRepresentation, o: SkinOpts = {}): THREE.
       ...(o.side ? { side: THREE.DoubleSide } : {}),
       ...(o.opacity !== undefined ? { transparent: true, opacity: o.opacity, depthWrite: o.opacity > 0.6 } : {}),
     });
+    if (o.surface && o.surface !== 'smooth') withSurface(m, o.surface, o.surfaceScale ?? 1);
     mats.set(key, m);
   }
   return m;

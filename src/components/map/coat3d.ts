@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import type { Individual, Pattern } from '../../game/individual';
+import { installPatches, rememberedSurface, type Patch } from './surface3d';
 
 /** APEX 2.10: species-only markings on top of the individual ones – tiger stripes, zebra stripes, a giraffe's net
  * of patches and a cow's blotches. */
@@ -19,10 +20,12 @@ export function patterned(base: THREE.MeshStandardMaterial, colour: THREE.Color,
   m.color.copy(colour);
   if (shimmer) { m.metalness = 0.35; m.roughness = 0.32; }
   const id = PATTERN_ID[pattern];
-  if (!id) return m;
+  // APEX 2.11: the base's surface (fur, scales …) stays under the marking
+  const surf = rememberedSurface(base);
+  if (!id) { if (surf) installPatches(m, [surf]); return m; }
   const length = Math.max(size.x, size.z, 0.3);
   const uniforms = { uMark: { value: mark.clone() }, uFreq: { value: (FREQ[pattern] ?? 5.5) / length }, uMid: { value: minY + size.y * 0.52 }, uSpan: { value: size.y * 0.08 } };
-  m.onBeforeCompile = (shader) => {
+  const coat: Patch = { key: `apex-coat-${id}`, apply: (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCoatPos;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvCoatPos = position;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
@@ -56,8 +59,8 @@ vec2 coatCells(vec3 p) { vec3 c = floor(p), f = fract(p); float d1 = 8.0, d2 = 8
   #endif
   diffuseColor.rgb = mix(diffuseColor.rgb, uMark, mark * 0.88);
 }`);
-  };
-  m.customProgramCacheKey = () => `apex-coat-${id}`;
+  } };
+  installPatches(m, [...(surf ? [surf] : []), coat]);
   m.userData = { ...m.userData, marking: undefined };
   return m;
 }
@@ -99,6 +102,7 @@ export function applyCoat(group: THREE.Object3D, ind: Individual): void {
       } else {
         next = mat.clone();
         (next as THREE.MeshStandardMaterial).color.multiplyScalar(1 + ind.jitter * 0.25);
+        const sp = rememberedSurface(mat); if (sp) installPatches(next, [sp]);
       }
       done.set(mat, next);
     }

@@ -56,10 +56,10 @@ function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
  * A faceted lock: a flattened, tapered wedge from `at` (head space, in head radii) along `dir`, `len` and `w` in head
  * radii; it lies flat against the head (its broad side faces away from the centre).
  */
-function lock(c: Ctx, at: [number, number, number], dir: [number, number, number], len: number, w: number, flat = 0.45, mat = c.hair, sides = 4) {
+function lock(c: Ctx, at: [number, number, number], dir: [number, number, number], len: number, w: number, flat = 0.45, mat = c.hair, sides = 7) {
   const hr = c.hr, s = SHAPE[c.shape];
   // APEX 2.6 – fuller: wider and thicker strands
-  const geo = new THREE.ConeGeometry(w * hr * 1.4, len * hr, sides);
+  const geo = new THREE.ConeGeometry(w * hr * 1.2, len * hr, sides);
   const y = new THREE.Vector3(...dir).normalize();
   const p = new THREE.Vector3(at[0] * hr * s[0], at[1] * hr * s[1], at[2] * hr * s[2]);
   const out = p.clone().normalize();
