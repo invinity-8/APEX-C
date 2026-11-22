@@ -1298,3 +1298,27 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - **Nur beigetretene Spieler:** Spieler, die sich noch nie angemeldet haben, werden nicht verschoben. Die Datenbank erlaubt das nur für Kampagnenmitglieder.
 - **Ein Pferd im Hideout** gibt es noch nicht als Figur; der Wagen ist eine Kachel.
 - **Handys:** nicht gemessen.
+
+## APEX 2.13 – Kampagnen-Theme für alle, Reichsadler, Zoom, ruhigere Figuren
+
+- **Theme nur für den GM:**
+  - Farben und Schriften stellt nur noch der GM ein. Sie gelten für alle Spieler; Spieler haben keinen Knopf mehr.
+  - Gespeichert im Spielstand (`uiTheme`), die Titelseite merkt sich das zuletzt gesehene Theme.
+- **Theme überall:** Auch Unterebenen (Szenen-Editor, Journal, Eingabefelder) folgen jetzt Hauptfarbe und Schriftton; 120 fest verdrahtete Gold- und Textfarben ersetzt.
+- **Hintergrund-Licht:** Neue Theme-Option:
+  - Obelisk: blauer Kern, Glut oben rechts
+  - Glut
+  - Arkan
+  - Grün
+  - Schlicht
+- **Emblem:** dreiköpfiger Reichsadler. Kantige Köpfe im Profil, gekrönter Mittelkopf, Klingenfedern, Schild-Rumpf mit leuchtender Rune; in der Theme-Farbe.
+- **Zoom in den 3D-Vorschauen** (Appearance und Inventar): Mausrad oder +/−, beim Zoomen mit Ziehen hoch und runter schauen.
+- **Figuren:**
+  - Oberflächen ohne „Hubel“: kaum noch Relief auf Stoff, Leder, Haut, Haar und Metall, nur Farbschwankung. Kettenhemd, Schuppen, Stein, Rinde und Chitin behalten ihre Struktur.
+  - Flache, aufliegende Augenbrauen statt spitzer Röhren; kleinere Reißzähne und Hauer.
+  - Helm, Mütze und Kappe folgen der Kopfform statt als Halbkugel-„Topf“ aufzusitzen.
+  - Ruhigere Beinkontur, Kniescheibe nur bei nackten Beinen, weniger spiegelndes Metall.
+- **Geprüft:**
+  - 648 Tests grün, Build grün.
+  - Emblem und Figuren im Browser gerendert.
+- **Nicht geprüft:** echte Datenbank, Handys.
