@@ -17,7 +17,7 @@ export function AuthShell({ children, subtitle }: { children: ReactNode; subtitl
         <div className="mb-7 flex flex-col items-center text-center">
           <ApexEmblem className="h-20 w-20 drop-shadow-[0_0_24px_rgba(192,155,88,.45)]" />
           <h1 className="mt-3 font-display text-4xl font-black tracking-[0.35em] text-gold-300">APEX</h1>
-          <p className="mt-1 text-[11px] uppercase tracking-[0.3em] text-marble-500">Arena of the Eternal Will</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.3em] text-marble-500">Rome meets magic</p>
           {subtitle && <p className="mt-4 text-sm text-marble-300">{subtitle}</p>}
         </div>
         <div className="panel p-6">{children}</div>
