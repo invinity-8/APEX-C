@@ -341,7 +341,7 @@ export function ItemInspect({
   const equippedActive = worn.some((w) => w.item.id === item.id);
   const showMods = !hidden || gmView;
   return (
-    <div className="rounded-lg border bg-ink-950/95 p-3 text-xs shadow-2xl" style={{ borderColor: r?.border ?? 'rgba(192,155,88,.4)' }} role="dialog" aria-label={`Details of ${item.name}`} data-inspect={item.id}>
+    <div className="rounded-lg border bg-ink-950/95 p-3 text-xs shadow-2xl" style={{ borderColor: r?.border ?? 'rgba(var(--apex-accent-rgb),.4)' }} role="dialog" aria-label={`Details of ${item.name}`} data-inspect={item.id}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="font-display text-lg font-black leading-tight" style={{ color: r?.color ?? '#efe7d6' }}>

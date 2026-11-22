@@ -1,14 +1,21 @@
-/** APEX 2.12 – the theme button: main colour, text colour, fonts and the surface texture (kept on this device). */
-import { useRef, useState } from 'react';
+/**
+ * APEX 2.12/2.13 – the theme button (GM only): main colour, text colour, fonts, the backdrop light and the texture. It is
+ * the campaign's look – saved on the server and the same for every player.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { api } from '../online/api';
 import { createPortal } from 'react-dom';
-import { ACCENTS, BODY_FONTS, DEFAULT_THEME, DISPLAY_FONTS, TEXT_TONES, applyTheme, loadTheme, saveTheme, type BodyFont, type DisplayFont, type TextTone, type UiTheme } from '../ui/theme';
+import { ACCENTS, BACKDROPS, BODY_FONTS, DEFAULT_THEME, DISPLAY_FONTS, TEXT_TONES, applyTheme, normaliseTheme, saveTheme, type Backdrop, type BodyFont, type DisplayFont, type TextTone, type UiTheme } from '../ui/theme';
 
-export function ThemeMenu({ className = 'btn btn-ghost px-2' }: { className?: string }) {
-  const [t, setT] = useState<UiTheme>(loadTheme);
+export function ThemeMenu({ className = 'btn btn-ghost px-2', current }: { className?: string; current?: UiTheme }) {
+  const [t, setT] = useState<UiTheme>(() => normaliseTheme(current ?? DEFAULT_THEME));
+  const timer = useRef<number>(0);
+  useEffect(() => { if (current) setT(normaliseTheme(current)); }, [current]);
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const r = open ? btn.current?.getBoundingClientRect() : undefined;
-  const set = (patch: Partial<UiTheme>) => { const next = { ...t, ...patch }; setT(next); applyTheme(next); saveTheme(next); };
+  // shown at once here, saved for the whole campaign a moment later
+  const set = (patch: Partial<UiTheme>) => { const next = { ...t, ...patch }; setT(next); applyTheme(next); saveTheme(next); window.clearTimeout(timer.current); timer.current = window.setTimeout(() => void api.saveTheme(next).catch(() => undefined), 500); };
   return (
     <span className="relative">
       <button ref={btn} type="button" className={className} aria-expanded={open} title="Colours and fonts" aria-label="Colours and fonts" onClick={() => setOpen(!open)} data-testid="theme-menu">
@@ -47,6 +54,11 @@ export function ThemeMenu({ className = 'btn btn-ghost px-2' }: { className?: st
               {(Object.keys(BODY_FONTS) as BodyFont[]).map((k) => <option key={k} value={k}>{BODY_FONTS[k].label}</option>)}
             </select>
           </label>
+          <label className="block"><span className="label">Backdrop light</span>
+            <select className="mt-1 w-full rounded-md border border-ink-600 bg-ink-800 px-2 py-1 text-sm text-marble-50" value={t.backdrop} onChange={(e) => set({ backdrop: e.target.value as Backdrop })} data-testid="theme-backdrop">
+              {(Object.keys(BACKDROPS) as Backdrop[]).map((k) => <option key={k} value={k}>{BACKDROPS[k].label}</option>)}
+            </select>
+          </label>
           <label className="block"><span className="label">Surface texture</span>
             <input type="range" min={0} max={1.5} step={0.1} value={t.texture} onChange={(e) => set({ texture: Number(e.target.value) })} className="w-full accent-[var(--color-gold-400)]" aria-label="Surface texture" />
           </label>
@@ -54,7 +66,7 @@ export function ThemeMenu({ className = 'btn btn-ghost px-2' }: { className?: st
             <button type="button" className="btn btn-ghost flex-1 py-1" onClick={() => set(DEFAULT_THEME)}>Reset</button>
             <button type="button" className="btn btn-gold flex-1 py-1" onClick={() => setOpen(false)}>Done</button>
           </div>
-          <p className="text-[10px] text-marble-500">Only on this device – every player picks their own.</p>
+          <p className="text-[10px] text-marble-500">The campaign's look – every player sees it.</p>
         </div>, document.body)}
     </span>
   );

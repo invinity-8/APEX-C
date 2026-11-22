@@ -251,7 +251,7 @@ export function CharacterPanel({ game, token, isGm, run, notify, initialTab }: P
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm transition-colors ${tab === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:bg-ink-800'}`}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm transition-colors ${tab === t.id ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(var(--apex-accent-rgb),.6)]' : 'text-marble-300 hover:bg-ink-800'}`}
           >
             {t.label}
           </button>

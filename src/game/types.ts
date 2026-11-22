@@ -443,6 +443,8 @@ export interface GameState {
   obelisk?: import('./obelisk.js').ObeliskState;
   /** APEX 2.12 – downtime between sessions: on the road (a shared camp) or at home (each player's own hideout). */
   downtime?: import('./downtime.js').DowntimeState;
+  /** APEX 2.13 – the campaign's colours and fonts (set by the GM, the same for everybody). */
+  uiTheme?: import('../ui/theme.js').UiTheme;
   /** APEX 2.5 – campaign time of day, season and snow. */
   worldTime?: import('./worldTime.js').WorldTime;
   /** Scene enemies (GM-placed), carried lights and the bounded combat log, per scene. */

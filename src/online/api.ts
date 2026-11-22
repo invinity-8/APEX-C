@@ -80,6 +80,8 @@ export const api = {
   journalImageUpload: (entryId:string,image:string,thumbnail:string) => request<{ id:string }>('POST','journal-images',{}, { entryId,image,thumbnail }),
   /** APEX 2.11 – the Obelisk: status (players: their characters; GM: everyone, trials and alerts) and actions. */
   obelisk: () => request<ObeliskStatus>('GET', 'obelisk'),
+  /** APEX 2.13 – GM: the campaign's colours and fonts for everybody. */
+  saveTheme: (theme: import('../ui/theme').UiTheme) => request<{ ok: boolean }>('POST', 'theme', {}, theme),
   /** APEX 2.12 – downtime: status (GM: everything; players: their hideout) and actions (start/end, chest, hideout). */
   downtime: () => request<DowntimeStatus>('GET', 'downtime'),
   downtimeAction: (input: Record<string, unknown>) => request<{ ok?: boolean; message?: string }>('POST', 'downtime', {}, input, { timeoutMs: 45_000 }),

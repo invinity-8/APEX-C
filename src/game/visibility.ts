@@ -221,6 +221,8 @@ export interface TrackerView {
 }
 
 export interface ViewModel {
+  /** APEX 2.13 – the campaign's colours and fonts, chosen by the GM for everybody. */
+  uiTheme?: import('../ui/theme.js').UiTheme;
   role: 'gm' | 'player';
   viewerId: string | null;
   /** Active world (null for saves without world metadata). Commands carry it to reject stale actions. */
@@ -342,6 +344,7 @@ export function buildGmView(state: GameState): ViewModel {
     hexes,
     hexByKey: Object.fromEntries(hexes.map((h) => [h.key, h])),
     tokens: Object.values(state.tokens).map((t) => tokenView(t, true)),
+    ...(state.uiTheme ? { uiTheme: state.uiTheme } : {}),
     teams: Object.values(state.teams).map((team) => ({
       id: team.id,
       name: team.name,
@@ -477,6 +480,7 @@ export function buildPlayerView(state: GameState, viewerId: string, sceneId?: st
     visibleEncounter.turnIndex = visibleEncounter.participants.findIndex(p => p.id === active?.id);
   }
   return {
+    ...(state.uiTheme ? { uiTheme: state.uiTheme } : {}),
     role: 'player',
     worldId: state.world?.id ?? null,
     worldName: state.world?.name ?? null,

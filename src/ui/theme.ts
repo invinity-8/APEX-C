@@ -4,7 +4,16 @@
  * colours from Tailwind's CSS variables (--color-gold-*, --color-marble-*, --font-*), so changing them here re-colours
  * the whole app at once – no reload, no component changes.
  */
-export interface UiTheme { accent: string; text: TextTone; display: DisplayFont; body: BodyFont; texture: number }
+export interface UiTheme { accent: string; text: TextTone; display: DisplayFont; body: BodyFont; texture: number; backdrop: Backdrop }
+export type Backdrop = 'obelisk' | 'ember' | 'arcane' | 'verdant' | 'plain';
+/** APEX 2.13 – the light behind everything: a cool glow in the middle and a warm one at the top right (the Obelisk), or others. */
+export const BACKDROPS: Record<Backdrop, { label: string; cool: string; warm: string; strength: number }> = {
+  obelisk: { label: 'Obelisk (blue core, ember corner)', cool: '127, 214, 255', warm: '226, 122, 56', strength: 1 },
+  ember: { label: 'Ember (fire and blood)', cool: '255, 150, 80', warm: '170, 40, 40', strength: 1 },
+  arcane: { label: 'Arcane (violet and azure)', cool: '150, 110, 235', warm: '80, 200, 255', strength: 1 },
+  verdant: { label: 'Verdant (forest and gold)', cool: '110, 200, 140', warm: '220, 180, 90', strength: 0.9 },
+  plain: { label: 'Plain (no glow)', cool: '0, 0, 0', warm: '0, 0, 0', strength: 0 },
+};
 export type TextTone = 'marble' | 'parchment' | 'moon' | 'ash';
 export type DisplayFont = 'cinzel' | 'marcellus' | 'cormorant' | 'georgia' | 'inter';
 export type BodyFont = 'inter' | 'garamond' | 'georgia' | 'system';
@@ -38,7 +47,7 @@ export const BODY_FONTS: Record<BodyFont, { label: string; css: string }> = {
   georgia: { label: 'Georgia', css: 'Georgia, "Times New Roman", serif' },
   system: { label: 'System', css: 'ui-sans-serif, system-ui, sans-serif' },
 };
-export const DEFAULT_THEME: UiTheme = { accent: '#c09b58', text: 'marble', display: 'cinzel', body: 'inter', texture: 1 };
+export const DEFAULT_THEME: UiTheme = { accent: '#c09b58', text: 'marble', display: 'cinzel', body: 'inter', texture: 1, backdrop: 'obelisk' };
 const KEY = 'apex.ui.theme';
 
 const hex = (c: string) => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : DEFAULT_THEME.accent;
@@ -60,6 +69,7 @@ export function normaliseTheme(v: unknown): UiTheme {
     text: o.text && o.text in TEXT_TONES ? o.text : DEFAULT_THEME.text,
     display: o.display && o.display in DISPLAY_FONTS ? o.display : DEFAULT_THEME.display,
     body: o.body && o.body in BODY_FONTS ? o.body : DEFAULT_THEME.body,
+    backdrop: o.backdrop && o.backdrop in BACKDROPS ? o.backdrop : DEFAULT_THEME.backdrop,
     texture: typeof o.texture === 'number' && Number.isFinite(o.texture) ? Math.max(0, Math.min(1.5, o.texture)) : DEFAULT_THEME.texture,
   };
 }
@@ -82,6 +92,7 @@ export function themeVars(t: UiTheme): Record<string, string> {
     '--apex-text-strong': txt[0], '--apex-text': txt[1], '--apex-text-muted': txt[3],
     '--font-display': DISPLAY_FONTS[t.display].css, '--font-sans': BODY_FONTS[t.body].css,
     '--apex-texture': String(t.texture),
+    '--apex-glow-cool': BACKDROPS[t.backdrop].cool, '--apex-glow-warm': BACKDROPS[t.backdrop].warm, '--apex-glow': String(BACKDROPS[t.backdrop].strength),
   };
 }
 export function applyTheme(t: UiTheme, el: HTMLElement = document.documentElement) {
