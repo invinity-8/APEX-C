@@ -22,3 +22,23 @@ describe('APEX 2.12 – other players look like themselves', () => {
     expect(figureLook({ tokenId: pcs[0].id, x: 0, y: 0, name: 'x', color: '#888888', look: mine.look })).toEqual(look);
   });
 });
+
+describe('APEX 2.12 – figure proportions', () => {
+  it('real proportions: hip at about half the height, the head about an eighth', async () => {
+    const THREE = await import('three');
+    const { buildLowPoly } = await import('../src/components/map/lowpoly');
+    const f = buildLowPoly({ ...lookFromPreset(FIGURE_PRESETS.find((p) => p.id === 'monk')!, 1), hat: 'none', hair: 'none' });
+    const head = new THREE.Vector3(); f.head!.getWorldPosition(head);
+    expect(head.y / f.height).toBeGreaterThan(0.86); // the head's centre sits high: legs no longer stretch the figure
+    expect(head.y / f.height).toBeLessThan(0.97);
+  });
+  it('the proportion sliders are kept, checked and change the figure', async () => {
+    const { parseLook, DEFAULT_LOOK } = await import('../src/game/figure');
+    expect(parseLook({ ...DEFAULT_LOOK, shape: { height: 0.5, legs: -0.3, nonsense: 1 } })).toBeNull();
+    expect(parseLook({ ...DEFAULT_LOOK, shape: { height: 2 } })).toBeNull();
+    expect(parseLook({ ...DEFAULT_LOOK, shape: { height: 0.53, head: 0 } })?.shape).toEqual({ height: 0.5 });
+    const { buildLowPoly } = await import('../src/components/map/lowpoly');
+    const tall = buildLowPoly({ ...DEFAULT_LOOK, shape: { height: 1 } }).height, small = buildLowPoly({ ...DEFAULT_LOOK, shape: { height: -1 } }).height;
+    expect(tall).toBeGreaterThan(small * 1.1);
+  });
+});

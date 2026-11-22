@@ -5,7 +5,7 @@
  */
 import { lazy, Suspense, useMemo, useState } from 'react';
 import {
-  BODY_TYPES_3D, CLOTH_COLOURS, COLOUR_LABELS, DEFAULT_LOOK, EYE_COLOURS, FIGURE_PARTS, FIGURE_PRESETS, HAIR_COLOURS, lookFromPreset, METAL_COLOURS, PART_LABELS, partLabel, randomLook, SKIN_TONES,
+  BODY_TYPES_3D, SHAPE_KEYS, SHAPE_LABELS, CLOTH_COLOURS, COLOUR_LABELS, DEFAULT_LOOK, EYE_COLOURS, FIGURE_PARTS, FIGURE_PRESETS, HAIR_COLOURS, lookFromPreset, METAL_COLOURS, PART_LABELS, partLabel, randomLook, SKIN_TONES,
   type FigureColourKey, type FigureLook, type FigurePartKey, type FigurePreset,
 } from '../game/figure';
 
@@ -76,6 +76,20 @@ export function FigureEditor({ value, onSave, onCancel, gm = false, busy = false
             {tab === 'body' && (
               <div className="grid grid-cols-3 gap-1" role="radiogroup" aria-label="Body type" data-testid="body-types">
                 {BODY_TYPES_3D.map((t) => <button key={t.id} type="button" role="radio" aria-checked={look.sex === t.sex && look.build === t.build} className={`rounded-md border px-1.5 py-1 text-left ${look.sex === t.sex && look.build === t.build ? 'border-gold-400 bg-gold-500/20 text-gold-100' : 'border-ink-600 bg-ink-900/70 text-marble-200 hover:border-gold-400/50'}`} onClick={() => setLook((l) => (t.sex === 'female' && l.sex !== 'female' ? { ...l, sex: 'female', build: t.build, beard: 'none' } : { ...l, sex: t.sex, build: t.build }))}>{t.sex === 'female' ? '♀' : '♂'} {t.label.split(' · ')[1]}</button>)}
+              </div>
+            )}
+            {tab === 'body' && (
+              // APEX 2.12 – fine proportions on top of the build
+              <div className="space-y-1 rounded-md border border-ink-700 bg-ink-900/60 p-2" data-testid="figure-shape">
+                <div className="flex items-center justify-between"><span className="label">Proportions</span>{look.shape && <button type="button" className="text-[10px] text-marble-400 hover:text-gold-200" onClick={() => setLook((l) => { const { shape: _s, ...rest } = l; return rest as FigureLook; })}>Reset</button>}</div>
+                {SHAPE_KEYS.map((k) => (
+                  <label key={k} className="grid grid-cols-[6.5rem_1fr_2.2rem] items-center gap-2">
+                    <span className="text-marble-300">{SHAPE_LABELS[k]}</span>
+                    <input type="range" min={-1} max={1} step={0.1} value={look.shape?.[k] ?? 0} aria-label={SHAPE_LABELS[k]} className="w-full accent-[var(--color-gold-400)]"
+                      onChange={(e) => { const v = Math.round(Number(e.target.value) * 10) / 10; setLook((l) => { const sh = { ...(l.shape ?? {}), [k]: v }; if (!v) delete sh[k]; const { shape: _o, ...rest } = l; return (Object.keys(sh).length ? { ...rest, shape: sh } : rest) as FigureLook; }); }} />
+                    <span className="text-right tabular-nums text-marble-400">{(look.shape?.[k] ?? 0) > 0 ? '+' : ''}{look.shape?.[k] ?? 0}</span>
+                  </label>
+                ))}
               </div>
             )}
             {current.parts.map((k) => (
