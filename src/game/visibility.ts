@@ -156,6 +156,8 @@ export interface TokenDetails {
   /** APEX 0.7: Sneak mode (owner + GM) and the cache versions of uploaded beast pictures (never the storage path). */
   sneaking?: boolean;
   beastImageV?: Record<string, number>;
+  /** APEX 2.12 – the hideout chest (owner + GM). */
+  stash?: Item[];
   /** APEX 2.9 – the figure shows the equipped gear (owner + GM). */
   figureGear?: boolean;
   /** APEX 2.9 – the Appearance tab's look while the map shows the gear (owner + GM). */
@@ -283,6 +285,7 @@ const detailsOf = (t: Token, withInventory = true, redact = false): TokenDetails
   ...(withInventory && t.sneaking ? { sneaking: true } : {}),
   ...(withInventory && t.reactionPrefs ? { reactionPrefs: { ...t.reactionPrefs } } : {}),
   ...(withInventory && t.figureGear ? { figureGear: true, ...(t.figure ? { appearanceFigure: t.figure } : {}) } : {}),
+  ...(withInventory && t.stash?.length ? { stash: t.stash.map((i) => (redact ? redactItem({ ...i }) : structuredClone(i))) } : {}),
   ...(withInventory && canUseCubeOperation(t, 'transmute') ? { transmuteUnlocked: true } : {}),
   ...(withInventory && t.cubeAccess ? { cubeAccess: true } : {}),
   ...(withInventory ? { cubeProgression: { ...(t.cubeProgression ?? {}), level: cubeLevelOf(t), ...(t.cubeAccess ? { gmOverride: true } : {}) }, cubeCarried: t.inventory.some(i => i.baseId === 'apex-imperial-transmutation-cube'), cubeCanTransmute: canUseCubeOperation(t, 'transmute') } : {}),

@@ -195,6 +195,8 @@ export interface Token {
   /** Nur Spieler: Teilt diese Figur Sicht & Wissen mit dem Rest der Gruppe? */
   sharesWithParty: boolean;
   inventory: Item[];
+  /** APEX 2.12 – long-term storage at the hideout (the chest): not carried, safe from an Obelisk wipe. */
+  stash?: Item[];
   /** Pending and recently reviewed narrative-item requests; exposed only to this character's owner and GM. */
   itemRequests?: NarrativeItemRequest[];
   /** APEX 0.3: inventory containers (missing = the default set, see inventory.ts). */
@@ -439,6 +441,8 @@ export interface GameState {
   sceneAi?: Record<string, { on: boolean; turn?: string; steps?: number }>;
   /** APEX 2.11 – the Obelisk: solo trials, per-character records, trials in progress and death alerts (GM-only; players read their own part through the obelisk op). */
   obelisk?: import('./obelisk.js').ObeliskState;
+  /** APEX 2.12 – downtime between sessions: on the road (a shared camp) or at home (each player's own hideout). */
+  downtime?: import('./downtime.js').DowntimeState;
   /** APEX 2.5 – campaign time of day, season and snow. */
   worldTime?: import('./worldTime.js').WorldTime;
   /** Scene enemies (GM-placed), carried lights and the bounded combat log, per scene. */

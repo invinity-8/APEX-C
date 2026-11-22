@@ -50,12 +50,15 @@ export function HexSceneEditor({
   change,
   busy,
   setMessage,
+  player = false,
 }: {
   scene: SceneDefinition;
   map: SceneMap;
   change: (patch: Partial<SceneMap> | SceneMap, replace?: boolean) => void;
   busy: boolean;
   setMessage: (m: string) => void;
+  /** APEX 2.12 – a player shaping their hideout: no enemy groups, no spawn moving. */
+  player?: boolean;
 }) {
   const [tool, setTool] = useState<Tool>('brush');
   // APEX 2.2 – the editor's 3D view (remembered per device): see heights, structures and markers while painting
@@ -173,7 +176,7 @@ export function HexSceneEditor({
     }
   }
 
-  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => (t !== 'light' && t !== 'height' && t !== 'enemies' && t !== 'fauna') || set === 'battle');
+  const visibleTools = (Object.keys(TOOL_LABEL) as Tool[]).filter((t) => ((t !== 'light' && t !== 'height' && t !== 'enemies' && t !== 'fauna') || set === 'battle') && !(player && (t === 'enemies' || t === 'spawn')));
   return (
     <>
     {battleScene && set !== 'battle' && (
@@ -352,7 +355,7 @@ export function HexSceneEditor({
             {map.hex?.heights && <button type="button" className="btn btn-ghost" title="Turns 5-ft stairs into gentle ramps of 1-ft steps; cliffs stay cliffs, water and houses stay level" onClick={() => { if (!map.hex) return; setUndo(map); change({ hex: smoothHeights(map.hex) }); setMessage('Slopes smoothed in 1-ft steps. Undo restores the previous heights.'); }} data-testid="smooth-relief">〰 Smooth slopes (1-ft steps)</button>}
           </fieldset>
         )}
-        {battleScene && set === 'battle' && (
+        {battleScene && set === 'battle' && !player && (
           <fieldset disabled={busy} className="scene-generator-panel" data-testid="group-composer">
             <legend>Enemy groups for this layout</legend>
             <p>Layout × colour scheme / mood × enemies: places fitting groups (e.g. a cultist cell in the market) far from the party spawn. Uses the generator's layout and seed.</p>
@@ -363,7 +366,7 @@ export function HexSceneEditor({
             {map.nodes.some((n) => n.kind === 'enemies') && <button type="button" className="btn btn-ghost" onClick={() => change({ nodes: map.nodes.filter((n) => n.kind !== 'enemies') })}>Remove all enemy markers</button>}
           </fieldset>
         )}
-        <fieldset disabled={busy || importing} className="scene-generator-panel">
+        {!player && <fieldset disabled={busy || importing} className="scene-generator-panel">
           <legend>Import picture or PDF</legend>
           <p>A map picture (PNG, JPG, WebP) or the first page of a PDF is sampled into hex terrain by colour. Nothing is uploaded.</p>
           <label>
@@ -375,7 +378,7 @@ export function HexSceneEditor({
           <label>
             Choose file <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf,.pdf" aria-label="Import map picture or PDF" onChange={(e) => (void importPicture(e.target.files?.[0]), (e.target.value = ''))} />
           </label>
-        </fieldset>
+        </fieldset>}
         <fieldset disabled={busy}>
           <legend>Map settings</legend>
           <label>

@@ -10,6 +10,8 @@ import { api, type ObeliskCharacter, type ObeliskReply, type ObeliskStatus } fro
 import { DANGER_LABEL, OBELISK_MAX, OBELISK_UNLOCK_STEP, dangerFor, emptyRecord, tierPlan, type Danger, type ObeliskAlert } from '../game/obelisk';
 import type { GameState } from '../game/types';
 import { play } from '../audio/sound';
+import type { GameApi } from '../state/gameApi';
+import { ObeliskRiskDialog } from './Downtime';
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const DANGER_TONE: Record<Danger, string> = {
@@ -49,7 +51,7 @@ export type ObeliskHook = ReturnType<typeof useObelisk>;
 // ---------------------------------------------------------------- players
 
 /** The player's Obelisk tab. */
-export function ObeliskPanel({ ob, onEntered }: { ob: ObeliskHook; onEntered: () => void }) {
+export function ObeliskPanel({ ob, onEntered, game }: { ob: ObeliskHook; onEntered: () => void; game?: GameApi }) {
   const { status, error, load } = ob;
   const chars = status?.characters ?? [];
   const [pick, setPick] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function ObeliskPanel({ ob, onEntered }: { ob: ObeliskHook; onEntered: ()
   const [tier, setTier] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const [risk, setRisk] = useState(false);
   useEffect(() => { if (me) setTier((t) => (t && t <= me.record.unlocked ? t : me.record.unlocked)); }, [me?.tokenId, me?.record.unlocked]); // eslint-disable-line react-hooks/exhaustive-deps
   const act = async (input: Record<string, unknown>, after?: (r: ObeliskReply) => void) => {
     setBusy(true); setNote('');
@@ -66,6 +69,7 @@ export function ObeliskPanel({ ob, onEntered }: { ob: ObeliskHook; onEntered: ()
   if (!me) return <div className="p-6 text-sm text-marble-500">No character of yours can enter the Obelisk yet.</div>;
   const r = me.record;
   const run = status.run;
+  const closed = !status.anytime && !status.downtime;
   const cost = status.keystonesRequired;
   const plan = tier ? tierPlan(tier) : null;
   const danger = tier ? dangerFor(tier, me.level) : null;
@@ -133,14 +137,16 @@ export function ObeliskPanel({ ob, onEntered }: { ob: ObeliskHook; onEntered: ()
                 <p className={`text-sm ${DANGER_TONE[danger]}`}>{DANGER_LABEL[danger]} for {me.name}{me.level ? '' : ' (no level on the sheet – counted as level 1)'}</p>
                 {cost && <p className="text-xs text-marble-400">Costs 1 keystone · you hold {r.keystones}</p>}
               </div>
-              <button className="btn btn-gold px-5 py-2 text-sm" disabled={busy || !!r.wipe || (cost && r.keystones < 1)} data-testid="obelisk-enter"
-                onClick={() => void act({ action: 'start', tokenId: me.tokenId, tier }, (res) => { if (res.run) { play('door'); onEntered(); } })}>
+              <button className="btn btn-gold px-5 py-2 text-sm" disabled={busy || closed || !!r.wipe || (cost && r.keystones < 1)} data-testid="obelisk-enter"
+                onClick={() => (game ? setRisk(true) : void act({ action: 'start', tokenId: me.tokenId, tier }, (res) => { if (res.run) { play('door'); onEntered(); } }))}>
                 {busy ? 'The Obelisk wakes…' : 'Enter the Obelisk'}
               </button>
             </div>
           )}
         </section>
       )}
+      {closed && <p role="note" className="rounded-lg border border-arcane-500/40 bg-ink-900/70 px-3 py-2 text-sm text-arcane-300">The Obelisk sleeps while the adventure runs. It opens during downtime – when your GM sends the party to camp or home.</p>}
+      {risk && game && tier && <ObeliskRiskDialog game={game} tokenId={me.tokenId} onCancel={() => setRisk(false)} onEnter={() => { setRisk(false); void act({ action: 'start', tokenId: me.tokenId, tier }, (res) => { if (res.run) { play('door'); onEntered(); } }); }} />}
       {r.last && <LastResult last={r.last} />}
       <p className="text-xs text-marble-500">A trial uses your character as it is – your gear and abilities. Hit points, spell slots and timed effects are restored to their campaign values afterwards. You may withdraw while above half your hit points; below that, the fight decides.</p>
     </div>
@@ -288,6 +294,10 @@ export function ObeliskGm({ state, notify }: { state: GameState; notify: (text: 
           <label className="flex items-center gap-2 text-sm text-marble-200">
             <input type="checkbox" checked={!!o?.keystonesRequired} disabled={busy} onChange={(e) => void act({ action: 'required', on: e.target.checked })} />
             A trial costs a keystone
+          </label>
+          <label className="flex items-center gap-2 text-sm text-marble-200">
+            <input type="checkbox" checked={!!o?.anytime} disabled={busy} onChange={(e) => void act({ action: 'anytime', on: e.target.checked })} />
+            Open outside downtime
           </label>
           {perm === 'default' && <button className="btn btn-ghost" onClick={() => void Notification.requestPermission().then(setPerm)}>Allow notifications</button>}
           {perm === 'denied' && <span className="text-xs text-marble-500">Browser notifications are blocked – alerts show inside APEX.</span>}

@@ -80,6 +80,9 @@ export const api = {
   journalImageUpload: (entryId:string,image:string,thumbnail:string) => request<{ id:string }>('POST','journal-images',{}, { entryId,image,thumbnail }),
   /** APEX 2.11 – the Obelisk: status (players: their characters; GM: everyone, trials and alerts) and actions. */
   obelisk: () => request<ObeliskStatus>('GET', 'obelisk'),
+  /** APEX 2.12 – downtime: status (GM: everything; players: their hideout) and actions (start/end, chest, hideout). */
+  downtime: () => request<DowntimeStatus>('GET', 'downtime'),
+  downtimeAction: (input: Record<string, unknown>) => request<{ ok?: boolean; message?: string }>('POST', 'downtime', {}, input, { timeoutMs: 45_000 }),
   obeliskAction: (input: Record<string, unknown>) => request<ObeliskReply>('POST', 'obelisk', {}, input, { timeoutMs: 30_000 }),
   sanctuary: () => request<import('../server/sanctuary').SanctuarySettings>('GET', 'sanctuary'),
   sanctuarySave: (settings: import('../server/sanctuary').SanctuarySettings) => request<import('../server/sanctuary').SanctuarySettings>('POST', 'sanctuary', {}, settings),
@@ -142,5 +145,6 @@ export const api = {
 /** APEX 2.11 – what the Obelisk op returns. */
 export interface ObeliskCharacter { tokenId: string; name: string; level: number | null; record: import('../game/obelisk').ObeliskRecord & { last?: import('../server/obelisk').ObeliskResult } }
 export interface ObeliskRunInfo { id: string; tokenId: string; tokenIds: string[]; tier: number; sceneId: string; startedAt: string; name: string }
-export interface ObeliskStatus { keystonesRequired: boolean; characters: ObeliskCharacter[]; run?: ObeliskRunInfo | null; runs?: ObeliskRunInfo[]; alerts?: import('../game/obelisk').ObeliskAlert[]; log?: Array<{ at: string; text: string }>; max?: number }
+export interface ObeliskStatus { keystonesRequired: boolean; anytime?: boolean; downtime?: boolean; characters: ObeliskCharacter[]; run?: ObeliskRunInfo | null; runs?: ObeliskRunInfo[]; alerts?: import('../game/obelisk').ObeliskAlert[]; log?: Array<{ at: string; text: string }>; max?: number }
 export interface ObeliskReply { ok?: boolean; message?: string; run?: ObeliskRunInfo | null; outcome?: import('../server/obelisk').ObeliskResult['outcome']; tier?: number; loot?: string[]; lost?: number; ai?: { idle: boolean; wait: boolean; step?: string; done: boolean } }
+export interface DowntimeStatus { active: boolean; mode: 'road' | 'home'; presets: Array<{ id: string; label: string }>; hideout?: (import('../game/downtime').Hideout & { map: unknown }) | null; obeliskOpen?: boolean; hideouts?: Record<string, import('../game/downtime').Hideout>; players?: Array<{ userId: string; name: string; tokenIds: string[]; sceneId: string | null }>; campSceneId?: string; from?: Record<string, string | null> }

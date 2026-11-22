@@ -33,6 +33,7 @@ import { MapStage } from './components/map/MapStage';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 import { ObeliskAlerts, ObeliskGm, ObeliskPanel, ObeliskRunner, useObelisk } from './components/Obelisk';
+import { DowntimeGm, DowntimePlayer } from './components/Downtime';
 // APEX 2.1 – performance: pages that are not on the map screen load on first use (smaller start bundle)
 const ArsenalPanel = lazy(() => import('./components/ArsenalPanel').then((m) => ({ default: m.ArsenalPanel })));
 const EnemyLibrary = lazy(() => import('./components/EnemyLibrary').then((m) => ({ default: m.EnemyLibrary })));
@@ -425,7 +426,7 @@ export default function App({ game }: { game: GameApi }) {
     ...(isGm && state ? [{ id: 'enemies' as View, label: '🐉 Enemy Library' }] : []),
     { id: 'character', label: '📜 Character' },
     ...(game.online ? [{ id: 'journal' as View, label: '📖 Journal' }] : []),
-    ...(game.online ? [{ id: 'obelisk' as View, label: isGm && state?.obelisk?.alerts?.length ? `◆ Obelisk · ☠ ${state.obelisk.alerts.length}` : '◆ Obelisk' }] : []),
+    ...(game.online ? [{ id: 'obelisk' as View, label: isGm && state?.obelisk?.alerts?.length ? `🏕 Downtime · ☠ ${state.obelisk.alerts.length}` : '🏕 Downtime' }] : []),
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
     ...(isGm && game.online ? [{ id: 'feedback' as View, label: '📮 Feedback' }] : []),
@@ -520,7 +521,11 @@ export default function App({ game }: { game: GameApi }) {
           )}
           <Suspense fallback={<p className="p-6 text-sm text-marble-500">Loading…</p>}>
           {screen === 'obelisk' && game.online ? (
-            isGm && state ? <ObeliskGm state={state} notify={notify} /> : <ObeliskPanel ob={obelisk} onEntered={() => setScreen('map')} />
+            isGm && state ? (
+              <div className="mx-auto max-w-5xl space-y-3 p-4 pb-0"><DowntimeGm notify={notify} trigger={state.downtime} /><ObeliskGm state={state} notify={notify} /></div>
+            ) : (
+              <div className="mx-auto max-w-4xl space-y-3 p-4"><DowntimePlayer game={game} characters={(obelisk.status?.characters ?? []).map((c) => c.tokenId)} /><ObeliskPanel ob={obelisk} game={game} onEntered={() => setScreen('map')} /></div>
+            )
           ) : screen === 'journal' && game.online ? (
             <PlayerJournal sceneReference={game.scene?.scene ? { id: game.scene.scene.id, name: game.scene.scene.name } : undefined} />
           ) : screen === 'feedback' && isGm && game.online ? (
