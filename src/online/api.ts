@@ -78,6 +78,9 @@ async function request<T>(
 export const api = {
   journalImage: (id: string) => request<{ url:string; mime:string; expiresIn:number }>('GET','journal-images',{ id }),
   journalImageUpload: (entryId:string,image:string,thumbnail:string) => request<{ id:string }>('POST','journal-images',{}, { entryId,image,thumbnail }),
+  /** APEX 2.11 – the Obelisk: status (players: their characters; GM: everyone, trials and alerts) and actions. */
+  obelisk: () => request<ObeliskStatus>('GET', 'obelisk'),
+  obeliskAction: (input: Record<string, unknown>) => request<ObeliskReply>('POST', 'obelisk', {}, input, { timeoutMs: 30_000 }),
   sanctuary: () => request<import('../server/sanctuary').SanctuarySettings>('GET', 'sanctuary'),
   sanctuarySave: (settings: import('../server/sanctuary').SanctuarySettings) => request<import('../server/sanctuary').SanctuarySettings>('POST', 'sanctuary', {}, settings),
   sceneTravelState: (sceneId: string) => request<import('../server/sceneTravel').TravelSnapshot>('GET', 'scene-travel', { sceneId }),
@@ -135,3 +138,9 @@ export const api = {
   feedbackList: () => request<{ feedback: import('../server/repo').FeedbackRow[] }>('GET', 'feedback'),
   feedback: <T>(body: Record<string, unknown>) => request<T>('POST', 'feedback', {}, body, { timeoutMs: 30_000 }),
 };
+
+/** APEX 2.11 – what the Obelisk op returns. */
+export interface ObeliskCharacter { tokenId: string; name: string; level: number | null; record: import('../game/obelisk').ObeliskRecord & { last?: import('../server/obelisk').ObeliskResult } }
+export interface ObeliskRunInfo { id: string; tokenId: string; tokenIds: string[]; tier: number; sceneId: string; startedAt: string; name: string }
+export interface ObeliskStatus { keystonesRequired: boolean; characters: ObeliskCharacter[]; run?: ObeliskRunInfo | null; runs?: ObeliskRunInfo[]; alerts?: import('../game/obelisk').ObeliskAlert[]; log?: Array<{ at: string; text: string }>; max?: number }
+export interface ObeliskReply { ok?: boolean; message?: string; run?: ObeliskRunInfo | null; outcome?: import('../server/obelisk').ObeliskResult['outcome']; tier?: number; loot?: string[]; lost?: number; ai?: { idle: boolean; wait: boolean; step?: string; done: boolean } }
