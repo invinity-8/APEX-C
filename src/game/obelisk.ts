@@ -141,6 +141,8 @@ export interface ObeliskAlert { id: string; at: string; tokenId: string; name: s
 export interface ObeliskState {
   /** The GM's choice: a trial costs one keystone. */
   keystonesRequired?: boolean;
+  /** APEX 2.12 – the GM keeps the Obelisk open outside downtime too. */
+  anytime?: boolean;
   records: Record<string, ObeliskRecord>;
   /** Trials in progress, by profile (user id). */
   runs?: Record<string, ObeliskRun>;

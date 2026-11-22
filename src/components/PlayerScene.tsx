@@ -79,6 +79,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
   const mv = scene.movement;
   // consecutive characters act together (block); a character that ended its part waits
   const myTurn = !!me && !!liveEncounter && activeActors(liveEncounter).includes(pcActor(me.id));
+  const turnIds = liveEncounter ? activeActors(liveEncounter).map((a) => a.slice(a.indexOf('-') + 1)) : undefined;
   void liveTurn;
   const free = mv?.mode === 'free';
   const remaining = mv ? Math.max(0, mv.allowance - mv.spent) : 0;
@@ -124,7 +125,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     return <div className="player-scene">
       <BattleLayout label={scene.scene.name}
         top={liveEncounter ? <InitiativeBar encounter={liveEncounter} tokens={game.view.tokens} myTokenId={me.id} figures={scene.figures} tone={sceneTone(scene.scene?.map?.palette)} /> : null}
-        map={<SceneSurface compact snapshot={scene} tokenId={me.id} name={me.name} color={me.color} tokenViews={game.view.tokens} reachBudget={(moveMode || (myTurn && canMove)) && !free ? remaining : null} onDestination={moveMode ? move : undefined} interaction={interaction} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />}
+        map={<SceneSurface compact snapshot={scene} tokenId={me.id} name={me.name} color={me.color} tokenViews={game.view.tokens} turnIds={turnIds} reachBudget={(moveMode || (myTurn && canMove)) && !free ? remaining : null} onDestination={moveMode ? move : undefined} interaction={interaction} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />}
         dock={(bar) => <>
           <div className="journal-toolbar">
             <button className="btn btn-gold" disabled={pending || !!uncertain || !canMove} aria-pressed={moveMode} onClick={() => setMoveMode(!moveMode)}>{moveMode ? 'Cancel movement' : 'Move your character'}</button>
@@ -161,7 +162,7 @@ export function PlayerScene({ game, open }: { game: GameApi; open: (screen: 'cha
     {!!game.view.sceneAnnouncements.length && <section className="mx-auto my-2 w-full max-w-4xl space-y-2" aria-label="Scene announcements">
       {game.view.sceneAnnouncements.map(item => <article key={item.id} className="rounded-lg border border-gold-700/60 bg-ink-950/90 p-3"><p className="eyebrow">Scene event</p><h2 className="font-display text-lg text-gold-200">{item.title}</h2><p className="whitespace-pre-wrap text-sm text-marble-200">{item.text}</p></article>)}
     </section>}
-    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} reachBudget={(moveMode || (myTurn && canMove)) && !free ? remaining : null} onDestination={moveMode ? move : undefined} interaction={interaction} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />
+    <SceneSurface snapshot={scene} tokenId={me?.id} name={me?.name} color={me?.color} tokenViews={game.view.tokens} turnIds={turnIds} reachBudget={(moveMode || (myTurn && canMove)) && !free ? remaining : null} onDestination={moveMode ? move : undefined} interaction={interaction} onFigureClick={figureClick} targets={attackIndex !== null ? enemiesInSight.map(f => f.id) : target ? [target] : undefined} />
     {category === 'world' && scene.travel && <WorldTravel sceneId={scene.scene.id} sceneRevision={scene.scene.revision} assignmentRevision={scene.assignmentRevision} map={scene.scene.map} travel={scene.travel} onChanged={() => game.online?.refresh()} />}
     <p>The Game Master controls scene transitions{category === 'region' ? ', day and night' : category === 'battle' ? ' and initiative' : ''}.</p>
   </div>;

@@ -139,6 +139,9 @@
 
 /* Semantic tokens – use these in new code; the scales above are their building blocks. */
 :root {
+  /* APEX 2.12 – the theme's main colour as numbers (for rgba) and the strength of the surface texture */
+  --apex-accent-rgb: 192, 155, 88;
+  --apex-texture: 1;
   --apex-obsidian: #22272b;
   --apex-forest: #405b49;
   --apex-stone: #8c806a;
@@ -188,10 +191,13 @@
   html, body, #root { height: 100%; }
   body {
     @apply bg-ink-950 text-marble-100 font-sans antialiased;
+    /* APEX 2.12 – the Obelisk's air everywhere: a cool glow on one side, a warm ember on the other, fine grain */
     background-image:
-      radial-gradient(ellipse at 50% -20%, rgba(192, 155, 88, 0.10), transparent 60%),
-      radial-gradient(ellipse at 0% 100%, rgba(64, 91, 73, 0.10), transparent 55%),
-      radial-gradient(ellipse at 100% 100%, rgba(142, 47, 47, 0.06), transparent 50%);
+      radial-gradient(ellipse at 50% -20%, rgba(var(--apex-accent-rgb), 0.10), transparent 60%),
+      radial-gradient(ellipse at 0% 60%, rgba(127, 214, 255, calc(0.06 * var(--apex-texture))), transparent 55%),
+      radial-gradient(ellipse at 100% 100%, rgba(168, 88, 44, calc(0.10 * var(--apex-texture))), transparent 55%),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, calc(0.010 * var(--apex-texture))) 0 2px, transparent 2px 9px);
+    background-attachment: fixed;
   }
   ::selection { background: var(--apex-selection); }
   * { scrollbar-width: thin; scrollbar-color: #4e565d transparent; }
@@ -204,6 +210,11 @@
 @layer components {
   .panel {
     @apply rounded-xl border border-gold-700/40 bg-ink-850/90 backdrop-blur-sm;
+    /* APEX 2.12 – the Obelisk texture: cool and warm light at the corners, a fine vertical grain */
+    background-image:
+      radial-gradient(ellipse at 8% 0%, rgba(127, 214, 255, calc(0.045 * var(--apex-texture))), transparent 55%),
+      radial-gradient(ellipse at 100% 0%, rgba(168, 88, 44, calc(0.06 * var(--apex-texture))), transparent 55%),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, calc(0.012 * var(--apex-texture))) 0 2px, transparent 2px 9px);
     /* stone slab: faint top light, carved inner edge, deep drop shadow */
     box-shadow: inset 0 1px 0 rgba(232, 212, 166, 0.06), inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 10px 30px -12px rgba(0, 0, 0, 0.75);
   }
@@ -217,8 +228,25 @@
   .btn-ghost { @apply border-ink-600 bg-ink-800 text-marble-100 hover:border-gold-500/70 hover:bg-ink-700; }
   .btn-gold {
     @apply border-gold-300/60 text-ink-950 font-semibold hover:brightness-110;
-    background: linear-gradient(180deg, #dcbf85, #a2803f);
-    box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,240,200,.35), 0 6px 18px -6px rgba(192,155,88,.55);
+    background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500));
+    box-shadow: 0 0 0 1px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.3), 0 6px 18px -6px rgba(var(--apex-accent-rgb), .55);
+  }
+  /* APEX 2.12 – header and navigation bars in the Obelisk style */
+  .apex-bar {
+    background-color: rgba(15, 17, 19, 0.88);
+    background-image:
+      radial-gradient(ellipse at 15% 0%, rgba(127, 214, 255, calc(0.07 * var(--apex-texture))), transparent 60%),
+      radial-gradient(ellipse at 95% 0%, rgba(168, 88, 44, calc(0.09 * var(--apex-texture))), transparent 60%),
+      repeating-linear-gradient(90deg, rgba(255, 255, 255, calc(0.014 * var(--apex-texture))) 0 2px, transparent 2px 9px);
+  }
+  .apex-popover {
+    @apply border border-gold-400/40 shadow-2xl;
+    background-color: rgba(11, 12, 15, 0.96);
+    background-image: radial-gradient(ellipse at 0% 0%, rgba(127, 214, 255, 0.06), transparent 60%), radial-gradient(ellipse at 100% 100%, rgba(168, 88, 44, 0.08), transparent 60%);
+  }
+  .apex-wordmark {
+    background: linear-gradient(180deg, var(--color-gold-200), var(--color-gold-400) 60%, var(--color-gold-500));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .btn-active { @apply border-gold-400 bg-gold-400/15 text-gold-200; }
   .btn-danger { @apply border-blood-600 bg-blood-800/60 text-marble-50 hover:bg-blood-600; }
@@ -732,11 +760,11 @@ input[type=text], input[type=search], input:not([type]), textarea { cursor: text
 .welcome-bg p, .welcome-bg span { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 14px rgba(0, 0, 0, 0.6); }
 .welcome-title {
   font-size: clamp(4.5rem, 16vw, 10rem); line-height: 0.95; letter-spacing: 0.14em; margin-right: -0.14em;
-  background: linear-gradient(180deg, #fbefc8 0%, #e2c07a 45%, #9a7034 75%, #5e431c 100%);
+  background: linear-gradient(180deg, #ffffff 0%, var(--color-gold-200) 30%, var(--color-gold-400) 62%, var(--color-gold-700) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 40px rgba(127, 214, 255, 0.18));
 }
-.welcome-cta { box-shadow: 0 0 0 1px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,240,200,.35), 0 0 34px -6px rgba(226, 192, 122, 0.65); }
+.welcome-cta { box-shadow: 0 0 0 1px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.3), 0 0 34px -6px rgba(var(--apex-accent-rgb), 0.65); }
 .welcome-pillar { background: rgba(12, 11, 16, 0.78); }
 .welcome-embers { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .welcome-embers span { position: absolute; bottom: -10px; width: 3px; height: 3px; border-radius: 50%; background: #ffb066; box-shadow: 0 0 8px 2px rgba(255, 140, 60, 0.55); opacity: 0; animation: welcome-ember linear infinite; }
@@ -751,7 +779,7 @@ input[type=text], input[type=search], input:not([type]), textarea { cursor: text
     linear-gradient(180deg, #11131c, #08090d);
   box-shadow: inset 0 1px 0 rgba(232, 212, 166, 0.07), 0 18px 40px -20px rgba(0, 0, 0, 0.9);
 }
-.obelisk-hero::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(255,255,255,0.012) 0 2px, transparent 2px 9px); pointer-events: none; }
+.obelisk-hero::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(255,255,255,calc(0.012 * var(--apex-texture))) 0 2px, transparent 2px 9px); pointer-events: none; }
 .obelisk-rune { animation: obelisk-rune 2.8s ease-in-out infinite; filter: drop-shadow(0 0 2px #9be4ff); }
 @keyframes obelisk-rune { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 .obelisk-result { box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 60px -12px rgba(127, 214, 255, 0.45), 0 30px 60px -20px rgba(0,0,0,.9); }

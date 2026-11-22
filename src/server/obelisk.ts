@@ -35,7 +35,7 @@ export interface ObeliskResult { outcome: 'victory' | 'defeat' | 'withdrawn' | '
 type RecordWithLast = ObeliskRecord & { last?: ObeliskResult };
 
 /** The campaign's GM profile as an acting user (scene creation, assignment and the enemy AI need GM rights). */
-async function gmActor(user: AuthUser, repo: Repo): Promise<AuthUser | null> {
+export async function gmActor(user: AuthUser, repo: Repo): Promise<AuthUser | null> {
   if (user.role === 'gm') return user;
   const gm = (await repo.profiles(user.campaignId)).find((p) => p.role === 'gm' && p.active);
   return gm ? { ...user, id: gm.userId, role: 'gm', profileKey: gm.key, displayName: gm.displayName, tokenIds: [] } : null;
@@ -45,7 +45,7 @@ async function gmActor(user: AuthUser, repo: Repo): Promise<AuthUser | null> {
  * Optimistic state update of the Obelisk part (and the tokens `fn` touches – it clones them with `own`). `fn`
  * returns an error text to refuse. Retries when someone else wrote in between.
  */
-async function update(repo: Repo, campaignId: string, by: string, fn: (s: GameState, ob: ObeliskState, own: (id: string) => Token) => string | void): Promise<{ ok: true; state: GameState } | { ok: false; error: string }> {
+export async function update(repo: Repo, campaignId: string, by: string, fn: (s: GameState, ob: ObeliskState, own: (id: string) => Token) => string | void): Promise<{ ok: true; state: GameState } | { ok: false; error: string }> {
   for (let attempt = 0; attempt < 6; attempt++) {
     const stored = await repo.loadState(campaignId);
     if (!stored) return { ok: false, error: 'The campaign has not been initialised yet.' };
@@ -112,9 +112,9 @@ async function status(user: AuthUser, repo: Repo): Promise<SceneResult> {
     const r = recordOf(s, id) as RecordWithLast;
     return { tokenId: id, name: s.tokens[id].name, level: sheetLevel(sheet), record: user.role === 'gm' ? r : playerRecord(r) };
   }));
-  if (user.role === 'gm') return { status: 200, body: { keystonesRequired: !!ob.keystonesRequired, characters, runs: Object.values(ob.runs ?? {}).map(publicRun), alerts: ob.alerts ?? [], log: ob.log ?? [] } };
+  if (user.role === 'gm') return { status: 200, body: { keystonesRequired: !!ob.keystonesRequired, anytime: !!ob.anytime, downtime: !!s.downtime?.active, characters, runs: Object.values(ob.runs ?? {}).map(publicRun), alerts: ob.alerts ?? [], log: ob.log ?? [] } };
   const run = ob.runs?.[user.id];
-  return { status: 200, body: { keystonesRequired: !!ob.keystonesRequired, characters, run: run ? publicRun(run) : null, max: OBELISK_MAX } };
+  return { status: 200, body: { keystonesRequired: !!ob.keystonesRequired, anytime: !!ob.anytime, downtime: !!s.downtime?.active, characters, run: run ? publicRun(run) : null, max: OBELISK_MAX } };
 }
 
 async function start(user: AuthUser, repo: Repo, v: Record<string, unknown>): Promise<SceneResult> {
@@ -132,6 +132,8 @@ async function start(user: AuthUser, repo: Repo, v: Record<string, unknown>): Pr
   if (rec.wipe) return err(409, 'Accept the inventory wipe first.');
   if (tier > rec.unlocked) return err(403, 'This tier is still sealed. Clear a lower one first.');
   if (ob.keystonesRequired && rec.keystones < 1) return err(409, 'The Obelisk asks for a keystone. Ask your GM for one.');
+  // APEX 2.12 – the Obelisk opens during downtime (unless the GM keeps it open at all times)
+  if (!ob.anytime && !state.downtime?.active) return err(409, 'The Obelisk opens during downtime – when the GM sends you to camp or home.');
   const gm = await gmActor(user, repo);
   if (!gm) return err(503, 'The campaign has no active GM profile.');
   const a = await repo.sceneRuntime.assignment(user.campaignId, user.id);
@@ -280,6 +282,14 @@ async function finish(gm: AuthUser, repo: Repo, run: ObeliskRun, how: 'victory' 
   return { status: 200, body: { ok: true, run: null, outcome: how, tier: run.tier, ...(loot.length ? { loot } : {}), ...(how === 'defeat' ? { lost } : {}), message: text } };
 }
 
+/** Ends every trial in progress without reward or loss (the downtime ends). */
+export async function recallAllTrials(gm: AuthUser, repo: Repo): Promise<number> {
+  const stored = await repo.loadState(gm.campaignId);
+  const runs = Object.values(obeliskOf(stored?.state ?? ({} as GameState)).runs ?? {});
+  for (const run of runs) await finish(gm, repo, run, 'recalled', true);
+  return runs.length;
+}
+
 async function gmAction(user: AuthUser, repo: Repo, v: Record<string, unknown>): Promise<SceneResult> {
   const say = (r: Awaited<ReturnType<typeof update>>, message: string): SceneResult => (r.ok ? { status: 200, body: { ok: true, message } } : err(409, r.error));
   const player = (s: GameState, id: unknown) => (typeof id === 'string' && s.tokens[id]?.kind === 'player' ? s.tokens[id] : null);
@@ -287,6 +297,9 @@ async function gmAction(user: AuthUser, repo: Repo, v: Record<string, unknown>):
     case 'required':
       if (typeof v.on !== 'boolean') return err(400, 'Invalid setting.');
       return say(await update(repo, user.campaignId, user.id, (_s, ob) => { ob.keystonesRequired = v.on as boolean; }), v.on ? 'A trial now costs one keystone.' : 'Trials are free – keystones are kept as a resource.');
+    case 'anytime':
+      if (typeof v.on !== 'boolean') return err(400, 'Invalid setting.');
+      return say(await update(repo, user.campaignId, user.id, (_s, ob) => { ob.anytime = v.on as boolean; }), v.on ? 'The Obelisk is open at any time.' : 'The Obelisk opens during downtime only.');
     case 'keystones': {
       if (!Number.isSafeInteger(v.delta) || Math.abs(v.delta as number) > MAX_KEYSTONES) return err(400, 'Invalid amount.');
       let name = '';

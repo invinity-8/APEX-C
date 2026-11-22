@@ -16,7 +16,7 @@ describe('bestiary 2.0', () => {
       expect(young.height, k).toBeLessThan(adult.height);
       expect(female.height, k).toBeLessThanOrEqual(adult.height);
     }
-  });
+  }, 30000); // builds every creature three times (heavy when the whole suite runs in parallel)
   it('German names, variants and exceptions', () => {
     const k = (t: string) => creatureFor(t);
     expect(k('Bärin')).toMatchObject({ kind: 'bear', variant: 'female' });

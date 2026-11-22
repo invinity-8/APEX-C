@@ -109,7 +109,9 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   const b = BUILD[look.build] ?? BUILD.average;
   const fem = look.sex === 'female' && !a.bone;
   const bone = !!a.bone, zombie = look.body === 'zombie';
-  const W = a.w * b.w, hunch = a.hunch ?? 0;
+  // APEX 2.12 – the player's fine proportions (−1 … +1 each)
+  const shp = look.shape ?? {};
+  const W = a.w * b.w * (1 + (shp.mass ?? 0) * 0.12), hunch = a.hunch ?? 0;
   // ---- materials
   const S = (c: string, surface: Surface, o: { rough?: number; metal?: number; glow?: number; side?: boolean } = {}) => skin(c, { surface, rough: o.rough ?? 0.8, ...(o.metal ? { metal: o.metal } : {}), ...(o.glow ? { glow: o.glow } : {}), ...(o.side ? { side: true } : {}) });
   const skinC = zombie ? mixHex(look.skin, '#7a8a6a', 0.5) : look.skin;
@@ -129,15 +131,17 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   const glowC = look.eyeColor === '#141210' ? '#7fd6ff' : look.eyeColor;
   const gear: GearMats = { metal, metalD, leather, leatherD, prim: S(look.primary, 'leather', { rough: 0.7 }), sec: S(look.secondary, 'cloth'), gold, wood: S('#5a3e26', 'wood', { rough: 0.8 }), glow: skin(glowC, { glow: 1.6 }), flame: skin('#ffb347', { glow: 1.8 }), bone: boneM, dark };
   // ---- skeleton of the figure (canonical human, scaled by the ancestry at the end)
-  const L = a.leg * b.leg * (fem ? 0.97 : 1);
-  const ankleY = 0.085, kneeY = 0.08 + 0.45 * L, hipY = 0.085 + 0.89 * L;
-  const T = 0.66 * (fem ? 0.96 : 1);
+  const L = a.leg * b.leg * (fem ? 0.97 : 1) * (1 + (shp.legs ?? 0) * 0.07);
+  // APEX 2.12 – measured against real proportions (height H ≈ 1.9): hip joint ≈ 0.49 H, knee ≈ 0.27 H, shoulders
+  // ≈ 0.82 H, the head ≈ 1/8 H – the earlier legs were too long and the heads too small ("Slenderman")
+  const ankleY = 0.08, kneeY = 0.075 + 0.43 * L, hipY = 0.08 + 0.85 * L;
+  const T = 0.7 * (fem ? 0.96 : 1);
   const waistY = hipY + T * 0.3, chestY = hipY + T * 0.66, shY = hipY + T * 0.93, neckY = hipY + T;
   const lean = (y: number) => Math.max(0, (y - hipY) / T) ** 1.5 * hunch * 0.35; // forward stoop
-  const hr = 0.105 * a.head * (a.snout ? 1.05 : 1);
+  const hr = 0.116 * a.head * (a.snout ? 1.05 : 1) * (1 + (shp.head ?? 0) * 0.1);
   const headY = neckY + 0.045 + hr * 1.02;
-  const shX = 0.19 * W * (fem ? 0.87 : 1) * (b.delt ? 1.05 : 1);
-  const armR = 0.048 * a.limb * b.arm * (fem ? 0.85 : 1), legR = 0.08 * Math.sqrt(W) * a.limb ** 0.5 * (fem ? 0.95 : 1);
+  const shX = 0.2 * W * (fem ? 0.86 : 1) * (b.delt ? 1.05 : 1) * (1 + (shp.shoulders ?? 0) * 0.1);
+  const armR = 0.048 * a.limb * b.arm * (fem ? 0.85 : 1) * (1 + (shp.mass ?? 0) * 0.14), legR = 0.08 * Math.sqrt(W) * a.limb ** 0.5 * (fem ? 0.95 : 1) * (1 + (shp.mass ?? 0) * 0.08);
   // torso section [half width, half depth] along the spine: hips → waist → chest → shoulders
   const tp = fem
     ? profile2([[0.158 * W, 0.112 * W], [0.118 * W, 0.092 * W], [0.15 * W, 0.11 * W], [0.15 * W, 0.095 * W]])
@@ -150,20 +154,30 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   const riding = look.mount !== 'none' && !!look.mount;
   const legM = bone ? boneM : look.legs === 'greaves' ? leatherD : look.legs === 'trousers' ? S(quiet(tone(look.leather, 0.85), 0.1), 'cloth') : look.legs === 'rags' ? S(tone(quiet(look.primary), 0.5), 'cloth') : look.legs === 'shorts' || look.legs === 'kilt' || look.legs === 'skirt' ? skinM : primD;
   const bootM = look.boots === 'armored' ? metal : look.boots === 'bare' ? skinM : look.boots === 'sandals' ? skinM : look.boots === 'wraps' ? S(mixHex(look.secondary, '#cdbf9f', 0.6), 'cloth') : leatherD;
-  const footAt = (sx: number): V3 => riding ? [sx * (0.11 * W + 0.26), hipY - L * 0.85, 0.24] : [sx * 0.12 * W, 0, sx > 0 ? -0.05 : 0.06];
+  const footAt = (sx: number): V3 => riding ? [sx * (0.11 * W + 0.26), hipY - L * 0.85, 0.24] : [sx * 0.13 * W, 0, sx > 0 ? -0.05 : 0.06];
   for (const sx of [-1, 1]) {
     const hipP: V3 = [sx * 0.092 * W, hipY, 0];
     const f = footAt(sx);
     const knee: V3 = riding ? [sx * (0.11 * W + 0.2), hipY - 0.06, 0.32] : [sx * 0.105 * W, kneeY, (f[2] + 0.03) * 0.8 + 0.02];
     const ankle: V3 = riding ? [f[0], f[1] + 0.06, f[2]] : [f[0], ankleY, f[2] - 0.01];
-    limb(g, [hipP, knee, ankle], [legR * 1.15, legR * 0.7, legR * 0.46], legM, bone ? 0.05 : 0.22, 12);
-    // knee and calf mass
-    if (!bone) blob(g, [legR * 0.6, legR * 0.72, legR * 0.62], legM, [knee[0], knee[1] - (riding ? 0 : L * 0.12), knee[2] - 0.025]);
+    if (bone) limb(g, [hipP, knee, ankle], [legR * 1.15, legR * 0.7, legR * 0.46], legM, 0.05, 12);
+    else {
+      // APEX 2.12 – the leg's contour: a full thigh tapering to the knee, the calf swelling just below it, a slim
+      // ankle; slightly wider than deep at the thigh, deeper than wide at the calf
+      const leg = (t: number): [number, number] => {
+        if (t < 0.5) { const u = t / 0.5; const r = legR * (1.2 - 0.48 * u ** 1.1); return [r * (1.06 - u * 0.08), r * (0.98 + u * 0.02)]; }
+        const u = (t - 0.5) / 0.5; const calf = Math.exp(-(((u - 0.28) / 0.2) ** 2)) * 0.2;
+        const r = legR * (0.7 - 0.3 * u ** 1.2 + calf); return [r * 0.95, r * (1 + calf * 0.6)];
+      };
+      tube(g, [hipP, [(hipP[0] + knee[0]) / 2, (hipP[1] + knee[1]) / 2, (hipP[2] + knee[2]) / 2 + 0.012], knee, [(knee[0] + ankle[0]) / 2, (knee[1] + ankle[1]) / 2, (knee[2] + ankle[2]) / 2 - 0.012], ankle], leg, legM, { sides: 14, steps: 28 });
+      blob(g, [legR * 0.42, legR * 0.4, legR * 0.25], legM, [knee[0], knee[1] + 0.008, knee[2] + legR * 0.52]); // kneecap
+    }
     // feet: boots, caligae (sandals with straps), wraps, greaves
     const toe: V3 = [ankle[0] * 1.02, 0.03 + (riding ? f[1] : 0), ankle[2] + 0.16];
     tube(g, [[ankle[0], ankle[1] - 0.02, ankle[2] - 0.05], [ankle[0], (ankle[1] + toe[1]) / 2, ankle[2] + 0.06], toe], (t) => [0.052 - t * 0.012, 0.045 - t * 0.022], bootM, { sides: 12 });
     if (look.boots === 'sandals') { for (let i = 0; i < 4; i++) part(g, new THREE.TorusGeometry(legR * 0.52, 0.007, 4, 14), leatherD, [ankle[0], ankle[1] + 0.02 + i * 0.04, ankle[2]], [Math.PI / 2, 0, 0]); tube(g, [[ankle[0], 0.012 + (riding ? f[1] : 0), ankle[2] - 0.06], [toe[0], 0.012 + (riding ? f[1] : 0), toe[2] + 0.02]], () => [0.055, 0.01], leatherD, { sides: 8 }); }
-    if (look.boots === 'tall' || look.boots === 'armored' || look.boots === 'boots') tube(g, [[ankle[0], ankle[1] - 0.03, ankle[2]], [knee[0] * 0.99, (ankle[1] + knee[1]) / 2, (ankle[2] + knee[2]) / 2], [knee[0], knee[1] - (look.boots === 'boots' ? L * 0.26 : 0.03), knee[2]]], (t) => legR * (0.62 + t * 0.12) + (look.boots === 'armored' ? 0.008 : 0.004), bootM, { sides: 12 });
+    // APEX 2.12 – the boot shaft hugs the calf and ends below the knee (no ball at the knee)
+    if (look.boots === 'tall' || look.boots === 'armored' || look.boots === 'boots') tube(g, [[ankle[0], ankle[1] - 0.03, ankle[2]], [knee[0] * 0.99, (ankle[1] + knee[1]) / 2, (ankle[2] + knee[2]) / 2 - 0.01], [knee[0], knee[1] - (look.boots === 'boots' ? L * 0.26 : 0.07), knee[2] - 0.005]], (t) => { const calf = Math.exp(-(((t - 0.62) / 0.3) ** 2)) * 0.16; return legR * (0.5 + t * 0.12 + calf) + (look.boots === 'armored' ? 0.008 : 0.005); }, bootM, { sides: 14, capEnd: false });
     if (look.boots === 'wraps') for (let i = 0; i < 5; i++) part(g, new THREE.TorusGeometry(legR * 0.55, 0.012, 4, 14), bootM, [ankle[0], ankle[1] + 0.03 + i * 0.05, ankle[2] + i * 0.005], [Math.PI / 2 + 0.15, 0, 0]);
     if (look.legs === 'greaves' || look.boots === 'armored') { tube(g, [[ankle[0], ankle[1] + 0.06, ankle[2] + 0.025], [knee[0], knee[1] - 0.02, knee[2] + 0.035]], (t) => [legR * 0.6, legR * (0.5 + t * 0.15)], metal, { sides: 10 }); blob(g, [legR * 0.62, legR * 0.6, legR * 0.45], metalD, [knee[0], knee[1], knee[2] + legR * 0.4]); }
   }
@@ -223,7 +237,9 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     }
     case 'leather': case 'studded': {
       // a moulded cuirass: a breast plate and a back plate
-      for (const z of [1, -1]) blob(g, [torsoAt(chestY)[0] * 1.02, T * 0.32, torsoAt(chestY)[1] * 0.6], leather, [0, chestY - 0.04, z * torsoAt(chestY)[1] * 0.55 + lean(chestY)]);
+      // APEX 2.12 – a fitted cuirass following the body (no longer two half-balls that read as a belly)
+      drape(g, chestY + 0.09, waistY - 0.03, [torsoAt(chestY + 0.09)[0] * 1.05, torsoAt(chestY + 0.09)[1] * 1.1], [torsoAt(waistY)[0] * 1.06, torsoAt(waistY)[1] * 1.1], leather, { folds: 2, depth: 0.006 });
+      for (let i = 0; i < 2; i++) { const y = waistY + 0.02 + i * 0.05; const r = torsoAt(y); band(g, y, [r[0] * 1.08, r[1] * 1.12], [r[0] * 1.08, r[1] * 1.12], 0.012, leatherD, lean(y)); }
       if (look.torso === 'studded') for (let i = 0; i < 12; i++) blob(g, [0.01, 0.01, 0.006], metal, [((i % 4) - 1.5) * 0.06, chestY + 0.06 - Math.floor(i / 4) * 0.07, front(chestY) + 0.012]);
       break;
     }
@@ -237,7 +253,7 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     case 'coat': drape(g, neckY, waistY, [torsoAt(neckY)[0] * 1.08, torsoAt(neckY)[1] * 1.12], [torsoAt(waistY)[0] * 1.1, torsoAt(waistY)[1] * 1.15], prim, { folds: 5, depth: 0.03, gap: 0.28 }); for (let i = 0; i < 4; i++) blob(g, [0.01, 0.01, 0.006], gold, [0.04, chestY + 0.06 - i * 0.07, front(chestY) + 0.01]); break;
     case 'vest': drape(g, neckY - 0.02, hipY + 0.02, [torsoAt(chestY)[0] * 1.05, torsoAt(chestY)[1] * 1.08], [hipR[0] * 1.06, hipR[1] * 1.08], prim, { gap: 0.45, folds: 3, depth: 0.02 }); break;
     case 'dress': drape(g, neckY - 0.02, waistY, [torsoAt(neckY)[0] * 1.04, torsoAt(neckY)[1] * 1.08], [torsoAt(waistY)[0] * 1.04, torsoAt(waistY)[1] * 1.06], prim, { folds: 4, depth: 0.02 }); break;
-    case 'furs': drape(g, neckY + 0.02, chestY - 0.04, [torsoAt(neckY)[0] * 1.2, torsoAt(neckY)[1] * 1.4], [shX * 1.25, torsoAt(chestY)[1] * 1.4], fur, { folds: 13, depth: 0.12, hem: 0.2 }); break;
+    case 'furs': drape(g, neckY + 0.02, chestY - 0.02, [torsoAt(neckY)[0] * 1.15, torsoAt(neckY)[1] * 1.3], [shX * 1.18, torsoAt(chestY)[1] * 1.3], fur, { folds: 13, depth: 0.06, hem: 0.16 }); break;
     case 'apron': drape(g, chestY + 0.05, kneeY, [torsoAt(chestY)[0] * 1.03, torsoAt(chestY)[1] * 1.08], [hipR[0] * 1.15, hipR[1] * 1.25], leather, { arc: 1.9, centre: 0, folds: 3, depth: 0.02 }); break;
     default: break;
   }
@@ -276,9 +292,16 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     else { elbow = [sx * (shX + 0.05), shY - 0.28, -0.04 + lean(shY)]; wrist = [sx * (shX + 0.06), shY - 0.53, 0.03 + lean(shY)]; }
     if (look.body === 'goblin' || look.body === 'ogre') { wrist = [wrist[0], wrist[1] - 0.06, wrist[2]]; }
     // upper arm in the sleeve, forearm bare (soldiers) or sleeved (robes)
-    limb(g, [sh, elbow], [armR * 1.2, armR * 0.86], sleeve, bone ? 0.03 : b.arm > 1.15 ? 0.35 : 0.2, 12);
-    limb(g, [elbow, wrist], [armR * 0.88, armR * 0.62], foreM, bone ? 0.03 : 0.25, 12);
-    if (!bone) blob(g, [armR * 1.45, armR * 1.25, armR * 1.4], sleeve, [sh[0] + sx * 0.008, sh[1] + 0.005, sh[2]]);
+    if (bone) { limb(g, [sh, elbow], [armR * 1.2, armR * 0.86], sleeve, 0.03, 12); limb(g, [elbow, wrist], [armR * 0.88, armR * 0.62], foreM, 0.03, 12); }
+    else {
+      // APEX 2.12 – the arm's contour: the upper arm full below the shoulder (biceps) and narrowing to the elbow, the
+      // forearm full just below the elbow and flat at the wrist; the deltoid caps the shoulder instead of a ball
+      const mid = (a2: V3, b2: V3, k: number): V3 => [a2[0] + (b2[0] - a2[0]) * k, a2[1] + (b2[1] - a2[1]) * k, a2[2] + (b2[2] - a2[2]) * k];
+      const bulk = b.arm > 1.15 ? 1.12 : 1;
+      tube(g, [sh, mid(sh, elbow, 0.5), elbow], (t) => { const bi = Math.exp(-(((t - 0.42) / 0.25) ** 2)) * 0.16 * bulk; const r = armR * (1.12 - 0.3 * t + bi); return [r, r * (1 + bi * 0.5)]; }, sleeve, { sides: 12, steps: 14 });
+      tube(g, [elbow, mid(elbow, wrist, 0.5), wrist], (t) => { const fl = Math.exp(-(((t - 0.2) / 0.22) ** 2)) * 0.14 * bulk; const r = armR * (0.86 - 0.26 * t + fl); return [r * (1 + t * 0.1), r * (1 - t * 0.22)]; }, foreM, { sides: 12, steps: 14 });
+      blob(g, [armR * 1.25, armR * 1.05, armR * 1.2], sleeve, mid(sh, elbow, 0.08), [sx * 0.25, 1, 0]);
+    }
     if (['plate', 'leather', 'studded'].includes(look.torso) && !bone) tube(g, [[wrist[0], wrist[1] + 0.02, wrist[2] - 0.01], [(wrist[0] + elbow[0]) / 2, (wrist[1] + elbow[1]) / 2, (wrist[2] + elbow[2]) / 2]], () => armR * 0.82, leatherD, { sides: 10 }); // bracers
     if (look.extra === 'tattoos' && foreM === skinM) part(g, new THREE.TorusGeometry(armR * 0.9, 0.006, 4, 12), S(tone(look.skin, 0.45), 'skin'), [(sh[0] + elbow[0]) / 2, (sh[1] + elbow[1]) / 2, (sh[2] + elbow[2]) / 2], [Math.PI / 2, 0, 0]);
     // the hand: a group at the fist, so gear held there keeps its old frame
@@ -466,7 +489,8 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     const cm = look.cloak === 'cape' ? S(quiet(look.secondary), 'cloth', { side: true }) : look.cloak === 'fur' ? S(quiet(look.leather), 'fur', { side: true }) : S(tone(quiet(look.primary), 0.62), 'cloth', { side: true });
     const len = look.cloak === 'short' || look.cloak === 'mantle' ? T * 0.75 : shY - 0.12;
     drape(g, shY + 0.03, shY + 0.03 - len, [shX * 1.05, torsoAt(shY)[1] * 1.45], [shX * 1.55, torsoAt(shY)[1] * 2.6], cm, { arc: Math.PI * (look.cloak === 'mantle' ? 1.7 : 1.15), folds: 11, depth: 0.09, z: -0.02 + lean(shY), hem: look.cloak === 'tattered' ? 0.25 : 0 });
-    if (look.cloak === 'fur' || look.cloak === 'mantle') part(g, new THREE.TorusGeometry(torsoAt(shY)[0] * 1.1, 0.05, 8, 22), look.cloak === 'fur' ? fur : cm, [0, shY + 0.03, lean(shY)], [Math.PI / 2, 0, 0], [1, torsoAt(shY)[1] / torsoAt(shY)[0] * 1.3, 1]);
+    // APEX 2.12 – a rolled collar lying on the shoulders (not a doughnut round the neck)
+    if (look.cloak === 'fur' || look.cloak === 'mantle') part(g, new THREE.TorusGeometry(torsoAt(shY)[0] * 1.05, look.cloak === 'fur' ? 0.034 : 0.022, 8, 26), look.cloak === 'fur' ? fur : cm, [0, shY + 0.035, lean(shY)], [Math.PI / 2, 0, 0], [1, torsoAt(shY)[1] / torsoAt(shY)[0] * 1.3, 0.55]);
     // the fibula on the right shoulder
     part(g, new THREE.CylinderGeometry(0.03, 0.03, 0.012, 16), gold, [shX * 0.7, shY + 0.02, torsoAt(shY)[1] * 0.9 + lean(shY)], [Math.PI / 2, 0, 0]);
   }
@@ -500,9 +524,10 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   if (offItem) offHand.add(offItem);
 
   // the whole figure on the ancestry's scale, merged for speed
-  g.scale.setScalar(a.s);
+  const S0 = a.s * (1 + (shp.height ?? 0) * 0.07);
+  g.scale.setScalar(S0);
   const hatH = ({ wizard: hr * 3.0, helmet: hr * 1.8, greathelm: hr * 2.0, crown: hr * 1.2, antlers: hr * 2.6, horned: hr * 1.6, cowl: hr * 1.6, strawhat: hr * 1.3, feathercap: hr * 2.0, turban: hr * 1.4 } as Record<string, number>)[look.hat] ?? hr * 1.15;
-  let height = (headY + hatH) * a.s;
+  let height = (headY + hatH) * S0;
   root.updateMatrixWorld(true);
   const headMatrix = head.matrixWorld.clone();
   head.parent?.remove(head);
@@ -517,7 +542,7 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   const ms = (mount.ride ?? sizeScale(mount.size)) * (opts.mountScale ?? 1);
   mount.group.scale.setScalar(ms);
   const seat = mount.seat ?? [0, mount.height * 0.6, 0];
-  merged.position.set(seat[0] * ms, seat[1] * ms - hipY * a.s + 0.04, seat[2] * ms);
+  merged.position.set(seat[0] * ms, seat[1] * ms - hipY * S0 + 0.04, seat[2] * ms);
   const out = new THREE.Group(); out.add(mount.group, merged);
   height = merged.position.y + height;
   return { group: out, height, wings: mount.wings, head: headPivot };

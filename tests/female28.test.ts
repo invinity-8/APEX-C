@@ -97,7 +97,9 @@ describe('API: women and men on the battle map', () => {
       cookies[key] = (await request(key, 'login', { profile: key, password: `${key}-test-password` })).cookies![0].split(';')[0];
     }
     const created = (await request('gm', 'scenes', { name: 'Fight', category: 'battle', template: 'hex-battle' })).body as { scene: SceneDefinition };
-    const meta = created.scene.metadata as unknown as SceneMap;
+    const raw = created.scene.metadata as unknown as SceneMap;
+    // all grass: the random template sometimes put a tree or a wall where the test places its orcs
+    const meta: SceneMap = { ...raw, hex: { ...raw.hex!, terrain: 'S'.repeat(raw.hex!.terrain.length) } };
     scene = ((await request('gm', 'scenes', { action: 'publish', id: created.scene.id, revision: created.scene.revision, map: meta })).body as { scene: SceneDefinition }).scene;
   });
 

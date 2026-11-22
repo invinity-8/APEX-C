@@ -1,4 +1,5 @@
 import { SoundMenu } from './SoundMenu';
+import { ThemeMenu } from './ThemeMenu';
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { Connection, GameApi } from '../state/gameApi';
@@ -35,13 +36,11 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map', arenaClock 
   } else shrinkText = view.day >= view.shrink.startDay ? '☠ The arena is contracting' : `Shrinking begins on Day ${view.shrink.startDay}`;
 
   return (
-    <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gold-700/40 bg-ink-900/85 px-4 py-2 backdrop-blur">
-      <div className="flex items-center gap-2.5">
-        <ApexEmblem className="h-9 w-9 drop-shadow-[0_0_8px_rgba(192,155,88,.45)]" />
-        <div className="leading-tight">
-          <div className="font-display text-xl font-black tracking-[0.3em] text-gold-300">APEX</div>
-          <div className="text-[10px] uppercase tracking-[0.25em] text-marble-500">{online ? online.campaignName : 'Rome meets magic'}</div>
-        </div>
+    <header className="apex-bar flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gold-700/40 px-4 py-2 backdrop-blur">
+      {/* APEX 2.12 – less text: the emblem and the name (the campaign shows on hover) */}
+      <div className="flex items-center gap-2.5" title={online ? online.campaignName : undefined}>
+        <ApexEmblem className="h-9 w-9 drop-shadow-[0_0_10px_rgba(var(--apex-accent-rgb),.45)]" />
+        <div className="apex-wordmark font-display text-xl font-black tracking-[0.3em]">APEX</div>
       </div>
 
       {/* Time of day (Arena only – scenes keep their own clock in Scene tools) */}
@@ -145,6 +144,7 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map', arenaClock 
             <span className="hidden max-w-40 truncate text-[11px] text-marble-300 lg:inline" title="Signed-in profile">
               {online.profileName}
             </span>
+            <ThemeMenu />
             <SoundMenu />
             <FeedbackButton online={online} area={area} notify={notify} />
             <button className="btn btn-ghost px-2" onClick={() => setPwOpen(true)} title="Change your password" aria-label="Change your password">

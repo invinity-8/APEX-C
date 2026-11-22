@@ -7,6 +7,10 @@ import { demoAllowed, missingConfig, onlineConfig } from './online/config';
 import { useDemoGame } from './state/useGame';
 import { VersionBadge } from './components/VersionBadge';
 import './index.css';
+import { applyTheme, loadTheme } from './ui/theme';
+
+// APEX 2.12 – the player's own colours and fonts, before the first paint
+applyTheme(loadTheme());
 
 // The online client (Supabase SDK, login screens) is only downloaded when it is used.
 const OnlineRoot = lazy(() => import('./online/OnlineRoot').then((m) => ({ default: m.OnlineRoot })));

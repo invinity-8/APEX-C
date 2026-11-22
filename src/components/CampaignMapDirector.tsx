@@ -1007,6 +1007,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               snapshot={snapshot}
               tokenLabels={markers}
               tokenViews={game.view.tokens}
+              turnIds={gmEncounter ? activeActors(gmEncounter).map((a) => a.slice(a.indexOf('-') + 1)) : undefined}
               gm
               selectedId={selected?.id ?? null}
               onDestination={enemyMode ? enemyClick : placeMode ? placeToken : battleMode === 'move' && selected ? battleMove : undefined}
@@ -1041,6 +1042,7 @@ export function useGameDirector({ game, enabled, run, active = true }: { game: G
               snapshot={snapshot}
               tokenLabels={markers}
               tokenViews={game.view.tokens}
+              turnIds={gmEncounter ? activeActors(gmEncounter).map((a) => a.slice(a.indexOf('-') + 1)) : undefined}
               gm
               selectedId={selected?.id ?? null}
               onDestination={enemyMode ? enemyClick : placeMode ? placeToken : battleMode === 'move' && selected ? battleMove : undefined}

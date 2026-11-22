@@ -3,6 +3,8 @@
  * scene movement so that what a player sees and what the server accepts always agree.
  */
 import { npcPassivePerception } from '../game/perception.js';
+import { gearLook } from '../game/gearLook.js';
+import { wornItems } from '../game/equipment.js';
 import { sheetSenses } from '../game/senses.js';
 import { effectiveClock } from '../game/worldTime.js';
 import type { FigureLook, FigureSex } from '../game/figure.js';
@@ -70,7 +72,9 @@ export function figuresFor(state: GameState, sceneId: string, map: SceneMap, pcs
   for (const p of pcs) {
     const t = state.tokens[p.tokenId];
     if (!t || exclude.includes(p.tokenId) || !seen(p) || !noticed(`pc-${p.tokenId}`, 'party')) continue;
-    out.push({ id: `pc-${p.tokenId}`, kind: 'pc', tokenId: p.tokenId, name: t.name, color: t.color, x: p.x, y: p.y, condition: 'healthy', torch: torches.has(p.tokenId), ...fx(`pc-${p.tokenId}`) });
+    // APEX 2.12 – the character's public 3D look travels with the figure (other players' clients do not hold its token)
+    const look = t.figureGear ? gearLook(t.figure, wornItems(t)) : t.figure;
+    out.push({ id: `pc-${p.tokenId}`, kind: 'pc', tokenId: p.tokenId, name: t.name, color: t.color, x: p.x, y: p.y, condition: 'healthy', torch: torches.has(p.tokenId), ...(look ? { look } : {}), ...fx(`pc-${p.tokenId}`) });
   }
   for (const e of enemiesOf(state, sceneId)) {
     if (!seen(e) || !noticed(`npc-${e.id}`, e.side === 'ally' ? 'party' : 'enemy')) continue;

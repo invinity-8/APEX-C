@@ -93,6 +93,9 @@ describe('APEX 2.11 – a trial through the API', () => {
     await repo.saveSheet(cid, hero, { ...emptySheet(), details: [{ id: 'l', label: 'Level', value: '3' }], hitPoints: { current: 17, max: 30, temp: 2 }, resources: [{ id: 'r', name: 'Spell Slots (1st)', current: 0, max: 3 }] }, 0, 'test');
     const t = st().tokens[hero];
     t.inventory = [item('ob-sword'), item('ob-letter', { baseId: QUEST_BASE, quest: {} })];
+    // APEX 2.12 – the Obelisk opens during downtime; these tests keep it open at all times
+    expect((await ob('hannah', { action: 'start', tokenId: hero, tier: 1 })).status).toBe(409);
+    expect((await ob('gm', { action: 'anytime', on: true })).status).toBe(200);
   });
 
   it('enter tier 1, fall, lose the gear, get an item back from the GM, accept the wipe, win, open tiers 2 and 3', async () => {

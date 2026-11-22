@@ -44,7 +44,13 @@ type PartValue<K extends FigurePartKey> = (typeof FIGURE_PARTS)[K][number];
 export const FIGURE_COLOURS = ['skin', 'hairColor', 'primary', 'secondary', 'leather', 'metal', 'eyeColor'] as const;
 export type FigureColourKey = (typeof FIGURE_COLOURS)[number];
 
-export type FigureLook = { [K in FigurePartKey]: PartValue<K> } & { [K in FigureColourKey]: string } & { tail?: boolean };
+/** APEX 2.12 – fine proportions on top of the build, each −1 … +1 (0 = the build as it is). */
+export const SHAPE_KEYS = ['height', 'legs', 'shoulders', 'head', 'mass'] as const;
+export type ShapeKey = (typeof SHAPE_KEYS)[number];
+export type FigureShape = Partial<Record<ShapeKey, number>>;
+export const SHAPE_LABELS: Record<ShapeKey, string> = { height: 'Height', legs: 'Leg length', shoulders: 'Shoulders', head: 'Head size', mass: 'Bulk' };
+
+export type FigureLook = { [K in FigurePartKey]: PartValue<K> } & { [K in FigureColourKey]: string } & { tail?: boolean; shape?: FigureShape };
 
 /** Colour palettes offered in the editor (any #rrggbb is valid). */
 export const SKIN_TONES = ['#f6d7b8', '#eebf94', '#d9a06e', '#b97b4c', '#8d5a36', '#5e3b23', '#3e2716', '#9fb37a', '#6f8f4e', '#4f6b3a', '#b9585a', '#8e3b44', '#7d8fa3', '#c9c1b0', '#a0b8a8', '#d8c48a'];
@@ -78,6 +84,16 @@ export function parseLook(v: unknown): FigureLook | null {
     out[k] = val.toLowerCase();
   }
   if (o.tail !== undefined) { if (typeof o.tail !== 'boolean') return null; if (o.tail) out.tail = true; }
+  if (o.shape !== undefined) {
+    if (!o.shape || typeof o.shape !== 'object' || Array.isArray(o.shape)) return null;
+    const sh: FigureShape = {};
+    for (const [k, val] of Object.entries(o.shape as Record<string, unknown>)) {
+      if (!(SHAPE_KEYS as readonly string[]).includes(k) || typeof val !== 'number' || !Number.isFinite(val) || Math.abs(val) > 1) return null;
+      const r = Math.round(val * 10) / 10;
+      if (r) sh[k as ShapeKey] = r;
+    }
+    if (Object.keys(sh).length) out.shape = sh;
+  }
   return out as FigureLook;
 }
 
