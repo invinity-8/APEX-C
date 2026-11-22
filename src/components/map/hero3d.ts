@@ -9,8 +9,10 @@
  * head is its own pivot (idle look-at).
  */
 import * as THREE from 'three';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { FigureLook } from '../../game/figure';
 import { buildBeard, buildHair, type HeadShape } from './hair3d';
+import { faceAt, headGeometry, onFace, type FaceShape } from './head3d';
 import { mergeByMaterial } from './merge3d';
 import { buildCreature, wing } from './creatures3d';
 import { sizeScale } from './sizes';
@@ -79,6 +81,25 @@ function band(g: THREE.Object3D, y: number, rTop: [number, number], rBot: [numbe
   part(g, geo, m, [0, y, z]);
   // a rolled edge top and bottom
   part(g, new THREE.TorusGeometry(1, 0.012 / rTop[0], 5, 36), m, [0, y + w / 2, z], [Math.PI / 2, 0, 0], [rTop[0], rTop[1], 1]);
+}
+
+/** APEX 2.11 – a hood that frames the face: a cloth shell with an oval opening (forehead to chin), not an open wedge. */
+function hoodGeometry(R: number): THREE.BufferGeometry {
+  const src = new THREE.SphereGeometry(1, 44, 28, 0, Math.PI * 2, 0, Math.PI * 0.72).toNonIndexed();
+  const pos = src.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3();
+  const open = (p: THREE.Vector3) => p.z > 0.2 && p.y < 0.42 - 0.55 * p.x * p.x && Math.abs(p.x) < 0.66;
+  const out: number[] = [];
+  for (let i = 0; i < pos.count; i += 3) {
+    c.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, i + k));
+    if (open(c.divideScalar(3).normalize())) continue;
+    for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, i + k); out.push(v.x * R, v.y * R, v.z * R); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  const m = mergeVertices(g, 1e-5);
+  m.computeVertexNormals();
+  return m;
 }
 
 export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}): LowPolyFigure {
@@ -273,76 +294,99 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   const head = new THREE.Group(); head.position.set(0, headY, lean(neckY) * 1.3 + hunch * 0.06); g.add(head);
   const shape = (bone ? 'round' : look.head) as HeadShape;
   const hs: V3 = shape === 'square' ? [1.06, 1, 1.02] : shape === 'oval' ? [0.92, 1.08, 0.98] : shape === 'long' ? [0.88, 1.12, 0.96] : shape === 'wide' ? [1.12, 0.94, 1] : shape === 'pointed' ? [0.94, 1.04, 1] : [1, 1, 1];
-  // the cranium, the face plane, the jaw and chin
-  blob(head, [hr * 0.9 * hs[0], hr * 1.02 * hs[1], hr * 1.0 * hs[2]], skinM, [0, hr * 0.06, -hr * 0.04], undefined, 1.4);
   const jawW = look.face === 'strongjaw' ? 0.82 : look.face === 'softjaw' || fem ? 0.66 : look.face === 'gaunt' ? 0.6 : 0.72;
-  const fz = hr * 0.88 * hs[2];
-  if (!a.snout) {
-    blob(head, [hr * jawW * hs[0], hr * 0.52, hr * 0.7], skinM, [0, -hr * 0.5, hr * 0.12]);
-    blob(head, [hr * 0.32, hr * 0.22, hr * 0.26], skinM, [0, -hr * 0.82, hr * 0.42]); // chin
-    // brow ridge and cheekbones
-    blob(head, [hr * 0.78 * hs[0], hr * 0.16, hr * 0.3], bone ? boneM : skinM, [0, hr * 0.2, fz - hr * 0.2]);
-    for (const sx of [-1, 1]) blob(head, [hr * 0.24, hr * 0.17, hr * 0.2], look.face === 'chubby' ? skinM : skinM, [sx * hr * 0.46, -hr * 0.14, fz - hr * 0.22]);
-    if (look.face === 'gaunt') for (const sx of [-1, 1]) blob(head, [hr * 0.16, hr * 0.2, hr * 0.06], skinD, [sx * hr * 0.42, -hr * 0.4, fz - hr * 0.26]);
-  } else {
-    // dragonborn and lizardfolk: a long snout, a jaw and brow plates
-    tube(head, [[0, -hr * 0.1, hr * 0.3], [0, -hr * 0.22, hr * 1.0], [0, -hr * 0.3, hr * 1.5]], (t) => [hr * 0.55 * (1 - t * 0.35), hr * 0.42 * (1 - t * 0.3)], skinM, { sides: 14 });
-    tube(head, [[0, -hr * 0.55, hr * 0.35], [0, -hr * 0.6, hr * 1.35]], (t) => [hr * 0.45 * (1 - t * 0.35), hr * 0.13], skinD, { sides: 12 });
-    blob(head, [hr * 0.75, hr * 0.18, hr * 0.5], skinM, [0, hr * 0.3, hr * 0.35]);
-    for (const sx of [-1, 1]) blob(head, [hr * 0.05, hr * 0.04, hr * 0.04], dark, [sx * hr * 0.14, -hr * 0.22, hr * 1.55]);
-    if (look.body === 'lizardfolk') for (let i = 0; i < 4; i++) claw(head, [0, hr * (0.9 - i * 0.05), -hr * i * 0.35], [0, 1, -0.6], hr * (0.5 - i * 0.06), hr * 0.12, sec, -0.3);
-    for (const sx of [-1, 1]) horn(head, [sx * hr * 0.5, hr * 0.55, -hr * 0.3], [sx * 0.3, 0.4, -1], hr * 1.3, hr * 0.14, S('#d8ccb0', 'bone'), { curl: 0.5, axis: [sx, 0, 0] });
+  const fz = hr * 0.9 * hs[2];
+  // APEX 2.11 – a sculpted head (head3d.ts) for every face; skulls and snouts keep their own build
+  const kind = look.body, brute = kind === 'orc' || kind === 'ogre';
+  const F: FaceShape | null = a.snout || bone ? null : {
+    w: 0.8 * hs[0] * (brute ? 1.08 : kind === 'dwarf' ? 1.05 : 1), h: hs[1], d: 0.95 * hs[2],
+    jaw: (look.face === 'strongjaw' ? 0.88 : look.face === 'softjaw' ? 0.7 : look.face === 'gaunt' ? 0.66 : fem ? 0.68 : 0.78) * (brute ? 1.12 : kind === 'elf' ? 0.92 : kind === 'dwarf' ? 1.06 : 1),
+    brow: (fem ? 0.025 : 0.055) + (brute ? 0.06 : kind === 'dwarf' || kind === 'goblin' ? 0.03 : 0) + (look.brows === 'bushy' ? 0.01 : 0),
+    cheek: kind === 'elf' || look.face === 'gaunt' ? 0.05 : 0.03,
+    nose: look.nose === 'none' ? 0.02 : (fem ? 0.12 : 0.16) * (look.nose === 'broad' ? 1.1 : look.nose === 'long' ? 1.3 : ['small', 'button', 'snub'].includes(look.nose) ? 0.7 : 1) * (kind === 'goblin' ? 1.6 : kind === 'dwarf' ? 1.25 : brute ? 0.7 : 1),
+    noseW: (look.nose === 'broad' ? 1.45 : 1) * (brute ? 1.6 : kind === 'dwarf' ? 1.25 : kind === 'elf' ? 0.85 : 1) * (fem ? 0.88 : 1),
+    noseLen: (look.nose === 'long' ? 1.2 : 1) * (kind === 'goblin' ? 1.3 : 1),
+    hook: look.nose === 'hooked' || look.nose === 'aquiline' ? 0.06 : 0,
+    crook: look.nose === 'crooked' ? 0.05 : 0,
+    lips: fem || look.mouth === 'lips' || look.mouth === 'pout' ? 0.035 : 0.018,
+    chin: look.face === 'strongjaw' ? 0.075 : fem ? 0.03 : 0.05,
+    gaunt: look.face === 'gaunt' || zombie ? 0.06 : 0,
+    chubby: look.face === 'chubby' ? 0.06 : 0,
+  };
+  if (F) part(head, headGeometry(F, hr), skinM);
+  else {
+    blob(head, [hr * 0.9 * hs[0], hr * 1.02 * hs[1], hr * 1.0 * hs[2]], skinM, [0, hr * 0.06, -hr * 0.04], undefined, 1.4);
+    if (!a.snout) {
+      blob(head, [hr * jawW * hs[0], hr * 0.52, hr * 0.7], skinM, [0, -hr * 0.5, hr * 0.12]);
+      blob(head, [hr * 0.78 * hs[0], hr * 0.16, hr * 0.3], boneM, [0, hr * 0.2, fz - hr * 0.2]);
+    } else {
+      // dragonborn and lizardfolk: a long snout, a jaw and brow plates
+      tube(head, [[0, -hr * 0.1, hr * 0.3], [0, -hr * 0.22, hr * 1.0], [0, -hr * 0.3, hr * 1.5]], (t) => [hr * 0.55 * (1 - t * 0.35), hr * 0.42 * (1 - t * 0.3)], skinM, { sides: 14 });
+      tube(head, [[0, -hr * 0.55, hr * 0.35], [0, -hr * 0.6, hr * 1.35]], (t) => [hr * 0.45 * (1 - t * 0.35), hr * 0.13], skinD, { sides: 12 });
+      blob(head, [hr * 0.75, hr * 0.18, hr * 0.5], skinM, [0, hr * 0.3, hr * 0.35]);
+      for (const sx of [-1, 1]) blob(head, [hr * 0.05, hr * 0.04, hr * 0.04], dark, [sx * hr * 0.14, -hr * 0.22, hr * 1.55]);
+      if (look.body === 'lizardfolk') for (let i = 0; i < 4; i++) claw(head, [0, hr * (0.9 - i * 0.05), -hr * i * 0.35], [0, 1, -0.6], hr * (0.5 - i * 0.06), hr * 0.12, sec, -0.3);
+      for (const sx of [-1, 1]) horn(head, [sx * hr * 0.5, hr * 0.55, -hr * 0.3], [sx * 0.3, 0.4, -1], hr * 1.3, hr * 0.14, S('#d8ccb0', 'bone'), { curl: 0.5, axis: [sx, 0, 0] });
+    }
   }
-  // eyes: set deep under the brow, small and dark with a glint; glowing or hollow for the eerie
+  const on = (x: number, y: number, out = 0): V3 => { const p = F ? onFace(F, hr, x, y, out) : new THREE.Vector3(x * hr * 0.9, y * hr, fz + out * hr); return [p.x, p.y, p.z]; };
+  // eyes: an eyeball deep in the socket under a heavy upper lid; glowing or hollow for the eerie
   const ey = hr * 0.06, ex = hr * 0.33, ez = fz - hr * 0.06;
+  const re = hr * (fem ? 0.1 : 0.094) * (kind === 'goblin' ? 1.25 : 1);
+  const lidDrop = look.eyes === 'angry' || look.eyes === 'narrow' ? 0.12 : look.eyes === 'wide' ? -0.3 : look.eyes === 'closed' || look.eyes === 'sleepy' ? 0.9 : -0.06; // the upper lid's edge sits at 1.3 + drop rad from straight up
   for (const sx of [-1, 1]) {
-    const p: V3 = a.snout ? [sx * hr * 0.46, hr * 0.12, hr * 0.62] : [sx * ex, ey, ez];
-    const socket = bone || look.eyes === 'hollow' ? dark : S(tone(skinC, 0.86), 'skin');
-    blob(head, [hr * 0.13, hr * 0.085, hr * 0.05], socket, [p[0], p[1] + hr * 0.01, p[2] - hr * 0.04]);
-    if (bone || look.eyes === 'hollow') { if (look.eyes === 'glowing' || bone) blob(head, [hr * 0.05, hr * 0.05, hr * 0.03], skin(glowC, { glow: 2.2 }), [p[0], p[1], p[2]]); continue; }
-    if (look.eyes === 'glowing') { blob(head, [hr * 0.08, hr * 0.06, hr * 0.04], skin(glowC, { glow: 2.4 }), p); continue; }
-    if (look.eyes === 'patch' && sx < 0) { blob(head, [hr * 0.15, hr * 0.13, hr * 0.04], leatherD, [p[0], p[1], p[2] + hr * 0.02]); tube(head, [[-hr * 0.95, hr * 0.25, 0], [0, hr * 0.32, hr * 0.92], [hr * 0.95, hr * 0.25, 0]], () => hr * 0.025, leatherD, { sides: 5 }); continue; }
-    if (look.eyes === 'closed' || look.eyes === 'sleepy') { tube(head, [[p[0] - hr * 0.1, p[1], p[2] + hr * 0.01], [p[0] + hr * 0.1, p[1] - hr * 0.01, p[2] + hr * 0.01]], () => hr * 0.018, skinD, { sides: 5 }); continue; }
-    blob(head, [hr * 0.09, hr * 0.065, hr * 0.045], skin('#e4dccb', { rough: 0.3 }), p);
-    blob(head, [hr * 0.055, hr * 0.055, hr * 0.03], skin(look.eyeColor, { rough: 0.25 }), [p[0], p[1], p[2] + hr * 0.022]);
-    blob(head, [hr * 0.028, hr * 0.028, hr * 0.02], dark, [p[0], p[1], p[2] + hr * 0.038]);
-    blob(head, [hr * 0.012, hr * 0.012, hr * 0.008], skin('#ffffff', { glow: 0.5 }), [p[0] + hr * 0.02, p[1] + hr * 0.02, p[2] + hr * 0.045]);
-    // upper lid: a heavy line gives the gaze its weight
-    tube(head, [[p[0] - hr * 0.1, p[1] + hr * 0.06, p[2] - hr * 0.01], [p[0], p[1] + hr * 0.078, p[2] + hr * 0.022], [p[0] + hr * 0.1, p[1] + hr * 0.055, p[2] - hr * 0.01]], () => hr * 0.012, skinD, { sides: 5 });
-    if (look.eyes === 'scarred' && sx > 0) tube(head, [[p[0] + hr * 0.05, p[1] + hr * 0.25, p[2] - hr * 0.02], [p[0] - hr * 0.05, p[1] - hr * 0.25, p[2]]], () => hr * 0.02, skin('#8e4a52'), { sides: 5 });
+    const surf = F ? onFace(F, hr, sx * 0.31, 0.035) : null;
+    const p: V3 = a.snout ? [sx * hr * 0.46, hr * 0.12, hr * 0.62] : surf ? (() => { const n = surf.clone().normalize(); const c = surf.clone().sub(n.multiplyScalar(re * 0.42)); return [c.x, c.y, c.z] as V3; })() : [sx * ex, ey, ez];
+    if (bone || look.eyes === 'hollow') {
+      blob(head, [hr * 0.13, hr * 0.1, hr * 0.06], dark, [p[0], p[1] + hr * 0.01, p[2] + (F ? re * 0.2 : -hr * 0.04)]);
+      if (look.eyes === 'glowing' || bone) blob(head, [hr * 0.05, hr * 0.05, hr * 0.03], skin(glowC, { glow: 2.2 }), [p[0], p[1], p[2] + (F ? re * 0.5 : 0)]);
+      continue;
+    }
+    if (look.eyes === 'glowing') { blob(head, [re * 1.05, re * 0.8, re * 0.7], skin(glowC, { glow: 2.4 }), p); continue; }
+    if (look.eyes === 'patch' && sx < 0) { blob(head, [hr * 0.15, hr * 0.13, hr * 0.05], leatherD, [p[0], p[1], p[2] + re * 0.6]); tube(head, [[-hr * 0.95, hr * 0.25, 0], [0, hr * 0.34, hr * 0.98], [hr * 0.95, hr * 0.25, 0]], () => hr * 0.025, leatherD, { sides: 5 }); continue; }
+    const look3 = new THREE.Vector3(sx * 0.1, -0.04, 1).normalize();
+    const at = (k: number, dx = 0, dy = 0): V3 => [p[0] + look3.x * re * k + dx, p[1] + look3.y * re * k + dy, p[2] + look3.z * re * k];
+    blob(head, [re, re * 0.86, re * 0.92], skin('#b9b0a2', { rough: 0.35 }), p);
+    if (!(look.eyes === 'closed' || look.eyes === 'sleepy')) {
+      blob(head, [re * 0.62, re * 0.62, re * 0.3], skin(tone(look.eyeColor, 0.8), { rough: 0.25 }), at(0.78, 0, -re * 0.05));
+      blob(head, [re * 0.3, re * 0.3, re * 0.14], dark, at(0.97, 0, -re * 0.05));
+      blob(head, [re * 0.1, re * 0.1, re * 0.05], skin('#ffffff', { glow: 0.4 }), at(1.02, re * 0.16, re * 0.12));
+    }
+    // the lids: skin caps over the ball – the upper one heavy, the lower one a rim
+    const lid = new THREE.Mesh(new THREE.SphereGeometry(re * 1.12, 16, 8, 0, Math.PI * 2, 0, 1.3), skinM);
+    lid.position.set(...p); lid.rotation.set(lidDrop, sx * 0.12, -sx * (look.eyes === 'angry' ? 0.18 : 0.05)); head.add(lid);
+    const low = new THREE.Mesh(new THREE.SphereGeometry(re * 1.06, 16, 5, 0, Math.PI * 2, Math.PI - 1.0, 1.0), skinM);
+    low.position.set(...p); low.rotation.set(-0.45, 0, 0); head.add(low);
+    if (look.eyes === 'scarred' && sx > 0) tube(head, [[p[0] + hr * 0.05, p[1] + hr * 0.25, p[2] + re * 0.6], [p[0] - hr * 0.05, p[1] - hr * 0.25, p[2] + re * 0.7]], () => hr * 0.02, skin('#8e4a52'), { sides: 5 });
   }
-  // brows
+  // brows: hair on the brow ridge
   if (!bone && !a.snout && look.brows !== 'none') for (const sx of [-1, 1]) {
-    const tilt = look.brows === 'angry' ? -0.35 : look.brows === 'worried' ? 0.35 : look.brows === 'raised' || look.brows === 'arched' ? 0.15 : look.eyes === 'angry' || look.eyes === 'narrow' ? -0.2 : 0;
-    const thick = look.brows === 'bushy' ? 0.045 : look.brows === 'thick' || look.brows === 'unibrow' ? 0.035 : 0.022;
-    const bx = sx * ex, by = ey + hr * (look.brows === 'raised' ? 0.24 : 0.17), bz = ez + hr * 0.02;
-    tube(head, [[bx - sx * hr * 0.12, by - sx * sx * tilt * hr * 0.05, bz - hr * 0.02], [bx, by + hr * 0.015, bz + hr * 0.01], [bx + sx * hr * 0.13, by + tilt * hr * 0.06, bz - hr * 0.04]], () => hr * thick, hairM, { sides: 5 });
+    const tilt = look.brows === 'angry' ? -0.06 : look.brows === 'worried' ? 0.06 : look.brows === 'raised' || look.brows === 'arched' ? 0.03 : look.eyes === 'angry' || look.eyes === 'narrow' ? -0.035 : -0.01;
+    const lift = look.brows === 'raised' ? 0.04 : 0;
+    const thick = look.brows === 'bushy' ? 0.04 : look.brows === 'thick' || look.brows === 'unibrow' ? 0.032 : 0.022;
+    tube(head, [on(sx * 0.15, 0.19 + lift + tilt * 0.6, 0.012), on(sx * 0.3, 0.215 + lift, 0.018), on(sx * 0.45, 0.19 + lift - tilt * 0.4, 0.008)], (t) => hr * thick * (1 - Math.abs(t - 0.35) * 0.6), hairM, { sides: 6 });
+    if (look.brows === 'unibrow' && sx > 0) tube(head, [on(-0.15, 0.19, 0.012), on(0, 0.18, 0.015), on(0.15, 0.19, 0.012)], () => hr * thick * 0.8, hairM, { sides: 6 });
   }
-  // nose
-  if (!bone && !a.snout && look.nose !== 'none') {
-    const big = look.nose === 'broad' ? 1.3 : look.nose === 'long' ? 1.15 : look.nose === 'small' || look.nose === 'button' || look.nose === 'snub' ? 0.8 : 1;
-    const hook = look.nose === 'hooked' || look.nose === 'aquiline' ? 0.025 : 0;
-    const crook = look.nose === 'crooked' ? hr * 0.04 : 0;
-    tube(head, [[0, ey + hr * 0.02, fz - hr * 0.08], [crook, -hr * 0.12, fz + hr * 0.1 * big + hook * hr * 4], [crook * 0.5, -hr * 0.27, fz + hr * 0.14 * big]], (t) => [hr * (0.06 + t * 0.07) * big, hr * (0.07 + t * 0.03)], skinM, { sides: 8 });
-    for (const sx of [-1, 1]) blob(head, [hr * 0.06 * big, hr * 0.045, hr * 0.06], skinM, [sx * hr * 0.08 * big, -hr * 0.27, fz + hr * 0.06 * big]);
-  }
-  // mouth: a firm line with lips; fangs and tusks
+  // nose (only the old build needs a separate one)
+  if (!F && !bone && !a.snout && look.nose !== 'none') tube(head, [[0, ey + hr * 0.02, fz - hr * 0.08], [0, -hr * 0.12, fz + hr * 0.1], [0, -hr * 0.27, fz + hr * 0.14]], (t) => [hr * (0.06 + t * 0.07), hr * (0.07 + t * 0.03)], skinM, { sides: 8 });
+  // mouth: the line between the lips, a touch of colour; fangs and tusks
   if (!bone && !a.snout) {
-    const my = -hr * 0.47, mz = fz + hr * 0.02 - (look.face === 'gaunt' ? hr * 0.03 : 0);
-    const lipM = look.face === 'lipstick' ? skin('#7a1a2a', { rough: 0.4 }) : S(mixHex(skinC, '#8a3a3a', fem ? 0.4 : 0.25), 'skin');
-    const curve = look.mouth === 'smile' || look.mouth === 'smirk' ? 0.02 : look.mouth === 'frown' ? -0.025 : 0;
-    tube(head, [[-hr * 0.2, my + curve * hr * 1.5, mz - hr * 0.06], [0, my, mz], [hr * 0.2, my + (look.mouth === 'smirk' ? curve * hr * 3 : curve * hr * 1.5), mz - hr * 0.06]], () => hr * 0.022, dark, { sides: 5 });
-    if (fem || look.mouth === 'lips' || look.mouth === 'pout') blob(head, [hr * 0.16, hr * 0.045, hr * 0.05], lipM, [0, my - hr * 0.055, mz - hr * 0.015]);
-    if (look.mouth === 'open' || look.mouth === 'snarl' || look.mouth === 'teeth' || look.mouth === 'grin') blob(head, [hr * 0.13, hr * 0.06, hr * 0.04], dark, [0, my - hr * 0.03, mz - hr * 0.01]);
-    if (look.mouth === 'tusks' || look.body === 'orc' || look.body === 'ogre') for (const sx of [-1, 1]) claw(head, [sx * hr * 0.17, my - hr * 0.08, mz - hr * 0.02], [sx * 0.15, 1, 0.25], hr * 0.32, hr * 0.06, boneM, -0.3);
-    if (look.mouth === 'fangs' || look.mouth === 'snarl') for (const sx of [-1, 1]) claw(head, [sx * hr * 0.08, my + hr * 0.01, mz], [0, -1, 0.2], hr * 0.14, hr * 0.03, boneM, 0);
+    const curve = look.mouth === 'smile' ? 0.012 : look.mouth === 'smirk' ? 0.01 : look.mouth === 'frown' ? -0.018 : -0.004;
+    const lineM = S(mixHex(skinC, '#2a1210', 0.55), 'skin', { rough: 0.6 });
+    const xs = [-0.15, -0.075, 0, 0.075, 0.15];
+    tube(head, xs.map((x) => on(x, -0.44 + curve * (Math.abs(x) / 0.15) ** 1.5 * (look.mouth === 'smirk' ? (x > 0 ? 2 : 0) : 1), 0.004)), () => hr * 0.01, lineM, { sides: 5 });
+    const lipM = look.face === 'lipstick' ? skin('#7a1a2a', { rough: 0.4 }) : S(mixHex(skinC, '#8a3a3a', fem ? 0.38 : 0.2), 'skin');
+    if (fem || look.mouth === 'lips' || look.mouth === 'pout' || look.face === 'lipstick') blob(head, [hr * 0.12, hr * 0.03, hr * 0.03], lipM, on(0, -0.475, -0.012));
+    if (look.mouth === 'open' || look.mouth === 'snarl' || look.mouth === 'teeth' || look.mouth === 'grin') blob(head, [hr * 0.11, hr * 0.05, hr * 0.03], dark, on(0, -0.45, -0.01));
+    if (look.mouth === 'tusks' || brute) for (const sx of [-1, 1]) claw(head, on(sx * 0.17, -0.5, -0.02), [sx * 0.15, 1, 0.25], hr * 0.32, hr * 0.06, boneM, -0.3);
+    if (look.mouth === 'fangs' || look.mouth === 'snarl') for (const sx of [-1, 1]) claw(head, on(sx * 0.07, -0.43, 0), [0, -1, 0.2], hr * 0.14, hr * 0.03, boneM, 0);
   }
   if (bone) { blob(head, [hr * 0.62, hr * 0.3, hr * 0.6], boneM, [0, -hr * 0.62, hr * 0.15]); for (let i = 0; i < 6; i++) part(head, new THREE.BoxGeometry(hr * 0.07, hr * 0.1, hr * 0.05), boneM, [(i - 2.5) * hr * 0.09, -hr * 0.5, hr * 0.68]); blob(head, [hr * 0.06, hr * 0.08, hr * 0.04], dark, [0, -hr * 0.22, fz]); }
   // ears
   const ears = look.ears === 'normal' && ['elf', 'tiefling'].includes(look.body) ? 'pointed' : look.ears === 'normal' && (look.body === 'goblin' || look.body === 'orc') ? 'big' : look.ears;
   if (!a.snout && !bone && ears !== 'none') for (const sx of [-1, 1]) {
-    const ep: V3 = [sx * hr * 0.86 * hs[0], -hr * 0.05, -hr * 0.05];
-    if (ears === 'normal') blob(head, [hr * 0.09, hr * 0.2, hr * 0.14], skinM, ep, [sx, 0, 0.4]);
+    const ep: V3 = F ? (() => { const q = faceAt(F, sx * 0.99, -0.05, -0.12).multiplyScalar(hr * 0.97); return [q.x, q.y, q.z] as V3; })() : [sx * hr * 0.86 * hs[0], -hr * 0.05, -hr * 0.05];
+    if (ears === 'normal') blob(head, [hr * 0.07, hr * 0.19, hr * 0.12], skinM, ep, [sx, 0, 0.4]);
     else ear(head, ep, [sx * 0.9, ears === 'big' ? 0.2 : 0.55, -0.35], hr * (ears === 'long' ? 0.42 : ears === 'big' ? 0.55 : 0.3), skinM, ears === 'long' ? 'long' : 'pointed', skinD);
   }
   // face marks
@@ -358,8 +402,9 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   if (look.extra === 'pipe') tube(head, [[hr * 0.1, -hr * 0.5, fz], [hr * 0.25, -hr * 0.62, fz + hr * 0.35], [hr * 0.32, -hr * 0.5, fz + hr * 0.55]], () => hr * 0.03, leatherD, { sides: 6 });
   // beard, hair, horns
   const hatCover = ['hood', 'cowl', 'greathelm', 'turban'].includes(look.hat) ? 'full' : ['helmet', 'horned', 'cap', 'tricorn', 'feathercap', 'strawhat', 'wizard', 'skullcap', 'bandana'].includes(look.hat) ? 'brim' : 'none';
-  if (!bone && !a.snout) buildBeard(head, look.beard, hr * 0.96, shape, fz * 0.98, { hair: hairM, skinMix: S(mixHex(skinC, look.hairColor, 0.45), 'skin'), gold });
-  if (!bone && !a.snout) buildHair(head, look.hair, hr * 0.97, shape, { hair: hairM, dark: S(tone(look.hairColor, 0.7), 'hair'), shaved: S(mixHex(skinC, look.hairColor, 0.5), 'skin'), tie: sec }, hatCover);
+  const surf = F ? (x: number, y: number, z: number) => faceAt(F, x, y, z) : undefined;
+  if (!bone && !a.snout) buildBeard(head, look.beard, hr * (F ? 1.005 : 0.96), shape, fz * 0.98, { hair: hairM, skinMix: S(mixHex(skinC, look.hairColor, F ? 0.28 : 0.45), 'skin'), gold }, surf);
+  if (!bone && !a.snout) buildHair(head, look.hair, hr * (F ? 0.985 : 0.97), shape, { hair: hairM, dark: S(tone(look.hairColor, 0.7), 'hair'), shaved: S(mixHex(skinC, look.hairColor, 0.5), 'skin'), tie: sec }, hatCover, surf);
   const hornM = S('#2e2420', 'bone', { rough: 0.55 }), ivory = S('#d8ccb0', 'bone');
   const horns = look.horns === 'none' && look.body === 'tiefling' ? 'curled' : look.horns;
   for (const sx of [-1, 1]) {
@@ -392,7 +437,7 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     }
     case 'horned': part(head, new THREE.SphereGeometry(R, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), metal, [0, hr * 0.12, -hr * 0.04]); tube(head, [[0, R, R * 0.4], [0, hr * -0.1, R * 1.05]], () => [hr * 0.05, hr * 0.03], metalD, { sides: 6 }); for (const sx of [-1, 1]) horn(head, [sx * R * 0.85, hr * 0.45, 0], [sx, 0.5, 0], hr * 1.5, hr * 0.15, ivory, { curl: -1.4, axis: [0, 0, sx] }); break;
     case 'hood': case 'cowl': {
-      part(head, new THREE.SphereGeometry(R * 1.12, 24, 14, Math.PI / 2 + 0.75, Math.PI * 2 - 1.5, 0, Math.PI * 0.7), hatM, [0, hr * 0.05, -hr * 0.08]);
+      part(head, hoodGeometry(R * 1.12), hatM, [0, hr * 0.05, -hr * 0.08]);
       if (look.hat === 'cowl') horn(head, [0, R * 0.9, -R * 0.6], [0, 0.4, -1], hr * 1.4, hr * 0.4, hatM, { curl: 1, axis: [1, 0, 0] });
       drape(g, neckY + 0.05, chestY + 0.04, [torsoAt(neckY)[0] * 0.95, torsoAt(neckY)[1] * 1.15], [shX * 1.08, torsoAt(chestY)[1] * 1.25], hatM, { folds: 7, depth: 0.04 });
       break;

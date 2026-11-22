@@ -128,7 +128,17 @@ export function offModel(id: FigureLook['off'], m: GearMats): THREE.Object3D | n
     case 'torch': { const w = weaponModel('torch', m)!; w.obj.rotation.x = 0.4; o.add(w.obj); return o; }
     case 'holy': { const d = new THREE.Group(); part(d, new THREE.CylinderGeometry(0.09, 0.09, 0.02, 24), m.gold, [0, 0, 0], [Math.PI / 2, 0, 0]); for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; claw(d, [Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0], [Math.cos(a), Math.sin(a), 0], 0.07 + (i % 2) * 0.04, 0.014, m.gold, 0); } d.rotation.set(0.3, 0, 0); d.position.set(0, 0.12, 0.08); o.add(d); return o; }
     case 'potion': { blob(o, [0.065, 0.07, 0.065], skin('#c97fff', { glow: 0.9, opacity: 0.85 }), [0, 0.07, 0.04]); tube(o, [[0, 0.12, 0.04], [0, 0.2, 0.04]], () => 0.02, skin('#d8e0e8', { opacity: 0.7 }), { sides: 8 }); blob(o, [0.022, 0.02, 0.022], m.wood, [0, 0.21, 0.04]); return o; }
-    case 'skull': { blob(o, [0.09, 0.1, 0.1], m.bone, [0, 0.12, 0.05]); blob(o, [0.06, 0.04, 0.06], m.bone, [0, 0.05, 0.08]); for (const sx of [-1, 1]) blob(o, [0.022, 0.026, 0.015], m.dark, [sx * 0.035, 0.13, 0.14]); return o; }
+    case 'skull': {
+      // APEX 2.11 – a real skull: cranium, cheekbones and upper jaw, deep sockets, the nasal hollow, a row of teeth
+      blob(o, [0.066, 0.07, 0.08], m.bone, [0, 0.125, 0.02]);
+      blob(o, [0.052, 0.034, 0.05], m.bone, [0, 0.082, 0.048]);
+      for (const sx of [-1, 1]) blob(o, [0.018, 0.012, 0.03], m.bone, [sx * 0.045, 0.088, 0.05]);
+      blob(o, [0.036, 0.02, 0.04], m.bone, [0, 0.05, 0.05]);
+      for (const sx of [-1, 1]) blob(o, [0.018, 0.016, 0.012], m.dark, [sx * 0.023, 0.108, 0.092]);
+      blob(o, [0.008, 0.012, 0.008], m.dark, [0, 0.086, 0.1]);
+      for (let i = 0; i < 6; i++) part(o, new THREE.BoxGeometry(0.0065, 0.011, 0.006), m.bone, [(i - 2.5) * 0.0085, 0.066, 0.094]);
+      return o;
+    }
   }
   return null;
 }

@@ -182,3 +182,20 @@ describe('APEX 2.11 – a trial through the API', () => {
     expect(st().obelisk!.records[hero].unlocked).toBe(40);
   });
 });
+
+describe('APEX 2.11 – sculpted heads', () => {
+  it('one smooth head mesh with a face: brow, sockets, nose and chin stand out where they should', async () => {
+    const { faceAt, headGeometry } = await import('../src/components/map/head3d');
+    const f = { w: 0.8, h: 1, d: 0.95, jaw: 0.78, brow: 0.055, cheek: 0.03, nose: 0.16, noseW: 1, noseLen: 1, hook: 0, crook: 0, lips: 0.018, chin: 0.05, gaunt: 0, chubby: 0 };
+    const len = (x: number, y: number) => { const z = Math.sqrt(1 - x * x - y * y); return faceAt(f, x, y, z).length(); };
+    expect(len(0, -0.24)).toBeGreaterThan(len(0.2, -0.24)); // the nose tip stands out
+    expect(len(0.31, 0.035)).toBeLessThan(len(0.31, 0.2)); // the eye sits in a socket under the brow
+    const back = faceAt(f, 0, 0, -1).length(), front = faceAt(f, 0, 0, 1).length();
+    expect(front).toBeGreaterThan(back * 0.9);
+    const g = headGeometry(f, 0.1);
+    expect(g.attributes.normal).toBeTruthy();
+    g.computeBoundingBox();
+    const size = g.boundingBox!.getSize(new (await import('three')).Vector3());
+    expect(size.y).toBeGreaterThan(size.x * 1.1); // taller than wide – no ball heads
+  });
+});

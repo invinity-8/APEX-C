@@ -9,6 +9,7 @@
  * Head space: centre of the head at the origin, +y up, +z the face, radius `hr`.
  */
 import * as THREE from 'three';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export type HeadShape = 'round' | 'square' | 'oval' | 'long' | 'wide' | 'pointed';
 /** Scale of the hair shell per head shape, so it hugs the skull. */
@@ -16,15 +17,27 @@ const SHAPE: Record<HeadShape, [number, number, number]> = {
   round: [1, 1, 1], square: [1.12, 1.08, 1.06], oval: [0.94, 1.14, 0.98], long: [0.92, 1.14, 0.92], wide: [1.2, 0.94, 1.03], pointed: [0.98, 1.05, 1.02],
 };
 
-interface Ctx { head: THREE.Group; hr: number; shape: HeadShape; hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material; cover: 'none' | 'brim' | 'full' }
+/** APEX 2.11 – the head's own surface (unit direction → point in head radii): hair and beard then hug a sculpted head. */
+export type HeadSurface = (x: number, y: number, z: number) => THREE.Vector3;
+interface Ctx { head: THREE.Group; hr: number; shape: HeadShape; hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material; cover: 'none' | 'brim' | 'full'; surf?: HeadSurface }
+/** Where a direction from the head's centre meets the scalp (head radii), on the sculpted surface or the shape's ellipsoid. */
+const scalpAt = (c: Pick<Ctx, 'shape' | 'surf'>, d: THREE.Vector3): THREE.Vector3 => { const s = SHAPE[c.shape]; return c.surf ? c.surf(d.x, d.y, d.z) : new THREE.Vector3(d.x * s[0], d.y * s[1], d.z * s[2]); };
+/** A shell from kept triangles of a sphere: shared vertices merged, so it is smooth instead of faceted. */
+function smoothShell(tris: Float32Array): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(tris, 3));
+  const m = mergeVertices(g, 1e-5);
+  m.computeVertexNormals();
+  return m;
+}
 
 /** Where the hair grows on the scalp: a hairline height per direction around the head (y of the unit sphere). */
 interface Line { front: number; side: number; back: number; /** only within |x| < strip (mohawk) */ strip?: number; /** only on one side (x > -cut) */ cut?: number; /** bald above this height (tonsure) */ cap?: number }
 
 function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
-  const s = SHAPE[c.shape];
   // APEX 2.4 – fuller hair: every shell sits a little further out (more volume), locks are wider
-  const geo = new THREE.SphereGeometry(c.hr * (r + (mat === c.shaved ? 0 : 0.035)), 18, 12).toNonIndexed();
+  const rad = c.hr * (r + (mat === c.shaved ? 0 : 0.035));
+  const geo = new THREE.SphereGeometry(1, 24, 16).toNonIndexed();
   const pos = geo.attributes.position;
   const keep: number[] = [];
   const v = new THREE.Vector3();
@@ -43,11 +56,8 @@ function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
   };
   for (let i = 0; i < pos.count; i += 3) if (covered(i) && covered(i + 1) && covered(i + 2)) keep.push(i);
   const out = new Float32Array(keep.length * 9);
-  keep.forEach((i, n) => { for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, i + k); out.set([v.x * s[0], (v.y > 0 ? v.y * puff : v.y) * s[1], v.z * s[2]], n * 9 + k * 3); } });
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(out, 3));
-  g.computeVertexNormals();
-  const m = new THREE.Mesh(g, mat);
+  keep.forEach((i, n) => { for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, i + k).normalize(); const q = scalpAt(c, v); out.set([q.x * rad, (q.y > 0 ? q.y * puff : q.y) * rad, q.z * rad], n * 9 + k * 3); } });
+  const m = new THREE.Mesh(smoothShell(out), mat);
   c.head.add(m);
   return m;
 }
@@ -57,11 +67,13 @@ function shell(c: Ctx, r: number, line: Line, mat = c.hair, puff = 1) {
  * radii; it lies flat against the head (its broad side faces away from the centre).
  */
 function lock(c: Ctx, at: [number, number, number], dir: [number, number, number], len: number, w: number, flat = 0.45, mat = c.hair, sides = 7) {
-  const hr = c.hr, s = SHAPE[c.shape];
+  const hr = c.hr;
   // APEX 2.6 – fuller: wider and thicker strands
-  const geo = new THREE.ConeGeometry(w * hr * 1.2, len * hr, sides);
+  // APEX 2.11 – a smooth, leaf-shaped strand with a soft tip instead of a sharp cone (no more spikes)
+  const geo = strand(w * hr * 1.2, len * hr, Math.max(7, sides + 1));
   const y = new THREE.Vector3(...dir).normalize();
-  const p = new THREE.Vector3(at[0] * hr * s[0], at[1] * hr * s[1], at[2] * hr * s[2]);
+  const a3 = new THREE.Vector3(...at);
+  const p = scalpAt(c, a3.clone().normalize()).multiplyScalar(a3.length() * hr);
   const out = p.clone().normalize();
   let z = out.clone().sub(y.clone().multiplyScalar(out.dot(y)));
   if (z.lengthSq() < 1e-4) z = new THREE.Vector3(0, 0, 1).sub(y.clone().multiplyScalar(y.z));
@@ -73,6 +85,11 @@ function lock(c: Ctx, at: [number, number, number], dir: [number, number, number
   m.position.copy(p).add(y.clone().multiplyScalar((len * hr) / 2));
   c.head.add(m);
   return m;
+}
+/** A lock's shape: narrow at the root, fullest a sixth of the way, then a long taper to a rounded tip. Centred like a cone (root at −len/2). */
+function strand(w: number, len: number, sides: number): THREE.BufferGeometry {
+  const prof: Array<[number, number]> = [[0, 0], [0.78, 0.03], [1, 0.16], [0.9, 0.38], [0.62, 0.62], [0.32, 0.84], [0.12, 0.96], [0, 1]];
+  return new THREE.LatheGeometry(prof.map(([r, t]) => new THREE.Vector2(r * w, -len / 2 + t * len)), sides);
 }
 /** A fringe: locks along the forehead hairline, swept towards `sweep` (−1 left … +1 right). */
 function fringe(c: Ctx, n: number, len: number, y = 0.42, sweep = 0.4, w = 0.2) {
@@ -110,7 +127,7 @@ function ridge(c: Ctx, n: number, len: number, w: number, back = 0.35) {
     lock(c, [0, Math.cos(phi) * 0.98, Math.sin(phi) * 0.98], [0, Math.cos(phi) + 0.25, Math.sin(phi) - back], len * (1 - Math.abs(i / (n - 1) - 0.35) * 0.6), w, 0.3);
   }
 }
-const lump = (c: Ctx, at: [number, number, number], r: number, mat = c.hair) => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r * c.hr, 0), mat); m.position.set(at[0] * c.hr, at[1] * c.hr, at[2] * c.hr); c.head.add(m); return m; };
+const lump = (c: Ctx, at: [number, number, number], r: number, mat = c.hair) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r * c.hr, 12, 8), mat); m.position.set(at[0] * c.hr, at[1] * c.hr, at[2] * c.hr); c.head.add(m); return m; };
 const band = (c: Ctx, at: [number, number, number], r: number) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r * c.hr, 0.05 * c.hr, 4, 8), c.tie); m.position.set(at[0] * c.hr, at[1] * c.hr, at[2] * c.hr); m.rotation.x = Math.PI / 2; c.head.add(m); return m; };
 /** A tail of segments (ponytail, braid) from `at`, hanging down and slightly back; `beads` adds braid knots. */
 function tail(c: Ctx, at: [number, number, number], segs: number, len: number, w: number, beads = false, outward: [number, number] = [0, -0.35]) {
@@ -127,11 +144,10 @@ function tail(c: Ctx, at: [number, number, number], segs: number, len: number, w
 /** Hair showing under a cap, helmet or hood: locks along the forehead under the brim, and over the ears. */
 function peek(c: Ctx, style: string) {
   const long = ['long', 'flowing', 'wavy', 'bob', 'pageboy', 'shaggy', 'wild', 'mane', 'halfup', 'curly', 'afro'].includes(style);
-  const n = 6;
-  for (let i = 0; i < n; i++) {
-    const t = i / (n - 1) - 0.5, a = t * 1.7;
-    lock(c, [Math.sin(a) * 1.04, 0.24 - Math.abs(t) * 0.12, Math.cos(a) * 0.98], [Math.sin(a) * 0.4 + 0.15, -1, 0.35], 0.42 * (1 - Math.abs(t) * 0.3), 0.19, 0.4);
-  }
+  // APEX 2.11 – a smooth band of hair under the brim (a row of locks read like teeth)
+  if (c.cover === 'brim') { shell(c, 1.05, { front: 0.2, side: -0.12, back: -0.45, cap: 0.36 }); for (const sx of [-1, 1]) lock(c, [sx * 0.97, 0.22, 0.32], [sx * 0.1, -1, 0.1], 0.32, 0.2, 0.35); }
+  // under a hood: a soft fringe on the forehead (the hood frames it)
+  else for (let i = 0; i < 4; i++) { const t = i / 3 - 0.5, a = t * 1.2; lock(c, [Math.sin(a) * 1.02, 0.4 - Math.abs(t) * 0.08, Math.cos(a) * 0.97], [Math.sin(a) * 0.5, -1, 0.3], 0.26, 0.26, 0.3); }
   if (c.cover === 'full' || long) for (const sx of [-1, 1]) lock(c, [sx * 0.98, 0.05, 0.3], [sx * 0.08, -1, 0.1], long ? 1.1 : 0.55, 0.24, 0.45);
 }
 
@@ -144,9 +160,9 @@ export type HairStyle = (typeof HAIR_STYLES)[number];
  * APEX 2.6 – on top of each style's shell and strands, a layer of rounded clumps gives the hair real volume (a
  * chunky, sculpted look that reads from the battle-map camera), with a darker under-layer for depth.
  */
-export function buildHair(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full') {
-  hairStyle(head, style, hr, shape, mats, cover);
-  volume({ head, hr, shape, ...mats, cover }, style);
+export function buildHair(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full', surf?: HeadSurface) {
+  hairStyle(head, style, hr, shape, mats, cover, surf);
+  volume({ head, hr, shape, ...mats, cover, surf }, style);
 }
 const CLUMPY: Record<string, { n: number; r: number; back: number }> = {
   short: { n: 9, r: 0.3, back: 0 }, messy: { n: 12, r: 0.32, back: 0 }, spiky: { n: 6, r: 0.26, back: 0 }, bob: { n: 12, r: 0.36, back: 0.9 }, pageboy: { n: 12, r: 0.36, back: 0.8 },
@@ -166,8 +182,9 @@ function volume(c: Ctx, style: string) {
     if (p.z > 0.45 && p.y < 0.55) continue; // forehead and face stay free
     if (c.cover === 'brim' && p.y > 0.25) continue;
     if ((style === 'undercut' || style === 'sidecut') && p.y < 0.45) continue;
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(v.r * c.hr, 0), i % 3 === 2 ? c.dark : c.hair);
-    m.position.set(p.x * c.hr * 1.02 * s[0], p.y * c.hr * 1.04 * s[1], p.z * c.hr * 1.02 * s[2]);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(v.r * c.hr, 12, 8), i % 3 === 2 ? c.dark : c.hair);
+    const q = scalpAt(c, p);
+    m.position.set(q.x * c.hr * 1.02, q.y * c.hr * 1.04, q.z * c.hr * 1.02);
     m.lookAt(0, 0, 0);
     m.scale.set(1.25, 1.1, 0.62); // flattened against the head
     c.head.add(m);
@@ -177,15 +194,15 @@ function volume(c: Ctx, style: string) {
     const len = v.back;
     for (const [x, y, sc] of [[0, -0.25, 1], [-0.55, -0.35, 0.75], [0.55, -0.35, 0.75], [0, -0.25 - len * 0.55, 0.8]] as Array<[number, number, number]>) {
       if (c.cover === 'brim' && y > 0.25) continue;
-      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62 * c.hr * sc, 1), c.hair);
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.62 * c.hr * sc, 16, 12), c.hair);
       m.position.set(x * c.hr * s[0], y * c.hr, -0.72 * c.hr * s[2]);
       m.scale.set(1.25, 1 + len * 0.35, 0.55);
       c.head.add(m);
     }
   }
 }
-function hairStyle(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full') {
-  const c: Ctx = { head, hr, shape, ...mats, cover };
+function hairStyle(head: THREE.Group, style: string, hr: number, shape: HeadShape, mats: { hair: THREE.Material; dark: THREE.Material; shaved: THREE.Material; tie: THREE.Material }, cover: 'none' | 'brim' | 'full', surf?: HeadSurface) {
+  const c: Ctx = { head, hr, shape, ...mats, cover, surf };
   const top = cover === 'none';
   const scalp = (r = 1.08, line: Line = { front: 0.42, side: 0.02, back: -0.42 }, puff = 1.04) => shell(c, r, line, c.hair, puff);
   // APEX 2.4 – under headwear the hair no longer vanishes: a fringe peeks out under the brim or the hood
@@ -364,21 +381,22 @@ function hairStyle(head: THREE.Group, style: string, hr: number, shape: HeadShap
 
 export interface BeardMats { hair: THREE.Material; skinMix: THREE.Material; gold: THREE.Material }
 /** Beards: a jaw shell for full beards, sculpted locks for long/forked/braided, moustaches as curved locks. */
-export function buildBeard(head: THREE.Group, style: string, hr: number, shape: HeadShape, faceZ: number, m: BeardMats) {
-  const c: Ctx = { head, hr, shape, hair: m.hair, dark: m.hair, shaved: m.skinMix, tie: m.gold, cover: 'none' };
+export function buildBeard(head: THREE.Group, style: string, hr: number, shape: HeadShape, faceZ: number, m: BeardMats, surf?: HeadSurface) {
+  const c: Ctx = { head, hr, shape, hair: m.hair, dark: m.hair, shaved: m.skinMix, tie: m.gold, cover: 'none', surf };
   const jaw = (r: number, mat = m.hair) => {
     // the lower face from ear to ear: the hairline inverted (grows BELOW a line that rises at the sides)
-    const s = SHAPE[shape];
-    const geo = new THREE.SphereGeometry(hr * r, 16, 12).toNonIndexed();
+    const geo = new THREE.SphereGeometry(1, 24, 18).toNonIndexed();
     const pos = geo.attributes.position, v = new THREE.Vector3(), keep: number[] = [];
-    const ok = (i: number) => { v.fromBufferAttribute(pos, i).normalize(); return v.z > -0.35 && v.y < -0.12 && !(v.z > 0.75 && v.y > -0.42 && Math.abs(v.x) < 0.25); };
+    // on a sculpted head the beard line runs low over the cheeks and rises to the ears (no beard on the nose)
+    const line = (x: number) => (surf ? -0.36 + 0.26 * Math.min(1, Math.max(0, (Math.abs(x) - 0.3) / 0.5)) : -0.12);
+    const ok = (i: number) => { v.fromBufferAttribute(pos, i).normalize(); return v.z > -0.35 && v.y < line(v.x) && !(v.z > 0.75 && v.y > -0.5 && Math.abs(v.x) < (surf ? 0.2 : 0.25)); };
     for (let i = 0; i < pos.count; i += 3) if (ok(i) && ok(i + 1) && ok(i + 2)) keep.push(i);
     const out = new Float32Array(keep.length * 9);
-    keep.forEach((i, n) => { for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, i + k); out.set([v.x * s[0], v.y * s[1] * 1.08, v.z * s[2] * 1.05], n * 9 + k * 3); } });
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(out, 3)); g.computeVertexNormals();
-    head.add(new THREE.Mesh(g, mat));
+    keep.forEach((i, n) => { for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, i + k).normalize(); const q = scalpAt(c, v); const k2 = surf ? 1 : 1.0; out.set([q.x * hr * r * k2, q.y * hr * r * (surf ? 1 : 1.08), q.z * hr * r * (surf ? 1 : 1.05)], n * 9 + k * 3); } });
+    head.add(new THREE.Mesh(smoothShell(out), mat));
   };
-  const moustache = (curl = false) => { for (const sx of [-1, 1]) { lock(c, [sx * 0.06, -0.28, faceZ / hr + 0.04], [sx * 1, -0.35, 0], curl ? 0.45 : 0.38, 0.12, 0.5); if (curl) lock(c, [sx * 0.42, -0.42, faceZ / hr - 0.05], [sx * 0.2, 1, -0.2], 0.22, 0.07, 0.6); } };
+  const my = surf ? -0.37 : -0.28;
+  const moustache = (curl = false) => { for (const sx of [-1, 1]) { lock(c, [sx * 0.06, my, surf ? 0.93 : faceZ / hr + 0.04], [sx * 1, -0.35, 0], curl ? 0.45 : 0.38, 0.12, 0.5); if (curl) lock(c, [sx * 0.42, -0.42, faceZ / hr - 0.05], [sx * 0.2, 1, -0.2], 0.22, 0.07, 0.6); } };
   switch (style) {
     case 'none': return;
     case 'stubble': jaw(1.01, m.skinMix); return;
