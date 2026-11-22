@@ -272,7 +272,8 @@ export function InventoryPanel({ token, run, busy, rules = DEFAULT_ITEM_RULES, i
         inactive={new Set(worn.filter((w) => !w.active).map((w) => w.item.id))}
       />
 
-      <div className="grid gap-3 md:grid-cols-2">
+      {/* APEX 2.12 – containers side by side only when each gets room (the panel sits next to the equipment) */}
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr))]">
         {containers.map((c) => {
           // worn items are shown on the paper doll (Worn) only – never in a container at the same time
           const inside = visible.filter((i) => !wornIds.has(i.id) && containerOfItem(i, containers) === c.id);
@@ -462,7 +463,7 @@ function WornCard(props: CardProps & { inactive: Set<string> }) {
       </div>
       {error && <p role="alert" className="mb-1 text-[11px] text-amber-200">{error}</p>}
       {props.items.length ? (
-        <ul className="grid gap-1.5 md:grid-cols-2">
+        <ul className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr))]">
           {props.items.map((i) => (
             <ItemRow key={i.id} {...props} item={i} inactiveSet={props.inactive.has(i.id)} />
           ))}
@@ -575,12 +576,12 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item; inac
         props.setDragId(null);
       }}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex flex-wrap items-start gap-2">
         <span className="cursor-grab select-none pt-0.5 text-marble-600" aria-hidden title="Drag to reorder or move">
           ⠿
         </span>
         <ItemIcon item={item} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[11rem] flex-1 basis-[11rem]">
           <div className="text-sm text-marble-50">
             {item.quantity !== 1 && <span className="mr-1 font-semibold text-gold-200 tabular-nums">{item.quantity}×</span>}
             <ItemBadges item={item} />
@@ -604,7 +605,7 @@ function ItemRow(props: CardProps & { item: Item; prev?: Item; next?: Item; inac
             ? <p role="status" className="mt-2 rounded border border-ink-600 px-2 py-1 text-[11px] text-marble-400">{comparison.reason}</p>
             : <EquipmentComparison comparison={comparison} />)}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {structured && (
             <button className="btn btn-ghost h-7 px-2 text-[11px]" aria-expanded={inspect} aria-label={`Inspect ${item.name}`} onClick={() => setInspect((v) => !v)}>
               Inspect

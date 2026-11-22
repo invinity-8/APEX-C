@@ -50,6 +50,8 @@ interface Props {
   fog?: string;
   phase?: 'day' | 'dusk' | 'night';
   selectedTokenId?: string | null;
+  /** APEX 2.12 – figures whose turn it is (token or enemy ids): a marker floats above their heads. */
+  turnIds?: string[];
   reach?: Map<HexKey, { cost: number }> | null;
   onTokenClick?: (tokenId: string) => void;
   onHexClick?: (key: HexKey, point: { x: number; y: number }) => void;
@@ -146,7 +148,7 @@ export default function HexScene3D(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const three = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; ground: THREE.InstancedMesh[]; dynamic: THREE.Group; tokens: THREE.Group; overlay: THREE.Group; effects: THREE.Group; composer?: EffectComposer } | null>(null);
   /** Animated things: grass shader time, swaying crowns, water, running combat effects. */
-  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }>; moves: Move[] }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], wings: [], water: [], lights: [], fauna: [], fx: [], moves: [] });
+  const anim = useRef<{ time: { value: number }; crowns: THREE.Object3D[]; flames: THREE.Object3D[]; cards: THREE.Object3D[]; turnMarks: THREE.Object3D[]; wings: THREE.Object3D[]; water: THREE.MeshStandardMaterial[]; lights: THREE.PointLight[]; fauna: Critter[]; fx: Array<{ born: number; life: number; update: (age: number) => void; dispose: () => void }>; moves: Move[] }>({ time: { value: 0 }, crowns: [], flames: [], cards: [], turnMarks: [], wings: [], water: [], lights: [], fauna: [], fx: [], moves: [] });
   /** APEX 2.5 – where every figure stood last time (to walk it along its path when it moves). */
   const lastPos = useRef(new Map<string, { k: HexKey; alt: number; pos: THREE.Vector3 }>());
   /** APEX 2.5 – the smooth ground surface (heights inside a hex for grass, markers …). */
@@ -589,8 +591,9 @@ export default function HexScene3D(p: Props) {
         const spawnNode = n.kind === 'spawn';
         const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 0.95, 6), new THREE.MeshBasicMaterial({ color: spawnNode ? 0x6fe0a0 : 0xd8b25a, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.rotation.z = Math.PI / 6; ring.position.set(w.x, top(k) + 0.04, w.z);
-        const pin = new THREE.Mesh(spawnNode ? new THREE.ConeGeometry(0.22, 0.5, 4) : new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: spawnNode ? 0x6fe0a0 : 0xd8b25a }));
-        pin.position.set(w.x, top(k) + (spawnNode ? 1.0 : 1.2), w.z); if (spawnNode) pin.rotation.x = Math.PI;
+        // APEX 2.12 – above head height and translucent, so a figure standing on it is not speared at the hip
+        const pin = new THREE.Mesh(spawnNode ? new THREE.ConeGeometry(0.12, 0.45, 12) : new THREE.OctahedronGeometry(0.18, 0), new THREE.MeshBasicMaterial({ color: spawnNode ? 0xcfe8dc : 0xd8b25a, transparent: true, opacity: 0.55, depthWrite: false }));
+        pin.position.set(w.x, top(k) + (spawnNode ? 3.1 : 3.0), w.z); if (spawnNode) pin.rotation.x = Math.PI;
         t.dynamic.add(ring, pin);
         continue;
       }
@@ -608,13 +611,13 @@ export default function HexScene3D(p: Props) {
   }, [tiles, fogOf, height, p.gm, p.phase, quality, recolor, nodesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- figures: upright markers with portrait / icon, name, life bar
-  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : '', tk.enemy?.sex, tk.enemy?.seed])) + (p.selectedTokenId ?? '');
+  const tokenKey = JSON.stringify((p.tokens ?? []).map((tk) => [tk.tokenId, Math.round(tk.x), Math.round(tk.y), tk.name, tk.color, tk.enemy?.icon, tk.enemy?.condition, tk.enemy?.hp, tk.vitals?.hp, tk.vitals?.form, tk.target, tk.view?.portraitV, tk.alt, tk.sneaking, tk.torch, (tk.icons ?? []).map((i) => i.icon).join(''), tk.view?.figure ? JSON.stringify(tk.view.figure) : '', tk.enemy?.look ? JSON.stringify(tk.enemy.look) : '', tk.enemy?.breed, tk.enemy?.creature ? JSON.stringify(tk.enemy.creature) : '', tk.enemy?.sex, tk.enemy?.seed, tk.look ? JSON.stringify(tk.look) : ''])) + (p.selectedTokenId ?? '') + '|' + (p.turnIds ?? []).join(',');
   useEffect(() => {
     const t = three.current;
     if (!t) return;
     t.tokens.children.forEach((c) => c.traverse((o) => { const m = (o as THREE.Mesh).material as (THREE.Material & { map?: THREE.Texture | null }) | undefined; if (m && (o as THREE.Sprite).isSprite) { m.map?.dispose(); m.dispose(); } }));
     t.tokens.clear();
-    anim.current.cards = []; anim.current.wings = [];
+    anim.current.cards = []; anim.current.wings = []; anim.current.turnMarks = [];
     const stacks = new Map<HexKey, SceneToken[]>();
     for (const tk of p.tokens ?? []) { const k = hexKey(hexAt(p.map, tk)); stacks.set(k, [...(stacks.get(k) ?? []), tk]); }
     let torchLights = 0;
@@ -634,6 +637,19 @@ export default function HexScene3D(p: Props) {
         // APEX 2.4 – sneaking figures crouch (also without the idle animation); a portrait standee ducks lower
         if (tk.sneaking) { if (fig.animKind === 'still') g.scale.y *= 0.74; else { fig.body.scale.y = 0.7; fig.body.scale.x = fig.body.scale.z = 1.08; if (fig.animKind === 'humanoid') fig.body.rotation.x = 0.2; } }
         if (fig.card) anim.current.cards.push(fig.card);
+        // APEX 2.12 – whose turn it is: a slender, translucent white-gold marker floating above the head
+        if (p.turnIds?.includes(tk.tokenId)) {
+          const mark = new THREE.Group();
+          const mat = new THREE.MeshBasicMaterial({ color: 0xf7e9c4, transparent: true, opacity: 0.72, depthWrite: false });
+          const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), mat); gem.scale.set(0.8, 1.9, 0.8);
+          const halo = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.25, 32), new THREE.MeshBasicMaterial({ color: 0xe3c27a, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+          halo.rotation.x = -Math.PI / 2; halo.position.y = -0.22;
+          mark.add(gem, halo);
+          mark.position.y = fig.height + 0.55; mark.userData.baseY = mark.position.y;
+          mark.renderOrder = 5;
+          g.add(mark);
+          anim.current.turnMarks.push(mark);
+        }
         if (fig.wings) anim.current.wings.push(...fig.wings);
         if (lift > 0) {
           // flying: a shadow on the ground and a faint line down to it
@@ -956,6 +972,7 @@ export default function HexScene3D(p: Props) {
       faunaStep(a.fauna, t.tokens, sec);
       // standees turn towards the camera (around the vertical axis)
       const camPos = t.camera.position;
+      for (const m of a.turnMarks) { m.position.y = (m.userData.baseY as number) + Math.sin(now / 420) * 0.08; m.rotation.y = now / 900; }
       for (const c of a.cards) { const wp = c.getWorldPosition(new THREE.Vector3()); const parentRot = c.parent ? c.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); const yaw = Math.atan2(camPos.x - wp.x, camPos.z - wp.z); const pe = new THREE.Euler().setFromQuaternion(parentRot, 'YXZ'); c.rotation.y = yaw - pe.y; }
       a.fx = a.fx.filter((f) => { const age = now - f.born; if (age > f.life) { f.dispose(); return false; } if (age >= 0) f.update(age / f.life); return true; });
       a.moves = a.moves.filter((m) => stepMove(m, now));
