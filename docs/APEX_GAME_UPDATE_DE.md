@@ -1223,3 +1223,78 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 - **Mehrere Charaktere:** Steuert ein Profil mehrere Charaktere, gehen alle mit in die Prüfung. Getestet ist nur der Normalfall mit einem Charakter.
 - **Geräte:** Leistung auf Handys und Ton in Safari/iOS habe ich nicht gemessen.
 - **Werkzeuge:** Für noch hochwertigere Modelle (modellierte Assets statt prozeduraler Formen) wären Spline oder Meshy möglich. Beide habe ich nicht benutzt, weil sie in euren Konten Assets und Credits anlegen würden.
+
+## APEX 2.12 – Fehler behoben, einheitlicher Stil, Farben nach Wahl, Proportionen, Downtime und Hideouts
+
+**Fehler: Andere Spieler sahen zufällig aus**
+- **Ursache:** In einer Szene kam die Figur eines anderen Charakters ohne ihr Aussehen beim Spieler an. Der Client suchte es in der Arena-Sicht des Spielers, dort fehlte der Charakter oft, und dann griff eine Zufallsvorlage nach der Token-ID.
+- **Behebung:** Das öffentliche Aussehen (gewählte Figur oder getragene Ausrüstung) reist jetzt mit der Szenen-Figur mit. Alle sehen dieselbe Figur.
+
+**Zug-Marker und Inventar**
+- **Zug-Marker:** Wer am Zug ist, hat über dem Kopf einen schlanken, durchscheinenden weiß-goldenen Marker, der leicht schwebt.
+- **Der „grüne Pfeil in der Hüfte“:** Das war die Startpunkt-Markierung des GM, über die die erste Figur gestellt wird. Sie ist jetzt schlank, durchscheinend und über Kopfhöhe.
+- **Inventar im Charakter-Tab:** Gegenstände werden nicht mehr in eine schmale Spalte gequetscht. Behälter stehen nur nebeneinander, wenn jeder Platz hat; die Knöpfe rutschen unter den Namen.
+
+**Stil**
+- **Obelisk-Optik überall:** kühles und warmes Licht, feine Maserung auf Hintergrund, Panels, Kopf- und Navigationsleiste.
+- **Neues Emblem:** ein „A“, das an einem Obelisken mit leuchtender Rune lehnt.
+- **Kopfzeile:** zeigt nur noch APEX; der Kampagnenname erscheint beim Darüberfahren.
+- **Titelseite:** nur APEX und „Join Campaign“.
+- **Farben und Schriften** (Knopf neben dem Ton, auch auf der Titelseite):
+  - Hauptfarbe: Vorlagen von Gold über Tyrian-Purpur, Amethyst, Bronze, Silber, Rot und Grünspan bis Azur, oder eine freie Farbe
+  - Schriftton: Marmor, Pergament, Mondlicht, Asche
+  - Schriften für Überschriften und Fließtext
+  - Stärke der Textur
+  - Gilt nur auf dem eigenen Gerät und färbt die ganze App sofort um.
+
+**Figuren**
+- **Proportionen nachgemessen:** Hüftgelenk bei etwa 0,49 der Körperhöhe (vorher 0,51), längerer Rumpf, Kopf etwa ein Achtel, breitere Schultern. Die Beine wirken nicht mehr „Slenderman“-lang.
+- **Geformte Konturen statt Röhren und Kugeln:**
+  - Beine: Oberschenkel, Kniescheibe, Wade, schlanker Knöchel
+  - Arme: Bizeps und Unterarm, ein Deltamuskel statt Schulterkugel
+- **Weniger Knete:**
+  - anliegender Lederpanzer statt zweier Halbkugeln
+  - Stiefelschäfte, die der Wade folgen
+  - flache, gerollte Kragen
+- **Neue Regler im Figuren-Editor:** Größe, Beinlänge, Schultern, Kopfgröße, Statur (jeweils −1 … +1).
+
+**Downtime und Hideouts** (Tab „🏕 Downtime“)
+- **GM: „Make camp (on the road)“:**
+  - Ein gemeinsames Lager in der Gegend, in der die Gruppe steht, erkannt an den Kacheln der aktuellen Szene: Wald, Wüste, Schnee, Sumpf, Ufer, Gebirge, Siedlung.
+  - Dazu Lagerfeuer, Zelte, Wagen, Kiste, Holzstapel und Bett.
+  - Spieler können das Gelände nicht umbauen. Der GM hat alle Werkzeuge, etwa für einen nächtlichen Überfall.
+- **GM: „Send everyone home“:**
+  - Jeder Spieler kommt in sein eigenes Hideout.
+  - Der Spieler wählt die Gegend: Seeufer, Strand, Waldlichtung, Wasserfall, Wüstenoase, Winterwald, Gebirgspass, Sumpf, Gehöft, Herrenhaus, Obstgarten, Tempelruine, Höhle, Dorf.
+  - Er wählt, was immer dort steht: Truhe, Wagen, Zelt, Lagerfeuer, Bett, Holzstapel, Tisch, Fässer.
+  - Er gestaltet es mit dem Gelände-Editor (Malen, Höhen, Licht, Beschriftungen, Tiere). Gegnergruppen und versteckte GM-Notizen kann er dort nicht anlegen.
+  - Das Hideout bleibt für die nächste Downtime erhalten.
+- **„End downtime“:** Alle kehren dorthin zurück, wo sie vorher waren. Das Lager wird archiviert. Laufende Obelisk-Prüfungen werden folgenlos zurückgerufen.
+- **Die Truhe:**
+  - Jeder Charakter hat im Hideout ein Langzeitlager.
+  - Was dort liegt, wird nicht getragen und ist bei einem Obelisk-Tod sicher.
+  - Gegenstände lassen sich während der Downtime hin- und herlegen, oder per „Store everything not worn“ alles einlagern, was nicht getragen wird.
+- **Obelisk:**
+  - Er öffnet nur in der Downtime. Der GM kann ihn mit „Open outside downtime“ dauerhaft öffnen.
+  - Vor dem Betreten zeigt er alles, was auf dem Spiel steht, mit „→ Chest“ pro Gegenstand.
+  - Nach der Prüfung steht man wieder im Lager oder Hideout.
+- **Daten:** Alles lebt im Spielstand (`downtime`, `stash` am Charakter) und in normalen Szenen, ohne Migration.
+
+**Geprüft**
+- **Tests:** 648 Tests grün. Neu sind:
+  - `ui212`: Aussehen anderer Spieler, Proportionen, Regler
+  - `downtime212`: Lager, Hideout, Truhe, Rückkehr, Editor-Speichern ohne Gegner
+- **Testkorrektur:** Ein alter, zufallsabhängiger Test (`female28`) setzte Orks manchmal auf einen Baum; er nutzt jetzt eine feste Karte.
+- **Build:** grün.
+- **Im Browser** (Mock-Server):
+  - Lager mit Lagerfeuer, Zelten, Wagen und Kiste
+  - Truhe und Obelisk-Abfrage
+  - Hideout „Strand“ mit Editor und Speichern
+  - Inventar-Layout, Titelseite, Farbwahl (Purpur), Kopfzeile
+  - Figuren und Köpfe in Nahansicht
+
+**Nicht geprüft / offen**
+- **Datenbank:** Die echte Supabase-Datenbank habe ich nicht angesprochen. Szenen und Zuweisungen laufen über dieselben Wege wie bisher.
+- **Nur beigetretene Spieler:** Spieler, die sich noch nie angemeldet haben, werden nicht verschoben. Die Datenbank erlaubt das nur für Kampagnenmitglieder.
+- **Ein Pferd im Hideout** gibt es noch nicht als Figur; der Wagen ist eine Kachel.
+- **Handys:** nicht gemessen.
