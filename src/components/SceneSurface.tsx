@@ -146,6 +146,8 @@ export function SceneSurface({ snapshot, tokenId, name = 'You', color = '#8bb5dc
     const tokens: SceneToken[] = [...own, ...figures.map(f => ({
       tokenId: f.kind === 'pc' ? f.tokenId! : f.id, x: f.x, y: f.y, name: f.name, color: f.color, torch: f.torch,
       view: f.tokenId ? view(f.tokenId) : undefined,
+      // APEX 2.12 – other characters' looks come with the figure (the viewer's own view may not hold their token)
+      ...(f.kind === 'pc' && f.look ? { look: f.look } : {}),
       enemy: f.kind === 'enemy' ? { icon: creatureEmoji(`${f.breed ?? ''} ${f.name}`, f.icon), ally: f.side === 'ally', elite: f.elite, condition: f.condition, hp: f.hp, maxHp: f.maxHp, tempHp: f.tempHp, size: f.size, build: f.build, look: f.look, breed: f.breed, creature: f.creature, sex: f.sex, seed: f.seed, ...(f.ac !== undefined ? { ac: f.ac } : {}) } : undefined,
       target: !!targets?.includes(f.kind === 'pc' ? f.tokenId! : f.id),
       ...((f.effects ?? (f.tokenId ? snapshot.self?.[f.tokenId]?.effects : undefined) ?? []).some((e) => e.key === 'hidden') ? { sneaking: true } : {}),

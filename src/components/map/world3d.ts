@@ -27,6 +27,7 @@ export function figureLook(tk: SceneToken): FigureLook | null {
   const enemy = tk.enemy;
   if (!enemy) {
     if (tk.view?.figure) return tk.view.figure;
+    if (tk.look) return tk.look;
     if (tk.view?.portraitV) return null; // an uploaded portrait stays a standee until a figure is built
     const heroes = FIGURE_PRESETS.filter((p) => p.group === 'hero');
     const h = hashText(tk.tokenId);

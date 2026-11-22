@@ -35,6 +35,8 @@ export interface SceneToken {
   color: string;
   /** Full token data for the Arena-style portrait marker, when the viewer knows it. */
   view?: TokenView;
+  /** APEX 2.12 – a character's public 3D look sent with the scene figure (when `view` is missing). */
+  look?: FigureLook;
   /** Enemy figure (red ring, icon, condition; HP for the GM). */
   enemy?: { icon: string; condition: 'healthy' | 'bloodied' | 'down'; hp?: number; maxHp?: number; tempHp?: number; ally?: boolean; elite?: boolean; size?: string; build?: string; /** APEX 2.1: chosen low-poly look, or the creature kind an automatic look is picked from. */ look?: FigureLook; breed?: string; /** APEX 2.2: an explicit creature model (beast, dragon, aberration …). */ creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' }; /** APEX 2.8 – men, women or mixed. */ sex?: FigureSex; /** APEX 2.9 – seed of its own look. */ seed?: string; /** GM: armour class */ ac?: number };
   /** Carries a light (torch glow). */
