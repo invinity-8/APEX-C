@@ -255,14 +255,15 @@ export function ear(parent: THREE.Object3D, base: V3, dir: V3, size: number, m: 
 export function eye(parent: THREE.Object3D, at: V3, r: number, o: { iris?: string; pupil?: 'round' | 'slit' | 'goat'; sclera?: string; glow?: number; look?: V3 } = {}): void {
   const g = new THREE.Group(); g.position.set(...at); parent.add(g);
   g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), vec(o.look ?? [0, 0, 1]).normalize());
-  if (!o.iris) { part(g, ellipsoid(r, r, r, 10, 7), skin(o.glow ? '#ffcf5a' : '#0e0b09', o.glow ? { glow: o.glow, rough: 0.2 } : { rough: 0.12, metal: 0.1 })); }
+  // APEX 2.11: an animal's eye – the iris fills it (no cartoon white), a dark pupil, a small wet glint; a lid above
+  if (!o.iris) { part(g, ellipsoid(r * 0.8, r * 0.7, r * 0.6, 10, 7), skin(o.glow ? '#ffcf5a' : '#0e0b09', o.glow ? { glow: o.glow, rough: 0.2 } : { rough: 0.12, metal: 0.1 })); }
   else {
-    part(g, ellipsoid(r, r, r, 11, 8), skin(o.sclera ?? '#f2ece0', { rough: 0.3 }));
-    part(g, ellipsoid(r * 0.72, r * 0.72, r * 0.3, 10, 6), skin(o.iris, o.glow ? { glow: o.glow, rough: 0.25 } : { rough: 0.25 }), [0, 0, r * 0.78]);
-    const pupil = o.pupil === 'slit' ? [r * 0.12, r * 0.6] : o.pupil === 'goat' ? [r * 0.55, r * 0.14] : [r * 0.34, r * 0.34];
-    part(g, ellipsoid(pupil[0], pupil[1], r * 0.1, 8, 5), skin('#080606', { rough: 0.1 }), [0, 0, r * 0.98]);
+    if (o.sclera) part(g, ellipsoid(r, r, r, 11, 8), skin(o.sclera, { rough: 0.3 }));
+    part(g, ellipsoid(r * 0.85, r * 0.72, r * 0.55, 11, 8), skin(o.iris, o.glow ? { glow: o.glow, rough: 0.25 } : { rough: 0.18 }), [0, 0, o.sclera ? r * 0.45 : 0]);
+    const pupil = o.pupil === 'slit' ? [r * 0.1, r * 0.55] : o.pupil === 'goat' ? [r * 0.5, r * 0.12] : [r * 0.3, r * 0.3];
+    part(g, ellipsoid(pupil[0], pupil[1], r * 0.1, 8, 5), skin('#060404', { rough: 0.1 }), [0, 0, (o.sclera ? r * 0.45 : 0) + r * 0.5]);
   }
-  part(g, ellipsoid(r * 0.2, r * 0.2, r * 0.1, 6, 4), skin('#ffffff', { glow: 0.6, rough: 0.1 }), [r * 0.3, r * 0.32, r * 0.92]);
+  part(g, ellipsoid(r * 0.1, r * 0.1, r * 0.05, 6, 4), skin('#ffffff', { glow: o.glow ? 0.6 : 0.25, rough: 0.1 }), [r * 0.25, r * 0.25, r * 0.6]);
 }
 /** A ring of tufts (lion's mane, ruff, crest): cones on a ring around `centre` facing `dir`, pointing outwards. */
 export function tuftRing(parent: THREE.Object3D, centre: V3, dir: V3, radius: number, count: number, len: number, m: THREE.Material, o: { back?: number; thick?: number; rows?: number } = {}): void {

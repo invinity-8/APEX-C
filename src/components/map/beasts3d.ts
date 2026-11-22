@@ -269,7 +269,7 @@ export interface Avian { c: string; c2: string; beak: string; legs?: string; siz
   /** Head and neck colour (a bald eagle's white head, a mallard's green one); bat wings instead of feathers; a lizard's tail (cockatrice). */
   headC?: string; membrane?: [string, string]; lizardTail?: string }
 export function avian(g: THREE.Group, s: Avian, airborne = false): THREE.Group[] {
-  const S = s.size, body = skin(s.c, s.glow ? { glow: s.glow } : { rough: 0.85 }), chest = skin(s.c2, s.glow ? { glow: s.glow } : { rough: 0.85 }), beakM = skin(s.beak, { rough: 0.4 }), legM = skin(s.legs ?? s.beak, { rough: 0.5 });
+  const S = s.size, body = skin(s.c, s.glow ? { glow: s.glow } : { rough: 0.85, surface: 'hair' }), chest = skin(s.c2, s.glow ? { glow: s.glow } : { rough: 0.85, surface: 'hair' }), beakM = skin(s.beak, { rough: 0.4, surface: 'bone' }), legM = skin(s.legs ?? s.beak, { rough: 0.5, surface: 'scales' });
   const legLen = s.legLen ?? 0.32, cy = (legLen + 0.25) * S;
   // body: an egg tipped forward
   tube(g, [[0, cy - 0.02 * S, -0.34 * S], [0, cy + 0.02 * S, -0.1 * S], [0, cy + 0.08 * S, 0.12 * S], [0, cy + 0.18 * S, 0.24 * S]], profile2([[0.1 * S, 0.08 * S], [0.25 * S, 0.24 * S], [0.25 * S, 0.27 * S], [0.14 * S, 0.15 * S]]), body, { sides: 14 });
@@ -314,7 +314,7 @@ export function avian(g: THREE.Group, s: Avian, airborne = false): THREE.Group[]
 // ---------------------------------------------------------------- serpents
 export interface Serpent { c: string; belly?: string; len: number; r: number; hood?: boolean; worm?: boolean; sea?: boolean; eye?: string; glow?: boolean; pattern?: { kind: Marking; mark: string }; rise?: number }
 export function serpent(g: THREE.Group, s: Serpent): void {
-  const m = skin(s.c, { rough: 0.55 }), belly = skin(s.belly ?? mixHex(s.c, '#e8dcb0', 0.5), { rough: 0.6 });
+  const m = skin(s.c, { rough: 0.55, surface: 'scales' }), belly = skin(s.belly ?? mixHex(s.c, '#e8dcb0', 0.5), { rough: 0.6, surface: 'scales' });
   const L = s.len, R = s.r, rise = s.rise ?? (s.worm ? 1.4 : 0.45);
   const pts: V3[] = [];
   const n = 9;
@@ -349,7 +349,7 @@ export function serpent(g: THREE.Group, s: Serpent): void {
 // ---------------------------------------------------------------- arthropods
 export interface Bug { kind: 'spider' | 'scorpion' | 'crab' | 'beetle' | 'centipede' | 'ant'; c: string; c2?: string; eye?: string; glow?: number; size?: number; pattern?: { kind: Marking; mark: string } }
 export function arthropod(g: THREE.Group, s: Bug): void {
-  const S = s.size ?? 1, m = skin(s.c, { rough: 0.5 }), m2 = skin(s.c2 ?? tone(s.c, 0.7), { rough: 0.5 });
+  const S = s.size ?? 1, m = skin(s.c, { rough: 0.38, surface: 'chitin' }), m2 = skin(s.c2 ?? tone(s.c, 0.7), { rough: 0.42, surface: 'chitin' });
   const leg = (x: number, base: V3, reach: number, up: number, z: number, r: number) => {
     const knee: V3 = [base[0] + x * reach * 0.45, base[1] + up, base[2] + z * 0.5];
     const foot: V3 = [base[0] + x * reach, 0.02, base[2] + z];
@@ -402,7 +402,7 @@ export function dragon(g: THREE.Group, s: Dragon, airborne = false): THREE.Group
     c: s.c, belly: s.c2, nose: tone(s.c, 0.5), claws: s.horn, eye: s.eye ?? '#ffcf3a', eyeGlow: 0.9,
     len: 1.0 * S, leg: (wyvern ? 0.5 : 0.42) * S, girth: 0.26 * S, chest: 1.15, legR: 0.075 * S,
     neck: 0.7 * S, neckUp: 0.85, head: 0.2 * S, snout: 1.1, snoutR: 0.85, brow: 1, headDown: 0.15,
-    feet: 'talon', ears: 'fin', earSize: 0.8, tail: s.tail === 'sting' || wyvern ? 'sting' : s.tail === 'spade' ? 'spade' : 'thick', tailLen: (wyvern ? 0.7 : 1.5) * S, horns: 'dragon', fangs: true,
+    surface: 'scales', feet: 'talon', ears: 'fin', earSize: 0.8, tail: s.tail === 'sting' || wyvern ? 'sting' : s.tail === 'spade' ? 'spade' : 'thick', tailLen: (wyvern ? 0.7 : 1.5) * S, horns: 'dragon', fangs: true,
     ...(wyvern ? { thinFront: true } : {}),
   };
   const r = beast(g, spec);
@@ -429,7 +429,7 @@ export interface Brute {
 }
 export function brute(g: THREE.Group, s: Brute): { shoulderY: number; hipY: number; hc: V3 } {
   const Hgt = s.height ?? 2, B = s.bulk ?? 1, hunch = s.hunch ?? 0.2, A = s.armLen ?? 1, U = Hgt / 2;
-  const mo = { rough: s.metal ? 0.35 : 0.75, ...(s.flat ? { flat: true } : {}), ...(s.metal ? { metal: s.metal } : {}) };
+  const mo = { rough: s.metal ? 0.35 : 0.75, ...(s.flat ? { flat: true } : {}), ...(s.metal ? { metal: s.metal } : {}), surface: (s.flat ? 'stone' : s.metal ? 'metal' : s.fur ? 'fur' : 'skin') as Surface };
   const m = skin(s.c, mo), m2 = skin(s.c2 ?? mixHex(s.c, '#d8c8a8', 0.3), { ...mo, rough: 0.8 });
   const ivory = skin('#efe6cf', { rough: 0.35 }), clawM = skin('#e8dcc0', { rough: 0.4 });
   const legH = Hgt * 0.42, hipY = legH, chestY = Hgt * 0.72, neckY = Hgt * 0.82;

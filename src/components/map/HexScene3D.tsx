@@ -23,6 +23,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { buildCreature } from './creatures3d';
 import { faunaOf } from '../../game/fauna';
 import { sizeScale } from './sizes';
@@ -85,6 +86,26 @@ interface Props {
  * depth and normals, but not sprites (name labels, floating numbers) or see-through overlays – they went into the
  * depth buffer as solid rectangles and the occlusion painted a dark, half-transparent box above every figure.
  */
+/**
+ * APEX 2.11 – the picture's mood (high and ultra): a little less saturation, cool shadows and warm lights, more
+ * contrast and a vignette – the dark-fantasy look of the setting. Runs after tone mapping, on display colours.
+ */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null as THREE.Texture | null }, uVignette: { value: 0.55 }, uSat: { value: 0.86 }, uContrast: { value: 1.08 } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVignette, uSat, uContrast; varying vec2 vUv;
+void main() {
+  vec4 c = texture2D(tDiffuse, vUv); vec3 col = c.rgb;
+  float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col = mix(vec3(l), col, uSat);
+  col += mix(vec3(-0.014, 0.0, 0.022), vec3(0.028, 0.012, -0.018), smoothstep(0.12, 0.7, l));
+  col = (col - 0.5) * uContrast + 0.5;
+  vec2 d = (vUv - 0.5) * vec2(1.0, 0.82);
+  col *= clamp(1.0 - dot(d, d) * uVignette * 1.6, 0.0, 1.0);
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);
+}`,
+};
+
 class SpriteSafeGTAO extends GTAOPass {
   constructor(...args: ConstructorParameters<typeof GTAOPass>) {
     super(...args);
@@ -198,8 +219,10 @@ export default function HexScene3D(p: Props) {
     sun.shadow.bias = -0.0004;
     Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 200 });
     scene.add(hemi, sun);
+    // APEX 2.11: a cool light from behind outlines figures against the ground (no shadows)
+    const rim = new THREE.DirectionalLight(0x9ab4d8, 0.45); rim.name = 'rim'; rim.position.set(30, 35, -40);
     const dynamic = new THREE.Group(), tokens = new THREE.Group(), overlay = new THREE.Group(), effects = new THREE.Group();
-    scene.add(dynamic, tokens, overlay, effects);
+    scene.add(dynamic, tokens, overlay, effects, rim);
     three.current = { renderer, scene, camera, ground: [], dynamic, tokens, overlay, effects };
     if (import.meta.env.DEV) (window as unknown as { __apex3d?: unknown }).__apex3d = three.current; // dev: inspect the scene from tests
     const resize = () => { const w = el.clientWidth || 600, h = el.clientHeight || 400; renderer.setSize(w, h, false); three.current?.composer?.setSize(w, h); renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'; camera.aspect = w / h; camera.updateProjectionMatrix(); setTick((t) => t + 1); };
@@ -241,6 +264,8 @@ export default function HexScene3D(p: Props) {
     const [hemi, sun] = t.scene.children as [THREE.HemisphereLight, THREE.DirectionalLight];
     hemi.color.setHex(l.hemiSky); hemi.groundColor.setHex(l.hemiGround); hemi.intensity = l.hemi;
     sun.color.setHex(l.sun); sun.intensity = l.sunI; sun.position.set(...l.sunPos);
+    const rim = t.scene.getObjectByName('rim') as THREE.DirectionalLight | undefined;
+    if (rim) { rim.position.set(-l.sunPos[0], Math.abs(l.sunPos[1]) * 0.6 + 10, -l.sunPos[2] - 30); rim.intensity = 0.25 + Math.min(0.35, l.sunI * 0.2); }
     t.renderer.toneMappingExposure = l.exposure;
     e.backdrop?.set(l, season, snow);
     e.recolorFill?.(l);
@@ -295,6 +320,7 @@ export default function HexScene3D(p: Props) {
       if (qcfg.ao) { const ao = new SpriteSafeGTAO(t.scene, t.camera, w, h); ao.blendIntensity = 0.85; composer.addPass(ao); }
       if (qcfg.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.45, 0.82));
       composer.addPass(new OutputPass());
+      composer.addPass(new ShaderPass(GradeShader));
       composer.setSize(w, h);
       t.composer = composer;
     }

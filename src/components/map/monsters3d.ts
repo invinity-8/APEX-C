@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { blob, claw, ear, eye, hand, horn, insectWing, limb, membraneWing, mixHex, part, profile2, skin, spikeRow, tail, teeth, tentacle, tone, tube, type V3 } from './kit3d';
 import { beast, foldWing, withPattern } from './beasts3d';
+import type { Surface } from './surface3d';
 
 const add = (a: V3, b: V3, k = 1): V3 => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
 const IVORY = '#efe6cf';
@@ -21,7 +22,7 @@ const rbox = (w: number, h: number, d: number, r = 0.06) => new RoundedBoxGeomet
 /** The eye tyrant: a floating orb with a great central eye, a toothy maw and ten eye stalks. */
 export function beholder(g: THREE.Group, c: string, eyeC = '#7ad84a', small = false): void {
   const S = small ? 0.6 : 1, y = small ? 1.15 : 1.35;
-  const body = skin(c, { rough: 0.55 }), dark = skin(tone(c, 0.62), { rough: 0.6 });
+  const body = skin(c, { rough: 0.55, surface: 'skin' }), dark = skin(tone(c, 0.62), { rough: 0.6, surface: 'skin' });
   blob(g, [0.62 * S, 0.58 * S, 0.6 * S], body, [0, y, 0], undefined, 1.4);
   for (let i = 0; i < 18; i++) { const a = i * 2.39996, el = Math.acos(1 - 2 * ((i + 0.5) / 18)); const p: V3 = [Math.sin(el) * Math.cos(a), Math.cos(el), Math.sin(el) * Math.sin(a)]; if (p[2] > 0.45) continue; blob(g, [0.08 * S, 0.08 * S, 0.05 * S], dark, [p[0] * 0.6 * S, y + p[1] * 0.56 * S, p[2] * 0.58 * S], p); }
   // the great eye under a heavy lid
@@ -41,7 +42,7 @@ export function beholder(g: THREE.Group, c: string, eyeC = '#7ad84a', small = fa
 }
 /** Aboleth, otyugh, gibbering mouther, octopus / kraken. */
 export function tentacled(g: THREE.Group, kind: 'aboleth' | 'otyugh' | 'octopus' | 'mouther', c: string): void {
-  const body = skin(c, { rough: 0.45 }), dark = skin(tone(c, 0.6), { rough: 0.5 }), under = skin(mixHex(c, '#e8d8c8', 0.45), { rough: 0.5 });
+  const body = skin(c, { rough: 0.45, surface: 'skin' }), dark = skin(tone(c, 0.6), { rough: 0.5, surface: 'skin' }), under = skin(mixHex(c, '#e8d8c8', 0.45), { rough: 0.5, surface: 'skin' });
   if (kind === 'mouther') {
     // a heap of flesh full of eyes and mouths
     for (let i = 0; i < 12; i++) { const a = i * 2.39996, r = 0.25 + (i % 3) * 0.08; blob(g, [r, r * 0.8, r], i % 4 ? body : dark, [Math.cos(a) * 0.38 * (i / 12 + 0.4), 0.25 + (i % 4) * 0.13, Math.sin(a) * 0.34 * (i / 12 + 0.4)]); }
@@ -92,7 +93,7 @@ export function brainy(g: THREE.Group, kind: 'grell' | 'devourer' | 'flumph'): v
     for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; tentacle(g, arc([Math.cos(a) * 0.32, 1.16, Math.sin(a) * 0.32], [Math.cos(a) * 0.45, 0.55, Math.sin(a) * 0.45], [Math.sin(i) * 0.08, 0.05, 0], 4), 0.04, glow); }
     return;
   }
-  const pink = skin('#d88a9a', { rough: 0.45 }), fold = skin('#b86a7a', { rough: 0.5 });
+  const pink = skin('#c87a8a', { rough: 0.35, surface: 'skin' }), fold = skin('#a85a6a', { rough: 0.4, surface: 'skin' });
   const y = kind === 'grell' ? 1.45 : 0.62, R = kind === 'grell' ? 0.42 : 0.34;
   blob(g, [R, R * 0.8, R * 1.15], pink, [0, y, 0]);
   // the folds of a brain: winding grooves over both halves
@@ -134,7 +135,7 @@ export function jellyfish(g: THREE.Group): void {
 }
 /** Roper: a stalagmite with one eye, a toothy mouth and grasping tendrils. */
 export function roper(g: THREE.Group): void {
-  const rock = skin('#6a6458', { rough: 0.95 }), dark = skin('#4a463e', { rough: 0.95 });
+  const rock = skin('#6a6458', { rough: 0.95, surface: 'stone' }), dark = skin('#4a463e', { rough: 0.95, surface: 'stone' });
   tube(g, [[0, 0, 0], [0.03, 0.8, 0], [-0.02, 1.5, 0.02], [0, 2.1, 0.03]], profile2([[0.58, 0.55], [0.46, 0.44], [0.32, 0.3], [0.05, 0.05]]), rock, { sides: 9, capStart: false });
   for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; tube(g, [[Math.cos(a) * 0.5, 0.15, Math.sin(a) * 0.5], [Math.cos(a) * 0.36, 1.1, Math.sin(a) * 0.36], [Math.cos(a) * 0.12, 1.85, Math.sin(a) * 0.12]], () => 0.05, dark, { sides: 5 }); }
   eye(g, [0, 1.35, 0.33], 0.13, { iris: '#e8e070', glow: 0.8, pupil: 'slit', look: [0, 0, 1] });
@@ -200,7 +201,7 @@ export function elemental(g: THREE.Group, kind: 'fire' | 'water' | 'air' | 'eart
  */
 export function golem(g: THREE.Group, c: string, eyeC = '#7ad8ff', kind: 'stone' | 'iron' | 'rough' | 'clay' = 'stone'): void {
   const rough = kind === 'rough', metal = kind === 'iron' ? 0.65 : 0;
-  const o = { flat: kind !== 'clay', rough: metal ? 0.38 : 0.9, ...(metal ? { metal } : {}) };
+  const o = { flat: kind !== 'clay', rough: metal ? 0.38 : 0.9, ...(metal ? { metal } : {}), surface: (metal ? 'metal' : kind === 'clay' ? 'skin' : 'stone') as Surface };
   const st = skin(c, o), d = skin(tone(c, 0.72), o), glow = skin(eyeC, { glow: 1.6 });
   const chunk = (r: number, at: V3, sc: V3 = [1, 1, 1]) => part(g, new THREE.DodecahedronGeometry(r, 0), st, at, [at[0] * 3, at[1] * 2, at[2] * 5], sc);
   for (const x of [-1, 1]) {
@@ -225,7 +226,7 @@ export function golem(g: THREE.Group, c: string, eyeC = '#7ad8ff', kind: 'stone'
 }
 /** Animated armour: an empty suit of plate with a light in the visor and a sword. */
 export function armour(g: THREE.Group, metal = '#a8b0b8'): void {
-  const m = skin(metal, { metal: 0.75, rough: 0.32 }), dk = skin(tone(metal, 0.55), { metal: 0.7, rough: 0.4 }), gap = skin('#0a0a0c');
+  const m = skin(metal, { metal: 0.75, rough: 0.32, surface: 'metal' }), dk = skin(tone(metal, 0.55), { metal: 0.7, rough: 0.4, surface: 'metal' }), gap = skin('#0a0a0c');
   for (const x of [-1, 1]) {
     limb(g, [[x * 0.15, 0.95, 0], [x * 0.17, 0.52, 0.04], [x * 0.16, 0.12, 0]], [0.11, 0.09, 0.075], m, 0.12, 12);
     blob(g, [0.1, 0.09, 0.08], dk, [x * 0.17, 0.52, 0.09]);
@@ -277,7 +278,7 @@ export function ooze(g: THREE.Group, c: string, cube = false): void {
 }
 /** Treants and shambling mounds. */
 export function treant(g: THREE.Group, shambling = false): void {
-  const bark = skin(shambling ? '#4a5a2a' : '#5a3e26', { rough: 0.95 }), barkD = skin(shambling ? '#2a3a1a' : '#3a2818', { rough: 0.95 });
+  const bark = skin(shambling ? '#4a5a2a' : '#5a3e26', { rough: 0.95, surface: 'wood' }), barkD = skin(shambling ? '#2a3a1a' : '#3a2818', { rough: 0.95, surface: 'wood' });
   const leaf = skin(shambling ? '#3a5a2a' : '#3a6a32', { rough: 0.9 }), leaf2 = skin(shambling ? '#5a7a32' : '#5a8a3a', { rough: 0.9 });
   if (shambling) {
     blob(g, [0.55, 0.75, 0.5], barkD, [0, 0.85, 0]);
@@ -309,7 +310,7 @@ export function treant(g: THREE.Group, shambling = false): void {
 }
 /** Myconids and fungal giants: a stalk body with arms and a spotted cap. */
 export function mushroom(g: THREE.Group, cap: string, glow = 0): void {
-  const stalk = skin('#e8dcc0', { rough: 0.85 }), c = skin(cap, glow ? { glow, rough: 0.6 } : { rough: 0.6 }), gill = skin(mixHex(cap, '#f2e6d0', 0.6), { rough: 0.9 });
+  const stalk = skin('#d8ccb0', { rough: 0.85, surface: 'skin' }), c = skin(cap, glow ? { glow, rough: 0.6 } : { rough: 0.6, surface: 'skin' }), gill = skin(mixHex(cap, '#f2e6d0', 0.6), { rough: 0.9 });
   for (const x of [-1, 1]) { limb(g, [[x * 0.13, 0.35, 0], [x * 0.16, 0.18, 0.03], [x * 0.15, 0.04, 0]], [0.1, 0.085, 0.08], stalk, 0.1, 8); blob(g, [0.09, 0.05, 0.13], stalk, [x * 0.15, 0.04, 0.05]); }
   tube(g, [[0, 0.3, 0], [0, 0.65, 0.01], [0, 1.02, 0]], profile2([[0.26, 0.24], [0.22, 0.2], [0.24, 0.22]]), stalk, { sides: 14 });
   part(g, new THREE.TorusGeometry(0.23, 0.04, 8, 20), stalk, [0, 0.82, 0], [Math.PI / 2, 0, 0]);
@@ -338,7 +339,7 @@ export function flytrap(g: THREE.Group): void {
 // ---------------------------------------------------------------- animals with a body of their own
 /** The mimic: a chest whose lid is a toothed maw, a long tongue and pseudopod legs. */
 export function mimic(g: THREE.Group): void {
-  const wood = skin('#8a5f36', { rough: 0.85 }), woodD = skin('#5a3a20', { rough: 0.9 }), gold = skin('#d8b25a', { metal: 0.75, rough: 0.3 }), flesh = skin('#8a3a3a', { rough: 0.6 });
+  const wood = skin('#8a5f36', { rough: 0.85, surface: 'wood' }), woodD = skin('#5a3a20', { rough: 0.9, surface: 'wood' }), gold = skin('#d8b25a', { metal: 0.75, rough: 0.3, surface: 'metal' }), flesh = skin('#8a3a3a', { rough: 0.6, surface: 'skin' });
   part(g, rbox(0.92, 0.52, 0.62, 0.04), wood, [0, 0.32, 0]);
   part(g, new THREE.CylinderGeometry(0.31, 0.31, 0.92, 18, 1, false, 0, Math.PI), wood, [0, 0.72, -0.14], [-0.55, 0, Math.PI / 2]);
   for (const x of [-0.32, 0.32]) { part(g, new THREE.BoxGeometry(0.07, 0.54, 0.64), gold, [x, 0.32, 0]); }
@@ -353,7 +354,7 @@ export function mimic(g: THREE.Group): void {
 }
 /** Giant frog / toad: a squat body, folded hind legs, bulging eyes and a wide mouth. */
 export function frog(g: THREE.Group, c: string): void {
-  const b = skin(c, { rough: 0.45 }), l = skin(mixHex(c, '#f2e6b0', 0.45), { rough: 0.5 });
+  const b = skin(c, { rough: 0.45, surface: 'skin' }), l = skin(mixHex(c, '#f2e6b0', 0.45), { rough: 0.5, surface: 'skin' });
   tube(g, [[0, 0.28, -0.38], [0, 0.36, -0.1], [0, 0.4, 0.2], [0, 0.38, 0.42]], profile2([[0.25, 0.18], [0.42, 0.3], [0.4, 0.3], [0.3, 0.2]]), b, { sides: 16 });
   blob(g, [0.36, 0.16, 0.42], l, [0, 0.2, 0.05]);
   tube(g, [[-0.32, 0.32, 0.38], [0, 0.29, 0.56], [0.32, 0.32, 0.38]], () => 0.018, skin('#2a1410'), { sides: 6 });
@@ -371,7 +372,7 @@ export function frog(g: THREE.Group, c: string): void {
 }
 /** Fish and sharks: a lofted body, fins, a forked tail. Swims a little above the ground. */
 export function fish(g: THREE.Group, c: string, shark: boolean): void {
-  const b = skin(c, { rough: shark ? 0.5 : 0.3 }), belly = skin(mixHex(c, '#f2ecdc', 0.65), { rough: 0.4 }), fin = skin(tone(c, 0.8), { rough: 0.5, side: true });
+  const b = skin(c, { rough: shark ? 0.5 : 0.3, surface: shark ? 'skin' : 'scales' }), belly = skin(mixHex(c, '#f2ecdc', 0.65), { rough: 0.4 }), fin = skin(tone(c, 0.8), { rough: 0.5, side: true });
   const y = 0.62;
   tube(g, [[0, y, -1.0], [0, y, -0.5], [0, y + 0.02, 0.1], [0, y, 0.6], [0, y - 0.04, 0.9]], profile2(shark ? [[0.05, 0.06], [0.2, 0.25], [0.27, 0.34], [0.22, 0.27], [0.06, 0.08]] : [[0.04, 0.08], [0.14, 0.26], [0.2, 0.36], [0.16, 0.28], [0.05, 0.1]]), b, { sides: 16, steps: 30 });
   tube(g, [[0, y - 0.14, -0.6], [0, y - 0.18, 0.1], [0, y - 0.13, 0.65]], () => [shark ? 0.2 : 0.14, 0.12], belly, { sides: 12 });
@@ -386,7 +387,7 @@ export function fish(g: THREE.Group, c: string, shark: boolean): void {
 }
 /** Bat: a furry body, big ears, fangs and leathery wings. */
 export function bat(g: THREE.Group, airborne: boolean): THREE.Group[] {
-  const fur = skin('#3a2e2a', { rough: 0.9 }), face = skin('#5a4440', { rough: 0.8 });
+  const fur = skin('#3a2e2a', { rough: 0.9, surface: 'fur' }), face = skin('#5a4440', { rough: 0.8, surface: 'skin' });
   blob(g, [0.2, 0.26, 0.2], fur, [0, 0.9, 0]);
   blob(g, [0.15, 0.14, 0.15], fur, [0, 1.18, 0.06]);
   blob(g, [0.08, 0.07, 0.09], face, [0, 1.14, 0.18]);
@@ -413,7 +414,7 @@ export function hydra(g: THREE.Group, c: string, c2: string): void {
 }
 /** Turtles and tortoises (a scute-patterned shell); the world turtle carries a little landscape. */
 export function turtle(g: THREE.Group, o: { c: string; shell: string; world?: boolean }): void {
-  const b = skin(o.c, { rough: 0.7 }), sh = skin(o.shell, { rough: 0.6 }), rim = skin(tone(o.shell, 0.7), { rough: 0.7 });
+  const b = skin(o.c, { rough: 0.7, surface: 'scales' }), sh = skin(o.shell, { rough: 0.6, surface: 'chitin' }), rim = skin(tone(o.shell, 0.7), { rough: 0.7, surface: 'chitin' });
   const shell = part(g, new THREE.SphereGeometry(0.6, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), sh, [0, 0.24, 0], [0, 0, 0], [1, 0.66, 1.25]);
   void shell;
   part(g, new THREE.TorusGeometry(0.6, 0.06, 8, 32), rim, [0, 0.25, 0], [Math.PI / 2, 0, 0], [1, 1.25, 1]);
@@ -433,7 +434,7 @@ export function turtle(g: THREE.Group, o: { c: string; shell: string; world?: bo
 }
 /** Giant snail: a soft foot under a spiral shell, eye stalks. */
 export function snail(g: THREE.Group, c: string, shell: string): void {
-  const b = skin(c, { rough: 0.35 }), sh = skin(shell, { rough: 0.5 });
+  const b = skin(c, { rough: 0.35, surface: 'skin' }), sh = skin(shell, { rough: 0.5, surface: 'chitin' });
   tube(g, [[0, 0.1, -0.6], [0, 0.14, -0.1], [0, 0.2, 0.4], [0, 0.36, 0.62]], profile2([[0.08, 0.05], [0.28, 0.12], [0.24, 0.15], [0.14, 0.14]]), b, { sides: 12 });
   const pts: V3[] = []; for (let i = 0; i <= 40; i++) { const a = i * 0.32, r = 0.42 * Math.exp(-0.09 * a); pts.push([-i * 0.004, 0.55 + Math.sin(a) * r, -0.12 + Math.cos(a) * r]); }
   tube(g, pts, (t) => 0.24 * (1 - t * 0.85), sh, { sides: 14, steps: 90 });
@@ -442,7 +443,7 @@ export function snail(g: THREE.Group, c: string, shell: string): void {
 }
 /** A sky whale or sea monster. */
 export function whale(g: THREE.Group, c: string, sky: boolean): void {
-  const b = skin(c, { rough: 0.55 }), belly = skin(mixHex(c, '#e8ecf0', 0.6), { rough: 0.6 }), y = sky ? 2.6 : 0.5;
+  const b = skin(c, { rough: 0.55, surface: 'skin' }), belly = skin(mixHex(c, '#e8ecf0', 0.6), { rough: 0.6, surface: 'skin' }), y = sky ? 2.6 : 0.5;
   tube(g, [[0, y + 0.05, -2.0], [0, y + 0.1, -1.0], [0, y + 0.12, 0.2], [0, y, 1.3], [0, y - 0.1, 1.75]], profile2([[0.1, 0.1], [0.55, 0.5], [0.85, 0.72], [0.7, 0.58], [0.3, 0.25]]), b, { sides: 18, steps: 36 });
   tube(g, [[0, y - 0.38, -0.8], [0, y - 0.5, 0.3], [0, y - 0.38, 1.4]], () => [0.55, 0.25], belly, { sides: 14 });
   tail(g, [[0, y + 0.05, -1.95], [0, y + 0.05, -2.15]], 0.18, b, { end: 'fluke' });
