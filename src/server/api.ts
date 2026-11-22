@@ -76,6 +76,7 @@ import { assetRequest } from './sceneAssets.js';
 import { motionRequest } from './sceneMotion.js';
 import { travelRequest } from './sceneTravel.js';
 import { sanctuaryRequest } from './sanctuary.js';
+import { obeliskRequest } from './obelisk.js';
 import { journalImageRequest } from './journalImages.js';
 import { kenneyPreviewRequest } from './kenneyPreview.js';
 import { isId, isInt, isObj, parseCommand } from './validate.js';
@@ -198,6 +199,7 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
     if (req.op === 'scene-turn') return await sceneTurnRequest(user, req.method, req.body, repo);
     if (req.op === 'scene-travel') return await travelRequest(user, req.method, req.query, req.body, repo);
     if (req.op === 'sanctuary') return await sanctuaryRequest(user, req.method, req.body, repo);
+    if (req.op === 'obelisk') return await obeliskRequest(user, req.method, req.body, repo);
     if (req.op === 'journal-images') return await journalImageRequest(user, req.method, req.query, req.body, repo);
     switch (`${req.method} ${req.op}`) {
       case 'GET session':

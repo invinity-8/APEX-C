@@ -437,6 +437,8 @@ export interface GameState {
   sceneClocks?: Record<string, SceneClockState>;
   /** APEX 2.7 – enemy AI per scene: on/off and a step counter per turn (runaway guard). */
   sceneAi?: Record<string, { on: boolean; turn?: string; steps?: number }>;
+  /** APEX 2.11 – the Obelisk: solo trials, per-character records, trials in progress and death alerts (GM-only; players read their own part through the obelisk op). */
+  obelisk?: import('./obelisk.js').ObeliskState;
   /** APEX 2.5 – campaign time of day, season and snow. */
   worldTime?: import('./worldTime.js').WorldTime;
   /** Scene enemies (GM-placed), carried lights and the bounded combat log, per scene. */

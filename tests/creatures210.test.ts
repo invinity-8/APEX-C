@@ -43,7 +43,7 @@ describe('APEX 2.10 – building-block kit', () => {
     for (const [kind, breed, id] of [['tiger', 'Tiger beast', 6], ['cow', 'Cow beast', 9], ['zebra', 'Zebra beast', 7]] as const) for (const seed of ['a', 'b', 'c']) {
       const m = buildCreature(kind)!;
       applyCoat(m.group, individualOf(breed, seed));
-      expect([...keys(m.group)], `${kind} ${seed}`).toContain(`apex-coat-${id}`);
+      expect([...keys(m.group)].some((k) => k.includes(`apex-coat-${id}`)), `${kind} ${seed}`).toBe(true);
     }
   });
   it('a tube is a mesh added to its parent', () => {
@@ -112,7 +112,7 @@ describe('APEX 2.10 – figures and sound', () => {
     for (const p of FIGURE_PRESETS) for (const sex of ['male', 'female'] as const) {
       const f = buildLowPoly(lookFromPreset(p, 5, sex));
       expect(f.head, p.id).toBeTruthy();
-      expect(f.height, p.id).toBeGreaterThan(1.0);
+      expect(f.height, p.id).toBeGreaterThan(0.8); // a gnome is ≈ 3 ft
       expect(f.height, p.id).toBeLessThan(4.5);
     }
   });

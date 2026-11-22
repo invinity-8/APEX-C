@@ -40,7 +40,7 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map', arenaClock 
         <ApexEmblem className="h-9 w-9 drop-shadow-[0_0_8px_rgba(192,155,88,.45)]" />
         <div className="leading-tight">
           <div className="font-display text-xl font-black tracking-[0.3em] text-gold-300">APEX</div>
-          <div className="text-[10px] uppercase tracking-[0.25em] text-marble-500">{online ? online.campaignName : 'Arena of the Eternal Will'}</div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-marble-500">{online ? online.campaignName : 'Rome meets magic'}</div>
         </div>
       </div>
 

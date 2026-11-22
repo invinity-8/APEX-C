@@ -87,7 +87,8 @@ export function NpcBar({ target, snapshot, encounter, npc, busy, act, attack, se
                 <select aria-label="AI mood" className="rounded border border-ink-600 bg-ink-900 px-1 py-0.5" value={mood} disabled={busy} onChange={(e) => act({ action: 'npcAi', id: npc.id, profile: { mood: e.target.value } })}>{MOODS.map((m) => <option key={m} value={m}>{MOOD_LABEL[m]}{m === base.mood ? ' (default)' : ''}</option>)}</select>
                 {(() => {
                   // APEX 2.9 – morale (hidden from the players) and the leader's rally
-                  const pers = creaturePersonality(block, { name: npc.name, ...(npc.elite ? { elite: true } : {}), ...(npc.abilities ? { abilities: npc.abilities } : {}) });
+                  const pers0 = creaturePersonality(block, { name: npc.name, ...(npc.elite ? { elite: true } : {}), ...(npc.abilities ? { abilities: npc.abilities } : {}) });
+                  const pers = 'fearless' in npc && npc.fearless ? { ...pers0, style: 'horde' as const } : pers0;
                   const text = moraleText(pers, npc.morale);
                   const tone = npc.morale?.surrendered ? 'text-sky-300' : npc.morale?.broken ? 'text-blood-400' : (npc.morale?.fatigue ?? 0) > 0 ? 'text-amber-300' : 'text-marble-400';
                   return <>

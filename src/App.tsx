@@ -32,13 +32,14 @@ import { useGameDirector } from './components/CampaignMapDirector';
 import { MapStage } from './components/map/MapStage';
 import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
+import { ObeliskAlerts, ObeliskGm, ObeliskPanel, ObeliskRunner, useObelisk } from './components/Obelisk';
 // APEX 2.1 – performance: pages that are not on the map screen load on first use (smaller start bundle)
 const ArsenalPanel = lazy(() => import('./components/ArsenalPanel').then((m) => ({ default: m.ArsenalPanel })));
 const EnemyLibrary = lazy(() => import('./components/EnemyLibrary').then((m) => ({ default: m.EnemyLibrary })));
 const SceneDirector = lazy(() => import('./components/SceneDirector').then((m) => ({ default: m.SceneDirector })));
 const CharacterPanel = lazy(() => import('./components/CharacterPanel').then((m) => ({ default: m.CharacterPanel })));
 
-type View = 'map' | 'scenes' | 'enemies' | 'character' | 'spells' | 'inventory' | 'journal' | 'merchant' | 'arsenal' | 'feedback';
+type View = 'map' | 'scenes' | 'enemies' | 'character' | 'spells' | 'inventory' | 'journal' | 'merchant' | 'arsenal' | 'feedback' | 'obelisk';
 
 interface Toast {
   id: number;
@@ -64,6 +65,9 @@ export default function App({ game }: { game: GameApi }) {
   const mapRef = useRef<MapHandle>(null);
 
   const notify = useCallback((text: string, kind: Toast['kind'] = 'error') => setToast({ id: Date.now(), text, kind }), []);
+  // APEX 2.11 – the Obelisk: the player's status follows the game view (a trial changes the scene and the state)
+  const obelisk = useObelisk(!!game.online && view.role !== 'gm', view);
+  const openObelisk = useCallback(() => setScreen('obelisk'), []);
   // APEX 2.9 – sound: allowed after the first click or key; the music follows the situation (battle, map, menus)
   useEffect(() => {
     const f = () => unlockSound();
@@ -421,6 +425,7 @@ export default function App({ game }: { game: GameApi }) {
     ...(isGm && state ? [{ id: 'enemies' as View, label: '🐉 Enemy Library' }] : []),
     { id: 'character', label: '📜 Character' },
     ...(game.online ? [{ id: 'journal' as View, label: '📖 Journal' }] : []),
+    ...(game.online ? [{ id: 'obelisk' as View, label: isGm && state?.obelisk?.alerts?.length ? `◆ Obelisk · ☠ ${state.obelisk.alerts.length}` : '◆ Obelisk' }] : []),
     ...(!isGm && view.merchant ? [{ id: 'merchant' as View, label: '🏛 Merchant' }] : []),
     ...(isGm && state ? [{ id: 'arsenal' as View, label: '⚔ Arsenal' }] : []),
     ...(isGm && game.online ? [{ id: 'feedback' as View, label: '📮 Feedback' }] : []),
@@ -460,10 +465,12 @@ export default function App({ game }: { game: GameApi }) {
       <AnnouncementOverlay announcements={view.announcements} scope={announceScope} serverTime={view.serverTime} />
       {!isGm && <LootRollDock rolls={view.lootRolls ?? []} viewerId={view.viewerId} serverTime={view.serverTime} run={run} />}
       {isGm && state && <GmEventModal state={state} run={run} />}
+      {isGm && state && game.online && <ObeliskAlerts state={state} notify={notify} openTab={openObelisk} />}
+      {!isGm && game.online && <ObeliskRunner ob={obelisk} refresh={game.online.refresh} openTab={openObelisk} />}
       <Header
         game={game}
         notify={notify}
-        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'enemies' ? 'Enemy Library' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'journal' ? 'Journal' : screen === 'arsenal' ? 'Arsenal' : 'Feedback'}
+        area={screen === 'map' ? 'Map' : screen === 'scenes' ? 'Scenes' : screen === 'enemies' ? 'Enemy Library' : screen === 'character' ? 'Character' : screen === 'spells' ? 'Spells' : screen === 'inventory' ? 'Inventory' : screen === 'journal' ? 'Journal' : screen === 'arsenal' ? 'Arsenal' : screen === 'obelisk' ? 'Obelisk' : 'Feedback'}
         onAdvancePhase={() => void advancePhase()}
         arenaClock={isGm ? director.arenaShown : !game.scene || game.scene.kind === 'arena'}
       />
@@ -480,7 +487,7 @@ export default function App({ game }: { game: GameApi }) {
             {t.label}
           </button>
         ))}
-        {isGm && screen !== 'map' && screen !== 'arsenal' && screen !== 'enemies' && screen !== 'feedback' && (
+        {isGm && screen !== 'map' && screen !== 'arsenal' && screen !== 'enemies' && screen !== 'feedback' && screen !== 'obelisk' && (
           <label className="ml-auto flex items-center gap-2 text-xs text-marble-300">
             Character
             <select
@@ -512,7 +519,9 @@ export default function App({ game }: { game: GameApi }) {
             </div>
           )}
           <Suspense fallback={<p className="p-6 text-sm text-marble-500">Loading…</p>}>
-          {screen === 'journal' && game.online ? (
+          {screen === 'obelisk' && game.online ? (
+            isGm && state ? <ObeliskGm state={state} notify={notify} /> : <ObeliskPanel ob={obelisk} onEntered={() => setScreen('map')} />
+          ) : screen === 'journal' && game.online ? (
             <PlayerJournal sceneReference={game.scene?.scene ? { id: game.scene.scene.id, name: game.scene.scene.name } : undefined} />
           ) : screen === 'feedback' && isGm && game.online ? (
             <FeedbackInbox online={game.online} notify={notify} />

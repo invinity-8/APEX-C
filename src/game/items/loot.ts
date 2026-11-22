@@ -211,7 +211,7 @@ function generate(base: BaseItem, cmd: Extract<LootCommand, { type: 'arsenalGene
 const pickDefined = <T extends object>(o: T): Partial<T> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 
 /** Creates the real item for an approved draft entry (modifiers rolled with the server seed). */
-function draftItem(e: LootDraftEntry, id: string, seed: number, day: number): Item | null {
+export function draftItem(e: LootDraftEntry, id: string, seed: number, day: number): Item | null {
   const source = { kind: 'loot' as const, label: 'Loot drop', day };
   if (e.currency) {
     return { id, name: `${currencyLabel(e.currency, e.quantity)}`, kind: 'misc', description: `Loot: ${currencyLabel(e.currency, e.quantity)} – goes straight into the purse when given.`, quantity: 1, rev: 0, grant: { currency: e.currency, amount: e.quantity }, source };

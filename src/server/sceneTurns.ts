@@ -1715,7 +1715,9 @@ const aiControls = (state: GameState, sceneId: string, e: SceneEnemy | undefined
 
 /** APEX 2.9 – a creature's personality: the stat block's preset plus what the GM changed in the library. */
 export function personalityFor(state: GameState, e: SceneEnemy): Personality {
-  return creaturePersonality(statBlock(state, e.templateId), { name: e.name, ...(e.elite ? { elite: true } : {}), ...(e.abilities ? { abilities: e.abilities } : {}) });
+  const p = creaturePersonality(statBlock(state, e.templateId), { name: e.name, ...(e.elite ? { elite: true } : {}), ...(e.abilities ? { abilities: e.abilities } : {}) });
+  // APEX 2.11 – creatures of the Obelisk know no fear (no morale rolls, no surrender, no rally)
+  return e.fearless ? { ...p, style: 'horde' } : p;
 }
 const sameSide = (a: SceneEnemy, b: SceneEnemy) => (a.side ?? 'enemy') === (b.side ?? 'enemy');
 const sightOn = (map: SceneMap) => { const rules = sightRules(map); return (a: { x: number; y: number }, b: { x: number; y: number }) => lineOfSight(hexAt(map, a), hexAt(map, b), rules.blocks, rules.height); };

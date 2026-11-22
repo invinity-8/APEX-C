@@ -57,14 +57,16 @@ function shoot(obj: THREE.Object3D, size: number, creatureHead?: THREE.Vector3, 
   let focus: THREE.Vector3, span: number;
   if (figureHead) {
     const h = new THREE.Vector3(); figureHead.getWorldPosition(h);
-    focus = h.add(new THREE.Vector3(0, -sz.y * 0.05, 0)); span = sz.y * 0.3;
+    // APEX 2.11 – a bust: head and shoulders (the face reads at initiative-bar size)
+    const headY = h.y - box.min.y;
+    focus = h.add(new THREE.Vector3(0, -headY * 0.06, 0)); span = Math.max(0.12, headY * 0.17);
   } else if (creatureHead) {
     const h = creatureHead.clone().applyMatrix4(obj.matrixWorld);
     focus = c.clone().lerp(h, 0.72); span = Math.max(sz.y * 0.3, Math.min(sz.y * 0.55, h.distanceTo(c) * 0.42 + sz.y * 0.12));
   } else { focus = c; span = Math.max(sz.x, sz.y, sz.z) * 0.62; }
   const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
   const dist = span / Math.tan((15 * Math.PI) / 180);
-  cam.position.set(focus.x + dist * 0.25, focus.y + dist * (humanoid ? 0.06 : 0.3), focus.z + dist);
+  cam.position.set(focus.x + dist * 0.25, focus.y + dist * (humanoid ? 0.1 : 0.3), focus.z + dist);
   cam.lookAt(focus);
   renderer.setClearColor(0x000000, 0);
   renderer.render(scene, cam);

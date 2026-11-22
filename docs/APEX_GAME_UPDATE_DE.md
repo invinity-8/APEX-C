@@ -1128,3 +1128,98 @@ Details und Tabellen: `docs/game/ITEMIZATION_BALANCE.md` §17.
 
 **Tests:** 632 Tests grün.
 - **Neu:** `creatures210`. Er prüft Baukasten, Muster, alle Kreaturen und Figuren, Flügel gefaltet und ausgebreitet, Modellzuordnung der Monster, Artmuster unter individuellem Fell und die neuen Geräusche.
+
+## APEX 2.11 – Grafik-Überarbeitung („Rome meets magic“), neue Titelseite, der Obelisk
+
+**Ziel der Grafik-Runde:** weg vom niedlichen Kugelkopf-Stil hin zu einem ernsteren Ton zwischen Rom und Magie, mit etwas Path of Exile und Diablo 3.
+
+**Oberflächen** (`surface3d.ts`)
+- **Materialien statt glatter Farbe:** Jedes Teil hat ein prozedurales Material mit Relief, Farbschwankung und Rauheit, ganz ohne Texturdateien:
+  - Stoff, Leder, Metall (gehämmert, zerkratzt), Kettenhemd
+  - Haut, Schuppen, Fell, Chitin, Stein, Holz, Knochen, Haar
+- **Kein Flimmern:** Das Muster blendet aus, wenn es kleiner als ein Pixel wird.
+- **Kombinierbar:** Fellzeichnungen (Tiger, Zebra …) liegen über dem Material.
+
+**Helden und NPCs** (`hero3d.ts`, `head3d.ts`, `gear3d.ts`, `hair3d.ts`)
+- **Erwachsene Proportionen:** Der Kopf ist etwa ein Siebtel der Körpergröße. Völker unterscheiden sich in Größe, Breite, Beinlänge, Kopf und Haltung.
+- **Modellierte Köpfe:** Jeder Kopf ist ein einziges glattes Modell statt eines Kugelhaufens:
+  - Schädel, Brauenbogen, Augenhöhlen, Nasenrücken und -spitze, Wangenknochen, Lippen, Kinn, Kiefer
+  - Die Augen liegen in den Höhlen unter einem schweren Oberlid; die Brauen liegen auf dem Brauenbogen.
+  - Statt des gemalten Grinsens gibt es eine feine Lippenlinie.
+  - Ergebnis: ernste, neutrale Gesichter. Licht und Schatten formen das Gesicht.
+- **Haare und Bärte:**
+  - Sie liegen jetzt auf der Kopfform auf.
+  - Strähnen sind glatte, blattförmige Locken statt spitzer Kegel; Haarschalen sind glatt statt facettiert.
+  - Unter Helmen zeigt sich ein Haaransatz, Kapuzen rahmen das Gesicht.
+- **Ausrüstung in römischem Stil mit Magie:**
+  - Rüstungen: Lorica segmentata (Platte), Hamata (Kette), Squamata (Schuppen), Lederpanzer mit Pteruges
+  - Helme: Galea mit Wangenklappen und Kamm, korinthischer Helm
+  - Waffen und Schild: Scutum, Gladius, Spatha, Hasta
+  - Kleidung: Feldherrenmantel mit Fibel, fallende Roben, Lorbeerkranz
+  - magisches Werkzeug: Stäbe mit Kristall, Orb, Sonnenscheibe, Schädel
+- **Alte Figuren bleiben gültig:** Alle bisherigen Optionen und gespeicherten Figuren funktionieren weiter, ohne Migration.
+
+**Monster:** Tieraugen statt Cartoon-Augen mit weißem Rand; Materialien je Art (Federn, Schuppen, Chitin, Stein, Rinde, Fell).
+
+**Bild im 3D-Kampf** (Qualität „hoch“ und „ultra“)
+- **Farbkorrektur:** weniger Sättigung, kühle Schatten, warme Lichter, mehr Kontrast, Vignette.
+- **Kantenlicht:** ein kühles Gegenlicht zeichnet die Umrisse der Figuren.
+
+**Porträts:** Menschen-Figuren erscheinen in der Initiative-Leiste als Büste (Kopf und Schultern), damit die Gesichter zu sehen sind.
+
+**Kartentexturen:** Bewusst nicht verändert, wie besprochen.
+
+**Titelseite: „Welcome to APEX – Rome meets magic“**
+- **Bild:** ein vollflächiges Abendbild mit Kolonnaden, zerbrochenem Aquädukt und einem Obelisken mit leuchtenden Runen über einem Zauberkreis; aufsteigende Glut (ruht, wenn das Gerät reduzierte Bewegung wünscht).
+- **Drei Säulen:** die Kampagne, der Obelisk, deine Legende.
+- **Untertitel:** „Arena of the Eternal Will“ ist überall durch „Rome meets magic“ ersetzt.
+- **Kopfzeile:** Dort steht der **Kampagnenname aus der Datenbank**. Im Mock heißt die Kampagne noch „APEX – Arena of the Eternal Will“. Ich ändere keine Kampagnendaten; eine Umbenennung in der App gibt es bisher nicht.
+
+**Der Obelisk: Solo-Prüfungen ohne Spielleitung** (Tab „◆ Obelisk“)
+- **Stufen:**
+  - Es gibt die Stufen 1 bis 150. Stufe 1 entspricht Level 1, Stufe 150 einem Level-25-Kampf.
+  - Ab Level 20 wächst der Kampf weiter: mehr Gegner, als stünden mehr Helden da.
+  - Innerhalb eines Levels steigen die Stufen von leicht bis tödlich.
+  - Die Stufen tragen keine Level-Zahl. Angezeigt wird, wie gefährlich sie für den eigenen Charakter sind: trivial, bequem, fordernd, gefährlich, tödlich.
+- **Freischalten:** Anfangs ist nur Stufe 1 offen. Jeder Sieg öffnet zwei weitere. Jede 5. Stufe bringt Elite-Beute, jede 10. Wächter-Beute.
+- **Der Kampf:**
+  - Er entsteht mit dem Zufallsbegegnungs-Werkzeug: Bande, Ort, Lage.
+  - Die Auswahl passt zum XP-Budget der Stufe, damit ein Level-1-Held keinem Oger begegnet. Nutztiere sind ausgeschlossen.
+  - Der Kampf läuft auf einer eigenen Kampfkarte mit Initiative. Die Gegner-KI steuert der Server; der Client des Spielers gibt nur den Takt.
+  - Die Kreaturen des Obelisken kennen keine Furcht: Sie fliehen nicht und ergeben sich nicht.
+- **Ohne Folgen für die Kampagne:** Trefferpunkte, Zauberplätze und zeitliche Effekte sind zu Beginn voll und kehren danach auf die Kampagnenwerte zurück. Danach steht man wieder dort, wo man vorher war.
+- **Sieg:** Ein Beutewurf der Stufe landet im Inventar, Währung im Geldbeutel.
+- **Tod (alle Trefferpunkte auf 0):**
+  - Das Inventar ist weg; Ausrüstung wird abgelegt.
+  - **Es bleiben:** Level, Geldbeutel, Quest-Gegenstände und der Transmutationswürfel. Das ist meine Entscheidung, damit Kampagnenfortschritt nicht verloren geht. Falls ihr es härter wollt, kann man das ändern.
+  - Der Spieler klickt „Accept Inventory Wipe“ und kann dann neu beginnen.
+- **Rückzug:** Nur möglich, solange jeder Held über der Hälfte seiner Trefferpunkte steht; darunter entscheidet der Kampf.
+- **Spielleitung:**
+  - Fällt jemand, erscheint eine Meldung und am Tab ein Zähler (☠).
+  - Verlorene Gegenstände lassen sich einzeln oder alle zurückgeben.
+  - Weitere Werkzeuge: Schlüsselsteine vergeben oder nehmen; einstellen, ob eine Prüfung einen Schlüsselstein kostet (Standard: nein, sie sind vorerst nur eine Ressource); Stufen von Hand öffnen; laufende Prüfungen ohne Folgen abbrechen; eine Chronik.
+- **Benachrichtigung – ehrlich:** Echte Push-Nachrichten auf ein geschlossenes Handy brauchen VAPID-Schlüssel, einen Service Worker und einen Versanddienst. Das gibt es bisher nicht.
+  - Jetzt gibt es: eine Meldung in APEX und eine **Browser-Benachrichtigung, solange APEX offen ist** (nach Erlaubnis).
+  - Echtes Push wäre ein eigener Schritt.
+- **Daten:**
+  - Der Obelisk lebt im Spielstand (`obelisk`), ohne neue Tabelle und ohne Migration.
+  - Spieler sehen nur ihre eigenen Werte, nicht die Rückgabeliste der Spielleitung.
+  - Jede Prüfung legt eine eigene Szene an, die danach archiviert wird. Bestehende Szenen und Karten bleiben unberührt.
+
+**Geprüft**
+- **Tests:** 641 Tests grün. Neu ist `obelisk211`; er prüft:
+  - Stufen und Vorschläge
+  - Freischalten, Wipe und Sieg
+  - einen ganzen Lauf über die API: Start, KI-Zug, Tod, Rückgabe durch die Spielleitung, Wipe akzeptieren, Sieg
+  - Schlüsselsteine und Rückzug
+  - den modellierten Kopf
+- **Build:** grün.
+- **Im Browser** (Mock-Server): Spieler-Tab, Kampf mit KI-Gegner (der Pirat kam heran und schoss), Sieges- und Tod-Dialog, GM-Tab mit Rückgabe. Außerdem Figuren, Köpfe und Porträts in Nahansicht.
+
+**Nicht geprüft / offen**
+- **Datenbank:** Der Obelisk lief nur gegen den Mock-Server. Gegen die echte Supabase-Datenbank habe ich ihn nicht ausgeführt.
+  - Szenenwechsel laufen über `apex_assign_scene` mit dem GM-Profil als Handelndem.
+  - Voraussetzung: Die Kampagne hat ein aktives GM-Profil, und der Spieler ist Kampagnenmitglied (hat sich einmal angemeldet).
+- **Mehrere Charaktere:** Steuert ein Profil mehrere Charaktere, gehen alle mit in die Prüfung. Getestet ist nur der Normalfall mit einem Charakter.
+- **Geräte:** Leistung auf Handys und Ton in Safari/iOS habe ich nicht gemessen.
+- **Werkzeuge:** Für noch hochwertigere Modelle (modellierte Assets statt prozeduraler Formen) wären Spline oder Meshy möglich. Beide habe ich nicht benutzt, weil sie in euren Konten Assets und Credits anlegen würden.

@@ -65,6 +65,8 @@ export interface SceneEnemy {
   sex?: 'male' | 'female';
   /** APEX 2.9 – hidden combat fatigue and morale in this fight (see morale.ts). */
   morale?: import('./morale.js').MoraleState;
+  /** APEX 2.11 – bound by the Obelisk: no morale (it neither breaks, flees nor surrenders) – it fights until it falls. */
+  fearless?: boolean;
   /** APEX 2.9 – the seed of this creature's own look (coat, markings, face); older creatures use their id. */
   seed?: string;
 }

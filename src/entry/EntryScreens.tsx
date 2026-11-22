@@ -37,31 +37,38 @@ function Shell({ children, wide = false }: { children: ReactNode; wide?: boolean
 
 export function WelcomeScreen({ onJoin }: { onJoin: () => void }) {
   return (
-    <Shell>
-      <div className="flex flex-col items-center text-center">
-        <ApexEmblem className="h-16 w-16 drop-shadow-[0_0_24px_rgba(192,155,88,.5)]" />
-        <h1 className="mt-4 font-display text-4xl font-black tracking-[0.08em] text-gold-300 sm:text-5xl">Welcome to APEX</h1>
-        <p className="mt-2 font-display text-lg tracking-[0.12em] text-gold-200/90 sm:text-xl">APEX – Arena of the Eternal Will</p>
-      </div>
-      <ImperialVista className="mt-6 h-56 sm:h-72" />
-      <div className="panel mt-6 p-6">
-        <p className="text-sm leading-relaxed text-marble-100">
-          At the height of its power, the Empire built an arena that no map can contain. Floating aqueducts, roads that carry the marching and
-          forests older than the legions surround a golden eagle at its heart – and around the eagle winds a labyrinth whose inscriptions glow when
-          night falls.
+    <main className="welcome-bg relative min-h-full overflow-x-hidden" data-testid="welcome">
+      <ImperialVista className="absolute inset-0 h-full w-full" />
+      <div className="welcome-shade absolute inset-0" aria-hidden="true" />
+      <div className="relative mx-auto flex min-h-full max-w-5xl flex-col items-center px-4 pb-10 pt-[12vh] text-center">
+        <ApexEmblem className="h-14 w-14 drop-shadow-[0_0_24px_rgba(127,214,255,.45)]" />
+        <p className="mt-5 font-display text-xs uppercase tracking-[0.6em] text-gold-200/80">Welcome to</p>
+        <h1 className="welcome-title font-display font-black">APEX</h1>
+        <p className="mt-1 font-display text-base tracking-[0.35em] text-marble-200 sm:text-lg">ROME MEETS MAGIC</p>
+        <p className="mt-6 max-w-2xl text-sm leading-relaxed text-marble-200/90">
+          Where the roads of the Empire end, the old powers wake. Legions march past ruins that hum with forgotten spells, obelisks burn with runes
+          nobody can read any more, and every coin of glory is paid in blood. Forge your legend – with your companions or alone before the Obelisk.
         </p>
-        <p className="mt-3 text-sm leading-relaxed text-marble-300">
-          You are tributes of the <i>Tributum Voluntatis</i>. Your will is your weapon, the unknown is your enemy, and the arena itself is closing in.
-          Explore together, find what the Gamemakers hide – and survive.
-        </p>
-        <div className="mt-6 flex flex-col items-center gap-2">
-          <button className="btn btn-gold px-10 py-3 text-base" onClick={onJoin} autoFocus>
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <button className="btn btn-gold welcome-cta px-12 py-3 text-base" onClick={onJoin} autoFocus>
             Join Campaign
           </button>
-          <span className="text-[11px] text-marble-500">A private campaign. Access by invitation of the Game Master.</span>
+          <span className="text-[11px] text-marble-400">A private campaign. Access by invitation of the Game Master.</span>
         </div>
+        <ul className="mt-12 grid w-full gap-3 text-left sm:grid-cols-3">
+          {[
+            ['⚜', 'The Campaign', 'Play your character with your group. The Game Master leads the story; maps, battles and the world change as you go.'],
+            ['🜂', 'The Obelisk', 'Between the sessions: step before the Obelisk alone, fight its trials tier by tier and bring back what you win.'],
+            ['🛡', 'Your Legend', 'Your hero in 3D with the gear you wear, a sheet that keeps itself, a journal of everything you lived through.'],
+          ].map(([icon, title, text]) => (
+            <li key={title} className="welcome-pillar panel p-4">
+              <div className="flex items-center gap-2"><span className="text-xl text-gold-300" aria-hidden="true">{icon}</span><b className="font-display text-sm uppercase tracking-[0.18em] text-gold-200">{title}</b></div>
+              <p className="mt-2 text-xs leading-relaxed text-marble-300">{text}</p>
+            </li>
+          ))}
+        </ul>
       </div>
-    </Shell>
+    </main>
   );
 }
 
@@ -115,7 +122,7 @@ export function ProfileSelect({
   return (
     <Shell wide>
       <div className="text-center">
-        <p className="text-[11px] uppercase tracking-[0.35em] text-marble-500">APEX – Arena of the Eternal Will</p>
+        <p className="text-[11px] uppercase tracking-[0.35em] text-marble-500">APEX · Rome meets magic</p>
         <h1 className="mt-2 font-display text-3xl font-black text-gold-300">Who are you?</h1>
         <p className="mt-2 text-sm text-marble-300">Choose your profile. You will confirm it with your password.</p>
       </div>
