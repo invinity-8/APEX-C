@@ -365,7 +365,7 @@ export function PlayerCombat(p: Props) {
         {p.attacks.map((a, i) => {
           const r = parseRangeFt(`${a.range} ${a.notes}`);
           const on = p.ready?.kind === 'attack' && p.ready.index === i;
-          return <button key={`a${i}`} type="button" {...dragQuick({ k: 'attack', i })} className={`rounded-md border px-2 py-1 transition ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_8px_rgba(192,155,88,0.5)]' : 'border-ink-600 bg-ink-900 text-marble-100 hover:border-gold-500'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')} <span className="text-[10px] text-marble-500">{a.bonus}</span></button>;
+          return <button key={`a${i}`} type="button" {...dragQuick({ k: 'attack', i })} className={`rounded-md border px-2 py-1 transition ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_8px_rgba(var(--apex-accent-rgb),0.5)]' : 'border-ink-600 bg-ink-900 text-marble-100 hover:border-gold-500'}`} aria-pressed={on} title={`${a.bonus} · ${a.damage} · ${r.rangeFt ? `range ${r.rangeFt} ft` : `reach ${r.reachFt} ft`}`} onClick={() => p.setReady(on ? null : { kind: 'attack', index: i })}>{r.rangeFt ? '🏹' : '⚔'} {a.name.replace(' (equipped)', '')} <span className="text-[10px] text-marble-500">{a.bonus}</span></button>;
         })}
         {spells.map((sp) => {
           const on = p.ready?.kind === 'spell' && p.ready.spellId === sp.id;
@@ -444,7 +444,7 @@ function Tile({ icon, label, cost, on, disabled, title, onClick, testid, badge, 
   if (gone && !on) return null;
   return (
     <button type="button" title={title} disabled={disabled} aria-pressed={on} onClick={onClick} data-testid={testid} {...drag}
-      className={`relative flex h-14 w-[4.6rem] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-center text-[10px] leading-tight transition disabled:cursor-not-allowed disabled:opacity-35 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_10px_rgba(192,155,88,0.45)]' : tone === 'forest' ? 'border-forest-400/60 bg-forest-700/30 text-forest-300 hover:border-forest-300' : 'border-ink-600 bg-ink-850 text-marble-100 hover:border-gold-500 hover:bg-ink-800'}`}>
+      className={`relative flex h-14 w-[4.6rem] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 text-center text-[10px] leading-tight transition disabled:cursor-not-allowed disabled:opacity-35 ${on ? 'border-gold-400 bg-gold-400/20 text-gold-200 shadow-[0_0_10px_rgba(var(--apex-accent-rgb),0.45)]' : tone === 'forest' ? 'border-forest-400/60 bg-forest-700/30 text-forest-300 hover:border-forest-300' : 'border-ink-600 bg-ink-850 text-marble-100 hover:border-gold-500 hover:bg-ink-800'}`}>
       <span className="text-lg leading-none" aria-hidden>{icon}</span>
       <span className="line-clamp-2">{label}</span>
       {cost && <span aria-hidden className={`absolute left-1 top-1 h-2 w-2 ${cost === 'action' ? 'rounded-full bg-emerald-400' : 'rotate-45 bg-amber-400'}`} />}

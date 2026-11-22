@@ -10,7 +10,7 @@ import { buildCreature } from './map/creatures3d';
 export default function FigurePreview({ look, creature, ring = '#d8b25a', size = 280 }: { look?: FigureLook; creature?: { kind: string; tint?: string; variant?: 'male' | 'female' | 'young' }; ring?: string; size?: number }) {
   const wrap = useRef<HTMLDivElement>(null);
   const wingsRef = useRef<THREE.Object3D[]>([]);
-  const t = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; holder: THREE.Group; yaw: number; drag: number | null; spin: boolean } | null>(null);
+  const t = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; holder: THREE.Group; yaw: number; drag: number | null; dragY: number | null; spin: boolean; zoom: number; focus: number; h: number } | null>(null);
 
   useEffect(() => {
     const el = wrap.current!;
@@ -27,19 +27,23 @@ export default function FigurePreview({ look, creature, ring = '#d8b25a', size =
     const sun = new THREE.DirectionalLight(0xfff0d0, 1.7); sun.position.set(-3, 5, 4); scene.add(sun);
     const rim = new THREE.DirectionalLight(0x9fc4ff, 0.6); rim.position.set(3, 2, -4); scene.add(rim);
     const holder = new THREE.Group(); scene.add(holder);
-    t.current = { renderer, scene, camera, holder, yaw: 0.5, drag: null, spin: true };
+    t.current = { renderer, scene, camera, holder, yaw: 0.5, drag: null, dragY: null, spin: true, zoom: 1, focus: 0, h: 2.2 };
+    // APEX 2.13 – zoom with the wheel (towards the face), drag up and down to look along the figure
+    const wheel = (e: WheelEvent) => { const st = t.current; if (!st) return; e.preventDefault(); st.zoom = Math.max(1, Math.min(4.5, st.zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); };
+    el.addEventListener('wheel', wheel, { passive: false });
     let raf = 0;
     const frame = () => {
       raf = requestAnimationFrame(frame);
       const s = t.current; if (!s || document.hidden) return;
       if (s.spin && s.drag === null) s.yaw += 0.006;
       s.holder.rotation.y = s.yaw;
+      { const z = (s.zoom - 1) / 3.5, aim = Math.min(1, Math.max(0, 0.46 + z * 0.42 + s.focus)) * s.h; s.camera.position.set(0, aim + s.h * 0.27 / s.zoom, (s.h * 2.9) / s.zoom); s.camera.lookAt(0, aim, 0); }
       const sec = performance.now() / 1000;
       for (const w of wingsRef.current) w.rotation.z = Math.sin(sec * 6) * ((w.userData.amp as number) ?? 0.5) * ((w.userData.side as number) ?? 1);
       renderer.render(scene, camera);
     };
     raf = requestAnimationFrame(frame);
-    return () => { cancelAnimationFrame(raf); renderer.dispose(); el.removeChild(renderer.domElement); t.current = null; };
+    return () => { el.removeEventListener('wheel', wheel); cancelAnimationFrame(raf); renderer.dispose(); el.removeChild(renderer.domElement); t.current = null; };
   }, [size]);
 
   useEffect(() => {
@@ -59,22 +63,29 @@ export default function FigurePreview({ look, creature, ring = '#d8b25a', size =
     wingsRef.current = (made as { wings?: THREE.Object3D[] }).wings ?? [];
     // tall figures (ogres, wizard hats) are framed by scaling the camera distance
     const h = Math.max(2.2, fig.height + 0.3);
-    s.camera.position.set(0, h * 0.75, h * 2.9); s.camera.lookAt(0, h * 0.48, 0);
+    s.h = h;
     s.holder.add(base, ringM, fig.group);
   }, [look, creature?.kind, creature?.tint, creature?.variant, ring]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const zoomBy = (k: number) => { const st = t.current; if (st) st.zoom = Math.max(1, Math.min(4.5, st.zoom * k)); };
   return (
+    <div className="relative" style={{ width: size, height: size * 1.15 }}>
     <div
       ref={wrap}
       className="cursor-grab touch-none select-none rounded-xl border border-ink-700 bg-[radial-gradient(circle_at_50%_40%,#2b2620,#0f0d0b)]"
       style={{ width: size, height: size * 1.15 }}
-      aria-label="3D preview of the figure – drag to turn it"
+      aria-label="3D preview of the figure – drag to turn it, mouse wheel to zoom"
       role="img"
-      onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); if (t.current) { t.current.drag = e.clientX; t.current.spin = false; } }}
-      onPointerMove={(e) => { const s = t.current; if (s && s.drag !== null) { s.yaw += (e.clientX - s.drag) * 0.012; s.drag = e.clientX; } }}
-      onPointerUp={() => { if (t.current) t.current.drag = null; }}
+      onPointerDown={(e) => { (e.target as Element).setPointerCapture?.(e.pointerId); if (t.current) { t.current.drag = e.clientX; t.current.dragY = e.clientY; t.current.spin = false; } }}
+      onPointerMove={(e) => { const s = t.current; if (s && s.drag !== null) { s.yaw += (e.clientX - s.drag) * 0.012; s.drag = e.clientX; if (s.dragY !== null && s.zoom > 1.05) { s.focus = Math.max(-0.6, Math.min(0.3, s.focus + (e.clientY - s.dragY) * 0.004)); s.dragY = e.clientY; } } }}
+      onPointerUp={() => { if (t.current) { t.current.drag = null; t.current.dragY = null; } }}
       onDoubleClick={() => { if (t.current) t.current.spin = !t.current.spin; }}
       data-testid="figure-preview"
     />
+    <div className="absolute bottom-1.5 right-1.5 flex flex-col gap-1">
+      <button type="button" className="btn btn-ghost h-6 w-6 px-0 text-sm" aria-label="Zoom in" onClick={() => zoomBy(1.4)}>+</button>
+      <button type="button" className="btn btn-ghost h-6 w-6 px-0 text-sm" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.4)}>−</button>
+    </div>
+    </div>
   );
 }

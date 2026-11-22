@@ -144,7 +144,7 @@ export function Header({ game, onAdvancePhase, notify, area = 'Map', arenaClock 
             <span className="hidden max-w-40 truncate text-[11px] text-marble-300 lg:inline" title="Signed-in profile">
               {online.profileName}
             </span>
-            <ThemeMenu />
+            {game.view.role === 'gm' && <ThemeMenu current={game.view.uiTheme} />}
             <SoundMenu />
             <FeedbackButton online={online} area={area} notify={notify} />
             <button className="btn btn-ghost px-2" onClick={() => setPwOpen(true)} title="Change your password" aria-label="Change your password">

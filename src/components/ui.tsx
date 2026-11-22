@@ -58,7 +58,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={`rounded-md px-2 ${size === 'md' ? 'py-1.5 text-xs' : 'py-1 text-[11px]'} font-medium transition-colors ${
-            value === o.value ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(192,155,88,.6)]' : 'text-marble-300 hover:text-marble-50'
+            value === o.value ? 'bg-gold-400/20 text-gold-200 shadow-[inset_0_0_0_1px_rgba(var(--apex-accent-rgb),.6)]' : 'text-marble-300 hover:text-marble-50'
           }`}
         >
           {o.label}

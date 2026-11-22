@@ -3,7 +3,6 @@
  * These screens contain no Supabase code, so they also render when the deployment
  * is not configured – joining then shows a clear setup error instead of a local game.
  */
-import { ThemeMenu } from '../components/ThemeMenu';
 import { ImperialVista } from '../components/ImperialVista';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ApexEmblem, Spinner } from '../components/brand';
@@ -42,7 +41,6 @@ export function WelcomeScreen({ onJoin }: { onJoin: () => void }) {
     <main className="welcome-bg relative min-h-full overflow-x-hidden" data-testid="welcome">
       <ImperialVista className="absolute inset-0 h-full w-full" />
       <div className="welcome-shade absolute inset-0" aria-hidden="true" />
-      <div className="absolute right-3 top-3 z-10"><ThemeMenu className="btn btn-ghost bg-ink-950/60 px-2" /></div>
       <div className="relative mx-auto flex min-h-[100svh] max-w-5xl flex-col items-center justify-center px-4 pb-[16vh] text-center">
         <ApexEmblem className="h-16 w-16 drop-shadow-[0_0_24px_rgba(127,214,255,.45)]" />
         <h1 className="welcome-title font-display font-black">APEX</h1>

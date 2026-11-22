@@ -11,18 +11,20 @@ const ID: Record<Surface, number> = { smooth: 0, cloth: 1, leather: 2, metal: 3,
 /** Pattern frequency per figure unit (a medium figure is ≈ 2 units tall) and bump strength. */
 const LOOK: Record<Surface, { freq: number; bump: number; tint: number; rough: number }> = {
   smooth: { freq: 1, bump: 0, tint: 0, rough: 0 },
-  cloth: { freq: 70, bump: 0.35, tint: 0.12, rough: 0.08 },
-  leather: { freq: 24, bump: 0.5, tint: 0.2, rough: 0.18 },
-  metal: { freq: 9, bump: 0.25, tint: 0.14, rough: 0.35 },
-  chain: { freq: 30, bump: 0.35, tint: 0.14, rough: 0.08 },
-  skin: { freq: 14, bump: 0.12, tint: 0.1, rough: 0.1 },
-  scales: { freq: 16, bump: 0.4, tint: 0.12, rough: 0.08 },
-  fur: { freq: 30, bump: 0.55, tint: 0.18, rough: 0.1 },
-  chitin: { freq: 9, bump: 0.55, tint: 0.2, rough: 0.3 },
-  stone: { freq: 6, bump: 1.1, tint: 0.35, rough: 0.15 },
-  wood: { freq: 10, bump: 0.45, tint: 0.3, rough: 0.12 },
-  bone: { freq: 12, bump: 0.35, tint: 0.18, rough: 0.15 },
-  hair: { freq: 60, bump: 0.6, tint: 0.3, rough: 0.12 },
+  // APEX 2.13 – a cleaner, painted look (WoW-like): colour variation stays, the bumps are mostly gone except where the
+  // material is made of bumps (ring mail, scales, stone, bark, chitin)
+  cloth: { freq: 70, bump: 0.06, tint: 0.08, rough: 0.06 },
+  leather: { freq: 24, bump: 0.1, tint: 0.14, rough: 0.14 },
+  metal: { freq: 9, bump: 0.06, tint: 0.1, rough: 0.3 },
+  chain: { freq: 30, bump: 0.3, tint: 0.12, rough: 0.08 },
+  skin: { freq: 14, bump: 0.02, tint: 0.06, rough: 0.08 },
+  scales: { freq: 16, bump: 0.3, tint: 0.1, rough: 0.08 },
+  fur: { freq: 30, bump: 0.22, tint: 0.16, rough: 0.1 },
+  chitin: { freq: 9, bump: 0.35, tint: 0.16, rough: 0.25 },
+  stone: { freq: 6, bump: 0.8, tint: 0.3, rough: 0.15 },
+  wood: { freq: 10, bump: 0.3, tint: 0.26, rough: 0.12 },
+  bone: { freq: 12, bump: 0.15, tint: 0.14, rough: 0.15 },
+  hair: { freq: 60, bump: 0.25, tint: 0.22, rough: 0.12 },
 };
 
 /** Shared GLSL: hashing, value noise, cells and the normal tilt (three's bump-map formula). */

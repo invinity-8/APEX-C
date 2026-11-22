@@ -83,6 +83,25 @@ function band(g: THREE.Object3D, y: number, rTop: [number, number], rBot: [numbe
   part(g, new THREE.TorusGeometry(1, 0.012 / rTop[0], 5, 36), m, [0, y + w / 2, z], [Math.PI / 2, 0, 0], [rTop[0], rTop[1], 1]);
 }
 
+/**
+ * APEX 2.13 – a shell that follows the head (helmet bowls, caps): the part of the skull where `covers` holds, pushed out
+ * by `puff`. Plain half-spheres sat on the narrow sculpted heads like pots.
+ */
+function headShell(surf: ((x: number, y: number, z: number) => THREE.Vector3) | null, hr: number, puff: number, covers: (d: THREE.Vector3) => boolean): THREE.BufferGeometry {
+  const src = new THREE.SphereGeometry(1, 40, 26).toNonIndexed();
+  const pos = src.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3(), out: number[] = [];
+  for (let i = 0; i < pos.count; i += 3) {
+    c.set(0, 0, 0); for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, i + k));
+    if (!covers(c.divideScalar(3).normalize())) continue;
+    for (let k = 0; k < 3; k++) { v.fromBufferAttribute(pos, i + k).normalize(); const q = surf ? surf(v.x, v.y, v.z) : v.clone().multiply(new THREE.Vector3(0.9, 1, 0.95)); out.push(q.x * hr * puff, q.y * hr * puff, q.z * hr * puff); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  const m = mergeVertices(g, 1e-5);
+  m.computeVertexNormals();
+  return m;
+}
+
 /** APEX 2.11 – a hood that frames the face: a cloth shell with an oval opening (forehead to chin), not an open wedge. */
 function hoodGeometry(R: number): THREE.BufferGeometry {
   const src = new THREE.SphereGeometry(1, 44, 28, 0, Math.PI * 2, 0, Math.PI * 0.72).toNonIndexed();
@@ -120,7 +139,7 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   const prim = S(quiet(look.primary), 'cloth', { rough: 0.92 }), primD = S(tone(quiet(look.primary), 0.66), 'cloth', { rough: 0.92 });
   const sec = S(quiet(look.secondary), 'cloth', { rough: 0.9 });
   const leather = S(quiet(look.leather, 0.08), 'leather', { rough: 0.72 }), leatherD = S(tone(quiet(look.leather, 0.08), 0.62), 'leather', { rough: 0.75 });
-  const metal = S(look.metal, 'metal', { metal: 0.8, rough: 0.36 }), metalD = S(tone(look.metal, 0.62), 'metal', { metal: 0.75, rough: 0.45 });
+  const metal = S(look.metal, 'metal', { metal: 0.7, rough: 0.5 }), metalD = S(tone(look.metal, 0.62), 'metal', { metal: 0.65, rough: 0.58 });
   const chain = S(tone(look.metal, 0.7), 'chain', { metal: 0.55, rough: 0.6 });
   const scaleM = S(tone(look.metal, 0.85), 'scales', { metal: 0.6, rough: 0.5 });
   const gold = S('#c9a24a', 'metal', { metal: 0.9, rough: 0.3 });
@@ -165,12 +184,12 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
       // APEX 2.12 – the leg's contour: a full thigh tapering to the knee, the calf swelling just below it, a slim
       // ankle; slightly wider than deep at the thigh, deeper than wide at the calf
       const leg = (t: number): [number, number] => {
-        if (t < 0.5) { const u = t / 0.5; const r = legR * (1.2 - 0.48 * u ** 1.1); return [r * (1.06 - u * 0.08), r * (0.98 + u * 0.02)]; }
-        const u = (t - 0.5) / 0.5; const calf = Math.exp(-(((u - 0.28) / 0.2) ** 2)) * 0.2;
+        if (t < 0.5) { const u = t / 0.5; const r = legR * (1.12 - 0.4 * u ** 1.1); return [r * (1.06 - u * 0.08), r * (0.98 + u * 0.02)]; }
+        const u = (t - 0.5) / 0.5; const calf = Math.exp(-(((u - 0.3) / 0.24) ** 2)) * 0.12;
         const r = legR * (0.7 - 0.3 * u ** 1.2 + calf); return [r * 0.95, r * (1 + calf * 0.6)];
       };
       tube(g, [hipP, [(hipP[0] + knee[0]) / 2, (hipP[1] + knee[1]) / 2, (hipP[2] + knee[2]) / 2 + 0.012], knee, [(knee[0] + ankle[0]) / 2, (knee[1] + ankle[1]) / 2, (knee[2] + ankle[2]) / 2 - 0.012], ankle], leg, legM, { sides: 14, steps: 28 });
-      blob(g, [legR * 0.42, legR * 0.4, legR * 0.25], legM, [knee[0], knee[1] + 0.008, knee[2] + legR * 0.52]); // kneecap
+      if (legM === skinM) blob(g, [legR * 0.36, legR * 0.34, legR * 0.2], legM, [knee[0], knee[1] + 0.008, knee[2] + legR * 0.5]); // kneecap (bare legs)
     }
     // feet: boots, caligae (sandals with straps), wraps, greaves
     const toe: V3 = [ankle[0] * 1.02, 0.03 + (riding ? f[1] : 0), ankle[2] + 0.16];
@@ -386,8 +405,8 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   if (!bone && !a.snout && look.brows !== 'none') for (const sx of [-1, 1]) {
     const tilt = look.brows === 'angry' ? -0.06 : look.brows === 'worried' ? 0.06 : look.brows === 'raised' || look.brows === 'arched' ? 0.03 : look.eyes === 'angry' || look.eyes === 'narrow' ? -0.035 : -0.01;
     const lift = look.brows === 'raised' ? 0.04 : 0;
-    const thick = look.brows === 'bushy' ? 0.04 : look.brows === 'thick' || look.brows === 'unibrow' ? 0.032 : 0.022;
-    tube(head, [on(sx * 0.15, 0.19 + lift + tilt * 0.6, 0.012), on(sx * 0.3, 0.215 + lift, 0.018), on(sx * 0.45, 0.19 + lift - tilt * 0.4, 0.008)], (t) => hr * thick * (1 - Math.abs(t - 0.35) * 0.6), hairM, { sides: 6 });
+    const thick = look.brows === 'bushy' ? 0.03 : look.brows === 'thick' || look.brows === 'unibrow' ? 0.024 : 0.017;
+    tube(head, [on(sx * 0.15, 0.19 + lift + tilt * 0.6, 0.006), on(sx * 0.3, 0.215 + lift, 0.009), on(sx * 0.45, 0.19 + lift - tilt * 0.4, 0.004)], (t) => [hr * thick * 1.25 * (1 - Math.abs(t - 0.35) * 0.35), hr * thick * 0.42], hairM, { sides: 8 });
     if (look.brows === 'unibrow' && sx > 0) tube(head, [on(-0.15, 0.19, 0.012), on(0, 0.18, 0.015), on(0.15, 0.19, 0.012)], () => hr * thick * 0.8, hairM, { sides: 6 });
   }
   // nose (only the old build needs a separate one)
@@ -401,8 +420,8 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     const lipM = look.face === 'lipstick' ? skin('#7a1a2a', { rough: 0.4 }) : S(mixHex(skinC, '#8a3a3a', fem ? 0.38 : 0.2), 'skin');
     if (fem || look.mouth === 'lips' || look.mouth === 'pout' || look.face === 'lipstick') blob(head, [hr * 0.12, hr * 0.03, hr * 0.03], lipM, on(0, -0.475, -0.012));
     if (look.mouth === 'open' || look.mouth === 'snarl' || look.mouth === 'teeth' || look.mouth === 'grin') blob(head, [hr * 0.11, hr * 0.05, hr * 0.03], dark, on(0, -0.45, -0.01));
-    if (look.mouth === 'tusks' || brute) for (const sx of [-1, 1]) claw(head, on(sx * 0.17, -0.5, -0.02), [sx * 0.15, 1, 0.25], hr * 0.32, hr * 0.06, boneM, -0.3);
-    if (look.mouth === 'fangs' || look.mouth === 'snarl') for (const sx of [-1, 1]) claw(head, on(sx * 0.07, -0.43, 0), [0, -1, 0.2], hr * 0.14, hr * 0.03, boneM, 0);
+    if (look.mouth === 'tusks' || brute) for (const sx of [-1, 1]) claw(head, on(sx * 0.17, -0.5, -0.02), [sx * 0.15, 1, 0.25], hr * 0.2, hr * 0.045, boneM, -0.15);
+    if (look.mouth === 'fangs' || look.mouth === 'snarl') for (const sx of [-1, 1]) claw(head, on(sx * 0.07, -0.445, 0.002), [0, -1, 0.35], hr * 0.075, hr * 0.018, boneM, 0);
   }
   if (bone) { blob(head, [hr * 0.62, hr * 0.3, hr * 0.6], boneM, [0, -hr * 0.62, hr * 0.15]); for (let i = 0; i < 6; i++) part(head, new THREE.BoxGeometry(hr * 0.07, hr * 0.1, hr * 0.05), boneM, [(i - 2.5) * hr * 0.09, -hr * 0.5, hr * 0.68]); blob(head, [hr * 0.06, hr * 0.08, hr * 0.04], dark, [0, -hr * 0.22, fz]); }
   // ears
@@ -442,7 +461,7 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
   switch (look.hat) {
     case 'helmet': {
       // galea: a bowl, a brow ridge, a flared neck guard, cheek guards and a crest of horsehair
-      part(head, new THREE.SphereGeometry(R, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), metal, [0, hr * 0.12, -hr * 0.04], [0, 0, 0], [0.95 * hs[0], 1, 1.02]);
+      part(head, headShell(surf ?? null, hr, 1.12, (d) => d.y > (d.z > 0.5 ? 0.24 : -0.08)), metal);
       tube(head, [[-R * 0.95, hr * 0.12, 0], [0, hr * 0.3, R * 1.05], [R * 0.95, hr * 0.12, 0]], () => [hr * 0.06, hr * 0.03], metalD, { sides: 8 });
       tube(head, [[-R * 0.9, hr * 0.05, -hr * 0.3], [0, -hr * 0.08, -R * 1.25], [R * 0.9, hr * 0.05, -hr * 0.3]], () => [hr * 0.03, hr * 0.2], metal, { sides: 8 });
       for (const sx of [-1, 1]) tube(head, [[sx * R * 0.9, hr * 0.1, hr * 0.15], [sx * R * 0.92, -hr * 0.35, hr * 0.35], [sx * R * 0.75, -hr * 0.72, hr * 0.45]], (t) => [hr * 0.04, hr * (0.22 - t * 0.06)], metal, { sides: 8 });
@@ -468,14 +487,14 @@ export function buildHero(look: FigureLook, opts: { mountScale?: number } = {}):
     case 'wizard': drape(head, hr * 0.62, hr * 0.6, [R * 1.9, R * 1.9], [R * 1.95, R * 1.95], prim, { folds: 5, depth: 0.03 }); horn(head, [0, hr * 0.55, -hr * 0.05], [0, 1, -0.15], hr * 2.6, R * 0.98, prim, { curl: -0.7, axis: [1, 0, 0] }); part(head, new THREE.TorusGeometry(R * 1.0, hr * 0.05, 5, 24), sec, [0, hr * 0.7, -hr * 0.05], [Math.PI / 2, 0, 0]); break;
     case 'crown': for (let i = 0; i < 16; i++) { const ang = (i / 16) * Math.PI * 2; if (Math.abs(Math.sin(ang)) < 0.12 && Math.cos(ang) > 0) continue; blob(head, [hr * 0.12, hr * 0.05, hr * 0.03], gold, [Math.sin(ang) * R * 0.98, hr * 0.52 + Math.cos(ang * 2) * hr * 0.03, Math.cos(ang) * R * 0.98], [Math.cos(ang), 0.6, -Math.sin(ang)]); } break; // laurel wreath
     case 'circlet': part(head, new THREE.TorusGeometry(R * 0.98, hr * 0.03, 5, 28), gold, [0, hr * 0.38, 0], [Math.PI / 2 - 0.1, 0, 0]); blob(head, [hr * 0.06, hr * 0.06, hr * 0.03], skin(glowC, { glow: 1.6 }), [0, hr * 0.35, R * 1.0]); break;
-    case 'cap': part(head, new THREE.SphereGeometry(R * 1.02, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), prim, [0, hr * 0.15, -hr * 0.02], [0.1, 0, 0]); break; // pileus
+    case 'cap': part(head, headShell(surf ?? null, hr, 1.07, (d) => d.y > (d.z > 0.4 ? 0.36 : 0.12)), prim); break; // pileus: a soft cap that fits
     case 'bandana': part(head, new THREE.SphereGeometry(R * 1.0, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), sec, [0, hr * 0.12, 0]); tube(head, [[0, hr * 0.3, -R * 0.95], [hr * 0.05, -hr * 0.1, -R * 1.15]], () => [hr * 0.1, hr * 0.02], sec, { sides: 6 }); break;
     case 'headband': part(head, new THREE.TorusGeometry(R * 0.95, hr * 0.06, 5, 28), sec, [0, hr * 0.4, 0], [Math.PI / 2, 0, 0]); break;
     case 'tricorn': drape(head, hr * 0.62, hr * 0.7, [R * 1.55, R * 1.55], [R * 1.45, R * 1.45], S('#1d1612', 'leather'), { folds: 3, depth: 0.2 }); part(head, new THREE.SphereGeometry(R * 0.95, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), S('#1d1612', 'leather'), [0, hr * 0.62, 0]); break;
     case 'feathercap': part(head, new THREE.SphereGeometry(R * 1.02, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), prim, [0, hr * 0.15, 0], [0, 0, -0.15]); tube(head, [[hr * 0.5, hr * 0.9, -hr * 0.3], [hr * 0.8, hr * 1.5, -hr * 0.9], [hr * 0.6, hr * 1.9, -hr * 1.6]], (t) => [hr * 0.12 * Math.sin(Math.PI * Math.min(1, t + 0.1)), hr * 0.02], sec, { sides: 6 }); break;
     case 'strawhat': drape(head, hr * 0.7, hr * 0.5, [R * 1.0, R * 1.0], [R * 2.1, R * 2.1], S('#bfa56a', 'wood'), { folds: 1, depth: 0 }); part(head, new THREE.CylinderGeometry(R * 0.85, R * 0.95, hr * 0.5, 20), S('#bfa56a', 'wood'), [0, hr * 0.9, 0]); break;
     case 'turban': for (let i = 0; i < 4; i++) part(head, new THREE.TorusGeometry(R * (0.95 - i * 0.12), hr * 0.18, 8, 24), prim, [0, hr * (0.4 + i * 0.18), 0], [Math.PI / 2 + (i % 2 ? 0.15 : -0.15), 0, 0]); blob(head, [hr * 0.08, hr * 0.08, hr * 0.04], skin(glowC, { glow: 1.5 }), [0, hr * 0.5, R * 1.12]); break;
-    case 'skullcap': part(head, new THREE.SphereGeometry(R * 0.98, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), leather, [0, hr * 0.15, 0]); break;
+    case 'skullcap': part(head, headShell(surf ?? null, hr, 1.045, (d) => d.y > 0.38), leather); break;
     case 'antlers': for (const sx of [-1, 1]) { horn(head, [sx * hr * 0.5, hr * 0.8, 0], [sx * 0.6, 1, -0.1], hr * 2.2, hr * 0.06, S('#6b4a2b', 'wood'), { curl: 0.3, axis: [0, 0, 1] }); for (let k = 1; k <= 2; k++) horn(head, [sx * hr * (0.5 + k * 0.35), hr * (0.8 + k * 0.6), 0], [sx * 0.2, 1, 0.4], hr * 0.7, hr * 0.04, S('#6b4a2b', 'wood'), { curl: 0.3, axis: [1, 0, 0] }); } break;
     case 'mask': blob(head, [hr * 0.85, hr * 0.42, hr * 0.3], S(tone(look.primary, 0.5), 'leather'), [0, -hr * 0.45, fz - hr * 0.1]); break;
     default: break;

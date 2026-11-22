@@ -76,7 +76,8 @@ import { assetRequest } from './sceneAssets.js';
 import { motionRequest } from './sceneMotion.js';
 import { travelRequest } from './sceneTravel.js';
 import { sanctuaryRequest } from './sanctuary.js';
-import { obeliskRequest } from './obelisk.js';
+import { obeliskRequest, update } from './obelisk.js';
+import { normaliseTheme } from '../ui/theme.js';
 import { downtimeRequest } from './downtime.js';
 import { journalImageRequest } from './journalImages.js';
 import { kenneyPreviewRequest } from './kenneyPreview.js';
@@ -202,6 +203,13 @@ export async function handleApi(req: ApiRequest, rawRepo: Repo): Promise<ApiResp
     if (req.op === 'sanctuary') return await sanctuaryRequest(user, req.method, req.body, repo);
     if (req.op === 'obelisk') return await obeliskRequest(user, req.method, req.body, repo);
     if (req.op === 'downtime') return await downtimeRequest(user, req.method, req.body, repo);
+    if (req.op === 'theme' && req.method === 'POST') {
+      // APEX 2.13 – the GM sets the campaign's colours and fonts for everybody
+      if (user.role !== 'gm') return { status: 403, body: { error: 'Only the GM sets the colours.' } };
+      const theme = normaliseTheme(req.body);
+      const r = await update(repo, user.campaignId, user.id, (s) => { s.uiTheme = theme; });
+      return r.ok ? { status: 200, body: { ok: true, theme } } : { status: 409, body: { error: r.error } };
+    }
     if (req.op === 'journal-images') return await journalImageRequest(user, req.method, req.query, req.body, repo);
     switch (`${req.method} ${req.op}`) {
       case 'GET session':

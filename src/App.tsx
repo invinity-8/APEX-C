@@ -34,6 +34,7 @@ import { PlayerJournal } from './components/PlayerJournal';
 import { PlayerScene } from './components/PlayerScene';
 import { ObeliskAlerts, ObeliskGm, ObeliskPanel, ObeliskRunner, useObelisk } from './components/Obelisk';
 import { DowntimeGm, DowntimePlayer } from './components/Downtime';
+import { DEFAULT_THEME, applyTheme, normaliseTheme, saveTheme } from './ui/theme';
 // APEX 2.1 – performance: pages that are not on the map screen load on first use (smaller start bundle)
 const ArsenalPanel = lazy(() => import('./components/ArsenalPanel').then((m) => ({ default: m.ArsenalPanel })));
 const EnemyLibrary = lazy(() => import('./components/EnemyLibrary').then((m) => ({ default: m.EnemyLibrary })));
@@ -69,6 +70,9 @@ export default function App({ game }: { game: GameApi }) {
   // APEX 2.11 – the Obelisk: the player's status follows the game view (a trial changes the scene and the state)
   const obelisk = useObelisk(!!game.online && view.role !== 'gm', view);
   const openObelisk = useCallback(() => setScreen('obelisk'), []);
+  // APEX 2.13 – the campaign's colours and fonts (set by the GM) for everybody; remembered for the title page
+  const themeKey = JSON.stringify(view.uiTheme ?? null);
+  useEffect(() => { const t = normaliseTheme(view.uiTheme ?? DEFAULT_THEME); applyTheme(t); saveTheme(t); }, [themeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // APEX 2.9 – sound: allowed after the first click or key; the music follows the situation (battle, map, menus)
   useEffect(() => {
     const f = () => unlockSound();
