@@ -474,7 +474,7 @@ export default function App({ game }: { game: GameApi }) {
         onAdvancePhase={() => void advancePhase()}
         arenaClock={isGm ? director.arenaShown : !game.scene || game.scene.kind === 'arena'}
       />
-      <nav className="flex flex-wrap items-center gap-1 border-b border-gold-700/30 bg-ink-900/70 px-3 py-1.5" aria-label="Main navigation">
+      <nav className="apex-bar flex flex-wrap items-center gap-1 border-b border-gold-700/30 px-3 py-1.5" aria-label="Main navigation">
         {tabs.map((t) => (
           <button
             key={t.id}
